@@ -114,7 +114,7 @@ def VerifyUsers(b: commands.Bot):
     '''First: Go through all members, verifying they have entries and variables'''
     for user in b.get_all_members():
         VerifyUser(user, b)
-    for result in users.find(): #Delete servers that disguard is no longer a part of
+    for result in users.find(): #Delete users that aren't in any disguard servers
         if b.get_user(result.get("user_id")) is None:
             users.delete_one({"user_id": result.get("user_id")})
     

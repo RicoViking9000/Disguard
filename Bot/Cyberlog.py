@@ -176,7 +176,8 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Reputation",value="N/A")
             embed.set_thumbnail(url=member.avatar_url)
             await database.GetLogChannel(member.guild, "doorguard").send(embed=embed)
-        database.Verification(bot)
+        database.VerifyServer(member.guild, bot)
+        database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
@@ -190,53 +191,57 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Here for",value=str(span.days)+" days, "+str(hours)+" hours, "+str(minutes)+" minutes, "+str(span.seconds - span.days*86400 - hours*3600 - minutes*60)+" seconds")
             embed.set_thumbnail(url=member.avatar_url)
             await database.GetLogChannel(member.guild, "doorguard").send(embed=embed)
-        database.Verification(bot)
+        database.VerifyServer(member.guild, bot)
+        database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with this bot'''
-        if (before.nick == after.nick and before.roles == after.roles) or not database.GetEnabled(before.guild, "member"):
-            return
-        content=None
-        embed=discord.Embed(title="Member's server attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-        if before.roles != after.roles:
-            try:
-                async for log in before.guild.audit_logs(limit=1):
-                    if log.action == discord.AuditLogAction.member_role_update and (datetime.datetime.utcnow() - log.created_at).seconds < 2: 
-                        embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
-            except discord.Forbidden:
-                 content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
-            for f in after.roles:
-                if f not in before.roles:
-                    if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")):
-                        embed.add_field(name="Role added",value=f.name)
-            for f in before.roles:
-                if f not in after.roles:
-                    if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")):
-                        embed.add_field(name="Role removed",value=f.name)
-        if before.nick != after.nick:
-            try:
-                async for log in before.guild.audit_logs(limit=1):
-                    if log.action == discord.AuditLogAction.member_update and (datetime.datetime.utcnow() - log.created_at).seconds < 2: 
-                        embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
-            except discord.Forbidden:
-                 content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
-            oldNick = before.nick if before.nick is not None else "<No nickname>"
-            newNick = after.nick if after.nick is not None else "<No nickname>"
-            embed.add_field(name="Nickname change",value=oldNick+" → → "+newNick)
-        embed.set_thumbnail(url=before.avatar_url)
-        embed.set_footer(text="Member ID: "+str(before.id))
-        await database.GetLogChannel(before.guild, "member").send(content=content,embed=embed)
+        if (before.nick != after.nick or before.roles != after.roles) and database.GetEnabled(before.guild, "member"):
+            content=None
+            embed=discord.Embed(title="Member's server attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+            if before.roles != after.roles:
+                try:
+                    async for log in before.guild.audit_logs(limit=1):
+                        if log.action == discord.AuditLogAction.member_role_update and (datetime.datetime.utcnow() - log.created_at).seconds < 2: 
+                            embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
+                except discord.Forbidden:
+                    content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
+                for f in after.roles:
+                    if f not in before.roles:
+                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")):
+                            embed.add_field(name="Role added",value=f.name)
+                for f in before.roles:
+                    if f not in after.roles:
+                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")):
+                            embed.add_field(name="Role removed",value=f.name)
+            if before.nick != after.nick:
+                try:
+                    async for log in before.guild.audit_logs(limit=1):
+                        if log.action == discord.AuditLogAction.member_update and (datetime.datetime.utcnow() - log.created_at).seconds < 2: 
+                            embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
+                except discord.Forbidden:
+                    content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
+                oldNick = before.nick if before.nick is not None else "<No nickname>"
+                newNick = after.nick if after.nick is not None else "<No nickname>"
+                embed.add_field(name="Nickname change",value=oldNick+" → → "+newNick)
+            embed.set_thumbnail(url=before.avatar_url)
+            embed.set_footer(text="Member ID: "+str(before.id))
+            await database.GetLogChannel(before.guild, "member").send(content=content,embed=embed)
+        global bot
+        database.VerifyUser(before, bot)
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
         '''[DISCORD API METHOD] Called when a user changes their global username, avatar, or discriminator'''
         servers = []
         global bot
+        membObj = None
         for server in bot.guilds: #Since this method doesn't supply a server, we need to get every server this member is a part of, to
             for member in server.members: #log to when they change their username, discriminator, or avatar
                 if member.id == before.id:
                     servers.append(server)
+                    membObj = member
         embed=discord.Embed(title="User's global attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
         if before.avatar_url != after.avatar_url:
             if before.avatar_url is not None:
@@ -254,7 +259,8 @@ class Cyberlog(commands.Cog):
         for server in servers:
             if database.GetEnabled(server, "member"):
                 await database.GetLogChannel(server, "member").send(embed=embed)
-        database.Verification(bot)
+        database.VerifyServer(before.guild, bot)
+        database.VerifyUser(membObj, bot)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -262,7 +268,8 @@ class Cyberlog(commands.Cog):
         global bot
         global globalLogChannel
         await globalLogChannel.send(embed=discord.Embed(title="Joined server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0x008000))
-        database.Verification(bot)
+        database.VerifyServer(guild, bot)
+        database.VerifyUsers(bot)
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):
@@ -270,7 +277,8 @@ class Cyberlog(commands.Cog):
         global bot
         global globalLogChannel
         await globalLogChannel.send(embed=discord.Embed(title="Left server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0xff0000))
-        database.Verification(bot)
+        database.VerifyServer(guild, bot)
+        database.VerifyUsers(bot)
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: discord.Role):
@@ -288,7 +296,7 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             await database.GetLogChannel(role.guild, "role").send(content=content,embed=embed)
-        database.Verification(bot)
+        database.VerifyServer(role.guild, bot)
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role):
@@ -305,7 +313,9 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             await database.GetLogChannel(role.guild, "role").send(content=content,embed=embed)
-        database.Verification(bot)
+        database.VerifyServer(role.guild, bot)
+        for member in role.members:
+            database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
@@ -358,7 +368,9 @@ class Cyberlog(commands.Cog):
             embed.set_footer(text="Role ID: "+str(before.id))
             if len(embed.fields)>0 or before.name != after.name:
                 await database.GetLogChannel(before.guild, "role").send(content=content,embed=embed)
-        database.Verification(bot)
+        database.VerifyServer(before.guild, bot)
+        for member in after.members:
+            database.VerifyUser(member, bot)
     
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild: discord.Guild, before, after):
