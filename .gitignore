@@ -1,0 +1,5 @@
+__pycache__/
+.vscode/
+*.code-workspace
+oauth.py
+secure.py

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>Dashboard: Disguard</title>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+        <script type="text/javascript">
+            $(window).load(function() {
+                $(".loader").fadeOut("slow");
+            });
+        </script>
+    </head>
+    <body>
+        <div class='loader'>
+            <div class="bg"></div>
+            <div class='circle'></div>
+            <div class='circle'></div>
+            <div class='circle'></div>
+            <div class='circle'></div>
+            <div class='circle'></div>
+        </div>
+        <h3>Welcome, {{user}}!</h3>
+        <h5>This place will be bare... design will be tackled later, right now, functionality is my goal</h5>
+        <h6>Speaking of functionality, right now, Disguard currently has almost the exact same features of RicoBot, with minor changes. Improvements will be made with time</h6>
+        <h5>Also, bookmark or save this URL - that way you won't have to authorize Disguard every time you come here - I will fix that during revisions</h5>
+        <p class=pageTitle>Click on a server image to manage your server.</p>
+        {% for server in servers %}
+            <div class="ChooseServer">
+                <a href="{{url_for('manageServer', id=server.server_id)}}">
+                    <img class=ChooseServerIcon src={{ server.thumbnail }} alt={{server.name}} height="150" width="150">
+                </a>
+                <p>Manage {{ server.name }}</p>
+            </div>
+        {% endfor %}
+    </body>
+</html>

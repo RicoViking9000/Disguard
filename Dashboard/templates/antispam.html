@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>Dashboard: Disguard</title>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+        <script type="text/javascript">
+            $(window).load(function() {
+                $(".loader").fadeOut("slow");
+            });
+        </script>
+    </head>
+    <body>
+        <div class='loader'>
+            <div class='circle'></div>
+            <div class='circle'></div>
+            <div class='circle'></div>
+            <div class='circle'></div>
+            <div class='circle'></div>
+        </div>
+        <h1 class=mod-header>Antispam</h1>
+        <div class=mod-master-switch>
+        </div>
+        <div>
+            <form class=mod-main method="POST">
+                Antispam Module<br><input type="radio" name="enabled" value=True {%if automod.enabled%}checked{%endif%}>Enabled
+                <br><input type="radio" name="enabled" value=False {%if not automod.enabled%}checked{%endif%}>Disabled
+                <fieldset>
+                    <legend>Consequences</legend>
+                    Members have<input type="number" name=warn value={{automod.warn}}>warnings before receiving the below action<br>
+                    </select>
+                    If a member is flagged, and has 0 warnings, impose what action on them?<select name=action>
+                        <option value=0 {%if automod.action==0%}selected{%endif%}>Do nothing</option>
+                        <option value=1 {%if automod.action==1%}selected{%endif%}>Automute</option>
+                        <option value=2 {%if automod.action==2%}selected{%endif%}>Kick</option>
+                        <option value=3 {%if automod.action==3%}selected{%endif%}>Ban</option>
+                        <option value=4 {%if automod.action==4%}selected{%endif%}>Give custom role</option>
+                    </select>
+                    <br>If using a custom role, use which role?<select name="customRoleID">
+                        <option value=None {%if not automod.customRoleID%}selected{%endif%}>--Disabled--</option>
+                        {%for role in roles%}
+                            <option value={{role.id}} {%if role.id==automod.customRoleID%}selected{%endif%}>{{role.name}}</option>
+                        {%endfor%}
+                    </select>
+                    <br>If consequence is Automute or Custom Role, a member will keep that role for<input type="number" name=muteTime value={{automod.muteTime/60}}>minute(s)
+                    <br>Notify members by<select name="whisper">
+                        <option value=True {% if automod.whisper %}selected{% endif %}>DM</option>
+                        <option value=False {% if not automod.whisper %}selected{% endif %}>Current channel</option></select>upon being flagged
+                    <br>Send detailed logs to channel<select name="log">
+                        <option value=None {%if not automod.log[0]%}selected{%endif%}>--No channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if channel.id == automod.log[1]%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                    </select>
+                    <br>Delete messages that are flagged<select name="delete">
+                        <option value=True {%if automod.delete%}selected{%endif%}>Enabled</option>
+                        <option value=False {%if not automod.delete%}selected{%endif%}>Disabled</option></select>
+                    <br>
+                </fieldset>
+                <fieldset>
+                    <legend>Filtration</legend>
+                        Set values to 0 to disable them<br><br>
+                        If<input type="number" name=congruent0 value={{automod.congruent[0]}}>out of a member's<input type="number" name=congruent1 value={{automod.congruent[1]}}>most recent messages sent within the past<input type="number" name=congruent2 value={{automod.congruent[2]/60}}>minutes contain the same content, flag them<br>
+                        If a message contains >=<input type="number" name=emoji value={{automod.emoji}}> emoji, flag the message<br>
+                        If a message contains >=<input type="number" name=mentions value={{automod.mentions}}> member mentions, flag the message<br>
+                        Flag potential selfbotters: <select name=selfbot><option value=True {%if automod.selfbot%}selected{%endif%}>Enabled</option><option value=False {%if not automod.selfbot%}selected{%endif%}>Disabled</option></select><br>
+                        If a message contains >=<input type="number" name=caps value={{automod.caps}}>% caps, flag the message<br>
+                        Flag messages containing web URLs: <select name=links><option value=True {%if not automod.links%}selected{%endif%}>Enabled</option><option value=False {%if automod.links%}selected{%endif%}>Disabled</option></select><br>
+                        Flag messages containing discord.gg invites: <select name=invites><option value=True {%if not automod.invites%}selected{%endif%}>Enabled</option><option value=False {%if automod.invites%}selected{%endif%}>Disabled</option></select><br>
+                        If a message contains >=<input type="number" name=everyoneTags value={{automod.everyoneTags}}> @everyone mentions, and doesn't mention <i>everyone</i>, flag the message<br>
+                        If a message contains >=<input type="number" name=hereTags value={{automod.hereTags}}> @here mentions, and doesn't mention <i>here</i>, flag the message<br>
+                        If a message contains >=<input type="number" name=roleTags value=0 disabled> @role mentions, flag the message<br>
+                        If a member spams <input type="number" name=quickMessages0 value={{automod.quickMessages[0]}}> messages in <input type="number" name=quickMessages1 value={{automod.quickMessages[1]}}> seconds, flag them<br>
+                        If a member has at least one role, ignore their offenses<select name=ignoreRoled><option value=True {%if automod.ignoreRoled%}selected{%endif%}>Enabled</option><option value=False {%if not automod.ignoreRoled%}selected{%endif%}>Disabled</option></select><br>
+                </fieldset>
+                <input type="submit" value="Save">
+            </form>
+        </div>
+        <div>
+        </div>
+        <h3>To exclude channels, roles, or channels from the antispam filter, contact RicoViking9000#2395 on Discord</h3>
+        <h3>To customize your profanity filter, contact me on Discord</h3>
+    </body>
