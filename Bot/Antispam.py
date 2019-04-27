@@ -38,24 +38,23 @@ class Antispam(commands.Cog):
                 lastMessages = member.get("lastMessages")
                 quickMessages = member.get("quickMessages")
                 lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
-                #if message.channel.id not in database.GetChannelExclusions(message.guild) and not database.AreRolesExcluded(message.author) and not database.ManageServer(message.author):
-                quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
-                for msg in lastMessages:
-                    if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
-                        lastMessages.remove(msg)
-                    if len(lastMessages) > spam.get("congruent")[1]:
-                        lastMessages.pop(0)
-                for msg in quickMessages:
-                    if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
-                        quickMessages.remove(msg)
-                    if len(quickMessages) > spam.get("quickMessages")[0]:
-                        quickMessages.pop(0)
-                database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
-                database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
-                break
+                if message.channel.id not in database.GetChannelExclusions(message.guild) and not CheckRoleExclusions(message.author) and message.author.id not in database.GetMemberExclusions(message.guild):
+                    quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
+                    for msg in lastMessages:
+                        if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
+                            lastMessages.remove(msg)
+                        if len(lastMessages) > spam.get("congruent")[1]:
+                            lastMessages.pop(0)
+                    for msg in quickMessages:
+                        if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
+                            quickMessages.remove(msg)
+                        if len(quickMessages) > spam.get("quickMessages")[0]:
+                            quickMessages.pop(0)
+                    database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+                    database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+                    break
         if not spam.get('enabled') or message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or CheckRoleExclusions(message.author):
-            #return #If the antispam is not enabled for a server, return
-            pass
+            return #If the antispam is not enabled for a server, return
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         reason = [] #List of reasons (long version) that a member was flagged for

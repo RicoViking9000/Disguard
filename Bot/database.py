@@ -7,10 +7,9 @@ import profanityfilter
 from discord.ext import commands
 
 mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
-db = mongo.disguard
-servers = db.servers
-users = db.users
-tickets = db.tickets
+db = None
+servers = None
+users = None
 
 class LogModule(object):
     '''Used for consistent controlling of logging'''
@@ -23,6 +22,19 @@ class LogModule(object):
         self.channel = channelID #which channel is this sent to?
         self.color = embedColor #custom color used for embed [LATER]
         self.advanced = advanced #enable advanced mode? [LATER]
+
+def Initialize(token):
+    '''Configure the database based on if bot is Disguard or Disguard Beta'''
+    global db
+    global servers
+    global users
+    if token == secure.token():
+        db = mongo.disguard
+    elif token == secure.beta():
+        db = mongo.disguard_beta
+    servers = db.servers
+    users = db.users
+    
 
 '''Checking events'''
 def Verification(b: commands.Bot):
