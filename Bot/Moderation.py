@@ -60,25 +60,31 @@ class Moderation(commands.Cog):
             elif "embeds" in body: current.embeds = True if "true" in meat.lower() else False
             elif "mentions" in body: current.mentions = True if "true" in meat.lower() else False
             elif "bots" in body: current.bots = True if "true" in meat.lower() else False
-            elif "channel" in body: current.channel = ctx.message.channel_mentions[0] if len(ctx.message.channel_mentions) > 0 else None
+            elif "channel" in body: current.channel = ctx.message.channel_mentions[0] if len(ctx.message.channel_mentions) > 0 else ctx.channel
             elif "attachments" in body: current.files = True if "true" in meat.lower() else False
             elif "reactions" in body: current.reactions = True if "true" in meat.lower() else False
             elif "external_messages" in body: current.appMessages = True if "true" in meat.lower() else False
             elif "after" in body: current.startDate = ConvertToDatetime(meat)
             elif "before" in body: current.endDate = ConvertToDatetime(meat)
-            else: current.limit = int(body) #for example, .purge 10 wouldn't fall into the above categories, but is used due to rapid ability
+            else:
+                try: 
+                    current.limit = int(body) #for example, .purge 10 wouldn't fall into the above categories, but is used due to rapid ability
+                except:
+                    current = None
+                    return await ctx.send("I don't think **"+body+"** is a number... please try again, or use the website documentation for filters")
+                actuallyPurge = True
         if actuallyPurge:
             await status.edit(content="Purging...")
-            messages = await current.channel.purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate, oldest_first=True)
+            messages = await current.channel.purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
             await status.edit(content="**Successfully purged "+str(len(messages))+" messages :ok_hand:**")
         else:
             await status.edit(content="Indexing... please be patient")
             count = 0
             async for message in current.channel.history(limit=current.limit, before=current.endDate, after=current.startDate):
                 if PurgeFilter(message): count += 1
-            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\n",color=discord.Color.blue(), timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n",color=discord.Color.blue(), timestamp=datetime.datetime.utcnow())
             if current.author is not None: embed.description += "Author: "+current.author.mention+"\n"
-            if current.channel is not None:  embed.description += "In channel: "+current.channel.mention+"\n"
+            if current.channel is not None: embed.description += "In channel: "+current.channel.mention+"\n"
             if current.contains is not None: embed.description += "Contains: "+current.contains+"\n"
             if current.startsWith is not None: embed.description += "Starts with: "+current.startsWith+"\n"
             if current.endsWith is not None: embed.description += "Ends with: "+current.endsWith+"\n"
@@ -104,6 +110,8 @@ class Moderation(commands.Cog):
 def PurgeFilter(m: discord.Message):
     '''Used to determine if a message should be purged'''
     global current
+    if m == current.message:
+        return False
     if current.contains is not None:
         if current.contains not in m.content:
             return False
