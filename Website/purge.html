@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>purge - Disguard Commands</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                </ul>
+            </nav>
+        </header>
+    <h1 class=comIndivTitle>purge command</h1>
+    <p class=comIndivDesc>Purge messages</p>
+    <h3 class=comIndivSub>Quick purge: .purge [number]</h3>
+    <h4>Example - purge 10 posts: <u>.purge 10</u></h4>
+    <h3 class=comIndivSub>Advanced purge: use filters</h3>
+    <p>filter_name:value</p>
+    <h5>Multi-lining filters is optional. If you use filters, you must include 'purge:true' to actually purge for safety reasons. Separate different filters by a space or newline; separate filter:value with only a colon - no space. Use as many filters as necessary. If a value requires a space for multiple words, surround filter:value with quotes, like this: "filter:value". For the True/False values, you can set them as false to ignore them, but omitting them is also valid - all filters are optional. Also happens to be a handy search tool if needed. Please see examples below the table.</h5>
+    <table border=1 id=purgeFilters>
+        <tr><td colspan=5><center>Filters</center></td></tr>
+        <tr>
+            <td><center>Name</center></td>
+            <td><center>Description</center></td>
+            <td><center>Values</center></td>
+        </tr>
+        <tr>
+            <td>count</td>
+            <td>The maximum number of messages to purge; the limit. Defaults to 100</td>
+            <td>An integer</td>
+        </tr>
+        <tr>
+            <td>author</td>
+            <td>Match messages sent by this author. Do not mention people. Discriminator (#0001) is optional, but recommended for accuracy. Nicknames will work.</td>
+            <td>Username#0001</td>
+        </tr>
+        <tr>
+            <td>channel</td>
+            <td>Match messages sent in this channel. Defaults to current channel</td>
+            <td>#{channel_name}</td>
+        </tr>
+        <tr>
+            <td>contains</td>
+            <td>Match messages that contain this text</td>
+            <td>word or phrase</td>
+        </tr>
+        <tr>
+            <td>startswith</td>
+            <td>Match messages that start with this text</td>
+            <td>word or phrase</td>
+        </tr>
+        <tr>
+            <td>endswith</td>
+            <td>Match messages that end with this text</td>
+            <td>word or phrase</td>
+        </tr>
+        <tr>
+            <td>links</td>
+            <td>Match messages that contain web URLs</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>invites</td>
+            <td>Match messages that server invites</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>images</td>
+            <td>Match messages that contain image attachments</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>embeds</td>
+            <td>Match messages that contain embeds, including embedded URLs</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>mentions</td>
+            <td>Match messages that contain @mentions</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>bots</td>
+            <td>Match messages that were sent by bot accounts</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>attachments</td>
+            <td>Match messages that contain attachments, such as images or files</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>reactions</td>
+            <td>Match messages that contain reactions</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>external_messages</td>
+            <td>Match messages that contain 3rd party embeds, such as Spotify invites or game invites through Discord (e.g. Fortnite)</td>
+            <td>true</td>
+        </tr>
+        <tr>
+            <td>before</td>
+            <td>Match messages that were sent before this date</td>
+            <td>mm/dd/yyyy</td>
+        </tr>
+        <tr>
+            <td>after</td>
+            <td>Match messages that were sent after this date</td>
+            <td>mm/dd/yyyy</td>
+        </tr>
+        <tr>
+            <td>purge</td>
+            <td>Include 'purge:true' to purge, exclude to pre-scan to see how many messages would be purged, if you included it</td>
+            <td>true</td>
+        </tr>
+    </table>
+    <p>This example isn't necessarily realistic, but includes every option, so you can follow this guide for your filters. Quotes are only required for multiple-word values, and again, all filters are optional</p>
+    <p>And if you find this daunting, you aren't alone. An interactive purge walkthrough is in the works.</p>
+    <p>.purge<br>
+        count:5<br>
+        author:Disguard#1890<br>
+        contains:noob<br>
+        "startswith:you are"<br>
+        endswith:idiot<br>
+        links:true<br>
+        invites:true<br>
+        images:true<br>
+        embeds:true<br>
+        mentions:true<br>
+        bots:true<br>
+        channel:#general<br>
+        attachments:true<br>
+        reactions:true<br>
+        external_messages:true<br>
+        before:4/27/19<br>
+        after:1/1/19<br>
+        purge:true<br></p>
+    <p>Here's a more realistic example - purging the most recent 20 messages in #bots sent by Mee6#4876 that contain image attachments:</p>
+    <p>.purge count:20 author:Mee6 channel:#bots images:true purge:true</p>
+    <p>And here's what a purge pre-scan looks like: (.purge channel:#general after:4/25/19)</p>
+    <img src=https://cdn.discordapp.com/attachments/567741860559454210/571858736704913409/unknown.png>
+    </body>
