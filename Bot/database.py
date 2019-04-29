@@ -115,7 +115,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
             } for member in iter(s.members)] if log is None or members is None else [{
         "name": member.name, 
         "id": member.id, 
-        "warnings": [] if len([a for a in iter(servers.find_one({"server_id": s.id}).get("members")) if a.get("id") == member.id]) < 1 else [memb.get("warnings") for memb in iter(servers.find_one({"server_id": s.id}).get("members")) if memb.get("id") == member.id][0], 
+        "warnings": spam.get('warn') if len([a for a in iter(servers.find_one({"server_id": s.id}).get("members")) if a.get("id") == member.id]) < 1 else [memb.get("warnings") for memb in iter(servers.find_one({"server_id": s.id}).get("members")) if memb.get("id") == member.id][0], 
         "quickMessages": [] if len([a for a in iter(servers.find_one({"server_id": s.id}).get("members")) if a.get("id") == member.id]) < 1 else [memb.get("quickMessages") for memb in iter(servers.find_one({"server_id": s.id}).get("members")) if memb.get("id") == member.id][0],
         "lastMessages": [] if len([a for a in iter(servers.find_one({"server_id": s.id}).get("members")) if a.get("id") == member.id]) < 1 else [memb.get("lastMessages") for memb in iter(servers.find_one({"server_id": s.id}).get("members")) if memb.get("id") == member.id][0]
             } for member in iter(s.members)]

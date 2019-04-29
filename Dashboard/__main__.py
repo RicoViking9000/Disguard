@@ -92,6 +92,9 @@ def antispam(id):
         database.UpdateMemberWarnings(id, int(r.get('warn')))
         serv = servers.find_one({"server_id": id})
         antispam = serv.get("antispam")
+        cex = list(map(int, r.getlist('channelExclusions'))) #HTML forms pass data as strings, but we need ints
+        rex = list(map(int, r.getlist('roleExclusions'))) #rex = (R)ole(Ex)clusions
+        mex = list(map(int, r.getlist('memberExclusions')))
         servers.update_one({"server_id": id}, {"$set": {"antispam": { #Save and convert values for DB
             "enabled": r.get('enabled').lower() == 'true',
             "whisper": r.get("whisper").lower() == 'true',
@@ -113,15 +116,15 @@ def antispam(id):
             "roleTags": 0,
             "quickMessages": [int(r.get("quickMessages0")), int(r.get("quickMessages1"))],
             "ignoreRoled": r.get("ignoreRoled").lower() == 'true',
-            "channelExclusions": antispam.get("channelExclusions"),
-            "roleExclusions": antispam.get("roleExclusions"),
-            "memberExclusions": antispam.get("memberExclusions"),
+            "channelExclusions": cex,
+            "roleExclusions": rex,
+            "memberExclusions": mex,
             "profanityEnabled": antispam.get("profanityEnabled"),
             "profanityTolerance": antispam.get("profanityTolerance"),
             "filter": antispam.get("filter")}}})
         return redirect(url_for('manage', id=id))
     servObj = servers.find_one({"server_id": id})
-    return render_template('antispam.html', servid = id, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"))
+    return render_template('antispam.html', servid = id, servObj=servObj, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
 
 
 
