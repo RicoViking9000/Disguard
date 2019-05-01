@@ -125,21 +125,25 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             embed.set_footer(text="Channel ID: "+str(before.id))
-            beforeTopic = before.topic if before.topic is not None else "<No topic>"
-            afterTopic = after.topic if after.topic is not None else "<No topic>"
-            embed.add_field(name="Name",value=before.name+" → → "+after.name if before.name != after.name else "(No change)")
+            embed.add_field(name="Name",value=before.name+" → "+after.name if before.name != after.name else "(No change)")
             if type(before) is discord.TextChannel:
-                embed.add_field(name="Topic",value=str(beforeTopic)+" → → "+str(afterTopic) if before.topic != after.topic else "(No change)")
-                embed.add_field(name="NSFW",value=str(before.is_nsfw())+" → → "+str(after.is_nsfw()) if before.is_nsfw() != after.is_nsfw() else "(No change)")
+                beforeTopic = before.topic if before.topic is not None else "<No topic>"
+                afterTopic = after.topic if after.topic is not None else "<No topic>"
+                embed.add_field(name="Topic",value=str(beforeTopic)+" → "+str(afterTopic) if before.topic != after.topic else "(No change)")
+                embed.add_field(name="NSFW",value=str(before.is_nsfw())+" → "+str(after.is_nsfw()) if before.is_nsfw() != after.is_nsfw() else "(No change)")
             elif type(before) is discord.VoiceChannel:
-                embed.add_field(name="Bitrate",value=str(before.bitrate)+" → → "+str(after.bitrate) if before.bitrate != after.bitrate else "(No change)")
-                embed.add_field(name="User limit",value=str(before.user_limit)+" → → "+str(after.user_limit) if before.user_limit != after.user_limit else "(No change)")
+                embed.add_field(name="Bitrate",value=str(before.bitrate)+" → "+str(after.bitrate) if before.bitrate != after.bitrate else "(No change)")
+                embed.add_field(name="User limit",value=str(before.user_limit)+" → "+str(after.user_limit) if before.user_limit != after.user_limit else "(No change)")
             beforeCat = str(before.category) if before.category is not None else "<No category>"
             afterCat = str(after.category) if after.category is not None else "<No category>"
             if type(before) is not discord.CategoryChannel:
-                embed.add_field(name="Category",value=str(beforeCat)+" → → "+str(afterCat) if before.category != after.category else "(No change)")
-            if len(embed.fields) > 0:
+                embed.add_field(name="Category",value=str(beforeCat)+" → "+str(afterCat) if before.category != after.category else "(No change)")
+            if type(before) is discord.TextChannel and before.topic != after.topic or before.name != after.name or before.category != after.category or before.is_nsfw() != after.is_nsfw():
                 await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
+            elif type(before) is discord.VoiceChannel and before.name != after.name or before.bitrate != after.bitrate or before.user_limit != after.user_limit or before.category != after.category:
+                await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
+            elif type(before) is discord.CategoryChannel and before.name != after.name:
+                 await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
         database.VerifyServer(before.guild, bot)
 
     @commands.Cog.listener()
@@ -188,7 +192,7 @@ class Cyberlog(commands.Cog):
             span = datetime.datetime.utcnow() - member.joined_at
             hours = span.seconds//3600
             minutes = (span.seconds//60)%60
-            embed.add_field(name="Here for",value=str(span.days)+" days, "+str(hours)+" hours, "+str(minutes)+" minutes, "+str(span.seconds - span.days*86400 - hours*3600 - minutes*60)+" seconds")
+            embed.add_field(name="Here for",value=str(span.days)+" days, "+str(hours)+" hours, "+str(minutes)+" minutes, "+str(span.seconds - hours*3600 - minutes*60)+" seconds")
             embed.set_thumbnail(url=member.avatar_url)
             await database.GetLogChannel(member.guild, "doorguard").send(embed=embed)
         database.VerifyServer(member.guild, bot)
@@ -224,7 +228,7 @@ class Cyberlog(commands.Cog):
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
                 oldNick = before.nick if before.nick is not None else "<No nickname>"
                 newNick = after.nick if after.nick is not None else "<No nickname>"
-                embed.add_field(name="Nickname change",value=oldNick+" → → "+newNick)
+                embed.add_field(name="Nickname change",value=oldNick+" → "+newNick)
             embed.set_thumbnail(url=before.avatar_url)
             embed.set_footer(text="Member ID: "+str(before.id))
             await database.GetLogChannel(before.guild, "member").send(content=content,embed=embed)
@@ -252,9 +256,9 @@ class Cyberlog(commands.Cog):
         else:
             embed.set_thumbnail(url=before.avatar_url)
         if before.discriminator != after.discriminator:
-            embed.add_field(name="Discriminator updated",value=before.discriminator+" → → "+after.discriminator)
+            embed.add_field(name="Discriminator updated",value=before.discriminator+" → "+after.discriminator)
         if before.name != after.name:
-            embed.add_field(name="Username updated",value=before.name+" → → "+after.name)
+            embed.add_field(name="Username updated",value=before.name+" → "+after.name)
         embed.set_footer(text="User ID: "+str(after.id))
         for server in servers:
             if database.GetEnabled(server, "member"):
@@ -324,7 +328,7 @@ class Cyberlog(commands.Cog):
         if database.GetEnabled(before.guild, "role"):
             content=None
             color=0x0000FF if before.color == after.color else after.color
-            embed=discord.Embed(title="Role was updated",description="Name: "+ after.name if before.name == after.name else "Name: "+before.name+" → → "+after.name,color=color,timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title="Role was updated",description="Name: "+ after.name if before.name == after.name else "Name: "+before.name+" → "+after.name,color=color,timestamp=datetime.datetime.utcnow())
             if database.GetReadPerms(before.guild, "role"):
                 try:
                     async for log in before.guild.audit_logs(limit=1): #Color too
@@ -334,37 +338,37 @@ class Cyberlog(commands.Cog):
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             if before.color != after.color: embed.description+="\nEmbed color represents new role color"
             embed.description+="\n:warning: "+str(len(after.members))+" members received updated permissions :warning:"
-            if before.permissions.administrator != after.permissions.administrator: embed.add_field(name="Admin",value=str(before.permissions.administrator+" → → "+after.permissions.administrator),inline=False)
-            if before.hoist != after.hoist: embed.add_field(name="Displayed separately",value=str(before.hoist)+" → → "+str(after.hoist))
-            if before.mentionable != after.mentionable: embed.add_field(name="Mentionable",value=str(before.mentionable)+" → → "+str(after.mentionable))
-            if before.permissions.create_instant_invite != after.permissions.create_instant_invite: embed.add_field(name="Create invites",value=str(before.permissions.create_instant_invite)+" → → "+str(after.permissions.create_instant_invite))
-            if before.permissions.kick_members != after.permissions.kick_members: embed.add_field(name="Kick",value=str(before.permissions.kick_members)+" → → "+str(after.permissions.kick_members))
-            if before.permissions.ban_members != after.permissions.ban_members: embed.add_field(name="Ban",value=str(before.permissions.ban_members)+" → → "+str(after.permissions.ban_members))
-            if before.permissions.manage_channels != after.permissions.manage_channels: embed.add_field(name="Manage channels",value=str(before.permissions.manage_channels)+" → → "+str(after.permissions.manage_channels))
-            if before.permissions.manage_guild != after.permissions.manage_guild: embed.add_field(name="Manage server",value=str(before.permissions.manage_guild)+" → → "+str(after.permissions.manage_guild))
-            if before.permissions.add_reactions != after.permissions.add_reactions: embed.add_field(name="Add reactions",value=str(before.permissions.add_reactions)+" → → "+str(after.permissions.add_reactions))
-            if before.permissions.view_audit_log != after.permissions.view_audit_log: embed.add_field(name="View audit log",value=str(before.permissions.view_audit_log)+" → → "+str(after.permissions.view_audit_log))
-            if before.permissions.priority_speaker != after.permissions.priority_speaker: embed.add_field(name="[VC] Priority speaker",value=str(before.permissions.priority_speaker)+" → → "+str(after.permissions.priority_speaker))
-            if before.permissions.read_messages != after.permissions.read_messages: embed.add_field(name="Read messages",value=str(before.permissions.read_messages)+" → → "+str(after.permissions.read_messages))
-            if before.permissions.send_messages != after.permissions.send_messages: embed.add_field(name="Send messages",value=str(before.permissions.send_messages)+" → → "+str(after.permissions.send_messages))
-            if before.permissions.send_tts_messages != after.permissions.send_tts_messages: embed.add_field(name="Use /TTS",value=str(before.permissions.send_tts_messages)+" → → "+str(after.permissions.send_tts_messages))
-            if before.permissions.manage_messages != after.permissions.manage_messages: embed.add_field(name="Manage messages",value=str(before.permissions.manage_messages)+" → → "+str(after.permissions.manage_messages))
-            if before.permissions.embed_links != after.permissions.embed_links: embed.add_field(name="Embed URLs",value=str(before.permissions.embed_links)+" → → "+str(after.permissions.embed_links))
-            if before.permissions.attach_files != after.permissions.attach_files: embed.add_field(name="Attach files",value=str(before.permissions.attach_files)+" → → "+str(after.permissions.attach_files))
-            if before.permissions.read_message_history != after.permissions.read_message_history: embed.add_field(name="Read message history",value=str(before.permissions.read_message_history)+" → → "+str(after.permissions.read_message_history))
-            if before.permissions.mention_everyone != after.permissions.mention_everyone: embed.add_field(name="@everyone/@here",value=str(before.permissions.mention_everyone)+" → → "+str(after.permissions.mention_everyone))
-            if before.permissions.external_emojis != after.permissions.external_emojis: embed.add_field(name="Use global/nitro emotes",value=str(before.permissions.external_emojis)+" → → "+str(after.permissions.external_emojis))
-            if before.permissions.connect != after.permissions.connect: embed.add_field(name="[VC] Connect",value=str(before.permissions.connect)+" → → "+str(after.permissions.connect))
-            if before.permissions.speak != after.permissions.speak: embed.add_field(name="[VC] Speak",value=str(before.permissions.speak)+" → → "+str(after.permissions.speak))
-            if before.permissions.mute_members != after.permissions.mute_members: embed.add_field(name="[VC] Mute others",value=str(before.permissions.mute_members)+" → → "+str(after.permissions.mute_members))
-            if before.permissions.deafen_members != after.permissions.deafen_members: embed.add_field(name="[VC] Deafen others",value=str(before.permissions.deafen_members)+" → → "+str(after.permissions.deafen_members))
-            if before.permissions.move_members != after.permissions.move_members: embed.add_field(name="[VC] Move others",value=str(before.permissions.move_members)+" → → "+str(after.permissions.move_members))
-            if before.permissions.use_voice_activation != after.permissions.use_voice_activation: embed.add_field(name="[VC] Push to talk required",value=str(not(before.permissions.use_voice_activation))+" → → "+str(not(after.permissions.use_voice_activation)))
-            if before.permissions.change_nickname != after.permissions.change_nickname: embed.add_field(name="Change own nickname",value=str(before.permissions.change_nickname)+" → → "+str(after.permissions.change_nickname))
-            if before.permissions.manage_nicknames != after.permissions.manage_nicknames: embed.add_field(name="Change other nicknames",value=str(before.permissions.manage_nicknames)+" → → "+str(after.permissions.manage_nicknames))
-            if before.permissions.manage_roles != after.permissions.manage_roles: embed.add_field(name="Manage roles",value=str(before.permissions.manage_roles)+" → → "+str(after.permissions.manage_roles))
-            if before.permissions.manage_webhooks != after.permissions.manage_webhooks: embed.add_field(name="Manage webhooks",value=str(before.permissions.manage_webhooks)+" → → "+str(after.permissions.manage_webhooks))
-            if before.permissions.manage_emojis != after.permissions.manage_emojis: embed.add_field(name="Manage emoji", value=str(before.permissions.manage_emojis)+" → → "+str(after.permissions.manage_emojis))
+            if before.permissions.administrator != after.permissions.administrator: embed.add_field(name="Admin",value=str(before.permissions.administrator+" → "+after.permissions.administrator),inline=False)
+            if before.hoist != after.hoist: embed.add_field(name="Displayed separately",value=str(before.hoist)+" → "+str(after.hoist))
+            if before.mentionable != after.mentionable: embed.add_field(name="Mentionable",value=str(before.mentionable)+" → "+str(after.mentionable))
+            if before.permissions.create_instant_invite != after.permissions.create_instant_invite: embed.add_field(name="Create invites",value=str(before.permissions.create_instant_invite)+" → "+str(after.permissions.create_instant_invite))
+            if before.permissions.kick_members != after.permissions.kick_members: embed.add_field(name="Kick",value=str(before.permissions.kick_members)+" → "+str(after.permissions.kick_members))
+            if before.permissions.ban_members != after.permissions.ban_members: embed.add_field(name="Ban",value=str(before.permissions.ban_members)+" → "+str(after.permissions.ban_members))
+            if before.permissions.manage_channels != after.permissions.manage_channels: embed.add_field(name="Manage channels",value=str(before.permissions.manage_channels)+" → "+str(after.permissions.manage_channels))
+            if before.permissions.manage_guild != after.permissions.manage_guild: embed.add_field(name="Manage server",value=str(before.permissions.manage_guild)+" → "+str(after.permissions.manage_guild))
+            if before.permissions.add_reactions != after.permissions.add_reactions: embed.add_field(name="Add reactions",value=str(before.permissions.add_reactions)+" → "+str(after.permissions.add_reactions))
+            if before.permissions.view_audit_log != after.permissions.view_audit_log: embed.add_field(name="View audit log",value=str(before.permissions.view_audit_log)+" → "+str(after.permissions.view_audit_log))
+            if before.permissions.priority_speaker != after.permissions.priority_speaker: embed.add_field(name="[VC] Priority speaker",value=str(before.permissions.priority_speaker)+" → "+str(after.permissions.priority_speaker))
+            if before.permissions.read_messages != after.permissions.read_messages: embed.add_field(name="Read messages",value=str(before.permissions.read_messages)+" → "+str(after.permissions.read_messages))
+            if before.permissions.send_messages != after.permissions.send_messages: embed.add_field(name="Send messages",value=str(before.permissions.send_messages)+" → "+str(after.permissions.send_messages))
+            if before.permissions.send_tts_messages != after.permissions.send_tts_messages: embed.add_field(name="Use /TTS",value=str(before.permissions.send_tts_messages)+" → "+str(after.permissions.send_tts_messages))
+            if before.permissions.manage_messages != after.permissions.manage_messages: embed.add_field(name="Manage messages",value=str(before.permissions.manage_messages)+" → "+str(after.permissions.manage_messages))
+            if before.permissions.embed_links != after.permissions.embed_links: embed.add_field(name="Embed URLs",value=str(before.permissions.embed_links)+" → "+str(after.permissions.embed_links))
+            if before.permissions.attach_files != after.permissions.attach_files: embed.add_field(name="Attach files",value=str(before.permissions.attach_files)+" → "+str(after.permissions.attach_files))
+            if before.permissions.read_message_history != after.permissions.read_message_history: embed.add_field(name="Read message history",value=str(before.permissions.read_message_history)+" → "+str(after.permissions.read_message_history))
+            if before.permissions.mention_everyone != after.permissions.mention_everyone: embed.add_field(name="@everyone/@here",value=str(before.permissions.mention_everyone)+" → "+str(after.permissions.mention_everyone))
+            if before.permissions.external_emojis != after.permissions.external_emojis: embed.add_field(name="Use global/nitro emotes",value=str(before.permissions.external_emojis)+" → "+str(after.permissions.external_emojis))
+            if before.permissions.connect != after.permissions.connect: embed.add_field(name="[VC] Connect",value=str(before.permissions.connect)+" → "+str(after.permissions.connect))
+            if before.permissions.speak != after.permissions.speak: embed.add_field(name="[VC] Speak",value=str(before.permissions.speak)+" → "+str(after.permissions.speak))
+            if before.permissions.mute_members != after.permissions.mute_members: embed.add_field(name="[VC] Mute others",value=str(before.permissions.mute_members)+" → "+str(after.permissions.mute_members))
+            if before.permissions.deafen_members != after.permissions.deafen_members: embed.add_field(name="[VC] Deafen others",value=str(before.permissions.deafen_members)+" → "+str(after.permissions.deafen_members))
+            if before.permissions.move_members != after.permissions.move_members: embed.add_field(name="[VC] Move others",value=str(before.permissions.move_members)+" → "+str(after.permissions.move_members))
+            if before.permissions.use_voice_activation != after.permissions.use_voice_activation: embed.add_field(name="[VC] Push to talk required",value=str(not(before.permissions.use_voice_activation))+" → "+str(not(after.permissions.use_voice_activation)))
+            if before.permissions.change_nickname != after.permissions.change_nickname: embed.add_field(name="Change own nickname",value=str(before.permissions.change_nickname)+" → "+str(after.permissions.change_nickname))
+            if before.permissions.manage_nicknames != after.permissions.manage_nicknames: embed.add_field(name="Change other nicknames",value=str(before.permissions.manage_nicknames)+" → "+str(after.permissions.manage_nicknames))
+            if before.permissions.manage_roles != after.permissions.manage_roles: embed.add_field(name="Manage roles",value=str(before.permissions.manage_roles)+" → "+str(after.permissions.manage_roles))
+            if before.permissions.manage_webhooks != after.permissions.manage_webhooks: embed.add_field(name="Manage webhooks",value=str(before.permissions.manage_webhooks)+" → "+str(after.permissions.manage_webhooks))
+            if before.permissions.manage_emojis != after.permissions.manage_emojis: embed.add_field(name="Manage emoji", value=str(before.permissions.manage_emojis)+" → "+str(after.permissions.manage_emojis))
             embed.set_footer(text="Role ID: "+str(before.id))
             if len(embed.fields)>0 or before.name != after.name:
                 await database.GetLogChannel(before.guild, "role").send(content=content,embed=embed)
@@ -412,14 +416,14 @@ class Cyberlog(commands.Cog):
             embed.set_footer(text="")
             for a in range(len(before)):
                 if before[a].name != after[a].name:
-                    embed.add_field(name=before[a].name+" → → "+after[a].name,value=str(before[a]))
+                    embed.add_field(name=before[a].name+" → "+after[a].name,value=str(before[a]))
                     embed.set_footer(text=embed.footer.text+"Emoji ID: "+str(before[a].id))
                     embed.set_image(url=before[a].url)
         if len(embed.fields)>0:
             await database.GetLogChannel(guild, "emoji").send(content=content,embed=embed)
 
 def AvoidDeletionLogging(messages: int, server: discord.Guild):
-    '''Don't log the next [messages] deletions if they belong to particular passes server'''
+    '''Don't log the next [messages] deletions if they belong to particular passed server'''
     global pauseDelete
     global serverDelete
     pauseDelete = messages

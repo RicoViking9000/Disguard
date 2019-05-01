@@ -91,12 +91,13 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
         "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
         "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
+        "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
         "channelExclusions": DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
         "roleExclusions": DefaultRoleExclusions(s) if serv is None or spam.get('roleExclusions') is None else spam.get('roleExclusions'), #Don't filter messages sent by members with a role in this list
         "memberExclusions": DefaultMemberExclusions(s) if serv is None or spam.get('memberExclusions') is None else spam.get('memberExclusions'), #Don't filter messages sent by a member in this list
         "profanityEnabled": False if serv is None or spam.get("profanityEnabled") is None else spam.get('profanityEnabled'), #Is the profanity filter enabled
         "profanityTolerance": 0.25 if serv is None or spam.get('profanityTolerance') is None else spam.get('profanityTolerance'), #% of message to be profanity to be flagged
-        "filter": vars(profanityfilter.ProfanityFilter()) if serv is None or spam.get("filter") is None else spam.get("filter")}, #Profanity filter object
+        "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter")}, #Profanity filter object
     "cyberlog": {
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
         "image": False if log is None or log.get('image') is None else log.get('enabled'),
@@ -165,6 +166,10 @@ def GetMembersList(s: discord.Guild):
 def GetServerCollection():
     '''Return servers collection object'''
     return servers
+
+def GetProfanityFilter(s: discord.Guild):
+    '''Return profanityfilter object'''
+    return GetAntiSpamObject(s).get("filter")
 
 def UpdateMemberLastMessages(server: int, member: int, messages):
     '''Updates database entry for lastMessages modification

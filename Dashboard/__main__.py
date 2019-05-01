@@ -9,11 +9,11 @@ import database
 
 OAUTH2_CLIENT_ID = Oauth.client_id
 OAUTH2_CLIENT_SECRET = Oauth.client_secret
-OAUTH2_REDIRECT_URI = 'http://localhost:5000/callback'
+OAUTH2_REDIRECT_URI = 'https://disguard.herokuapp.com/callback'
 
 API_BASE_URL = 'https://discordapp.com/api'
 AUTHORIZATION_BASE_URL = API_BASE_URL + '/oauth2/authorize'
-TOKEN_URL = API_BASE_URL + '/oauth2/token' 
+TOKEN_URL = API_BASE_URL + '/oauth2/token'
 
 app = Flask(__name__)
 
@@ -21,7 +21,8 @@ app.debug = True
 app.config['SECRET_KEY'] = Oauth.client_secret
 
 mongo = pymongo.MongoClient(oauth.mongo()) #Database connection URL in another file so you peeps don't go editing the database ;)
-db = mongo.disguard
+#db = mongo.disguard
+db = mongo.disguard_beta #Allows for dashboard to use test database if necessary
 servers = db.servers
 users = db.users
 
@@ -95,6 +96,13 @@ def antispam(id):
         cex = list(map(int, r.getlist('channelExclusions'))) #HTML forms pass data as strings, but we need ints
         rex = list(map(int, r.getlist('roleExclusions'))) #rex = (R)ole(Ex)clusions
         mex = list(map(int, r.getlist('memberExclusions')))
+        profane = antispam.get("filter")
+        for word in r.getlist('removeCensorWords'):
+            profane.remove(word)
+        profane.extend(r.get('addCensorWords').split(', '))
+        for w in profane:
+            if len(w) < 1:
+                profane.remove(w) #Remove empty words, if they exist
         servers.update_one({"server_id": id}, {"$set": {"antispam": { #Save and convert values for DB
             "enabled": r.get('enabled').lower() == 'true',
             "whisper": r.get("whisper").lower() == 'true',
@@ -113,15 +121,16 @@ def antispam(id):
             "invites": r.get("invites").lower() == 'false',
             "everyoneTags": int(r.get("everyoneTags")),
             "hereTags": int(r.get("hereTags")),
-            "roleTags": 0,
+            "roleTags": int(r.get('roleTags')),
             "quickMessages": [int(r.get("quickMessages0")), int(r.get("quickMessages1"))],
             "ignoreRoled": r.get("ignoreRoled").lower() == 'true',
+            "exclusionMode": int(r.get('exclusionMode')),
             "channelExclusions": cex,
             "roleExclusions": rex,
             "memberExclusions": mex,
-            "profanityEnabled": antispam.get("profanityEnabled"),
-            "profanityTolerance": antispam.get("profanityTolerance"),
-            "filter": antispam.get("filter")}}})
+            "profanityEnabled": r.get('profanityEnabled').lower() == 'true',
+            "profanityTolerance": float(r.get("profanityTolerance")) / 100,
+            "filter": profane}}})
         return redirect(url_for('manage', id=id))
     servObj = servers.find_one({"server_id": id})
     return render_template('antispam.html', servid = id, servObj=servObj, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))

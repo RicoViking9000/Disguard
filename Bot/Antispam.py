@@ -6,6 +6,9 @@ import profanityfilter
 import emoji
 import Cyberlog
 import asyncio
+import profanityfilter
+
+filters = {}
 
 class ParodyMessage(object):
     def __init__(self, content, created):
@@ -20,7 +23,7 @@ class Antispam(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent'''
-        if message.author.bot:
+        if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
         spam = database.GetAntiSpamObject(message.guild)
         servers = database.GetMembersList(message.guild)
@@ -53,8 +56,11 @@ class Antispam(commands.Cog):
                     database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
                     database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
                     break
-        if not spam.get('enabled') or message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or CheckRoleExclusions(message.author):
-            return #If the antispam is not enabled for a server, return
+        if not spam.get('enabled'): return #return if antispam isn't enabled
+        if spam.get('exclusionMode') == 0:
+            if not (message.channel.id in spam.get('channelExclusions') and CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
+        else:
+            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or CheckRoleExclusions(message.author): return
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         reason = [] #List of reasons (long version) that a member was flagged for
@@ -114,6 +120,11 @@ class Antispam(commands.Cog):
                 flag = True
                 reason.append("Tagging too many members: " + message.content + "\n\n(" + str(len(message.mentions)) + " mentions; " + str(spam.get("mentions")) + " tolerated)")
                 short.append("Tagging too many members")
+        if spam.get("roleTags") != 0:
+            if len(message.role_mentions) >= spam.get('roleTags'):
+                flag = True
+                reason.append("Tagging too many roles: " + message.content + "\n\n(" + str(len(message.role_mentions)) + " mentions; " + str(spam.get("roleTags")) + " tolerated)")
+                short.append("Tagging too many roles")
         if spam.get("selfbot"):
             if not message.author.bot and len(message.embeds) > 0 and "http" not in message.content:
                 flag = True
@@ -191,6 +202,33 @@ class Antispam(commands.Cog):
                 flag = True
                 reason.append("Attempting to tag `@here` without permission to\n\n" + parsed)
                 short.append("Attempting to tag `here`")
+        if spam.get("profanityEnabled"):
+            if len(message.content) > 0:
+                parsed = ""
+                spaces = 0
+                for a in message.content:
+                    if a == " ":
+                        spaces += 1
+                global filters
+                currentFilter = profanityfilter.ProfanityFilter()
+                currentFilter._censor_list = filters.get(str(message.guild.id))
+                filtered = currentFilter.censor(message.content)
+                arr = message.content.split(" ")
+                prof = filtered.split(" ")
+                for a in range(len(arr)):
+                    if arr[a] != prof[a]:
+                        parsed += "**" + arr[a] + "** "
+                    else:
+                        parsed += arr[a] + " "
+                if filtered != message.content:
+                    censorCount = 0
+                    for a in filtered:
+                        if a == "*":
+                            censorCount += 1
+                    if censorCount / (len(filtered) - spaces) >= spam.get('profanityTolerance'):
+                        flag = True
+                        reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
+                        short.append("Profanity")
         if not flag: return
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
             return await message.channel.send("I flagged user `" + str(message.author) + "`, but need Manage Role permissions for the current consequence to be given. There are two solutions:\n  •Add the Manage Role permissions to me\n  •Enter your server's web dashboard and change the punishment for being flagged")
@@ -342,6 +380,12 @@ def GetRoleManagementPermissions(member: discord.Member):
         if role.permissions.manage_roles or role.permissions.administrator:
             return True
     return False
+
+def PrepareFilters(bot: commands.Bot):
+    '''Initialize the local profanityfilter objects'''
+    global filters
+    for server in bot.guilds:
+        filters[str(server.id)] = database.GetProfanityFilter(server)
 
 def setup(bot):
     bot.add_cog(Antispam(bot))

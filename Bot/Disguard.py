@@ -6,6 +6,7 @@ import pymongo
 import dns
 import secure
 import database
+import Antispam
 
 bot = commands.Bot(command_prefix=".")
 bot.remove_command('help')
@@ -23,13 +24,10 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         for cog in cogs:
             bot.load_extension(cog)
         database.Verification(bot)
+        Antispam.PrepareFilters(bot)
     booted = True
     print("Booted")
     await bot.change_presence(status=discord.Status.online, activity=discord.Game("At attention"))
-database.Initialize(secure.token())
-bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
-#database.Initialize(secure.beta())
-#bot.run(secure.beta())
 
 @bot.command()
 async def verify(ctx):
@@ -37,3 +35,8 @@ async def verify(ctx):
         status = await ctx.send("Verifying...")
         database.Verification(bot)
         await status.delete()
+
+database.Initialize(secure.token())
+bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
+#database.Initialize(secure.beta())
+#bot.run(secure.beta())

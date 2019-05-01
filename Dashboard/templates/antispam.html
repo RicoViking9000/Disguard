@@ -70,25 +70,41 @@
                         Flag messages containing discord.gg invites: <select name=invites><option value=True {%if not automod.invites%}selected{%endif%}>Enabled</option><option value=False {%if automod.invites%}selected{%endif%}>Disabled</option></select><br>
                         If a message contains >=<input type="number" name=everyoneTags value={{automod.everyoneTags}}> @everyone mentions, and doesn't mention <i>everyone</i>, flag the message<br>
                         If a message contains >=<input type="number" name=hereTags value={{automod.hereTags}}> @here mentions, and doesn't mention <i>here</i>, flag the message<br>
-                        If a message contains >=<input type="number" name=roleTags value=0 disabled> @role mentions, flag the message<br>
+                        If a message contains >=<input type="number" name=roleTags value={{automod.roleTags}}> @role mentions, flag the message<br>
                         If a member spams <input type="number" name=quickMessages0 value={{automod.quickMessages[0]}}> messages in <input type="number" name=quickMessages1 value={{automod.quickMessages[1]}}> seconds, flag them<br>
                         If a member has at least one role, ignore their offenses<select name=ignoreRoled><option value=True {%if automod.ignoreRoled%}selected{%endif%}>Enabled</option><option value=False {%if not automod.ignoreRoled%}selected{%endif%}>Disabled</option></select><br>
                 </fieldset>
                 <fieldset>
+                    <legend>Profanity Filter</legend>
+                    <input type="radio" name=profanityEnabled value="True" {%if automod.profanityEnabled%}checked{%endif%}>Enabled
+                    <input type="radio" name=profanityEnabled value="False" {%if not automod.profanityEnabled%}checked{%endif%}>Disabled<br>
+                    If a message contains >= <input type="number" name=profanityTolerance value={{automod.profanityTolerance * 100}}>% profanity, flag it<br>
+                    <u>Censor list</u><br>Select words (ctrl + click for multiple) to remove them when saving (tip: Ctrl+F works for finding words in it)<br><select name=removeCensorWords multiple>
+                    {%for word in automod.filter%}
+                        <option value={{word}}>{{word}}</option>
+                    {%endfor%}
+                    </select><br>Add words to list (separate with a <b>comma and a space</b>, then press 'save' at the bottom for them to be added):
+                    <input type="text" name=addCensorWords>
+
+                </fieldset>
+                <fieldset>
                     <legend>Exclusions</legend>
                     Ctrl + click in the dropdown to select multiple options or to deselect options<br>
-                    The antispam filter will <b>ignore</b> channels, roles, and members in these exclusions<br><br><br>
-                    Exclude the following channels <select name="channelExclusions" multiple>
+                    The antispam filter will <b>only ignore </b> channels, roles, and members in these lists if <b>whitelist</b> is selected<br>
+                    The antispam filter will <b>only filter </b> channels, roles, and members in these lists if <b>blasklist</b> is selected. Members you select here will be added to the filter regarless of channel or roles, but members not in this list will only be considered for the filter if <b>both the channel and one of their roles</b> are in the blacklist. This will be more flexible in the future.<br>
+                    Mode: <input type="radio" name="exclusionMode" value=0 {%if automod.exclusionMode == 0%}checked{%endif%}>Blacklist
+                    <input type="radio" name=exclusionMode value=1 {%if automod.exclusionMode == 1%}checked{%endif%}>Whitelist
+                    <br><br><br>Channels: <select name="channelExclusions" multiple>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if channel.id in automod.channelExclusions%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
                     </select>
-                    <br><br><br>Exclude the following roles <select name="roleExclusions" multiple>
+                    <br><br><br>Roles: <select name="roleExclusions" multiple>
                     {%for role in roles%}
                         <option value={{role.id}} {%if role.id in automod.roleExclusions%}selected{%endif%}>{{role.name}}</option>
                     {%endfor%}
                     </select>
-                    <br><br><br>Exclude the following members <select name="memberExclusions" multiple>
+                    <br><br><br>Members: <select name="memberExclusions" multiple>
                     {%for member in members%}
                         <option value={{member.id}} {%if member.id in automod.memberExclusions%}selected{%endif%}>{{member.name}}</option>
                     {%endfor%}
