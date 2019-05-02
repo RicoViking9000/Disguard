@@ -32,7 +32,6 @@ class Cyberlog(commands.Cog):
         if before.author.bot or len(before.embeds) > 0 or before.content == after.content or not database.GetEnabled(before.guild, "message"):
             return
         if database.GetLogChannel(before.guild, "message") is not None:
-            status = await database.GetLogChannel(before.guild, "message").send(loading)
             beforeWordList = before.content.split(" ")
             afterWordList = after.content.split(" ")
             beforeC = ""
@@ -53,7 +52,7 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Channel: ", value=str(before.channel.mention))
             embed.set_footer(text="Message ID: " + str(after.id))
             embed.set_thumbnail(url=before.author.avatar_url)
-            await status.edit(content=None,embed=embed)
+            await database.GetLogChannel(before.guild, 'message').send(content=None,embed=embed)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
@@ -241,6 +240,7 @@ class Cyberlog(commands.Cog):
     async def on_user_update(self, before: discord.User, after: discord.User):
         '''[DISCORD API METHOD] Called when a user changes their global username, avatar, or discriminator'''
         servers = []
+        print("user update")
         global bot
         membObj = None
         for server in bot.guilds: #Since this method doesn't supply a server, we need to get every server this member is a part of, to
@@ -277,6 +277,45 @@ class Cyberlog(commands.Cog):
         await globalLogChannel.send(embed=discord.Embed(title="Joined server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0x008000))
         database.VerifyServer(guild, bot)
         database.VerifyUsers(bot)
+
+    @commands.Cog.listener()
+    async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
+        global bot
+        if database.GetEnabled(before, 'server'):
+            embed=discord.Embed(title="Server updated",description="",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+            content=None
+            if database.GetReadPerms(before, 'server'):
+                try:
+                    async for log in before.audit_logs(limit=1):
+                        if log.action == discord.AuditLogAction.guild_update:
+                            embed.description= "By: "+log.user.mention+" ("+log.user.name+")"
+                            embed.set_thumbnail(url=log.user.avatar_url)
+                except discord.Forbidden:
+                    content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
+            if before.afk_channel != after.afk_channel:
+                b4 = before.afk_channel.name if before.afk_channel is not None else "(None)"
+                af = after.afk_channel.name if after.afk_channel is not None else "(None)"
+                embed.add_field(name="AFK Channel",value=b4+" → "+af)
+            if before.afk_timeout != after.afk_timeout:
+                embed.add_field(name="AFK Timeout",value=str(before.afk_timeout)+"s → "+str(after.afk_timeout)+"s")
+            if before.mfa_level != after.mfa_level:
+                b4 = True if before.mfa_level == 1 else False
+                af = True if after.mfa_level == 1 else False
+                embed.add_field(name="Mods need 2FA",value=b4+" → "+af)
+            if before.name != after.name:
+                embed.add_field(name="Name",value=before.name+" → "+after.name)
+            if before.owner != after.owner:
+                embed.add_field(name="Owner",value=before.owner.mention+" → "+after.owner.mention)
+            if before.default_notifications != after.default_notifications:
+                embed.add_field(name="Default notifications",value=before.default_notifications.name+" → "+after.default_notifications.name)
+            if before.explicit_content_filter != after.explicit_content_filter:
+                embed.add_field(name="Explicit content filter",value=before.explicit_content_filter.name+" → "+after.explicit_content_filter.name)
+            if before.system_channel != after.system_channel:
+                b4 = before.system_channel.mention if before.system_channel is not None else "(None)"
+                af = after.system_channel.mention if after.system_channel is not None else "(None)"
+                embed.add_field(name="System channel",value=b4+" → "+af)
+            if len(embed.fields) > 0: await database.GetLogChannel(before, 'server').send(content=content,embed=embed)
+        database.VerifyServer(after, bot)
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):

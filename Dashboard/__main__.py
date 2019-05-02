@@ -10,6 +10,7 @@ import database
 OAUTH2_CLIENT_ID = Oauth.client_id
 OAUTH2_CLIENT_SECRET = Oauth.client_secret
 OAUTH2_REDIRECT_URI = 'https://disguard.herokuapp.com/callback'
+#OAUTH2_REDIRECT_URI = 'http://localhost:5000/callback'
 
 API_BASE_URL = 'https://discordapp.com/api'
 AUTHORIZATION_BASE_URL = API_BASE_URL + '/oauth2/authorize'
@@ -58,19 +59,24 @@ def index():
     #discord = make_session(scope=scope.split(' '))
     #authorization_url = discord.authorization_url(AUTHORIZATION_BASE_URL)
     #session['oauth2_state'] = state
-    return redirect('https://discordapp.com/api/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope={}'.format(OAUTH2_CLIENT_ID, OAUTH2_REDIRECT_URI, scope))
-
+    if 'user_id' not in session:
+        return redirect('https://discordapp.com/api/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope={}'.format(OAUTH2_CLIENT_ID, OAUTH2_REDIRECT_URI, scope))
+    else:
+        return redirect(url_for('manage'))
 
 @app.route('/callback')
 def callback():
     if request.values.get('error'):
         return request.values['error']
-    discord = make_session()#state=session.get('oauth2_state'))
+    discord = make_session()
     token = discord.fetch_token(
         TOKEN_URL,
         client_secret=OAUTH2_CLIENT_SECRET,
         authorization_response=request.url)
     session['oauth2_token'] = token
+    discord = make_session(token=session.get('oauth2_token'))
+    user = discord.get(API_BASE_URL + '/users/@me').json()
+    session['user_id'] = user.get('id')
     session.permanent = True
     return redirect(url_for('.manage'))
 
@@ -84,7 +90,10 @@ def manage():
 
 @app.route('/manage/<int:id>')
 def manageServer(id):
-    return render_template('trio.html', server=servers.find_one({"server_id":id}).get("server_id"))
+    if id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))]:
+        return render_template('trio.html', server=servers.find_one({"server_id":id}).get("server_id"))
+    else:
+        return redirect(url_for('manage'))
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
 def antispam(id):
@@ -168,6 +177,14 @@ def cyberlog(id):
             "channel": None if r.get('doorChannel').lower() == 'none' or r.get('doorChannel') is None else int(r.get('doorChannel')),
             "color": c.get('doorguard').get('color'),
             "advanced": c.get('doorguard').get('advanced')},
+        "server": {
+            "name": c.get('server').get('name'),
+            "description": c.get('server').get('description'),
+            "embed": c.get('server').get('embed'),
+            "enabled": r.get('server').lower() == 'true',
+            "channel": None if r.get('serverChannel').lower() == 'none' or r.get('serverChannel') is None else int(r.get('serverChannel')),
+            "color": c.get('server').get('color'),
+            "advanced": c.get('server').get('advanced')},
         "channel": {
             "name": c.get('channel').get('name'),
             "description": c.get('channel').get('description'),

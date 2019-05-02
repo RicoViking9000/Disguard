@@ -5,6 +5,7 @@ import datetime
 import Cyberlog #Used to prevent delete logs upon purging
 
 current = None
+loading = None
 
 class PurgeObject(object):
     def __init__(self, message=None, botMessage=None, limit=100, author=None, contains=None, startsWith=None, endsWith=None, links=None, invites=None, images=None, embeds=None, mentions=None, bots=None, channel=None, files=None, reactions=None, appMessages=None, startDate=None, endDate=None):
@@ -36,12 +37,13 @@ class Moderation(commands.Cog):
     async def purge(self, ctx, *args):
         '''Purge messages'''
         global current
+        global loading
         current = PurgeObject()
         if not (GetManageMessagePermissions(ctx.author) and GetManageMessagePermissions(ctx.guild.me)):
             return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
         if len(args) < 1:
             return await ctx.send("Please provide filters for the purge, or at the minimum, a number of messages to purge:\n`.purge 5`, for example, is the minimum\nRefer to `.help` documentation for advanced usage")
-        status = await ctx.send("Parsing filters...")
+        status = await ctx.send(str(loading)+"Parsing filters...")
         actuallyPurge = False
         current.channel = ctx.channel
         current.message = ctx.message
@@ -76,11 +78,11 @@ class Moderation(commands.Cog):
                         return await ctx.send("I don't think **"+body+"** is a number... please try again, or use the website documentation for filters")
                     actuallyPurge = True
             if actuallyPurge:
-                await status.edit(content="Purging...")
+                await status.edit(content=str(loading)+"Purging...")
                 messages = await current.channel.purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
                 await status.edit(content="**Successfully purged "+str(len(messages))+" messages :ok_hand:**")
             else:
-                await status.edit(content="Indexing... please be patient")
+                await status.edit(content=str(loading)+"Indexing... please be patient")
                 count = 0
                 async for message in current.channel.history(limit=current.limit, before=current.endDate, after=current.startDate):
                     if PurgeFilter(message): count += 1
@@ -174,4 +176,6 @@ def ConvertToDatetime(string: str):
     return None
 
 def setup(bot):
+    global loading
     bot.add_cog(Moderation(bot))
+    loading = bot.get_emoji(573298271775227914)

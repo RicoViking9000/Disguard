@@ -97,7 +97,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "memberExclusions": DefaultMemberExclusions(s) if serv is None or spam.get('memberExclusions') is None else spam.get('memberExclusions'), #Don't filter messages sent by a member in this list
         "profanityEnabled": False if serv is None or spam.get("profanityEnabled") is None else spam.get('profanityEnabled'), #Is the profanity filter enabled
         "profanityTolerance": 0.25 if serv is None or spam.get('profanityTolerance') is None else spam.get('profanityTolerance'), #% of message to be profanity to be flagged
-        "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter")}, #Profanity filter object
+        "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter")}, #Profanity filter list
     "cyberlog": {
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
         "image": False if log is None or log.get('image') is None else log.get('enabled'),
@@ -106,7 +106,8 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else log.get('channel'),
         "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else log.get('member'),
         "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else log.get('role'),
-        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else log.get('emoji')},
+        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else log.get('emoji'),
+        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else log.get('server')},
     "members": [{
         "name": member.name, 
         "id": member.id, 
