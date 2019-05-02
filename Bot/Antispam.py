@@ -9,6 +9,7 @@ import asyncio
 import profanityfilter
 
 filters = {}
+loading = None
 
 class ParodyMessage(object):
     def __init__(self, content, created):
@@ -63,6 +64,11 @@ class Antispam(commands.Cog):
             if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or CheckRoleExclusions(message.author): return
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
+        global loading
+        try:
+            await message.add_reaction(loading)
+        except discord.Forbidden:
+            pass
         reason = [] #List of reasons (long version) that a member was flagged for
         short = [] #list of reasons (short version) that a member was flagged for
         flag = False #was a member flagged?
@@ -229,8 +235,17 @@ class Antispam(commands.Cog):
                         flag = True
                         reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
                         short.append("Profanity")
-        if not flag: return
+        if not flag: 
+            try:
+                await message.remove_reaction(loading, message.guild.me)
+            except discord.Forbidden:
+                pass
+            return
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
+            try:
+                await message.remove_reaction(loading, message.guild.me)
+            except discord.Forbidden:
+                pass
             return await message.channel.send("I flagged user `" + str(message.author) + "`, but need Manage Role permissions for the current consequence to be given. There are two solutions:\n  •Add the Manage Role permissions to me\n  •Enter your server's web dashboard and change the punishment for being flagged")
         if spam.get("delete"):
             try:
@@ -238,6 +253,11 @@ class Antispam(commands.Cog):
                 await message.delete()
             except:
                 await message.channel.send("I require Manage Message permissions to carry out deleting messages upon members being flagged")
+        else:
+            try:
+                await message.remove_reaction(loading, message.guild.me)
+            except discord.Forbidden:
+                pass
         successful = False #Was a member's consequence carried out successfully?
         desc = [] #List of error messages, if applicable
         warned = False #Was a member warned?
@@ -384,8 +404,12 @@ def GetRoleManagementPermissions(member: discord.Member):
 def PrepareFilters(bot: commands.Bot):
     '''Initialize the local profanityfilter objects'''
     global filters
+    global loading
     for server in bot.guilds:
         filters[str(server.id)] = database.GetProfanityFilter(server)
+    for e in bot.emojis:
+        if e.id == 573298271775227914:
+            loading = e
 
 def setup(bot):
     bot.add_cog(Antispam(bot))

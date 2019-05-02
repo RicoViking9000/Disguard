@@ -8,6 +8,7 @@ imageLogChannel = discord.TextChannel
 globalLogChannel = discord.TextChannel
 pauseDelete = 0
 serverDelete = None
+loading = None
 
 class Cyberlog(commands.Cog):
     def __init__(self, bot):
@@ -31,6 +32,7 @@ class Cyberlog(commands.Cog):
         if before.author.bot or len(before.embeds) > 0 or before.content == after.content or not database.GetEnabled(before.guild, "message"):
             return
         if database.GetLogChannel(before.guild, "message") is not None:
+            status = await database.GetLogChannel(before.guild, "message").send(loading)
             beforeWordList = before.content.split(" ")
             afterWordList = after.content.split(" ")
             beforeC = ""
@@ -51,7 +53,7 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Channel: ", value=str(before.channel.mention))
             embed.set_footer(text="Message ID: " + str(after.id))
             embed.set_thumbnail(url=before.author.avatar_url)
-            await database.GetLogChannel(before.guild, "message").send(embed=embed)
+            await status.edit(content=None,embed=embed)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
@@ -246,6 +248,7 @@ class Cyberlog(commands.Cog):
                 if member.id == before.id:
                     servers.append(server)
                     membObj = member
+                    break
         embed=discord.Embed(title="User's global attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
         if before.avatar_url != after.avatar_url:
             if before.avatar_url is not None:
@@ -261,9 +264,9 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Username updated",value=before.name+" → "+after.name)
         embed.set_footer(text="User ID: "+str(after.id))
         for server in servers:
+            database.VerifyServer(server, bot)
             if database.GetEnabled(server, "member"):
                 await database.GetLogChannel(server, "member").send(embed=embed)
-        database.VerifyServer(before.guild, bot)
         database.VerifyUser(membObj, bot)
 
     @commands.Cog.listener()
@@ -434,7 +437,9 @@ def setup(Bot):
     global bot
     global imageLogChannel
     global globalLogChannel
+    global loading
     Bot.add_cog(Cyberlog(Bot))
     bot = Bot
     imageLogChannel = bot.get_channel(534439214289256478)
     globalLogChannel = bot.get_channel(566728691292438538)
+    loading = bot.get_emoji(573298271775227914)
