@@ -66,6 +66,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         members = serv.get("members")
     servers.update_one({"server_id": s.id}, {"$set": { #update database
     "name": s.name,
+    "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
     "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
     "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if role.name != "@everyone"],
@@ -171,6 +172,10 @@ def GetServerCollection():
 def GetProfanityFilter(s: discord.Guild):
     '''Return profanityfilter object'''
     return GetAntiSpamObject(s).get("filter")
+
+def GetPrefix(s: discord.Guild):
+    '''Return prefix associated with the server'''
+    return servers.find_one({"server_id": s.id}).get('prefix')
 
 def UpdateMemberLastMessages(server: int, member: int, messages):
     '''Updates database entry for lastMessages modification

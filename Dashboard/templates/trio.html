@@ -4,6 +4,7 @@
     <head>
         <title>Dashboard: Disguard</title>
         <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
         <script type="text/javascript">
             $(window).load(function() {
@@ -21,18 +22,24 @@
             <div class='circle'></div>
         </div>
         <p class=pageTitle>Choose a module</p>
+        <a href="{{url_for('server', id=server)}}">
+            <p class=trioSub>General server settings</p>
+        </a>
         <a href="{{url_for('antispam', id=server)}}">
             <div id=Antispam>
                 <p class=trioTitle>Antispam</p>
+                <p class=trioDesc>Includes profanity filter</p>
             </div>
         </a>
         <a href="{{url_for('moderation', id=server)}}">
             <div id=Moderation>
                 <p class=trioTitle>Moderation</p>
+                <p class=trioDesc>Coming soon</p>
             </div>
         </a>
         <a href="{{url_for('cyberlog', id=server)}}">
             <div id=CyberGuard>
                 <p class=trioTitle>Cybersecurity/Logging</p>
+                <p class=trioDesc>Free image logging</p>
             </div>
         </a>

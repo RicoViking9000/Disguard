@@ -80,6 +80,8 @@ def callback():
     session.permanent = True
     return redirect(url_for('.manage'))
 
+def EnsureVerification(id):
+    return id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))]
 
 @app.route('/manage')
 def manage():
@@ -90,13 +92,26 @@ def manage():
 
 @app.route('/manage/<int:id>')
 def manageServer(id):
-    if id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))]:
+    if EnsureVerification(id):
         return render_template('trio.html', server=servers.find_one({"server_id":id}).get("server_id"))
     else:
         return redirect(url_for('manage'))
 
+@app.route('/manage/<int:id>/server', methods=['GET', 'POST'])
+def server(id):
+    if not EnsureVerification(id):
+        return redirect(url_for('manage'))
+    serv = servers.find_one({"server_id": id})
+    if request.method == 'POST':
+        r = request.form
+        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix')}})
+        return redirect(url_for('server', id=id)) 
+    return render_template('general.html', servObj=serv, id=id)
+
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
 def antispam(id):
+    if not EnsureVerification(id):
+        return redirect(url_for('manage'))
     if request.method == 'POST':
         r = request.form
         database.UpdateMemberWarnings(id, int(r.get('warn')))
@@ -140,11 +155,9 @@ def antispam(id):
             "profanityEnabled": r.get('profanityEnabled').lower() == 'true',
             "profanityTolerance": float(r.get("profanityTolerance")) / 100,
             "filter": profane}}})
-        return redirect(url_for('manage', id=id))
+        return redirect(url_for('antispam', id=id))
     servObj = servers.find_one({"server_id": id})
     return render_template('antispam.html', servid = id, servObj=servObj, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
-
-
 
 @app.route('/manage/<int:id>/moderation')
 def moderation(id):
@@ -153,6 +166,8 @@ def moderation(id):
 
 @app.route('/manage/<int:id>/cyberlog', methods=['GET', 'POST'])
 def cyberlog(id):
+    if not EnsureVerification(id):
+        return redirect(url_for('manage'))
     servObj = servers.find_one({"server_id": id})
     if request.method == 'POST':
         r = request.form
@@ -173,6 +188,7 @@ def cyberlog(id):
             "name": c.get('doorguard').get('name'),
             "description": c.get('doorguard').get('description'),
             "embed": c.get('doorguard').get('embed'),
+            "read": r.get('doorRead').lower() == 'true',
             "enabled": r.get('doorguard').lower() == 'true',
             "channel": None if r.get('doorChannel').lower() == 'none' or r.get('doorChannel') is None else int(r.get('doorChannel')),
             "color": c.get('doorguard').get('color'),
@@ -181,6 +197,7 @@ def cyberlog(id):
             "name": c.get('server').get('name'),
             "description": c.get('server').get('description'),
             "embed": c.get('server').get('embed'),
+            "read": r.get('serverRead').lower() == 'true',
             "enabled": r.get('server').lower() == 'true',
             "channel": None if r.get('serverChannel').lower() == 'none' or r.get('serverChannel') is None else int(r.get('serverChannel')),
             "color": c.get('server').get('color'),
@@ -221,8 +238,8 @@ def cyberlog(id):
             "channel": None if r.get('emojiChannel').lower() == 'none' or r.get('emojiChannel') is None else int(r.get('emojiChannel')),
             "color": c.get('emoji').get('color'),
             "advanced": c.get('emoji').get('advanced')}}}})
-        return redirect(url_for('manage', id=id))
-    return render_template('cyberlog.html', cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"))
+        return redirect(url_for('cyberlog', id=id))
+    return render_template('cyberlog.html', servid=id, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"))
 
 if __name__ == '__main__':
     app.run()

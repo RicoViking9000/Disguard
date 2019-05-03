@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import database
 import datetime
+import asyncio
 
 bot = None
 imageLogChannel = discord.TextChannel
@@ -126,25 +127,25 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             embed.set_footer(text="Channel ID: "+str(before.id))
-            embed.add_field(name="Name",value=before.name+" → "+after.name if before.name != after.name else "(No change)")
+            if before.name != after.name: embed.add_field(name="Name",value=before.name+" → "+after.name)
             if type(before) is discord.TextChannel:
-                beforeTopic = before.topic if before.topic is not None else "<No topic>"
-                afterTopic = after.topic if after.topic is not None else "<No topic>"
-                embed.add_field(name="Topic",value=str(beforeTopic)+" → "+str(afterTopic) if before.topic != after.topic else "(No change)")
-                embed.add_field(name="NSFW",value=str(before.is_nsfw())+" → "+str(after.is_nsfw()) if before.is_nsfw() != after.is_nsfw() else "(No change)")
+                if before.topic != after.topic:
+                    beforeTopic = before.topic if before.topic is not None else "<No topic>"
+                    afterTopic = after.topic if after.topic is not None else "<No topic>"
+                    embed.add_field(name="Topic",value=str(beforeTopic)+" → "+str(afterTopic))
+                if before.is_nsfw() != after.is_nsfw():
+                    embed.add_field(name="NSFW",value=str(before.is_nsfw())+" → "+str(after.is_nsfw()))
             elif type(before) is discord.VoiceChannel:
-                embed.add_field(name="Bitrate",value=str(before.bitrate)+" → "+str(after.bitrate) if before.bitrate != after.bitrate else "(No change)")
-                embed.add_field(name="User limit",value=str(before.user_limit)+" → "+str(after.user_limit) if before.user_limit != after.user_limit else "(No change)")
-            beforeCat = str(before.category) if before.category is not None else "<No category>"
-            afterCat = str(after.category) if after.category is not None else "<No category>"
-            if type(before) is not discord.CategoryChannel:
-                embed.add_field(name="Category",value=str(beforeCat)+" → "+str(afterCat) if before.category != after.category else "(No change)")
-            if type(before) is discord.TextChannel and before.topic != after.topic or before.name != after.name or before.category != after.category or before.is_nsfw() != after.is_nsfw():
+                if before.bitrate != after.bitrate:
+                    embed.add_field(name="Bitrate",value=str(before.bitrate)+" → "+str(after.bitrate))
+                if before.user_limit != after.user_limit:
+                    embed.add_field(name="User limit",value=str(before.user_limit)+" → "+str(after.user_limit))
+            if type(before) is not discord.CategoryChannel and before.category != after.category:
+                beforeCat = str(before.category) if before.category is not None else "<No category>"
+                afterCat = str(after.category) if after.category is not None else "<No category>"
+                embed.add_field(name="Category",value=str(beforeCat)+" → "+str(afterCat))
+            if len(embed.fields) > 0:
                 await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
-            elif type(before) is discord.VoiceChannel and before.name != after.name or before.bitrate != after.bitrate or before.user_limit != after.user_limit or before.category != after.category:
-                await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
-            elif type(before) is discord.CategoryChannel and before.name != after.name:
-                 await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
         database.VerifyServer(before.guild, bot)
 
     @commands.Cog.listener()
@@ -189,16 +190,75 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when member leaves a server'''
         global bot
         if database.GetEnabled(member.guild, "doorguard"):
-            embed=discord.Embed(title="Member left",description=member.mention+"("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
+            content=None
+            embed=None
+            if embed is None: 
+                embed=discord.Embed(title="Member left",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
+                if database.GetReadPerms(member.guild, 'doorguard'):
+                    await asyncio.sleep(1)
+                    try:
+                        async for log in member.guild.audit_logs(limit=1):
+                            if log.action == discord.AuditLogAction.kick:
+                                embed.title = member.name+" was kicked"
+                                embed.description="Kicked by: "+log.user.mention+" ("+log.user.name+")"
+                            elif log.action == discord.AuditLogAction.ban:
+                                embed.title = member.name+" was banned"
+                                embed.description="Banned by: "+log.user.mention+" ("+log.user.name+")"
+                            embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
+                    except discord.Forbidden:
+                        content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             span = datetime.datetime.utcnow() - member.joined_at
             hours = span.seconds//3600
             minutes = (span.seconds//60)%60
             embed.add_field(name="Here for",value=str(span.days)+" days, "+str(hours)+" hours, "+str(minutes)+" minutes, "+str(span.seconds - hours*3600 - minutes*60)+" seconds")
             embed.set_thumbnail(url=member.avatar_url)
-            await database.GetLogChannel(member.guild, "doorguard").send(embed=embed)
+            embed.set_footer(text="User ID: "+str(member.id))
+            await database.GetLogChannel(member.guild, "doorguard").send(content=content,embed=embed)
         database.VerifyServer(member.guild, bot)
         database.VerifyUser(member, bot)
 
+    @commands.Cog.listener()
+    async def on_member_unban(self, guild: discord.Guild, user: discord.User):
+        if database.GetEnabled(guild, 'doorguard'):
+            embed=discord.Embed(title=user.name+" was unbanned",description="",timestamp=datetime.datetime.utcnow(),color=0x008000)
+            content=None
+            if database.GetReadPerms(guild, 'doorguard'):
+                try:
+                    async for log in guild.audit_logs(limit=1):
+                        if log.action == discord.AuditLogAction.unban:
+                            embed.description = "by "+log.user.mention+" ("+log.user.name+")"
+                    async for log in guild.audit_logs(limit=1000):
+                        if log.action == discord.AuditLogAction.ban:
+                            if log.target == user:
+                                span = datetime.datetime.utcnow() - log.created_at
+                                hours = span.seconds//3600
+                                minutes = (span.seconds//60)%60
+                                embed.add_field(name="Banned for",value=str(span.days)+" days, "+str(hours)+" hours, "+str(minutes)+" minutes, "+str(span.seconds - hours*3600 - minutes*60)+" seconds")
+                                break
+                except discord.Forbidden:
+                    content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
+            embed.set_thumbnail(url=user.avatar_url)
+            embed.set_footer(text="User ID: "+str(user.id))
+            await database.GetLogChannel(guild, 'doorguard').send(content=content,embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User):
+        if database.GetEnabled(guild, 'doorguard'):
+            if user not in guild.members:
+                embed=discord.Embed(title=user.name+" was banned",description="",timestamp=datetime.datetime.utcnow(),color=0x800000)
+                content=None
+                if database.GetReadPerms(guild, 'doorguard'):
+                    try:
+                        async for log in guild.audit_logs(limit=1):
+                            if log.action == discord.AuditLogAction.ban:
+                                embed.description = "by "+log.user.mention+" ("+log.user.name+")"
+                                embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
+                    except discord.Forbidden:
+                        content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>\nI can't determine who banned this user, or the reason, if applicable, without it"
+                embed.description+="\n\n**This user was NOT in this server before the ban**"
+                embed.set_footer(text="User ID: "+str(user.id))
+                embed.set_thumbnail(url=user.avatar_url)
+                await database.GetLogChannel(guild, 'doorguard').send(content=content,embed=embed)
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with this bot'''
@@ -232,7 +292,8 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name="Nickname change",value=oldNick+" → "+newNick)
             embed.set_thumbnail(url=before.avatar_url)
             embed.set_footer(text="Member ID: "+str(before.id))
-            await database.GetLogChannel(before.guild, "member").send(content=content,embed=embed)
+            if len(embed.fields) > 0:
+                await database.GetLogChannel(before.guild, "member").send(content=content,embed=embed)
         global bot
         database.VerifyUser(before, bot)
 

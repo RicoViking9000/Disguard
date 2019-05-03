@@ -8,12 +8,15 @@ import secure
 import database
 import Antispam
 
-bot = commands.Bot(command_prefix=".")
-bot.remove_command('help')
-
 booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation']
 print("Booting...")
+
+def prefix(bot, message):
+    return database.GetPrefix(message.guild)
+
+bot = commands.Bot(command_prefix=prefix)
+bot.remove_command('help')
 
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
@@ -35,6 +38,11 @@ async def verify(ctx):
         status = await ctx.send("Verifying...")
         database.Verification(bot)
         await status.delete()
+
+@bot.command()
+async def help(ctx):
+    await ctx.send(embed=discord.Embed(description="[View help here](https://disguard.netlify.com/commands)"))
+    
 
 database.Initialize(secure.token())
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot

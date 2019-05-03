@@ -23,7 +23,7 @@
   width: 6px;
   height: 6px;
   border-radius: 5px;
-  background: darkblue;
+  background: rgb(167, 167, 167);
   box-shadow: 0 0 9px rgba(255, 255, 255, .7);
 }
 .loader .circle:nth-child(2) {

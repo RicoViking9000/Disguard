@@ -4,6 +4,7 @@
     <head>
         <title>Dashboard: Disguard</title>
         <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
         <script type="text/javascript">
             $(window).load(function() {
@@ -19,6 +20,7 @@
             <div class='circle'></div>
             <div class='circle'></div>
         </div>
+        <a href="{{url_for('manageServer', id=servid)}}"><h2 class=goBack>Back</h2></a>
         <h1 class=mod-header>Antispam</h1>
         <div class=mod-master-switch>
         </div>
@@ -115,5 +117,4 @@
         </div>
         <div>
         </div>
-        <h3>Profanity filter will be available soon. Stay tuned for updates</h3>
     </body>

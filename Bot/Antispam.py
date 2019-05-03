@@ -41,7 +41,8 @@ class Antispam(commands.Cog):
                 person = member
                 lastMessages = member.get("lastMessages")
                 quickMessages = member.get("quickMessages")
-                lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
+                if message.content is not None and len(message.content) > 0:
+                    lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
                 if message.channel.id not in database.GetChannelExclusions(message.guild) and not CheckRoleExclusions(message.author) and message.author.id not in database.GetMemberExclusions(message.guild):
                     quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
                     for msg in lastMessages:
