@@ -43,11 +43,10 @@ class Moderation(commands.Cog):
             return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
         if len(args) < 1:
             return await ctx.send("Please provide filters for the purge, or at the minimum, a number of messages to purge:\n`.purge 5`, for example, is the minimum\nRefer to `.help` documentation for advanced usage")
-        status = await ctx.send(str(loading)+"Parsing filters...")
+        current.botMessage = await ctx.send(str(loading)+"Parsing filters...")
         actuallyPurge = False
         current.channel = ctx.channel
         current.message = ctx.message
-        current.botMessage = status
         try:
             for arg in args:
                 meat = arg[arg.find(":")+1:].strip()
@@ -77,12 +76,13 @@ class Moderation(commands.Cog):
                         current = None
                         return await ctx.send("I don't think **"+body+"** is a number... please try again, or use the website documentation for filters")
                     actuallyPurge = True
+                current.limit += 2
             if actuallyPurge:
-                await status.edit(content=str(loading)+"Purging...")
+                await current.botMessage.edit(content=str(loading)+"Purging...")
                 messages = await current.channel.purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
-                await status.edit(content="**Successfully purged "+str(len(messages))+" messages :ok_hand:**")
+                await current.botMessage.edit(content="**Successfully purged "+str(len(messages))+" messages :ok_hand:**",delete_after=5)
             else:
-                await status.edit(content=str(loading)+"Indexing... please be patient")
+                await current.botMessage.edit(content=str(loading)+"Indexing... please be patient")
                 count = 0
                 async for message in current.channel.history(limit=current.limit, before=current.endDate, after=current.startDate):
                     if PurgeFilter(message): count += 1
@@ -105,7 +105,7 @@ class Moderation(commands.Cog):
                 if current.appMessages is True: embed.description += "Contains external invites (e.g. Spotify)\n"
                 embed.set_footer(text="To actually purge, copy & paste your command message, but add 'purge:true' to the filters")
                 embed.description+="\n**"+str(count)+" messages matched the filters**"
-                await status.edit(content=None,embed=embed)
+                await current.botMessage.edit(content=None,embed=embed)
             current = None
         except Exception as e:
             await ctx.send("Error - send this to my dev to decode:\n"+str(e))
@@ -113,7 +113,7 @@ class Moderation(commands.Cog):
 def PurgeFilter(m: discord.Message):
     '''Used to determine if a message should be purged'''
     global current
-    if m == current.message or m == current.botMessage:
+    if m.id == current.botMessage.id:
         return False
     if current.contains is not None:
         if current.contains not in m.content:

@@ -21,7 +21,7 @@
             <div class='circle'></div>
             <div class='circle'></div>
         </div>
-        <a href="{{url_for('manageServer', id=servid)}}"><h2 class=goBack>Back</h2></a>
+        <a href="{{url_for('manageServer', id=id)}}"><h2 class=goBack>Back</h2></a>
         <h1 class=mod-header>General server settings</h1>
             <form class=mod-main method="POST">
                 Server prefix: <input type="text" name=prefix value={{servObj.prefix}}>

@@ -11,6 +11,8 @@ pauseDelete = 0
 serverDelete = None
 loading = None
 
+invites = {}
+
 class Cyberlog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -201,10 +203,11 @@ class Cyberlog(commands.Cog):
                             if log.action == discord.AuditLogAction.kick:
                                 embed.title = member.name+" was kicked"
                                 embed.description="Kicked by: "+log.user.mention+" ("+log.user.name+")"
+                                embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
                             elif log.action == discord.AuditLogAction.ban:
                                 embed.title = member.name+" was banned"
                                 embed.description="Banned by: "+log.user.mention+" ("+log.user.name+")"
-                            embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
+                                embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
                     except discord.Forbidden:
                         content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             span = datetime.datetime.utcnow() - member.joined_at

@@ -22,8 +22,8 @@ app.debug = True
 app.config['SECRET_KEY'] = Oauth.client_secret
 
 mongo = pymongo.MongoClient(oauth.mongo()) #Database connection URL in another file so you peeps don't go editing the database ;)
-db = mongo.disguard
-#db = mongo.disguard_beta #Allows for dashboard to use test database if necessary
+#db = mongo.disguard
+db = mongo.disguard_beta #Allows for dashboard to use test database if necessary
 servers = db.servers
 users = db.users
 
