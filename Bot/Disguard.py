@@ -44,7 +44,7 @@ async def help(ctx):
     await ctx.send(embed=discord.Embed(description="[View help here](https://disguard.netlify.com/commands)"))
     
 
-#database.Initialize(secure.token())
-#bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
-database.Initialize(secure.beta())
-bot.run(secure.beta())
+database.Initialize(secure.token())
+bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
+#database.Initialize(secure.beta())
+#bot.run(secure.beta())
