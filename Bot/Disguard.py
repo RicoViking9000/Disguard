@@ -23,14 +23,14 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     '''Method called when bot connects and all the internals are ready'''
     global booted
     if not booted:
-        await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss", type=discord.ActivityType.listening))
+        await bot.change_presence(status=discord.Status.idle, activity=discord.Game("Awaiting orders"))
         for cog in cogs:
             bot.load_extension(cog)
         database.Verification(bot)
         Antispam.PrepareFilters(bot)
     booted = True
     print("Booted")
-    await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))
+    await bot.change_presence(status=discord.Status.online, activity=discord.Game("At attention"))
 
 @bot.command()
 async def verify(ctx):

@@ -79,10 +79,8 @@ class Moderation(commands.Cog):
                 current.limit += 2
             if actuallyPurge:
                 await current.botMessage.edit(content=str(loading)+"Purging...")
-                Cyberlog.AvoidDeletionLogging(current.limit + 2, ctx.guild)
                 messages = await current.channel.purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
-                await current.botMessage.edit(content="**Successfully purged "+str(len(messages) - 1)+" messages :ok_hand:**",delete_after=5)
-                Cyberlog.AvoidDeletionLogging(0, None)
+                await current.botMessage.edit(content="**Successfully purged "+str(len(messages))+" messages :ok_hand:**",delete_after=5)
             else:
                 await current.botMessage.edit(content=str(loading)+"Indexing... please be patient")
                 count = 0

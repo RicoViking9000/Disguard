@@ -21,14 +21,6 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here due to web dashboard :D'''
-        if len(invites) < 1:
-            global bot
-            for server in bot.guilds:
-                try:
-                    invites[str(server.id)] = await server.invites()
-                    invites[str(server.id)+"_vanity"] = (await server.vanity_invite()).uses
-                except (discord.Forbidden, discord.HTTPException):
-                    pass
         global imageLogChannel
         if message.author.bot:
             return
@@ -137,30 +129,23 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             embed.set_footer(text="Channel ID: "+str(before.id))
-            if before.name != after.name: 
-                embed.add_field(name="Prev name",value=before.name)
-                embed.add_field(name="New name",value=after.name)
+            if before.name != after.name: embed.add_field(name="Name",value=before.name+" → "+after.name)
             if type(before) is discord.TextChannel:
                 if before.topic != after.topic:
                     beforeTopic = before.topic if before.topic is not None else "<No topic>"
                     afterTopic = after.topic if after.topic is not None else "<No topic>"
-                    embed.add_field(name="Prev topic",value=beforeTopic)
-                    embed.add_field(name="New topic",value=afterTopic)
+                    embed.add_field(name="Topic",value=str(beforeTopic)+" → "+str(afterTopic))
                 if before.is_nsfw() != after.is_nsfw():
-                    embed.add_field(name="Prev NSFW",value=before.is_nsfw())
-                    embed.add_field(name="New NSFW",value=after.is_nsfw())
+                    embed.add_field(name="NSFW",value=str(before.is_nsfw())+" → "+str(after.is_nsfw()))
             elif type(before) is discord.VoiceChannel:
                 if before.bitrate != after.bitrate:
-                    embed.add_field(name="Prev Bitrate",value=before.bitrate)
-                    embed.add_field(name="New Bitrate",value=after.bitrate)
+                    embed.add_field(name="Bitrate",value=str(before.bitrate)+" → "+str(after.bitrate))
                 if before.user_limit != after.user_limit:
-                    embed.add_field(name="Prev User limit",value=before.user_limit)
-                    embed.add_field(name="New User limit",value=after.user_limit)
+                    embed.add_field(name="User limit",value=str(before.user_limit)+" → "+str(after.user_limit))
             if type(before) is not discord.CategoryChannel and before.category != after.category:
                 beforeCat = str(before.category) if before.category is not None else "<No category>"
                 afterCat = str(after.category) if after.category is not None else "<No category>"
-                embed.add_field(name="Prev category",value=beforeCat)
-                embed.add_field(name="New category",value=afterCat)
+                embed.add_field(name="Category",value=str(beforeCat)+" → "+str(afterCat))
             if len(embed.fields) > 0:
                 await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
         database.VerifyServer(before.guild, bot)
@@ -193,41 +178,12 @@ class Cyberlog(commands.Cog):
     async def on_member_join(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member joins a server'''
         global bot
-        global invites
         if database.GetEnabled(member.guild, "doorguard"):
-            newInv = []
-            content=None
-            embed=discord.Embed(title="New member",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0x008000)
+            embed=discord.Embed(title="New member",description=member.mention+"("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0x008000)
             embed.add_field(name="Mutual Servers",value=len([a for a in iter(bot.guilds) if member in a.members]))
-            #embed.add_field(name="Reputation",value="N/A")
+            embed.add_field(name="Reputation",value="N/A")
             embed.set_thumbnail(url=member.avatar_url)
-            try:
-                newInv = await member.guild.invites()
-            except discord.Forbidden:
-                content="Tip: I can determine who invited new members if I have the <Manage Server> permissions"
-                return await database.GetLogChannel(member.guild, 'doorguard').send(content=content,embed=embed)
-            #All this below it only works if the bot successfully works with invites
-            for invite in newInv:
-                if invite in invites.get(str(member.guild.id)):
-                    for invite2 in invites.get(str(member.guild.id)):
-                        if invite2 == invite:
-                            if invite.uses > invite2.uses:
-                                embed.add_field(name="Invited by",value=invite.inviter.mention+" ("+invite.inviter.name+")")
-                                break
-            if len(embed.fields) == 0: #check vanity invite for popular servers
-                for invite in newInv: #Check for new invites
-                    if invite not in invites.get(str(member.guild.id)):
-                        if invite.uses > 0:
-                            embed.add_field(name="Invited by",value=invite.inviter.mention+" ("+invite.inviter.name+")")
-                            break
-                try:
-                    invite = await member.guild.vanity_invite()
-                    if invite.uses > invites.get(str(member.guild.id)+"_vanity"):
-                        embed.add_field(name="Invited by",value=invite.inviter.mention+" ("+invite.inviter.name+")\n{VANITY INVITE}")
-                except (discord.Forbidden, discord.HTTPException):
-                    pass
-            invites[str(member.guild.id)] = newInv
-            await database.GetLogChannel(member.guild, "doorguard").send(content=content,embed=embed)
+            await database.GetLogChannel(member.guild, "doorguard").send(embed=embed)
         database.VerifyServer(member.guild, bot)
         database.VerifyUser(member, bot)
 
@@ -336,8 +292,7 @@ class Cyberlog(commands.Cog):
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
                 oldNick = before.nick if before.nick is not None else "<No nickname>"
                 newNick = after.nick if after.nick is not None else "<No nickname>"
-                embed.add_field(name="Prev nickname",value=oldNick)
-                embed.add_field(name="New nickname",value=newNick)
+                embed.add_field(name="Nickname change",value=oldNick+" → "+newNick)
             embed.set_thumbnail(url=before.avatar_url)
             embed.set_footer(text="Member ID: "+str(before.id))
             if len(embed.fields) > 0:
@@ -368,11 +323,9 @@ class Cyberlog(commands.Cog):
         else:
             embed.set_thumbnail(url=before.avatar_url)
         if before.discriminator != after.discriminator:
-            embed.add_field(name="Prev discriminator",value=before.discriminator)
-            embed.add_field(name="New discriminator",value=after.discriminator)
+            embed.add_field(name="Discriminator updated",value=before.discriminator+" → "+after.discriminator)
         if before.name != after.name:
-            embed.add_field(name="Prev username",value=before.name)
-            embed.add_field(name="New username",value=after.name)
+            embed.add_field(name="Username updated",value=before.name+" → "+after.name)
         embed.set_footer(text="User ID: "+str(after.id))
         for server in servers:
             database.VerifyServer(server, bot)
@@ -574,41 +527,6 @@ class Cyberlog(commands.Cog):
                     embed.set_image(url=before[a].url)
         if len(embed.fields)>0:
             await database.GetLogChannel(guild, "emoji").send(content=content,embed=embed)
-    
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-        if not database.GetEnabled(member.guild, 'voice'):
-            return
-        embed=discord.Embed(title="Voice Channel update",description=member.mention,timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-        if before.afk != after.afk:
-            embed.add_field(name="💤",value="Went AFK (was in "+before.channel.name+")")
-        else: #that way, we don't get duplicate logs with AFK and changing channels
-            if before.deaf != after.deaf:
-                if before.deaf: #member is no longer force deafened
-                    embed.add_field(name="🔨 🔊",value="Force undeafened")
-                else:
-                    embed.add_field(name="🔨 🔇",value="Force deafened")
-            if before.mute != after.mute:
-                if before.mute: #member is no longer force muted
-                    embed.add_field(name="🔨 🗣",value="Force unmuted")
-                else:
-                    embed.add_field(name="🔨 🤐",value="Force muted")
-            if not database.GetReadPerms(member.guild, 'voice'): #this is used to determine mod-only actions for variable convenience since audit logs aren't available
-                if before.self_deaf != after.self_deaf:
-                    if before.self_deaf:
-                        embed.add_field(name="🔊",value="Undeafened")
-                    else:
-                        embed.add_field(name="🔇",value="Deafened")
-                if before.self_mute != after.self_mute:
-                    if before.self_mute:
-                        embed.add_field(name="🗣",value="Unmuted")
-                    else:
-                        embed.add_field(name="🤐",value="Muted")
-                if before.channel != after.channel:
-                    b4 = "{Disconnected}" if before.channel is None else before.channel.name
-                    af = "{Disconnected}" if after.channel is None else after.channel.name
-                    embed.add_field(name="🔀",value="Channel: "+b4+" → "+af)
-        await database.GetLogChannel(member.guild, 'voice').send(embed=embed)
 
 def AvoidDeletionLogging(messages: int, server: discord.Guild):
     '''Don't log the next [messages] deletions if they belong to particular passed server'''

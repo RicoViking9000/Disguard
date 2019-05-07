@@ -80,26 +80,13 @@ def callback():
     return redirect(url_for('.manage'))
 
 def EnsureVerification(id):
-    '''Check if the user is authorized to proceed to editing a server'''
-    discord = make_session(token=session.get('oauth2_token'))
-    return id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))] and discord.get(API_BASE_URL + '/users/@me').json().get('id') is not None
-
-def ReRoute():
-    '''If a user isn't authorized to edit a server, determine what to do: send back to login to Discord or send to homepage'''
-    if 'user_id' not in session:
-        return url_for('index')
-    else:
-        return url_for('manage')
+    return id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))]
 
 @app.route('/manage')
 def manage():
     discord = make_session(token=session.get('oauth2_token'))
     user = discord.get(API_BASE_URL + '/users/@me').json()
-    try:
-        shared = users.find_one({"user_id": int(user.get("id"))}).get("servers")
-    except TypeError:
-        session.clear()
-        return redirect(url_for('index')) #If the website can't load servers
+    shared = users.find_one({"user_id": int(user.get("id"))}).get("servers")
     return render_template('homepage.html', servers=shared, user=user.get("username"))
 
 @app.route('/manage/<int:id>')
@@ -107,12 +94,12 @@ def manageServer(id):
     if EnsureVerification(id):
         return render_template('trio.html', server=servers.find_one({"server_id":id}).get("server_id"))
     else:
-        return redirect(ReRoute())
+        return redirect(url_for('manage'))
 
 @app.route('/manage/<int:id>/server', methods=['GET', 'POST'])
 def server(id):
     if not EnsureVerification(id):
-        return redirect(ReRoute())
+        return redirect(url_for('manage'))
     serv = servers.find_one({"server_id": id})
     if request.method == 'POST':
         r = request.form
@@ -123,7 +110,7 @@ def server(id):
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
 def antispam(id):
     if not EnsureVerification(id):
-        return redirect(ReRoute())
+        return redirect(url_for('manage'))
     if request.method == 'POST':
         r = request.form
         database.UpdateMemberWarnings(id, int(r.get('warn')))
@@ -179,7 +166,7 @@ def moderation(id):
 @app.route('/manage/<int:id>/cyberlog', methods=['GET', 'POST'])
 def cyberlog(id):
     if not EnsureVerification(id):
-        return redirect(ReRoute())
+        return redirect(url_for('manage'))
     servObj = servers.find_one({"server_id": id})
     if request.method == 'POST':
         r = request.form
@@ -187,7 +174,6 @@ def cyberlog(id):
         servers.update_one({"server_id": id}, {"$set": {"cyberlog": {
         "enabled": r.get('enabled').lower() == 'true',
         "image": r.get('imageLogging').lower() == 'true',
-        "defaultChannel": None if r.get('defaultChannel').lower() == 'none' or r.get('defaultChannel') is None else int(r.get('defaultChannel')),
         "message": {
             "name": c.get('message').get('name'),
             "description": c.get('message').get('description'),
@@ -250,16 +236,7 @@ def cyberlog(id):
             "enabled": r.get('emoji').lower() == 'true',
             "channel": None if r.get('emojiChannel').lower() == 'none' or r.get('emojiChannel') is None else int(r.get('emojiChannel')),
             "color": c.get('emoji').get('color'),
-            "advanced": c.get('emoji').get('advanced')},
-        "voice": {
-            "name": c.get('voice').get('name'),
-            "description": c.get('voice').get('description'),
-            "embed": c.get('voice').get('embed'),
-            "read": r.get('voiceRead').lower() == 'true',
-            "enabled": r.get('voice').lower() == 'true',
-            "channel": None if r.get('voiceChannel').lower() == 'none' or r.get('voiceChannel') is None else int(r.get('voiceChannel')),
-            "color": c.get('voice').get('color'),
-            "advanced": c.get('voice').get('advanced')}}}})
+            "advanced": c.get('emoji').get('advanced')}}}})
         return redirect(url_for('cyberlog', id=id))
     return render_template('cyberlog.html', servid=id, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"))
 

@@ -102,15 +102,13 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
     "cyberlog": {
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
         "image": False if log is None or log.get('image') is None else log.get('enabled'),
-        "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
         "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else log.get('message'),
         "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('message') is None else log.get('doorguard'),
         "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else log.get('channel'),
         "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else log.get('member'),
         "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else log.get('role'),
         "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else log.get('emoji'),
-        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else log.get('server'),
-        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else log.get('voice')},
+        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else log.get('server')},
     "members": [{
         "name": member.name, 
         "id": member.id, 
@@ -145,7 +143,7 @@ def VerifyUser(m: discord.Member, b: commands.Bot):
 
 def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
-    return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel")) if servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None else servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel")
+    return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel")) if servers.find_one({"server_id": s.id}).get("cyberlog").get("enabled") else None
 
 def GetReadPerms(s: discord.Guild, mod: str):
     '''Return if the bot should read the server audit log for logs'''
