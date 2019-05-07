@@ -2,13 +2,12 @@ import os
 import pymongo
 from flask import Flask, g, session, redirect, request, url_for, jsonify, render_template
 from requests_oauthlib import OAuth2Session
-from oauth import Oauth
 import dns
 import oauth
 import database
 
-OAUTH2_CLIENT_ID = Oauth.client_id
-OAUTH2_CLIENT_SECRET = Oauth.client_secret
+OAUTH2_CLIENT_ID = oauth.Oauth.client_id
+OAUTH2_CLIENT_SECRET = oauth.Oauth.client_secret
 OAUTH2_REDIRECT_URI = 'https://disguard.herokuapp.com/callback'
 #OAUTH2_REDIRECT_URI = 'http://localhost:5000/callback'
 
@@ -19,7 +18,7 @@ TOKEN_URL = API_BASE_URL + '/oauth2/token'
 app = Flask(__name__)
 
 app.debug = True
-app.config['SECRET_KEY'] = Oauth.client_secret
+app.config['SECRET_KEY'] = oauth.Oauth.client_secret
 
 mongo = pymongo.MongoClient(oauth.mongo()) #Database connection URL in another file so you peeps don't go editing the database ;)
 db = mongo.disguard
