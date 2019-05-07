@@ -26,11 +26,17 @@
             <form class=mod-main method="POST">
                 Logging module<br><input type="radio" name="enabled" value=True {%if cyberlog.enabled%}checked{%endif%}>Enabled
                 <br><input type="radio" name="enabled" value=False {%if not cyberlog.enabled%}checked{%endif%}>Disabled
+                <br>Default logging channel <select name=defaultChannel><option value=None {%if not cyberlog.defaultChannel%}selected{%endif%}>--Select a channel--</option>
+                {%for channel in channels%}
+                    <option value={{channel.id}} {%if cyberlog.defaultChannel==channel.id%}selected{%endif%}>{{channel.name}}</option>
+                {%endfor%}
+                </select>
+
                 <fieldset>
                     <legend class=log-mod-title>Message</legend>
                     <p class=log-mod-desc>{{cyberlog.message.description}}</p>
                     Use this module? <select name=message><option value=True {%if cyberlog.message.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.message.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Send this module's logs to channel <select name=messageChannel><option value=None {%if not cyberlog.message.channel%}selected{%endif%}>--Select a channel--</option>
+                    Overwrite default log channel <select name=messageChannel><option value=None {%if not cyberlog.message.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.message.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
@@ -46,7 +52,7 @@
                     <legend class=log-mod-title>Doorguard</legend>
                     <p class=log-mod-desc>{{cyberlog.doorguard.description}}</p>
                     Use this module? <select name=doorguard><option value=True {%if cyberlog.doorguard.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.doorguard.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Send this module's logs to channel <select name=doorChannel><option value=None {%if not cyberlog.doorguard.channel%}selected{%endif%}>--Select a channel--</option>
+                    Overwrite default log channel <select name=doorChannel><option value=None {%if not cyberlog.doorguard.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.doorguard.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
@@ -61,7 +67,7 @@
                     <legend class=log-mod-title>Server</legend>
                     <p class=log-mod-desc>{{cyberlog.server.description}}</p>
                     Use this module? <select name=server><option value=True {%if cyberlog.server.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.server.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Send this module's logs to channel <select name=serverChannel><option value=None {%if not cyberlog.server.channel%}selected{%endif%}>--Select a channel--</option>
+                    Overwrite default log channel <select name=serverChannel><option value=None {%if not cyberlog.server.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.server.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
@@ -76,7 +82,7 @@
                     <legend class=log-mod-title>Channel</legend>
                     <p class=log-mod-desc>{{cyberlog.channel.description}}</p>
                     Use this module? <select name=channel><option value=True {%if cyberlog.channel.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.channel.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Send this module's logs to channel <select name=channelChannel><option value=None {%if not cyberlog.channel.channel%}selected{%endif%}>--Select a channel--</option>
+                    Overwrite default log channel <select name=channelChannel><option value=None {%if not cyberlog.channel.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.channel.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
@@ -91,7 +97,7 @@
                     <legend class=log-mod-title>Member</legend>
                     <p class=log-mod-desc>{{cyberlog.member.description}}</p>
                     Use this module? <select name=member><option value=True {%if cyberlog.member.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.member.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Send this module's logs to channel <select name=memberChannel><option value=None {%if not cyberlog.member.channel%}selected{%endif%}>--Select a channel--</option>
+                    Overwrite default log channel <select name=memberChannel><option value=None {%if not cyberlog.member.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.member.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
@@ -106,7 +112,7 @@
                     <legend class=log-mod-title>Role</legend>
                     <p class=log-mod-desc>{{cyberlog.role.description}}</p>
                     Use this module? <select name=role><option value=True {%if cyberlog.role.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.role.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Send this module's logs to channel <select name=roleChannel><option value=None {%if not cyberlog.role.channel%}selected{%endif%}>--Select a channel--</option>
+                    Overwrite default log channel <select name=roleChannel><option value=None {%if not cyberlog.role.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.role.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
@@ -121,7 +127,7 @@
                     <legend class=log-mod-title>Emoji</legend>
                     <p class=log-mod-desc>{{cyberlog.emoji.description}}</p>
                     Use this module? <select name=emoji><option value=True {%if cyberlog.emoji.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.emoji.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Send this module's logs to channel <select name=emojiChannel><option value=None {%if not cyberlog.emoji.channel%}selected{%endif%}>--Select a channel--</option>
+                    Overwrite default log channel <select name=emojiChannel><option value=None {%if not cyberlog.emoji.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.emoji.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
@@ -130,6 +136,21 @@
                     Read server's audit log to send who created, edited, deleted the emoji <select name=emojiRead><option value=True {%if cyberlog.emoji.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.emoji.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=emojiColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=emojiAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
+                </fieldset>
+
+                <fieldset>
+                    <legend class=log-mod-title>Voice</legend>
+                    <p class=log-mod-desc>{{cyberlog.voice.description}}</p>
+                    Use this module? <select name=voice><option value=True {%if cyberlog.voice.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.enabled%}selected{%endif%}>Disabled</option></select><br>
+                    Overwrite default log channel <select name=voiceChannel><option value=None {%if not cyberlog.voice.channel%}selected{%endif%}>(Disabled)</option>
+                    {%for channel in channels%}
+                        <option value={{channel.id}} {%if cyberlog.voice.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
+                    {%endfor%}
+                    </select><br>
+                    Send this module's logs in embed form <select name=voiceEmbed disabled><option value=True {%if cyberlog.voice.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.embed%}selected{%endif%}>Disabled</option></select><br>
+                    Only log moderator enforced mutes/deafens <select name=voiceRead><option value=True {%if cyberlog.voice.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.read%}selected{%endif%}>Disabled</option></select><br>
+                    Custom embed color <select name=voiceColor disabled><option value=None selected>Currently N/A</option></select><br>
+                    Use advanced embed viewer mode <select name=voiceAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
                 </fieldset>
 
                 <input type="submit" value="Save">
