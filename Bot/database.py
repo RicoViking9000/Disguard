@@ -40,7 +40,6 @@ def Initialize(token):
 def Verification(b: commands.Bot):
     '''Longest operation. Checks entire usable database *twice*, and verifies it's as it should be, creating entries as necessary'''
     VerifyServers(b)
-    VerifyServers(b)
     VerifyUsers(b)
     VerifyUsers(b)
 
@@ -60,10 +59,12 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
     serv = servers.find_one({"server_id": s.id})
     spam = None
     log = None
+    members = None
     if serv is not None:
         spam = serv.get("antispam") #antispam object from database
         log = serv.get("cyberlog") #cyberlog object from database
         members = serv.get("members")
+    membIDs = [memb.id for memb in s.members]
     servers.update_one({"server_id": s.id}, {"$set": { #update database
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
@@ -110,22 +111,23 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else log.get('role'),
         "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else log.get('emoji'),
         "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else log.get('server'),
-        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else log.get('voice')},
-    "members": [{
-        "name": member.name, 
-        "id": member.id, 
-        "warnings": 3 if spam is None else spam.get('warn'), 
-        "quickMessages": [], 
-        "lastMessages": []
-            } for member in iter(s.members)] if log is None or members is None else [{
-        "name": member.name, 
-        "id": member.id, 
-        "warnings": spam.get('warn') if len([a for a in iter(servers.find_one({"server_id": s.id}).get("members")) if a.get("id") == member.id]) < 1 else [memb.get("warnings") for memb in iter(servers.find_one({"server_id": s.id}).get("members")) if memb.get("id") == member.id][0], 
-        "quickMessages": [] if len([a for a in iter(servers.find_one({"server_id": s.id}).get("members")) if a.get("id") == member.id]) < 1 else [memb.get("quickMessages") for memb in iter(servers.find_one({"server_id": s.id}).get("members")) if memb.get("id") == member.id][0],
-        "lastMessages": [] if len([a for a in iter(servers.find_one({"server_id": s.id}).get("members")) if a.get("id") == member.id]) < 1 else [memb.get("lastMessages") for memb in iter(servers.find_one({"server_id": s.id}).get("members")) if memb.get("id") == member.id][0]
-            } for member in iter(s.members)]
-             }}, True)
-
+        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else log.get('voice')}}}, True)
+    membDict = {}
+    for m in s.members: #Create dict 
+        membDict[str(m.id)] = m.name
+        membDict[m.name] = m.id
+    for id in membIDs:
+        member=None
+        for m in members:
+            if m.get('id') == id:
+                member=m
+                break
+        servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
+            "members.$.name": membDict.get(str(id)),
+            "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
+            "members.$.quickMessages": [] if member is None else member.get('quickMessages'),
+            "members.$.lastMessages": [] if member is None else member.get('lastMessages')
+        }})
 def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
     '''First: Go through all members, verifying they have entries and variables'''
