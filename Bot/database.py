@@ -70,7 +70,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
     "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
-    "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if role.name != "@everyone"],
+    "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if role != s.default_role and not role.managed],
     "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
         "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
         "whisper": False if serv is None or spam.get('whisper') is None else spam.get('whisper'), #when a member is flagged, whisper a notice to them in DM instead of current channel?
@@ -104,6 +104,9 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
         "image": False if log is None or log.get('image') is None else log.get('enabled'),
         "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
+        "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
+        'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
+        'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
         "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else log.get('message'),
         "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('message') is None else log.get('doorguard'),
         "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else log.get('channel'),
@@ -165,9 +168,21 @@ def GetAntiSpamObject(s: discord.Guild):
     '''Return the Antispam database object - use 'get' to get the other objects'''
     return servers.find_one({"server_id": s.id}).get("antispam")
 
+def GetCyberlogObject(s: discord.Guild):
+    '''Return the cyberlog database object'''
+    return servers.find_one({"server_id": s.id}).get("cyberlog")
+
 def GetMembersList(s: discord.Guild):
     '''Return list of members DB entry objects for a server'''
     return servers.find_one({"server_id": s.id}).get("members")
+
+def PauseMod(s: discord.Guild, mod):
+    '''Pauses logging for a server'''
+    servers.update_one({"server_id": s.id}, {"$set": {mod+".enabled": False}})
+
+def ResumeMod(s: discord.Guild, mod):
+    '''Resumes logging for a server'''
+    servers.update_one({"server_id": s.id}, {"$set": {mod+".enabled": True}})
 
 def GetServerCollection():
     '''Return servers collection object'''
@@ -207,15 +222,27 @@ def GetChannelExclusions(s: discord.Guild):
     s: discord.Guild object (server) to get the exclusions from'''
     return GetAntiSpamObject(s).get("channelExclusions")
 
+def GetLogChannelExclusions(s: discord.Guild):
+    '''Get the channel exclusions for the Cyberlog module'''
+    return GetCyberlogObject(s).get("channelExclusions")
+
 def GetRoleExclusions(s: discord.Guild):
     '''Not to be confused with DefaultRoleExclusions(). Returns server's role exclusions
     s: discord.Guild object (server) to get the exclusions from'''
     return GetAntiSpamObject(s).get("roleExclusions")
 
+def GetLogRoleExclusions(s: discord.Guild):
+    '''Get the role exclusions for the Cyberlog module'''
+    return GetCyberlogObject(s).get("roleExclusions")
+
 def GetMemberExclusions(s: discord.Guild):
     '''Not to be confused with DefaultMemberExclusions(). Returns server's member exclusions
     s: discord.Guild object (server) to get the exclusions from'''
     return GetAntiSpamObject(s).get("memberExclusions")
+
+def GetLogMemberExclusions(s: discord.Guild):
+    '''Get the member exclusions for the cyberlog module'''
+    return GetCyberlogObject(s).get("memberExclusions")
 
 def DefaultChannelExclusions(server: discord.Guild): 
     '''For now, return array of IDs of all channels with 'spam' in the name. Will be customizable later'''
@@ -234,6 +261,16 @@ def ManageServer(member: discord.Member): #Check if a member can manage server, 
         if a.permissions.administrator or a.permissions.manage_guild:
             return True
     return False
+
+def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.Member):
+    '''Check to see if we shouldn't log a message delete event
+    True to proceed
+    False to not log'''
+    if channel.id in GetLogChannelExclusions(channel.guild) or member.id in GetLogMemberExclusions(channel.guild):
+        return False
+    for role in member.roles:
+        if role.id in GetLogRoleExclusions(channel.guild):
+            return False
 
 def DashboardManageServer(server: discord.Guild, member: discord.Member):
     '''Initialize dashboard permissions; which servers a member can manage'''

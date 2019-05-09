@@ -184,11 +184,17 @@ def cyberlog(id):
     servObj = servers.find_one({"server_id": id})
     if request.method == 'POST':
         r = request.form
+        cex = list(map(int, r.getlist('channelExclusions'))) #HTML forms pass data as strings, but we need ints
+        rex = list(map(int, r.getlist('roleExclusions'))) #rex = (R)ole(Ex)clusions
+        mex = list(map(int, r.getlist('memberExclusions')))
         c = servObj.get("cyberlog")
         servers.update_one({"server_id": id}, {"$set": {"cyberlog": {
         "enabled": r.get('enabled').lower() == 'true',
         "image": r.get('imageLogging').lower() == 'true',
         "defaultChannel": None if r.get('defaultChannel').lower() == 'none' or r.get('defaultChannel') is None else int(r.get('defaultChannel')),
+        "channelExclusions": cex,
+        "roleExclusions": rex,
+        "memberExclusions": mex,
         "message": {
             "name": c.get('message').get('name'),
             "description": c.get('message').get('description'),
@@ -262,7 +268,7 @@ def cyberlog(id):
             "color": c.get('voice').get('color'),
             "advanced": c.get('voice').get('advanced')}}}})
         return redirect(url_for('cyberlog', id=id))
-    return render_template('cyberlog.html', servid=id, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"))
+    return render_template('cyberlog.html', servid=id, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
 
 if __name__ == '__main__':
     app.run()

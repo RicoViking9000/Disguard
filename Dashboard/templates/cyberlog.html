@@ -153,6 +153,26 @@
                     Use advanced embed viewer mode <select name=voiceAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
                 </fieldset>
 
+                <fieldset>
+                    <legend class=log-mod-title>Exclusions</legend>
+                    <p class=log-mod-desc>Don't send message edit/delete logs if they match variables in this category<br>Ctrl + click to remove an entry or select multiple entries</p>
+                    <br><br><br>Channels: <select name="channelExclusions" multiple>
+                    {%for channel in channels%}
+                        <option value={{channel.id}} {%if channel.id in cyberlog.channelExclusions%}selected{%endif%}>{{channel.name}}</option>
+                    {%endfor%}
+                    </select>
+                    <br><br><br>Roles: <select name="roleExclusions" multiple>
+                    {%for role in roles%}
+                        <option value={{role.id}} {%if role.id in cyberlog.roleExclusions%}selected{%endif%}>{{role.name}}</option>
+                    {%endfor%}
+                    </select>
+                    <br><br><br>Members: <select name="memberExclusions" multiple>
+                    {%for member in members%}
+                        <option value={{member.id}} {%if member.id in cyberlog.memberExclusions%}selected{%endif%}>{{member.name}}</option>
+                    {%endfor%}
+                    </select>
+                </fieldset>
+
                 <input type="submit" value="Save">
             </form>
             </div>

@@ -42,6 +42,8 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when message is edited'''
         if before.author.bot or len(before.embeds) > 0 or before.content == after.content or not database.GetEnabled(before.guild, "message"):
             return
+        if not database.CheckCyberlogExclusions(before.channel, before.author):
+            return
         if database.GetLogChannel(before.guild, "message") is not None:
             beforeWordList = before.content.split(" ")
             afterWordList = after.content.split(" ")
@@ -76,6 +78,8 @@ class Cyberlog(commands.Cog):
         else:
             serverDelete = None
         if message.author.bot or message.author not in message.guild.members or not database.GetEnabled(message.guild, "message"):
+            return
+        if not database.CheckCyberlogExclusions(message.channel, message.author):
             return
         embed=discord.Embed(title="Message was deleted",description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: "+(message.created_at - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST",timestamp=datetime.datetime.utcnow(),color=0xff0000)
         embed.set_thumbnail(url=message.author.avatar_url)
@@ -283,29 +287,11 @@ class Cyberlog(commands.Cog):
                                 embed.add_field(name="Banned for",value=str(span.days)+" days, "+str(hours)+" hours, "+str(minutes)+" minutes, "+str(span.seconds - hours*3600 - minutes*60)+" seconds")
                                 break
                 except discord.Forbidden:
-                    content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
+                    content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>\nI also need that permission to determine if a member was kicked/banned"
             embed.set_thumbnail(url=user.avatar_url)
             embed.set_footer(text="User ID: "+str(user.id))
             await database.GetLogChannel(guild, 'doorguard').send(content=content,embed=embed)
 
-    @commands.Cog.listener()
-    async def on_member_ban(self, guild: discord.Guild, user: discord.User):
-        if database.GetEnabled(guild, 'doorguard'):
-            if user not in guild.members:
-                embed=discord.Embed(title=user.name+" was banned",description="",timestamp=datetime.datetime.utcnow(),color=0x800000)
-                content=None
-                if database.GetReadPerms(guild, 'doorguard'):
-                    try:
-                        async for log in guild.audit_logs(limit=1):
-                            if log.action == discord.AuditLogAction.ban:
-                                embed.description = "by "+log.user.mention+" ("+log.user.name+")"
-                                embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
-                    except discord.Forbidden:
-                        content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>\nI can't determine who banned this user, or the reason, if applicable, without it"
-                embed.description+="\n\n**This user was NOT in this server before the ban**"
-                embed.set_footer(text="User ID: "+str(user.id))
-                embed.set_thumbnail(url=user.avatar_url)
-                await database.GetLogChannel(guild, 'doorguard').send(content=content,embed=embed)
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with this bot'''
@@ -315,7 +301,7 @@ class Cyberlog(commands.Cog):
             if before.roles != after.roles:
                 try:
                     async for log in before.guild.audit_logs(limit=1):
-                        if log.action == discord.AuditLogAction.member_role_update and (datetime.datetime.utcnow() - log.created_at).seconds < 2: 
+                        if log.action == discord.AuditLogAction.member_role_update and (datetime.datetime.utcnow() - log.created_at).seconds < 60 and log.target == before: 
                             embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
@@ -325,12 +311,12 @@ class Cyberlog(commands.Cog):
                             embed.add_field(name="Role added",value=f.name)
                 for f in before.roles:
                     if f not in after.roles:
-                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")):
+                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")) and f in before.guild.roles:
                             embed.add_field(name="Role removed",value=f.name)
             if before.nick != after.nick:
                 try:
                     async for log in before.guild.audit_logs(limit=1):
-                        if log.action == discord.AuditLogAction.member_update and (datetime.datetime.utcnow() - log.created_at).seconds < 2: 
+                        if log.action == discord.AuditLogAction.member_update and (datetime.datetime.utcnow() - log.created_at).seconds < 60 and log.target == before: 
                             embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
@@ -609,6 +595,60 @@ class Cyberlog(commands.Cog):
                     af = "{Disconnected}" if after.channel is None else after.channel.name
                     embed.add_field(name="🔀",value="Channel: "+b4+" → "+af)
         await database.GetLogChannel(member.guild, 'voice').send(embed=embed)
+
+    @commands.command()
+    async def pause(self, ctx, *args):
+        '''Pause logging or antispam for a duration'''
+        global loading
+        status = await ctx.send(str(loading) + "Please wait...")
+        duration = 0
+        classify = ''
+        args = [a.lower() for a in args]
+        duration = ParsePauseDuration((" ").join(args[1:]))
+        if 'logging' in args:
+            if 'logging' != args[0]:
+                return
+            classify = 'Logging'
+        if 'antispam' in args:
+            if 'antispam' != args[0]:
+                return
+            classify = 'Antispam'
+        embed=discord.Embed(title=classify+" was paused",description="by "+ctx.author.mention+" ("+ctx.author.name+")\n\n"+(" ").join(args[1:]),color=0x008000,timestamp=datetime.datetime.utcnow()+datetime.timedelta(seconds=duration))
+        embed.set_footer(text="Logging will resume")
+        embed.set_thumbnail(url=ctx.author.avatar_url)
+        logged = await database.GetLogChannel(ctx.guild, 'message').send(embed=embed)
+        try:
+            await logged.pin()
+        except discord.Forbidden:
+            pass
+        await status.edit(content="✅",embed=embed)
+        database.PauseMod(ctx.guild, classify.lower())
+        await asyncio.sleep(duration)
+        database.ResumeMod(ctx.guild, classify.lower())
+        try:
+            await logged.delete()
+        except discord.Forbidden:
+            pass
+        await database.GetLogChannel(ctx.guild, 'message').send(classify+" was unpaused",delete_after=60*60*24)
+
+def ParsePauseDuration(s: str):
+    '''Convert a string into a number of seconds to ignore antispam or logging'''
+    args = s.split(' ')                             #convert string into a list, separated by space
+    duration = 0                                    #in seconds
+    for a in args:                                  #loop through words
+        number = ""                                 #each int is added to the end of a number string, to be converted later
+        for b in a:                                 #loop through each character in a word
+            try:
+                c = int(b)                          #attempt to convert the current character to an int
+                number+=str(c)                      #add current int, in string form, to number
+            except ValueError:                      #if we can't convert character to int... parse the current word
+                if b.lower() == "m":                #Parsing minutes
+                    duration+=60*int(number)
+                elif b.lower() == "h":              #Parsing hours
+                    duration+=60*60*int(number)
+                elif b.lower() == "d":              #Parsing days
+                    duration+=24*60*60*int(number)
+    return duration
 
 def AvoidDeletionLogging(messages: int, server: discord.Guild):
     '''Don't log the next [messages] deletions if they belong to particular passed server'''
