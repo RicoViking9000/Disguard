@@ -57,10 +57,13 @@
             color: black;
             background-color: inherit;}
 .collist ul {padding-left: 20px;}
-.comDesc {font-size: 12px; color: rgb(199, 199, 199); display: inline; padding: 20px}
+.comDesc {font-size: 12px; color: rgb(199, 199, 199); display: inline; padding-left: 20px}
 .comIndivDesc {font-size: 30px; color: rgb(185, 185, 185)}
 .comIndivTitle {font-size: 50px}
 .comIndivSub {font-size: 35px; color: darkgray}
+.comIndivArg {font-size: 25px}
+.comIndivMeat {padding-left: 50px}
+.comIndivBul {padding-left: 75px}
 #mainbullethead {font-size: 40px}
 #desc {font-size: 25px}
 #title {font-size: 85px;

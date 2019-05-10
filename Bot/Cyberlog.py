@@ -601,10 +601,9 @@ class Cyberlog(commands.Cog):
         '''Pause logging or antispam for a duration'''
         global loading
         status = await ctx.send(str(loading) + "Please wait...")
-        duration = 0
         classify = ''
+        duration = 0
         args = [a.lower() for a in args]
-        duration = ParsePauseDuration((" ").join(args[1:]))
         if 'logging' in args:
             if 'logging' != args[0]:
                 return
@@ -613,6 +612,10 @@ class Cyberlog(commands.Cog):
             if 'antispam' != args[0]:
                 return
             classify = 'Antispam'
+        if len(args) == 1:
+            await status.edit(content=classify+" was paused by "+ctx.author.name)
+            await database.GetLogChannel(ctx.guild, 'message').send(classify+" was paused by "+ctx.author.name)
+        duration = ParsePauseDuration((" ").join(args[1:]))
         embed=discord.Embed(title=classify+" was paused",description="by "+ctx.author.mention+" ("+ctx.author.name+")\n\n"+(" ").join(args[1:]),color=0x008000,timestamp=datetime.datetime.utcnow()+datetime.timedelta(seconds=duration))
         embed.set_footer(text="Logging will resume")
         embed.set_thumbnail(url=ctx.author.avatar_url)
@@ -630,6 +633,16 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden:
             pass
         await database.GetLogChannel(ctx.guild, 'message').send(classify+" was unpaused",delete_after=60*60*24)
+    @commands.command()
+    async def unpause(self, ctx, *args):
+        if len(args) < 1: return await ctx.send("Please provide module `antispam` or `logging` to unpause")
+        args = [a.lower() for a in args]
+        if 'antispam' in args:
+            database.ResumeMod(ctx.guild, 'antispam')
+            await ctx.send("✅Successfully resumed antispam moderation")
+        if 'logging' in args:
+            database.ResumeMod(ctx.guild, 'logging')
+            await ctx.send("✅Successfully resumed logging")
 
 def ParsePauseDuration(s: str):
     '''Convert a string into a number of seconds to ignore antispam or logging'''
