@@ -70,7 +70,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
     "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
-    "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if role != s.default_role and not role.managed],
+    "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.is_default() and not role.managed],
     "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
         "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
         "whisper": False if serv is None or spam.get('whisper') is None else spam.get('whisper'), #when a member is flagged, whisper a notice to them in DM instead of current channel?
@@ -271,6 +271,7 @@ def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.Member
     for role in member.roles:
         if role.id in GetLogRoleExclusions(channel.guild):
             return False
+    return True
 
 def DashboardManageServer(server: discord.Guild, member: discord.Member):
     '''Initialize dashboard permissions; which servers a member can manage'''
