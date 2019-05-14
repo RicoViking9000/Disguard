@@ -140,7 +140,6 @@ def VerifyUsers(b: commands.Bot):
         if b.get_user(result.get("user_id")) is None:
             users.delete_one({"user_id": result.get("user_id")})
     
-    
 def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''
     users.update_one({"user_id": m.id}, {"$set": { #update database

@@ -3,3 +3,4 @@ __pycache__/
 *.code-workspace
 oauth.py
 secure.py
+Indexes/

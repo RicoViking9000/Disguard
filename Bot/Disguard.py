@@ -7,6 +7,7 @@ import dns
 import secure
 import database
 import Antispam
+import os
 
 booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation']
@@ -23,11 +24,28 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     '''Method called when bot connects and all the internals are ready'''
     global booted
     if not booted:
-        await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss", type=discord.ActivityType.listening))
+        await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening))
         for cog in cogs:
             bot.load_extension(cog)
         database.Verification(bot)
         Antispam.PrepareFilters(bot)
+        await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
+        print("Indexing...")
+        for server in bot.guilds:
+            for channel in server.text_channels:
+                path = "Indexes/{}/{}".format(server.id, channel.id)
+                try: os.makedirs(path)
+                except FileExistsError: pass
+                try:
+                    async for message in channel.history(limit=10000000):
+                        if str(message.id)+".txt" in os.listdir(path): break
+                        try: f = open(path+"/"+str(message.id)+".txt", "w+")
+                        except FileNotFoundError: pass
+                        try: f.write(message.author.name+"\n"+str(message.author.id)+"\n"+message.content)
+                        except UnicodeEncodeError: pass
+                except discord.Forbidden:
+                    pass
+        print("Indexed")
     booted = True
     print("Booted")
     await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))

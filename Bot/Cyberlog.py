@@ -3,6 +3,7 @@ from discord.ext import commands
 import database
 import datetime
 import asyncio
+import os
 
 bot = None
 imageLogChannel = discord.TextChannel
@@ -20,7 +21,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
-        Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here due to web dashboard :D'''
+        Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here due to the web dashboard :D'''
         if len(invites) < 1:
             global bot
             for server in bot.guilds:
@@ -68,35 +69,81 @@ class Cyberlog(commands.Cog):
             await database.GetLogChannel(before.guild, 'message').send(content=None,embed=embed)
 
     @commands.Cog.listener()
-    async def on_message_delete(self, message: discord.Message):
-        '''[DISCORD API METHOD] Called when message is deleted'''
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        '''[DISCORD API METHOD] Called when message is deleted (RAW CONTENT)'''
         global pauseDelete
         global serverDelete
-        if pauseDelete > 0 and message.guild == serverDelete:
+        global loading
+        global bot
+        message = None
+        if payload.cached_message is not None: message = payload.cached_message
+        if message is not None and pauseDelete > 0 and message.guild == serverDelete:
             pauseDelete -= 1
             return
-        else:
+        elif pauseDelete == 0:
             serverDelete = None
-        if message.author.bot or message.author not in message.guild.members or not database.GetEnabled(message.guild, "message"):
+        g = message.guild if message is not None else bot.get_guild(payload.guild_id)
+        if not database.GetEnabled(g, 'message'):
             return
-        if not database.CheckCyberlogExclusions(message.channel, message.author):
-            return
-        embed=discord.Embed(title="Message was deleted",description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: "+(message.created_at - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST",timestamp=datetime.datetime.utcnow(),color=0xff0000)
-        embed.set_thumbnail(url=message.author.avatar_url)
+        embed=None
+        embed=discord.Embed(title="Message was deleted",timestamp=datetime.datetime.utcnow(),color=0xff0000)
+        embed.set_footer(text="Message ID: {}".format(payload.message_id))
+        ma = message.author if message is not None else None
+        s = None
+        if message is not None:
+            if not database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot:
+                return
+            embed.description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: "+(message.created_at - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST"
+            embed.set_thumbnail(url=message.author.avatar_url)
+            if len(message.attachments) > 0 and database.GetImageLogPerms(message.guild):
+                embed.set_image(url=message.attachments[0].url)
+            embed.add_field(name="Content",value="(No content)" if message.content is None or len(message.content)<1 else message.content)
+        else:
+            embed.description="Message is old...\n\n"+str(loading)+" Attempting to retrieve some data..." #Now we have to search the file system
+            s = await database.GetLogChannel(g, 'message').send(embed=embed)
+            directory = "Indexes/{}/{}".format(payload.guild_id,payload.channel_id)
+            for fl in os.listdir(directory):
+                if fl == str(payload.message_id)+".txt":
+                    f = open(directory+"/"+fl, "r")
+                    line = 0
+                    authorName = ""
+                    authorID = 0
+                    messageContent = ""
+                    for l in f:
+                        if line == 0:
+                            authorName = l
+                        elif line == 1:
+                            authorID = int(l)
+                        elif line == 2:
+                            messageContent = l
+                        line+=1
+                    os.remove(directory+"/"+fl)
+                    author = bot.get_guild(payload.guild_id).get_member(authorID)
+                    if author.bot or author not in g.members or not database.CheckCyberlogExclusions(bot.get_channel(payload.channel_id), author):
+                        return await s.delete()
+                    embed.description=""
+                    if author is not None: 
+                        embed.description+="Author: "+author.mention+" ("+author.name+")\n"
+                        embed.set_thumbnail(url=author.avatar_url)
+                    else:
+                        embed.description+="Author: "+authorName+"\n"
+                        ma = author
+                    embed.description+="Channel: "+bot.get_channel(payload.channel_id).mention+"\n"
+                    embed.add_field(name="Content",value="(No content)" if messageContent is None or len(messageContent)<1 else messageContent)
+                    break #the for loop
         content=None
-        if len(message.attachments) > 0 and database.GetImageLogPerms(message.guild):
-            embed.set_image(url=message.attachments[0].url)
-        if database.GetReadPerms(message.guild, "message"):
+        if database.GetReadPerms(g, "message"):
             try:
-                async for log in message.guild.audit_logs(limit=1):
-                    if (datetime.datetime.utcnow() - log.created_at).seconds < 2:
+                async for log in g.audit_logs(limit=1):
+                    if log.action == discord.AuditLogAction.message_delete and log.target == ma and (datetime.datetime.utcnow() - log.created_at).seconds < 120:
                         if log.action == discord.AuditLogAction.message_delete:
                             embed.description+="\nDeleted by: "+log.user.mention+" ("+log.user.name+")"
             except discord.Forbidden:
                 content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
-        embed.set_footer(text="Message ID: "+str(message.id))
-        embed.add_field(name="Content",value="(No content)" if message.content is None or len(message.content)<1 else message.content)
-        await database.GetLogChannel(message.guild, "message").send(content=content,embed=embed)
+        if s is not None:
+            await s.edit(content=content,embed=embed)
+        else:
+            await database.GetLogChannel(g, "message").send(content=content,embed=embed)
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
@@ -373,7 +420,8 @@ class Cyberlog(commands.Cog):
         global globalLogChannel
         await globalLogChannel.send(embed=discord.Embed(title="Joined server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0x008000))
         database.VerifyServer(guild, bot)
-        database.VerifyUsers(bot)
+        for member in guild.members:
+            database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
@@ -421,7 +469,8 @@ class Cyberlog(commands.Cog):
         global globalLogChannel
         await globalLogChannel.send(embed=discord.Embed(title="Left server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0xff0000))
         database.VerifyServer(guild, bot)
-        database.VerifyUsers(bot)
+        for member in guild.members:
+            database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: discord.Role):
@@ -614,7 +663,10 @@ class Cyberlog(commands.Cog):
             classify = 'Antispam'
         if len(args) == 1:
             await status.edit(content=classify+" was paused by "+ctx.author.name)
-            await database.GetLogChannel(ctx.guild, 'message').send(classify+" was paused by "+ctx.author.name)
+            if ctx.channel != database.GetLogChannel(ctx.guild, 'message'):
+                await database.GetLogChannel(ctx.guild, 'message').send(classify+" was paused by "+ctx.author.name)
+            database.PauseMod(ctx.guild, classify.lower())
+            return
         duration = ParsePauseDuration((" ").join(args[1:]))
         embed=discord.Embed(title=classify+" was paused",description="by "+ctx.author.mention+" ("+ctx.author.name+")\n\n"+(" ").join(args[1:]),color=0x008000,timestamp=datetime.datetime.utcnow()+datetime.timedelta(seconds=duration))
         embed.set_footer(text="Logging will resume")
