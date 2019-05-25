@@ -34,7 +34,7 @@ def Initialize(token):
         db = mongo.disguard_beta
     servers = db.servers
     users = db.users
-    
+
 
 '''Checking events'''
 def Verification(b: commands.Bot):
@@ -130,7 +130,8 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
             "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
             "members.$.quickMessages": [] if member is None else member.get('quickMessages'),
             "members.$.lastMessages": [] if member is None else member.get('lastMessages')
-        }})
+        }}, True)
+
 def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
     '''First: Go through all members, verifying they have entries and variables'''
@@ -157,7 +158,12 @@ def GetReadPerms(s: discord.Guild, mod: str):
 
 def GetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled') and servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel")
+    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled') and servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None
+
+def SimpleGetEnabled(s: discord.Guild, mod: str):
+    '''Check if this module is enabled for the current server (lightweight)
+    REMEMBER THAT THIS DOESN'T MAKE SURE THAT THE CHANNEL IS VALID'''
+    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled')
 
 def GetImageLogPerms(s: discord.Guild):
     '''Check if image logging is enabled for the current server'''
@@ -186,6 +192,10 @@ def ResumeMod(s: discord.Guild, mod):
 def GetServerCollection():
     '''Return servers collection object'''
     return servers
+
+def GetAllServers():
+    '''Return all servers...'''
+    return servers.find()
 
 def GetProfanityFilter(s: discord.Guild):
     '''Return profanityfilter object'''

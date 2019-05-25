@@ -41,11 +41,12 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         '''[DISCORD API METHOD] Called when message is edited'''
-        if before.author.bot or len(before.embeds) > 0 or before.content == after.content or not database.GetEnabled(before.guild, "message"):
+        c = database.GetLogChannel(before.guild, 'message')
+        if before.author.bot or len(before.embeds) > 0 or before.content == after.content or not database.SimpleGetEnabled(before.guild, 'message'):
             return
         if not database.CheckCyberlogExclusions(before.channel, before.author):
             return
-        if database.GetLogChannel(before.guild, "message") is not None:
+        if c is not None:
             beforeWordList = before.content.split(" ")
             afterWordList = after.content.split(" ")
             beforeC = ""
@@ -66,7 +67,7 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Channel: ", value=str(before.channel.mention))
             embed.set_footer(text="Message ID: " + str(after.id))
             embed.set_thumbnail(url=before.author.avatar_url)
-            await database.GetLogChannel(before.guild, 'message').send(content=None,embed=embed)
+            await c.send(content=None,embed=embed)
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
@@ -76,13 +77,14 @@ class Cyberlog(commands.Cog):
         global loading
         global bot
         message = None
-        if payload.cached_message is not None: message = payload.cached_message
+        g = message.guild if message is not None else bot.get_guild(payload.guild_id)
+        c = database.GetLogChannel(g, 'message')
+        if payload.cached_message: message = payload.cached_message
         if message is not None and pauseDelete > 0 and message.guild == serverDelete:
             pauseDelete -= 1
             return
         elif pauseDelete == 0:
             serverDelete = None
-        g = message.guild if message is not None else bot.get_guild(payload.guild_id)
         if not database.GetEnabled(g, 'message'):
             return
         embed=None
@@ -97,10 +99,16 @@ class Cyberlog(commands.Cog):
             embed.set_thumbnail(url=message.author.avatar_url)
             if len(message.attachments) > 0 and database.GetImageLogPerms(message.guild):
                 embed.set_image(url=message.attachments[0].url)
+            else:
+                for ext in ['.png', '.jpg', '.gif', '.webp']:
+                    if ext in message.content:
+                        if '://' in message.content:
+                            url = message.content[message.content.find('http'):message.content.find(ext)+len(ext)+1]
+                            embed.set_image(url=url)
             embed.add_field(name="Content",value="(No content)" if message.content is None or len(message.content)<1 else message.content)
         else:
             embed.description="Message is old...\n\n"+str(loading)+" Attempting to retrieve some data..." #Now we have to search the file system
-            s = await database.GetLogChannel(g, 'message').send(embed=embed)
+            s = await c.send(embed=embed)
             directory = "Indexes/{}/{}".format(payload.guild_id,payload.channel_id)
             for fl in os.listdir(directory):
                 if fl == str(payload.message_id)+".txt":
@@ -130,6 +138,11 @@ class Cyberlog(commands.Cog):
                         ma = author
                     embed.description+="Channel: "+bot.get_channel(payload.channel_id).mention+"\n"
                     embed.add_field(name="Content",value="(No content)" if messageContent is None or len(messageContent)<1 else messageContent)
+                    for ext in ['.png', '.jpg', '.gif', '.webp']:
+                        if ext in messageContent:
+                            if '://' in messageContent:
+                                url = messageContent[message.content.find('http'):messageContent.find(ext)+len(ext)+1]
+                                embed.set_image(url=url)
                     break #the for loop
         content=None
         if database.GetReadPerms(g, "message"):
@@ -143,7 +156,7 @@ class Cyberlog(commands.Cog):
         if s is not None:
             await s.edit(content=content,embed=embed)
         else:
-            await database.GetLogChannel(g, "message").send(content=content,embed=embed)
+            await c.send(content=content,embed=embed)
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
@@ -292,7 +305,6 @@ class Cyberlog(commands.Cog):
             if embed is None: 
                 embed=discord.Embed(title="Member left",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
                 if database.GetReadPerms(member.guild, 'doorguard'):
-                    await asyncio.sleep(1)
                     try:
                         async for log in member.guild.audit_logs(limit=1):
                             if log.action == discord.AuditLogAction.kick:

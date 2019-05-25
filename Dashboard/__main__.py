@@ -27,7 +27,6 @@ db = mongo.disguard
 servers = db.servers
 users = db.users
 
-
 if 'http://' in OAUTH2_REDIRECT_URI:
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = 'true'
 
@@ -95,10 +94,10 @@ def ReRoute():
 @app.route('/manage')
 def manage():
     discord = make_session(token=session.get('oauth2_token'))
-    user = discord.get(API_BASE_URL + '/users/@me').json()
     try:
+        user = discord.get(API_BASE_URL + '/users/@me').json()
         shared = users.find_one({"user_id": int(user.get("id"))}).get("servers")
-    except TypeError:
+    except:
         session.clear()
         return redirect(url_for('index')) #If the website can't load servers
     return render_template('homepage.html', servers=shared, user=user.get("username"))
