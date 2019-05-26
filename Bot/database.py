@@ -125,12 +125,14 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
             if m.get('id') == id:
                 member=m
                 break
-        servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
-            "members.$.name": membDict.get(str(id)),
-            "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
-            "members.$.quickMessages": [] if member is None else member.get('quickMessages'),
-            "members.$.lastMessages": [] if member is None else member.get('lastMessages')
-        }}, True)
+        try:
+            servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
+                "members.$.name": membDict.get(str(id)),
+                "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
+                "members.$.quickMessages": [] if member is None else member.get('quickMessages'),
+                "members.$.lastMessages": [] if member is None else member.get('lastMessages')
+            }}, True)
+        except: pass #Member no longer exists in server
 
 def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
