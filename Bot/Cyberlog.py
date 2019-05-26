@@ -79,7 +79,8 @@ class Cyberlog(commands.Cog):
         message = None
         g = message.guild if message is not None else bot.get_guild(payload.guild_id)
         c = database.GetLogChannel(g, 'message')
-        if payload.cached_message: message = payload.cached_message
+        try: message = payload.cached_message
+        except: message = None
         if message is not None and pauseDelete > 0 and message.guild == serverDelete:
             pauseDelete -= 1
             return
