@@ -117,23 +117,18 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else log.get('role'),
         "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else log.get('emoji'),
         "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else log.get('server'),
-        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else log.get('voice')},
-    "members": [{
-        'id': m} for m in membIDs]}}, True)
+        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else log.get('voice')}}}, True)
     membDict = {}
     for m in s.members: #Create dict 
         membDict[str(m.id)] = m.name
         membDict[m.name] = m.id
     for id in membIDs:
         member=None
-        if members is None: #Due to database error lol
-            for mm in b.get_guild(s.id).members:
-                VerifyUser(mm, b)
-            members = serv.get('members')
-        for m in members:
-            if m.get('id') == id:
-                member=m
-                break
+        if members is not None:
+            for m in members:
+                if m.get('id') == id:
+                    member=m
+                    break
         try:
             servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
                 "members.$.name": membDict.get(str(id)),
