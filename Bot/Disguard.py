@@ -43,6 +43,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                         except FileNotFoundError: pass
                         try: f.write(message.author.name+"\n"+str(message.author.id)+"\n"+message.content)
                         except UnicodeEncodeError: pass
+                        try: f.close()
+                        except: pass
                 except discord.Forbidden:
                     pass
         print("Indexed")

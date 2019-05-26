@@ -126,6 +126,7 @@ class Cyberlog(commands.Cog):
                         elif line == 2:
                             messageContent = l
                         line+=1
+                    f.close()
                     os.remove(directory+"/"+fl)
                     author = bot.get_guild(payload.guild_id).get_member(authorID)
                     if author.bot or author not in g.members or not database.CheckCyberlogExclusions(bot.get_channel(payload.channel_id), author):
