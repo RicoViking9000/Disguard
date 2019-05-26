@@ -57,6 +57,9 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     serv = servers.find_one({"server_id": s.id})
+    if b.get_guild(s.id) is None: 
+        servers.delete_one({'server_id': s.id})
+        return
     spam = None
     log = None
     members = None
