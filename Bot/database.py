@@ -124,6 +124,10 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         membDict[m.name] = m.id
     for id in membIDs:
         member=None
+        if members is None: #Due to database error lol
+            for mm in b.get_guild(s.id).members:
+                VerifyUser(mm, b)
+            members = serv.get('members')
         for m in members:
             if m.get('id') == id:
                 member=m
