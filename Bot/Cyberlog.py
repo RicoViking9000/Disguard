@@ -81,7 +81,6 @@ class Cyberlog(commands.Cog):
         c = database.GetLogChannel(g, 'message')
         try: message = payload.cached_message
         except: message = None
-        print(message)
         if message is not None and pauseDelete > 0 and message.guild == serverDelete:
             pauseDelete -= 1
             return
