@@ -94,7 +94,7 @@ class Cyberlog(commands.Cog):
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
         ma = message.author if message is not None else None
         s = None
-        if message is not None:
+        if ma is not None:
             if not database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot:
                 return
             embed.description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: "+(message.created_at - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST"
