@@ -13,6 +13,26 @@ serverDelete = None
 loading = None
 
 invites = {}
+edits = {}
+
+
+class MessageEditObject(object):
+    def __init__(self, content, message, time):
+        self.history = [MessageEditEntry(content, message.content, time)]
+        self.message = message
+        self.created = message.created_at
+
+    def add(self, before, after, time):
+        self.history.append(MessageEditEntry(before, after, time))
+    
+    def update(self, message):
+        self.message = message
+
+class MessageEditEntry(object):
+    def __init__(self, before, after, time):
+        self.before = before
+        self.after = after
+        self.time = time
 
 class Cyberlog(commands.Cog):
     def __init__(self, bot):
@@ -22,6 +42,12 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here due to the web dashboard :D'''
+        path = "Indexes/{}/{}".format(message.guild.id, message.channel.id)
+        f = open(path+'/{}.txt'.format(message.id), 'w+')
+        try: f.write(message.author.name+"\n"+str(message.author.id)+"\n"+message.content)
+        except UnicodeEncodeError: pass
+        try: f.close()
+        except: pass
         if len(invites) < 1:
             global bot
             for server in bot.guilds:
@@ -39,35 +65,210 @@ class Cyberlog(commands.Cog):
             await imageLogChannel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        '''[DISCORD API METHOD] Called when message is edited'''
-        c = database.GetLogChannel(before.guild, 'message')
-        if before.author.bot or len(before.embeds) > 0 or before.content == after.content or not database.SimpleGetEnabled(before.guild, 'message'):
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        ej = payload.emoji
+        global bot
+        global edits
+        global loading
+        channel = bot.get_channel(payload.channel_id)
+        try: message = await channel.fetch_message(payload.message_id)
+        except: return
+        member = bot.get_guild(channel.guild.id).get_member(payload.user_id)
+        if member.bot: return
+        if len(message.embeds) == 0: return
+        if message.author.id != bot.get_guild(channel.guild.id).me.id: return
+        e = message.embeds[0]
+        f = e.footer.text
+        fid = f[f.find(':')+2:]
+        #load = discord.Embed(title=' ',description=str(loading))
+        if str(ej) == 'ℹ':
+            if 'Message was edited' in e.title:
+                try: await message.remove_reaction(ej, member)
+                except discord.Forbidden: pass
+                eo = edits.get(fid)
+                after = eo.message
+                details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing full edited message__'.format(after.author.name),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+                before = eo.history[0].before
+                beforeWordList = before.split(" ")
+                afterWordList = after.content.split(" ")
+                beforeC=''
+                afterC=''
+                for b in beforeWordList:
+                    if b not in afterWordList:
+                        beforeC += "**" + b + "** "
+                    else:
+                        beforeC += b + " "
+                for b in afterWordList:
+                    if b not in beforeWordList:
+                        afterC += "**" + b + "** "
+                    else:
+                        afterC += b + " "
+                details.add_field(name='Previously', value=beforeC, inline=False)
+                details.add_field(name='Now', value=afterC, inline=False)
+                details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context\nMessage will retract three minutes from pressing the first reaction')
+                details.set_footer(text='Message ID: {}'.format(after.id))
+                await message.edit(content=None,embed=details)
+                for rr in ['📜', '🗒']:
+                    await message.add_reaction(rr)
+        if str(ej) == '📜':
+            if 'edit details' in e.title:
+                try: await message.remove_reaction(ej, member)
+                except discord.Forbidden: pass
+                eo = edits.get(fid)
+                after = eo.message
+                details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing message edit history__'.format(after.author.name),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+                details.add_field(name=(eo.created - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST", value=eo.history[0].before, inline=False)
+                for entry in eo.history:
+                    details.add_field(name=(entry.time - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST", value=entry.after,inline=False)
+                details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context')
+                details.set_footer(text='Message ID: {}'.format(after.id))
+                await message.edit(content=None,embed=details)
+        if str(ej) == '🗒':
+            try: await message.remove_reaction(ej, member)
+            except discord.Forbidden: pass
+            eo = edits.get(fid)
+            after = eo.message
+            lst = None
+            details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing message in context__'.format(after.author.name),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+            try: 
+                lst = await after.channel.history(limit=10000).flatten()
+            except discord.Forbidden:
+                details.description+='\n\nUnable to provide message in context'
+                await message.edit(content=None,embed=details)
+            for m in range(len(lst)):
+                if lst[m].id == after.id:
+                    for n in range(m-2,m+3):
+                        if n >= 0:
+                            try:
+                                details.add_field(name=lst[n].author.name,value=lst[n].content if len(lst[n].content)>0 else '(No content)',inline=False)
+                            except IndexError:
+                                pass
+            details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context')
+            details.set_footer(text='Message ID: {}'.format(after.id))
+            await message.edit(content=None,embed=details)
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        if user.bot or len(reaction.message.embeds) == 0 or reaction.message.author.id != reaction.message.guild.me.id:
             return
-        if not database.CheckCyberlogExclusions(before.channel, before.author):
+        global loading
+        if str(reaction) in ['ℹ', '📜', '🗒']:
+            await reaction.message.edit(content=loading)
+
+    @commands.Cog.listener()
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        '''[DISCORD API METHOD] Called when raw message is edited'''
+        global bot
+        global edits
+        global loading #We have to get the previous content from indexed message and current from guild.get_message
+        c = bot.get_channel(int(payload.data.get('channel_id')))
+        try: after = await c.fetch_message(payload.message_id)
+        except discord.NotFound: return
+        g = bot.get_guild(int(payload.data.get('guild_id')))
+        if not database.SimpleGetEnabled(g, 'message'):
             return
-        if c is not None:
-            beforeWordList = before.content.split(" ")
-            afterWordList = after.content.split(" ")
-            beforeC = ""
-            afterC = ""
-            for b in beforeWordList:
-                if b not in afterWordList:
-                    beforeC += "**" + b + "** "
-                else:
-                    beforeC += b + " "
-            for b in afterWordList:
-                if b not in beforeWordList:
-                    afterC += "**" + b + "** "
-                else:
-                    afterC += b + " "
-            embed=discord.Embed(title="Message was edited",description="Author: "+before.author.mention+" ("+before.author.name+")",color=0x0000FF,timestamp=datetime.datetime.utcnow())
-            embed.add_field(name="Previously: ", value=beforeC,inline=False)
-            embed.add_field(name="Now: ", value=afterC,inline=False)
-            embed.add_field(name="Channel: ", value=str(before.channel.mention))
-            embed.set_footer(text="Message ID: " + str(after.id))
-            embed.set_thumbnail(url=before.author.avatar_url)
-            await c.send(content=None,embed=embed)
+        if not database.CheckCyberlogExclusions(after.channel, after.author) or after.author.bot:
+            return
+        load=discord.Embed(title="Message was edited",description=str(loading),color=0x0000FF)
+        embed = load.copy()
+        c = database.GetLogChannel(g, 'message')
+        msg = await c.send(embed=embed)
+        if c is None: return
+        before = None
+        path = 'Indexes/{}/{}'.format(payload.data.get('guild_id'), payload.data.get('channel_id'))
+        for fl in os.listdir(path):
+            if fl == str(payload.message_id)+'.txt':
+                f = open(path+'/'+fl, 'r+')
+                line = 0
+                for l in f:
+                    if line == 2:
+                        before = l
+                        f.close()
+                        f = open(path+'/'+fl, 'w')
+                        try: f.write(after.author.name+"\n"+str(after.author.id)+"\n"+after.content)
+                        except UnicodeEncodeError: pass
+                        f.close()
+                        break
+                    line+=1
+                f.close()
+        timestamp = datetime.datetime.utcnow()
+        if edits.get(str(payload.message_id)) is None:
+            edits[str(payload.message_id)] = MessageEditObject(before, after, timestamp)
+        else:
+            edits.get(str(payload.message_id)).add(before, after.content, timestamp)
+            edits.get(str(payload.message_id)).update(after)
+        beforeWordList = before.split(" ")
+        afterWordList = after.content.split(" ")
+        beforeC = ""
+        afterC = ""
+        b=0
+        while b < len(beforeWordList):
+            start=b
+            if beforeWordList[b] not in afterWordList:
+                if b>=2: beforeC+='...'
+                for m in reversed(range(1, 3)):
+                    if b-m>=0: beforeC+=beforeWordList[b-m]+" "
+                beforeC += "**"+beforeWordList[b]+" "
+                for m in range(b+1, len(beforeWordList)):
+                    if beforeWordList[m] not in afterWordList:
+                        beforeC += beforeWordList[m]+" "
+                    else:
+                        try:
+                            beforeC+="** "
+                            beforeC+=beforeWordList[m+1]+" "
+                            beforeC+=beforeWordList[m+2]+"... "
+                        except IndexError: beforeC+="... "
+                        b=m+1
+                        break
+                    b=m+1
+            if b==start:b+=1
+        b=0
+        while b < len(afterWordList):
+            start=b
+            if afterWordList[b] not in beforeWordList:
+                if b>=2: afterC+='...'
+                for m in reversed(range(1, 3)):
+                    if b-m>=0: afterC+=afterWordList[b-m]+" "
+                afterC += "**"+afterWordList[b]+" "
+                for m in range(b+1, len(afterWordList)):
+                    if afterWordList[m] not in beforeWordList:
+                        afterC += afterWordList[m]+" "
+                    else:
+                        try:
+                            afterC+="** "
+                            afterC+=afterWordList[m+1]+" "
+                            afterC+=afterWordList[m+2]+"... "
+                        except IndexError: afterC+="... "
+                        b=m+1
+                        break
+                    b=m+1
+            if b==start:b+=1
+        b4count = 0
+        afcount = 0
+        for char in beforeC:
+            if char == '*':
+                b4count+=1
+        if b4count % 4 !=0: beforeC+='**'
+        for char in afterC:
+            if char=='*':
+                afcount+=1
+        if afcount % 4 !=0: afterC+='**'
+        embed.description="Author: "+after.author.mention+" ("+after.author.name+")"
+        embed.timestamp=timestamp
+        embed.add_field(name="Previously: ", value=beforeC if len(beforeC) > 0 else '(No content)',inline=False)
+        embed.add_field(name="Now: ", value=afterC if len(afterC) > 0 else '(No content)',inline=False)
+        embed.add_field(name="Channel: ", value=str(after.channel.mention))
+        embed.add_field(name="Edits are truncated",value="React with ℹ to see more information")
+        embed.set_footer(text="Message ID: " + str(after.id))
+        embed.set_thumbnail(url=after.author.avatar_url)
+        await msg.edit(embed=embed)
+        await msg.add_reaction('ℹ')
+        await asyncio.sleep(180)
+        await msg.edit(embed=embed)
+        if len(msg.reactions) > 1:
+            try: await msg.clear_reactions()
+            except discord.Forbidden: pass
+            await msg.add_reaction('ℹ')
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
@@ -80,9 +281,8 @@ class Cyberlog(commands.Cog):
         g = message.guild if message is not None else bot.get_guild(payload.guild_id)
         c = database.GetLogChannel(g, 'message')
         try: message = payload.cached_message
-        except Exception as e: 
+        except AttributeError:
             message = None
-            print("Message delete\n"+e)
         if message is not None and pauseDelete > 0 and message.guild == serverDelete:
             pauseDelete -= 1
             return
@@ -95,7 +295,7 @@ class Cyberlog(commands.Cog):
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
         ma = message.author if message is not None else None
         s = None
-        if ma is not None:
+        if message is not None:
             if not database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot:
                 return
             embed.description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: "+(message.created_at - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST"
@@ -112,6 +312,7 @@ class Cyberlog(commands.Cog):
         else:
             embed.description="Message is old...\n\n"+str(loading)+" Attempting to retrieve some data..." #Now we have to search the file system
             s = await c.send(embed=embed)
+            f=None
             directory = "Indexes/{}/{}".format(payload.guild_id,payload.channel_id)
             for fl in os.listdir(directory):
                 if fl == str(payload.message_id)+".txt":
@@ -141,13 +342,15 @@ class Cyberlog(commands.Cog):
                         embed.description+="Author: "+authorName+"\n"
                         ma = author
                     embed.description+="Channel: "+bot.get_channel(payload.channel_id).mention+"\n"
-                    embed.add_field(name="Content",value="(No content)" if messageContent is None or len(messageContent)<1 else messageContent)
+                    embed.add_field(name="Content",value="(No content)" if messageContent is "" or len(messageContent)<1 else messageContent)
                     for ext in ['.png', '.jpg', '.gif', '.webp']:
                         if ext in messageContent:
                             if '://' in messageContent:
                                 url = messageContent[message.content.find('http'):messageContent.find(ext)+len(ext)+1]
                                 embed.set_image(url=url)
                     break #the for loop
+            if f is None:
+                await s.edit(embed=discord.Embed(title="Message was deleted",description='Unable to provide more information',timestamp=datetime.datetime.utcnow(),color=0xff0000))
         content=None
         if database.GetReadPerms(g, "message"):
             try:
@@ -184,6 +387,10 @@ class Cyberlog(commands.Cog):
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             embed.set_footer(text="Channel ID: "+str(channel.id))
             await database.GetLogChannel(channel.guild, "channel").send(content=content,embed=embed)
+        if type(channel) is discord.TextChannel:
+            path = "Indexes/{}/{}".format(channel.guild.id, channel.id)
+            try: os.makedirs(path)
+            except FileExistsError: pass
         database.VerifyServer(channel.guild, bot) #Update database to reflect creation. This call is used frequently here. Placed at bottom to avoid delay before logging
 
     @commands.Cog.listener()
@@ -407,7 +614,7 @@ class Cyberlog(commands.Cog):
                     servers.append(server)
                     membObj = member
                     break
-        embed=discord.Embed(title="User's global attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+        embed=discord.Embed(title="User's global attributes updated",description=after.mention+"("+after.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
         if before.avatar_url != after.avatar_url:
             if before.avatar_url is not None:
                 embed.set_thumbnail(url=before.avatar_url)
@@ -438,6 +645,33 @@ class Cyberlog(commands.Cog):
         database.VerifyServer(guild, bot)
         for member in guild.members:
             database.VerifyUser(member, bot)
+        message=None
+        global loading
+        content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: `https://disguard.herokuapp.com`\n{}Please wait while I index your server's messages...".format(loading)
+        if guild.system_channel is not None:
+            try: message = await guild.system_channel.send(content) #Update later to provide more helpful information
+            except discord.Forbidden: pass
+        if message is None:
+            for channel in guild.text_channels:
+                if 'general' in channel.name:
+                    try: message = await guild.system_channel.send(content) #Update later to provide more helpful information
+                    except discord.Forbidden: pass
+        for channel in guild.text_channels:
+            path = "Indexes/{}/{}".format(guild.id, channel.id)
+            try: os.makedirs(path)
+            except FileExistsError: pass
+            try:
+                async for message in channel.history(limit=10000000):
+                    if str(message.id)+".txt" in os.listdir(path): break
+                    try: f = open(path+"/"+str(message.id)+".txt", "w+")
+                    except FileNotFoundError: pass
+                    try: f.write(message.author.name+"\n"+str(message.author.id)+"\n"+message.content)
+                    except UnicodeEncodeError: pass
+                    try: f.close()
+                    except: pass
+            except discord.Forbidden:
+                pass
+        await message.edit(content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: `https://disguard.herokuapp.com`")
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
@@ -709,7 +943,7 @@ class Cyberlog(commands.Cog):
             database.ResumeMod(ctx.guild, 'antispam')
             await ctx.send("✅Successfully resumed antispam moderation")
         if 'logging' in args:
-            database.ResumeMod(ctx.guild, 'logging')
+            database.ResumeMod(ctx.guild, 'cyberlog')
             await ctx.send("✅Successfully resumed logging")
 
 def ParsePauseDuration(s: str):

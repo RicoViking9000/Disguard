@@ -39,7 +39,7 @@ class Moderation(commands.Cog):
         global current
         global loading
         current = PurgeObject()
-        if not (GetManageMessagePermissions(ctx.author) and GetManageMessagePermissions(ctx.guild.me)):
+        if not (GetManageMessagePermissions(ctx.author) and GetManageMessagePermissions(ctx.guild.me)) and ('purge:true' in args or len(args) == 1):
             return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
         if len(args) < 1:
             return await ctx.send("Please provide filters for the purge, or at the minimum, a number of messages to purge:\n`.purge 5`, for example, is the minimum\nRefer to `.help` documentation for advanced usage")
