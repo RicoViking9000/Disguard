@@ -214,15 +214,15 @@ class Antispam(commands.Cog):
                 global filters
                 currentFilter = profanityfilter.ProfanityFilter()
                 currentFilter._censor_list = filters.get(str(message.guild.id))
-                filtered = currentFilter.censor(message.content)
-                arr = message.content.split(" ")
+                filtered = currentFilter.censor(message.content.lower())
+                arr = message.content.lower().split(" ")
                 prof = filtered.split(" ")
                 for a in range(len(arr)):
                     if arr[a] != prof[a]:
                         parsed += "**" + arr[a] + "** "
                     else:
                         parsed += arr[a] + " "
-                if filtered != message.content:
+                if filtered != message.content.lower():
                     censorCount = 0
                     for a in filtered:
                         if a == "*":

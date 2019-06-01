@@ -45,7 +45,7 @@
                     Read server's audit log to send who deleted the message <select name=messageRead><option value=True {%if cyberlog.message.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.message.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=messageColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=messageAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Log images that are deleted <select name=imageLogging><option value=True {%if cyberlog.image%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.image%}selected{%endif%}>Disabled</option></select><br>
+                    Log images and attachments that are deleted <select name=imageLogging><option value=True {%if cyberlog.image%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.image%}selected{%endif%}>Disabled</option></select><br>
                 </fieldset>
 
                 <fieldset>

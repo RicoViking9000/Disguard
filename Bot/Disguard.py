@@ -34,7 +34,10 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         for server in bot.guilds:
             for channel in server.text_channels:
                 path = "Indexes/{}/{}".format(server.id, channel.id)
+                path2 = 'Attachments/{}/{}'.format(server.id, channel.id)
                 try: os.makedirs(path)
+                except FileExistsError: pass
+                try: os.makedirs(path2)
                 except FileExistsError: pass
                 try:
                     async for message in channel.history(limit=10000000):

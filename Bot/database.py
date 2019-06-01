@@ -137,7 +137,13 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
                 "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
                 "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
             }}, True)
-        except Exception as e: print('servers update member\n'+str(e))
+        except: #new member joined since last database refresh
+            servers.update_one({'server_id': s.id}, {'$push': { 'members': {
+                'id': id,
+                'name': membDict.get(str(id)),
+                'warnings': spam.get('warn'),
+                'quickMessages': [],
+                'lastMessages': []}}})
 
 def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''

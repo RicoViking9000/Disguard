@@ -6,8 +6,8 @@ import asyncio
 import os
 
 bot = None
-imageLogChannel = discord.TextChannel
 globalLogChannel = discord.TextChannel
+imageLogChannel = discord.TextChannel
 pauseDelete = 0
 serverDelete = None
 loading = None
@@ -43,7 +43,8 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here due to the web dashboard :D'''
         path = "Indexes/{}/{}".format(message.guild.id, message.channel.id)
-        f = open(path+'/{}.txt'.format(message.id), 'w+')
+        try: f = open(path+'/{}.txt'.format(message.id), 'w+')
+        except FileNotFoundError: pass
         try: f.write(message.author.name+"\n"+str(message.author.id)+"\n"+message.content)
         except UnicodeEncodeError: pass
         try: f.close()
@@ -56,13 +57,14 @@ class Cyberlog(commands.Cog):
                     invites[str(server.id)+"_vanity"] = (await server.vanity_invite()).uses
                 except (discord.Forbidden, discord.HTTPException):
                     pass
-        global imageLogChannel
         if message.author.bot:
             return
         if database.GetImageLogPerms(message.guild) and len(message.attachments) > 0:
-            embed=discord.Embed(title="Image", description=" ")
-            embed.set_image(url=message.attachments[0].url)
-            await imageLogChannel.send(embed=embed)
+            path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+            try: os.makedirs(path2)
+            except FileExistsError: pass
+            for a in message.attachments:
+                await a.save(path2+'/'+a.filename)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -82,7 +84,7 @@ class Cyberlog(commands.Cog):
         fid = f[f.find(':')+2:]
         #load = discord.Embed(title=' ',description=str(loading))
         if str(ej) == 'ℹ':
-            if 'Message was edited' in e.title:
+            if 'Message was edited' in e.title or 'edit details' in e.title:
                 try: await message.remove_reaction(ej, member)
                 except discord.Forbidden: pass
                 eo = edits.get(fid)
@@ -110,6 +112,10 @@ class Cyberlog(commands.Cog):
                 await message.edit(content=None,embed=details)
                 for rr in ['📜', '🗒']:
                     await message.add_reaction(rr)
+                await asyncio.sleep(180)
+                await message.edit(embed=e)
+                await message.clear_reactions()
+                await message.add_reaction('ℹ')
         if str(ej) == '📜':
             if 'edit details' in e.title:
                 try: await message.remove_reaction(ej, member)
@@ -124,28 +130,29 @@ class Cyberlog(commands.Cog):
                 details.set_footer(text='Message ID: {}'.format(after.id))
                 await message.edit(content=None,embed=details)
         if str(ej) == '🗒':
-            try: await message.remove_reaction(ej, member)
-            except discord.Forbidden: pass
-            eo = edits.get(fid)
-            after = eo.message
-            lst = None
-            details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing message in context__'.format(after.author.name),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-            try: 
-                lst = await after.channel.history(limit=10000).flatten()
-            except discord.Forbidden:
-                details.description+='\n\nUnable to provide message in context'
+            if 'edit details' in e.title:
+                try: await message.remove_reaction(ej, member)
+                except discord.Forbidden: pass
+                eo = edits.get(fid)
+                after = eo.message
+                lst = None
+                details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing message in context__'.format(after.author.name),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+                try: 
+                    lst = await after.channel.history(limit=10000).flatten()
+                except discord.Forbidden:
+                    details.description+='\n\nUnable to provide message in context'
+                    await message.edit(content=None,embed=details)
+                for m in range(len(lst)):
+                    if lst[m].id == after.id:
+                        for n in range(m-2,m+3):
+                            if n >= 0:
+                                try:
+                                    details.add_field(name=lst[n].author.name,value=lst[n].content if len(lst[n].content)>0 else '(No content)',inline=False)
+                                except IndexError:
+                                    pass
+                details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context')
+                details.set_footer(text='Message ID: {}'.format(after.id))
                 await message.edit(content=None,embed=details)
-            for m in range(len(lst)):
-                if lst[m].id == after.id:
-                    for n in range(m-2,m+3):
-                        if n >= 0:
-                            try:
-                                details.add_field(name=lst[n].author.name,value=lst[n].content if len(lst[n].content)>0 else '(No content)',inline=False)
-                            except IndexError:
-                                pass
-            details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context')
-            details.set_footer(text='Message ID: {}'.format(after.id))
-            await message.edit(content=None,embed=details)
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
@@ -172,8 +179,8 @@ class Cyberlog(commands.Cog):
         load=discord.Embed(title="Message was edited",description=str(loading),color=0x0000FF)
         embed = load.copy()
         c = database.GetLogChannel(g, 'message')
-        msg = await c.send(embed=embed)
         if c is None: return
+        msg = await c.send(embed=embed)
         before = None
         path = 'Indexes/{}/{}'.format(payload.data.get('guild_id'), payload.data.get('channel_id'))
         for fl in os.listdir(path):
@@ -191,6 +198,8 @@ class Cyberlog(commands.Cog):
                         break
                     line+=1
                 f.close()
+        if before == after.content:
+            return await msg.delete()
         timestamp = datetime.datetime.utcnow()
         if edits.get(str(payload.message_id)) is None:
             edits[str(payload.message_id)] = MessageEditObject(before, after, timestamp)
@@ -218,9 +227,9 @@ class Cyberlog(commands.Cog):
                             beforeC+=beforeWordList[m+1]+" "
                             beforeC+=beforeWordList[m+2]+"... "
                         except IndexError: beforeC+="... "
-                        b=m+1
+                        b=m
                         break
-                    b=m+1
+                    b=m
             if b==start:b+=1
         b=0
         while b < len(afterWordList):
@@ -239,9 +248,9 @@ class Cyberlog(commands.Cog):
                             afterC+=afterWordList[m+1]+" "
                             afterC+=afterWordList[m+2]+"... "
                         except IndexError: afterC+="... "
-                        b=m+1
+                        b=m
                         break
-                    b=m+1
+                    b=m
             if b==start:b+=1
         b4count = 0
         afcount = 0
@@ -263,12 +272,6 @@ class Cyberlog(commands.Cog):
         embed.set_thumbnail(url=after.author.avatar_url)
         await msg.edit(embed=embed)
         await msg.add_reaction('ℹ')
-        await asyncio.sleep(180)
-        await msg.edit(embed=embed)
-        if len(msg.reactions) > 1:
-            try: await msg.clear_reactions()
-            except discord.Forbidden: pass
-            await msg.add_reaction('ℹ')
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
@@ -277,6 +280,7 @@ class Cyberlog(commands.Cog):
         global serverDelete
         global loading
         global bot
+        global imageLogChannel
         message = None
         g = message.guild if message is not None else bot.get_guild(payload.guild_id)
         c = database.GetLogChannel(g, 'message')
@@ -290,19 +294,26 @@ class Cyberlog(commands.Cog):
             serverDelete = None
         if not database.GetEnabled(g, 'message'):
             return
-        embed=None
         embed=discord.Embed(title="Message was deleted",timestamp=datetime.datetime.utcnow(),color=0xff0000)
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
         ma = message.author if message is not None else None
+        attachments = []
+        path = 'Attachments/{}/{}/{}'.format(payload.guild_id,payload.channel_id, payload.message_id)
+        try:
+            for fil in os.listdir(path):
+                if '.png' in fil or '.jpg' in fil or '.gif' in fil or '.webp' in fil:
+                    t = await imageLogChannel.send(file=discord.File(path+'/'+fil, fil))
+                    embed.set_image(url=t.attachments[0].url)
+                else:
+                    attachments.append(discord.File(path+'/'+fil, fil))
+        except OSError: attachments = None
         s = None
         if message is not None:
             if not database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot:
                 return
             embed.description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: "+(message.created_at - datetime.timedelta(hours=4)).strftime("%b %d, %Y - %I:%M %p")+" EST"
             embed.set_thumbnail(url=message.author.avatar_url)
-            if len(message.attachments) > 0 and database.GetImageLogPerms(message.guild):
-                embed.set_image(url=message.attachments[0].url)
-            else:
+            if attachments is None:
                 for ext in ['.png', '.jpg', '.gif', '.webp']:
                     if ext in message.content:
                         if '://' in message.content:
@@ -361,9 +372,9 @@ class Cyberlog(commands.Cog):
             except discord.Forbidden:
                 content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
         if s is not None:
-            await s.edit(content=content,embed=embed)
+            await s.edit(content=content,embed=embed,files=attachments)
         else:
-            await c.send(content=content,embed=embed)
+            await c.send(content=content,embed=embed,files=attachments)
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
@@ -975,9 +986,9 @@ def AvoidDeletionLogging(messages: int, server: discord.Guild):
             
 def setup(Bot):
     global bot
-    global imageLogChannel
     global globalLogChannel
     global loading
+    global imageLogChannel
     Bot.add_cog(Cyberlog(Bot))
     bot = Bot
     imageLogChannel = bot.get_channel(534439214289256478)
