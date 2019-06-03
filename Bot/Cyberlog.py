@@ -44,7 +44,7 @@ class Cyberlog(commands.Cog):
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here due to the web dashboard :D'''
         path = "Indexes/{}/{}".format(message.guild.id, message.channel.id)
         try: f = open(path+'/{}.txt'.format(message.id), 'w+')
-        except FileNotFoundError: pass
+        except FileNotFoundError: return
         try: f.write(message.author.name+"\n"+str(message.author.id)+"\n"+message.content)
         except UnicodeEncodeError: pass
         try: f.close()
@@ -64,7 +64,8 @@ class Cyberlog(commands.Cog):
             try: os.makedirs(path2)
             except FileExistsError: pass
             for a in message.attachments:
-                await a.save(path2+'/'+a.filename)
+                try: await a.save(path2+'/'+a.filename)
+                except discord.HTTPException: pass
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -159,7 +160,8 @@ class Cyberlog(commands.Cog):
         if user.bot or len(reaction.message.embeds) == 0 or reaction.message.author.id != reaction.message.guild.me.id:
             return
         global loading
-        if str(reaction) in ['ℹ', '📜', '🗒']:
+        reactions = ['ℹ', '📜']
+        if str(reaction) in reactions or str(reaction) == '🗒':
             await reaction.message.edit(content=loading)
 
     @commands.Cog.listener()
@@ -181,7 +183,7 @@ class Cyberlog(commands.Cog):
         c = database.GetLogChannel(g, 'message')
         if c is None: return
         msg = await c.send(embed=embed)
-        before = None
+        before = ""
         path = 'Indexes/{}/{}'.format(payload.data.get('guild_id'), payload.data.get('channel_id'))
         for fl in os.listdir(path):
             if fl == str(payload.message_id)+'.txt':
@@ -343,7 +345,7 @@ class Cyberlog(commands.Cog):
                     f.close()
                     os.remove(directory+"/"+fl)
                     author = bot.get_guild(payload.guild_id).get_member(authorID)
-                    if author.bot or author not in g.members or not database.CheckCyberlogExclusions(bot.get_channel(payload.channel_id), author):
+                    if author is None or author.bot or author not in g.members or not database.CheckCyberlogExclusions(bot.get_channel(payload.channel_id), author):
                         return await s.delete()
                     embed.description=""
                     if author is not None: 
@@ -616,7 +618,6 @@ class Cyberlog(commands.Cog):
     async def on_user_update(self, before: discord.User, after: discord.User):
         '''[DISCORD API METHOD] Called when a user changes their global username, avatar, or discriminator'''
         servers = []
-        print("user update")
         global bot
         membObj = None
         for server in bot.guilds: #Since this method doesn't supply a server, we need to get every server this member is a part of, to

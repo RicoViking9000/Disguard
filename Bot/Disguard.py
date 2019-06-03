@@ -26,20 +26,21 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     if not booted:
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening))
         for cog in cogs:
-            bot.load_extension(cog)
+            try:
+                bot.load_extension(cog)
+            except:
+                pass
         database.Verification(bot)
         Antispam.PrepareFilters(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         print("Indexing...")
         for server in bot.guilds:
+            print('Indexing '+server.name)
             for channel in server.text_channels:
                 path = "Indexes/{}/{}".format(server.id, channel.id)
-                path2 = 'Attachments/{}/{}'.format(server.id, channel.id)
                 try: os.makedirs(path)
                 except FileExistsError: pass
-                try: os.makedirs(path2)
-                except FileExistsError: pass
-                try:
+                try: 
                     async for message in channel.history(limit=10000000):
                         if str(message.id)+".txt" in os.listdir(path): break
                         try: f = open(path+"/"+str(message.id)+".txt", "w+")
@@ -48,8 +49,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                         except UnicodeEncodeError: pass
                         try: f.close()
                         except: pass
-                except discord.Forbidden:
-                    pass
+                except discord.Forbidden: pass
         print("Indexed")
     booted = True
     print("Booted")

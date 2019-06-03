@@ -171,7 +171,7 @@ def GetReadPerms(s: discord.Guild, mod: str):
 
 def GetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled') and servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None
+    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled') and (servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None or servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel") is not None) 
 
 def SimpleGetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server (lightweight)
