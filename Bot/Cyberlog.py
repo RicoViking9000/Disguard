@@ -76,17 +76,17 @@ class Cyberlog(commands.Cog):
         channel = bot.get_channel(payload.channel_id)
         try: message = await channel.fetch_message(payload.message_id)
         except: return
-        member = bot.get_guild(channel.guild.id).get_member(payload.user_id)
-        if member.bot: return
+        user = bot.get_guild(channel.guild.id).get_member(payload.user_id)
+        if user.bot: return
         if len(message.embeds) == 0: return
         if message.author.id != bot.get_guild(channel.guild.id).me.id: return
         e = message.embeds[0]
         f = e.footer.text
         fid = f[f.find(':')+2:]
-        #load = discord.Embed(title=' ',description=str(loading))
+        me = channel.guild.me
         if str(ej) == 'ℹ':
             if 'Message was edited' in e.title or 'edit details' in e.title:
-                try: await message.remove_reaction(ej, member)
+                try: await message.remove_reaction(ej, user)
                 except discord.Forbidden: pass
                 eo = edits.get(fid)
                 after = eo.message
@@ -108,18 +108,35 @@ class Cyberlog(commands.Cog):
                         afterC += b + " "
                 details.add_field(name='Previously', value=beforeC, inline=False)
                 details.add_field(name='Now', value=afterC, inline=False)
-                details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context\nMessage will retract three minutes from pressing the first reaction')
+                details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context')
                 details.set_footer(text='Message ID: {}'.format(after.id))
                 await message.edit(content=None,embed=details)
                 for rr in ['📜', '🗒']:
                     await message.add_reaction(rr)
-                await asyncio.sleep(180)
-                await message.edit(embed=e)
-                await message.clear_reactions()
-                await message.add_reaction('ℹ')
+            if 'New member' in e.title:
+                try: await message.remove_reaction(ej, user)
+                except discord.Forbidden: pass
+                if len(message.reactions) > 3:
+                    for a in ['🤐', '👢', '🔨']:
+                        try: await message.remove_reaction(a, me)
+                        except discord.Forbidden: pass
+                member = user.guild.get_member(int(fid))
+                details=discord.Embed(title="New member",description=member.mention+" ("+member.name+")\n\n__Viewing extra statistics__",timestamp=datetime.datetime.utcnow(),color=0x008000)
+                details.add_field(name='Servers I share',value=len([a for a in iter(bot.guilds) if member in member.guild.members]))
+                details.add_field(name='Reputation',value='Coming soon')
+                details.add_field(name='Account created',value='{0.days} days ago'.format(datetime.datetime.utcnow() - member.created_at))
+                details.add_field(name='Navigation',value='ℹ - member statistics\n🔍 - member information\n🕹 - member quick actions')
+                details.set_footer(text=e.footer.text)
+                await message.edit(content=None,embed=details)
+                for a in ['🔍', '🕹']:
+                    await message.add_reaction(a)
+            await asyncio.sleep(180)
+            await message.edit(embed=e)
+            await message.clear_reactions()
+            await message.add_reaction('ℹ')
         if str(ej) == '📜':
             if 'edit details' in e.title:
-                try: await message.remove_reaction(ej, member)
+                try: await message.remove_reaction(ej, user)
                 except discord.Forbidden: pass
                 eo = edits.get(fid)
                 after = eo.message
@@ -132,12 +149,12 @@ class Cyberlog(commands.Cog):
                 await message.edit(content=None,embed=details)
         if str(ej) == '🗒':
             if 'edit details' in e.title:
-                try: await message.remove_reaction(ej, member)
+                try: await message.remove_reaction(ej, user)
                 except discord.Forbidden: pass
                 eo = edits.get(fid)
                 after = eo.message
                 lst = None
-                details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing message in context__'.format(after.author.name),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+                details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing message in context (oldest on top)__\nChannel: {}'.format(after.author.name, eo.message.channel.mention),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
                 try: 
                     lst = await after.channel.history(limit=10000).flatten()
                 except discord.Forbidden:
@@ -145,7 +162,7 @@ class Cyberlog(commands.Cog):
                     await message.edit(content=None,embed=details)
                 for m in range(len(lst)):
                     if lst[m].id == after.id:
-                        for n in range(m-2,m+3):
+                        for n in reversed(range(m-2,m+3)):
                             if n >= 0:
                                 try:
                                     details.add_field(name=lst[n].author.name,value=lst[n].content if len(lst[n].content)>0 else '(No content)',inline=False)
@@ -154,6 +171,95 @@ class Cyberlog(commands.Cog):
                 details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context')
                 details.set_footer(text='Message ID: {}'.format(after.id))
                 await message.edit(content=None,embed=details)
+        if str(ej) == '🔍':
+            if 'New member' in e.title:
+                try: await message.remove_reaction(ej, user)
+                except discord.Forbidden: pass
+                if len(message.reactions) > 3:
+                    for a in ['🤐', '👢', '🔨']:
+                        try: await message.remove_reaction(a, me)
+                        except discord.Forbidden: pass
+                member = user.guild.get_member(int(fid))
+                details = discord.Embed(title=e.title, description=member.mention+" ("+member.name+")\n\n__Viewing member information__",timestamp=datetime.datetime.utcnow(),color=0x008000)
+                details.set_footer(text=e.footer.text)
+                joined=member.joined_at - datetime.timedelta(hours=4)
+                created=member.created_at - datetime.timedelta(hours=4)
+                details.add_field(name='Joined',value='{} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p EST"), (datetime.datetime.now()-joined).days))
+                details.add_field(name='Created',value='{} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p EST"), (datetime.datetime.now()-created).days))
+                details.add_field(name='Currently',value=member.status+' (Mobile)' if member.is_on_mobile() else member.status)
+                details.add_field(name='Top role',value=member.top_role)
+                details.add_field(name='Role count',value=len(member.roles))
+                details.description+='\n\n**Permissions:** {}'.format(database.StringifyPermissions(member.guild_permissions))
+                details.add_field(name='Navigation',value='ℹ - member statistics\n🔍 - member information\n🕹 - member quick actions')
+                details.set_thumbnail(url=member.avatar_url)
+                await message.edit(content=None,embed=details)
+        if str(ej) == '🕹':
+            if 'New member' in e.title:
+                try: await message.remove_reaction(ej, user)
+                except discord.Forbidden: pass
+                member = user.guild.get_member(int(fid))
+                details = discord.Embed(title=e.title, description=member.mention+" ("+member.name+")\n\n__Viewing member quick actions__",timestamp=datetime.datetime.utcnow(),color=0x008000)
+                details.set_footer(text=e.footer.text)
+                details.description+='\n\nComing soon: Warn member\n🤐: Mute member\nComing soon: Lock out member\n👢: Kick member\n🔨: Ban member'
+                details.add_field(name='Navigation',value='ℹ - member statistics\n🔍 - member information\n🕹 - member quick actions')
+                await message.edit(content=None,embed=details)
+                for a in ['🤐', '👢', '🔨']:
+                    await message.add_reaction(a)
+        if str(ej) == '🤐':
+            if 'New member' in e.title:
+                member = user.guild.get_member(int(fid))
+                await message.edit(content='{}, are you sure you would like to mute {} for an indefinite period (until a mod removes it)? Type `yes` within 10s to confirm'.format(user.mention, member.name))
+                def checkMute(m): return 'yes' in m.content.lower() and message.channel == m.channel and m.author.id == user.id and database.ManageRoles(user)
+                try: result = await bot.wait_for('message',check=checkMute,timeout=10)
+                except asyncio.TimeoutError: await message.edit(content=None)
+                else: 
+                    if result: 
+                        muted=False
+                        role=None
+                        for a in message.guild.roles:
+                            if a.name == "RicobotAutoMute": 
+                                role=a
+                                muted=True
+                        if not muted:
+                            try:
+                                role = await message.guild.create_role(name="RicobotAutoMute", reason="Quickmute")
+                                await role.edit(position=message.guild.me.top_role.position - 1)
+                                for a in message.guild.channels:
+                                    if type(a) is discord.TextChannel:
+                                        await a.set_permissions(role, send_messages=False)
+                            except discord.Forbidden:
+                                muted=False
+                        if not muted: 
+                            await message.edit(content='Unable to mute {}, please ensure I have manage role permissions'.format(member.name))
+                        await member.add_roles(role)
+                        await message.edit(content='Successfully muted {}'.format(member.name))
+                await message.remove_reaction(ej, user)
+        if str(ej) == '👢':
+            if 'New member' in e.title:
+                member = user.guild.get_member(int(fid))
+                await message.edit(content='{}, are you sure you would like to kick {}? Type a reason for the kick within 30s to confirm; to skip a reason, type `none`; to cancel, don\'t send a message'.format(user.mention, member.name))
+                def checkKick(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and database.KickMembers(user)
+                try: result = await bot.wait_for('message',check=checkKick,timeout=30)
+                except asyncio.TimeoutError: await message.edit(content=None)
+                else:
+                    try: 
+                        await member.kick(reason='{}: {}'.format(result.author.name, result.content))
+                        await message.edit(content='Successfully kicked {}'.format(member.name))
+                    except discord.Forbidden: await message.edit(content='Unable to kick {}'.format(member.name))
+                await message.remove_reaction(ej, user)
+        if str(ej) == '🔨':
+            if 'New member' in e.title:
+                member = user.guild.get_member(int(fid))
+                await message.edit(content='{}, are you sure you would like to ban {}? Type a reason for the ban within 30s to confirm; to skip a reason, type `none`; to cancel, don\'t send a message'.format(user.mention, member.name))
+                def checkBan(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and database.BanMembers(user)
+                try: result = await bot.wait_for('message',check=checkBan,timeout=30)
+                except asyncio.TimeoutError: await message.edit(content=None)
+                else:
+                    try: 
+                        await member.ban(reason='{}: {}'.format(result.author.name, result.content))
+                        await message.edit(content='Successfully banned {}'.format(member.name))
+                    except discord.Forbidden: await message.edit(content='Unable to ban {}'.format(member.name))
+                await message.remove_reaction(ej, user)
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
@@ -215,65 +321,83 @@ class Cyberlog(commands.Cog):
         b=0
         while b < len(beforeWordList):
             start=b
+            #print('Checking for match:\n'+beforeWordList[b])
             if beforeWordList[b] not in afterWordList:
-                if b>=2: beforeC+='...'
+                if b>2: beforeC+='...'
                 for m in reversed(range(1, 3)):
                     if b-m>=0: beforeC+=beforeWordList[b-m]+" "
-                beforeC += "**"+beforeWordList[b]+" "
-                for m in range(b+1, len(beforeWordList)):
-                    if beforeWordList[m] not in afterWordList:
-                        beforeC += beforeWordList[m]+" "
+                beforeC += "**"+beforeWordList[b]+"** "
+                m=b+1
+                matchCount=0
+                matches=[] #Array of T/F depending on if word matches - if word matches, don't bold it
+                trueCount=0
+                while m < len(beforeWordList):
+                    if beforeWordList[m] in afterWordList: 
+                        matchCount+=1
+                        trueCount+=1
+                        matches.append(True)
                     else:
-                        try:
-                            beforeC+="** "
-                            beforeC+=beforeWordList[m+1]+" "
-                            beforeC+=beforeWordList[m+2]+"... "
-                        except IndexError: beforeC+="... "
-                        b=m
+                        matchCount=0
+                        matches.append(False)
+                    if matchCount == 2:
                         break
-                    b=m
+                    m+=1
+                confirmCount=0
+                for match in range(len(matches)):
+                    if matches[match]:
+                        confirmCount+=1
+                        beforeC+=beforeWordList[match+b+1]+" "
+                        if confirmCount==trueCount: break
+                    else: beforeC+='**'+beforeWordList[match+b+1]+'** '
+                beforeC+='... '
+                b=m+1
             if b==start:b+=1
         b=0
         while b < len(afterWordList):
             start=b
             if afterWordList[b] not in beforeWordList:
-                if b>=2: afterC+='...'
+                if b>2: afterC+='...'
                 for m in reversed(range(1, 3)):
                     if b-m>=0: afterC+=afterWordList[b-m]+" "
-                afterC += "**"+afterWordList[b]+" "
-                for m in range(b+1, len(afterWordList)):
-                    if afterWordList[m] not in beforeWordList:
-                        afterC += afterWordList[m]+" "
+                afterC += "**"+afterWordList[b]+"** "
+                m=b+1
+                matchCount=0
+                matches=[] #Array of T/F depending on if word matches - if word matches, don't bold it
+                trueCount=0
+                while m < len(afterWordList):
+                    if afterWordList[m] in beforeWordList: 
+                        matchCount+=1
+                        trueCount+=1
+                        matches.append(True)
                     else:
-                        try:
-                            afterC+="** "
-                            afterC+=afterWordList[m+1]+" "
-                            afterC+=afterWordList[m+2]+"... "
-                        except IndexError: afterC+="... "
-                        b=m
+                        matchCount=0
+                        matches.append(False)
+                    if matchCount == 2:
                         break
-                    b=m
+                    m+=1
+                confirmCount=0
+                for match in range(len(matches)):
+                    if matches[match]:
+                        confirmCount+=1
+                        afterC+=afterWordList[match+b+1]+" "
+                        if confirmCount==trueCount: break
+                    else: afterC+='**'+afterWordList[match+b+1]+'** '
+                afterC+='... '
+                b=m+1
             if b==start:b+=1
-        b4count = 0
-        afcount = 0
-        for char in beforeC:
-            if char == '*':
-                b4count+=1
-        if b4count % 4 !=0: beforeC+='**'
-        for char in afterC:
-            if char=='*':
-                afcount+=1
-        if afcount % 4 !=0: afterC+='**'
         embed.description="Author: "+after.author.mention+" ("+after.author.name+")"
         embed.timestamp=timestamp
-        embed.add_field(name="Previously: ", value=beforeC if len(beforeC) > 0 else '(No content)',inline=False)
-        embed.add_field(name="Now: ", value=afterC if len(afterC) > 0 else '(No content)',inline=False)
+        embed.add_field(name="Previously: ", value=beforeC if len(beforeC) > 0 else '(No new content)',inline=False)
+        embed.add_field(name="Now: ", value=afterC if len(afterC) > 0 else '(No new content)',inline=False)
         embed.add_field(name="Channel: ", value=str(after.channel.mention))
         embed.add_field(name="Edits are truncated",value="React with ℹ to see more information")
         embed.set_footer(text="Message ID: " + str(after.id))
         embed.set_thumbnail(url=after.author.avatar_url)
-        await msg.edit(embed=embed)
-        await msg.add_reaction('ℹ')
+        try: 
+            await msg.edit(embed=embed)
+            await msg.add_reaction('ℹ')
+        except discord.HTTPException:
+            await msg.edit(embed=discord.Embed(title="Message was edited",description='Message content is too long to post here',color=0x0000FF,timestamp=datetime.datetime.utcnow()))
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
@@ -485,10 +609,19 @@ class Cyberlog(commands.Cog):
         if database.GetEnabled(member.guild, "doorguard"):
             newInv = []
             content=None
-            embed=discord.Embed(title="New member",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0x008000)
-            embed.add_field(name="Mutual Servers",value=len([a for a in iter(bot.guilds) if member in a.members]))
-            #embed.add_field(name="Reputation",value="N/A")
+            count=len(member.guild.members)
+            suffix='th'
+            if count % 100 in [11, 12, 13]:
+                suffix='th'
+            elif count%10==1:
+                suffix='st'
+            elif count%10==2:
+                suffix='nd'
+            elif count%10==3:
+                suffix='rd'
+            embed=discord.Embed(title="New member (React with ℹ to see member info)",description=member.mention+" ("+member.name+")\n{}{} member".format(count,suffix),timestamp=datetime.datetime.utcnow(),color=0x008000)
             embed.set_thumbnail(url=member.avatar_url)
+            embed.set_footer(text='Member ID: {}'.format(member.id))
             try:
                 newInv = await member.guild.invites()
             except discord.Forbidden:
@@ -515,7 +648,8 @@ class Cyberlog(commands.Cog):
                 except (discord.Forbidden, discord.HTTPException):
                     pass
             invites[str(member.guild.id)] = newInv
-            await database.GetLogChannel(member.guild, "doorguard").send(content=content,embed=embed)
+            msg = await database.GetLogChannel(member.guild, "doorguard").send(content=content,embed=embed)
+            await msg.add_reaction('ℹ')
         database.VerifyServer(member.guild, bot)
         database.VerifyUser(member, bot)
 
@@ -531,14 +665,15 @@ class Cyberlog(commands.Cog):
                 if database.GetReadPerms(member.guild, 'doorguard'):
                     try:
                         async for log in member.guild.audit_logs(limit=1):
-                            if log.action == discord.AuditLogAction.kick:
-                                embed.title = member.name+" was kicked"
-                                embed.description="Kicked by: "+log.user.mention+" ("+log.user.name+")"
-                                embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
-                            elif log.action == discord.AuditLogAction.ban:
-                                embed.title = member.name+" was banned"
-                                embed.description="Banned by: "+log.user.mention+" ("+log.user.name+")"
-                                embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
+                            if (datetime.datetime.utcnow() - log.created_at).seconds < 10 and log.target == member:
+                                if log.action == discord.AuditLogAction.kick:
+                                    embed.title = member.name+" was kicked"
+                                    embed.description="Kicked by: "+log.user.mention+" ("+log.user.name+")"
+                                    embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
+                                elif log.action == discord.AuditLogAction.ban:
+                                    embed.title = member.name+" was banned"
+                                    embed.description="Banned by: "+log.user.mention+" ("+log.user.name+")"
+                                    embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided")
                     except discord.Forbidden:
                         content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             span = datetime.datetime.utcnow() - member.joined_at

@@ -1,4 +1,5 @@
-'''This file creates, verifies, and manages database entries as necessary during Disguard's operation'''
+'''This file creates, verifies, and manages database entries as necessary during Disguard's operation
+   This file also houses various useful methods that can be used across multiple files'''
 import pymongo
 import dns
 import secure
@@ -284,6 +285,27 @@ def ManageServer(member: discord.Member): #Check if a member can manage server, 
             return True
     return False
 
+def ManageRoles(member: discord.Member):
+    '''Does this member have the Manage Roles permission'''
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.manage_roles:
+            return True
+    return False
+
+def KickMembers(member: discord.Member):
+    '''Does this member have the Kick Members permission'''
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.kick_members:
+            return True
+    return False
+
+def BanMembers(member: discord.Member):
+    '''Does this member have the Ban Members permission'''
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.ban_members:
+            return True
+    return False
+
 def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.Member):
     '''Check to see if we shouldn't log a message delete event
     True to proceed
@@ -302,7 +324,9 @@ def DashboardManageServer(server: discord.Guild, member: discord.Member):
             return ManageServer(memb)
     return False
 
-    
+def StringifyPermissions(p: discord.Permissions):
+    '''Turn a permissions object into a stringified version'''
+    return ', '.join([a[0] for a in iter(p)])
 
 
         
