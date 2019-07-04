@@ -14,12 +14,13 @@ users = None
 
 class LogModule(object):
     '''Used for consistent controlling of logging'''
-    def __init__(self, name, description, embed=True, audit=True, enabled=True, channelID=None, embedColor=None, advanced=False):
+    def __init__(self, name, description, embed=True, audit=True, enabled=True, summarize=0, channelID=None, embedColor=None, advanced=False):
         self.name = name #name of module
         self.description = description #description of module
         self.embed = embed #send logs in embed form? [ENABLED BY DEFAULT, CUSTOMIZABLE LATER]
         self.read = audit #read audit logs to post who did the action (such as who created the channel)? [ENABLED BY DEFAULT, CUSTOMIZABLE LATER]
         self.enabled = enabled #is this module enabled?
+        self.summarize = summarize #summarize logging (overwrite)
         self.channel = channelID #which channel is this sent to?
         self.color = embedColor #custom color used for embed [LATER]
         self.advanced = advanced #enable advanced mode? [LATER]
@@ -73,8 +74,11 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
+    'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
+    'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
     "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
     "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.is_default() and not role.managed],
+    'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
     "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
         "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
         "whisper": False if serv is None or spam.get('whisper') is None else spam.get('whisper'), #when a member is flagged, whisper a notice to them in DM instead of current channel?
@@ -111,14 +115,15 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
         'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
         'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
-        "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else log.get('message'),
-        "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('message') is None else log.get('doorguard'),
-        "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else log.get('channel'),
-        "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else log.get('member'),
-        "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else log.get('role'),
-        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else log.get('emoji'),
-        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else log.get('server'),
-        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else log.get('voice')}}}, True)
+        'summarize': 0 if log is None or log.get('summarize') is None else log.get('summarize'),
+        "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else vars(LogModule("message", "Send logs when a message is edited or deleted", True, log.get('message').get('read'), log.get('message').get('enabled'), 0, log.get('message').get('channel'))),
+        "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else vars(LogModule("doorguard", "Send logs when a member joins or leaves server", True, log.get('doorguard').get('read'), log.get('doorguard').get('enabled'), 0, log.get('doorguard').get('channel'))),
+        "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else vars(LogModule("channel", "Send logs when channel is created, edited, or deleted", True, log.get('channel').get('read'), log.get('channel').get('enabled'), 0, log.get('channel').get('channel'))),
+        "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator", True, log.get('member').get('read'), log.get('member').get('enabled'), 0, log.get('member').get('channel'))),
+        "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted",True, log.get('role').get('read'), log.get('role').get('enabled'), 0, log.get('role').get('channel'))),
+        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted", True, log.get('emoji').get('read'), log.get('emoji').get('enabled'), 0, log.get('emoji').get('channel'))),
+        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail", True, log.get('server').get('read'), log.get('server').get('enabled'), 0, log.get('server').get('channel'))),
+        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change", True, log.get('voice').get('read'), log.get('voice').get('enabled'), 0, log.get('voice').get('channel')))}}}, True)
     membDict = {}
     for m in s.members: #Create dict 
         membDict[str(m.id)] = m.name
@@ -164,7 +169,11 @@ def VerifyUser(m: discord.Member, b: commands.Bot):
 
 def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
-    return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel")) if servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None else servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel")
+    return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel")) if servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None else s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel"))
+
+def GetMainLogChannel(s: discord.Guild):
+    '''Returns the log channel associated with the server (general one), if one is set'''
+    return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel"))
 
 def GetReadPerms(s: discord.Guild, mod: str):
     '''Return if the bot should read the server audit log for logs'''
@@ -324,11 +333,68 @@ def DashboardManageServer(server: discord.Guild, member: discord.Member):
             return ManageServer(memb)
     return False
 
+def GetSummarize(s: discord.Guild, mod):
+    '''Get the summarize value'''
+    return GetCyberlogObject(s).get(mod).get('summarize') if GetCyberlogObject(s).get('summarize') != GetCyberlogObject(s).get(mod).get('summarize') else GetCyberlogObject(s).get('summarize')
+
+def SummarizeEnabled(s: discord.Guild, mod):
+    '''Is summarizing enabled for this module?'''
+    return GetCyberlogObject(s).get('summarize') != 0 and GetCyberlogObject(s).get(mod).get('summarize') != 1
+
+def GeneralSummarizeEnabled(s: discord.Guild):
+    '''Is summarizing enabled for this server?'''
+    return GetCyberlogObject(s).get('summarize') != 0
+
 def StringifyPermissions(p: discord.Permissions):
-    '''Turn a permissions object into a stringified version'''
-    return ', '.join([a[0] for a in iter(p)])
+    '''Turn a permissions object into a partially stringified version'''
+    return [a[0] for a in iter(p) if a[1]]
 
+def AppendSummary(s: discord.Guild, summary):
+    '''Appends a Cyberlog.Summary object to a server's database entry'''
+    servers.update_one({'server_id': s.id}, {'$push': {'summaries': vars(summary) }})
 
-        
+def GetSummary(s: discord.Guild, id: int):
+    '''Return a summary object from a server and message ID'''
+    return [a for a in servers.find_one({"server_id": s.id}).get('summaries') if a.get('id') == id][0]
 
+def StringifyExtras(r: discord.Role):
+    '''Turns a role into a partially stringified version for things like mentionable/displayed separately'''
+    s = []
+    if r.hoist: s.append('displayed separately')
+    if r.mentionable: s.append('mentionable')
+    return s
 
+def StringifyBoth(r: discord.Role):
+    '''Turns a role into a combination of the above two'''
+    perms = StringifyPermissions(r.permissions)
+    perms.extend(StringifyExtras(r))
+    return perms
+
+def ComparePerms(b: discord.Role, a: discord.Role):
+    '''Bold or strikethrough differences'''
+    bef = StringifyBoth(b)
+    aft = StringifyBoth(a)
+    s = []
+    for perm in bef:
+        if perm not in aft: s.append('~~{}~~'.format(perm))
+        else: s.append(perm)
+    for perm in aft:
+        if perm not in bef and perm not in s: s.append('**{}**'.format(perm))
+    return s
+
+def UnchangedPerms(b: discord.Role, a: discord.Role):
+    '''Only return things that aren't changed'''
+    root = StringifyBoth(b)
+    new = StringifyBoth(a)
+    returns = []
+    for r in root:
+        if r in new: returns.append(r)
+    return returns
+
+def GetTimezone(s: discord.Guild):
+    '''Return the timezone offset from UTC for a given server'''
+    return servers.find_one({"server_id": s.id}).get('offset')
+
+def GetNamezone(s: discord.Guild):
+    '''Return the custom timezone name for a given server'''
+    return servers.find_one({"server_id": s.id}).get('tzname')

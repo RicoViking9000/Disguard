@@ -7,6 +7,7 @@ import dns
 import secure
 import database
 import Antispam
+import Cyberlog
 import os
 
 booted = False
@@ -32,6 +33,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 pass
         database.Verification(bot)
         Antispam.PrepareFilters(bot)
+        Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         print("Indexing...")
         for server in bot.guilds:
