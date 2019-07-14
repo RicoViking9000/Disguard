@@ -90,7 +90,7 @@ class Cyberlog(commands.Cog):
                         keyCounts[a] = 0
                     summaries.get(str(server.id)).categorize()
                     for summary in summaries.get(str(server.id)).queue:
-                        if database.SummarizeEnabled(server, summary.get('mod')) and (datetime.datetime.now() - summaries.get(str(server.id)).lastUpdate).seconds * 60 > database.GetSummarize(server, summary.get('mod')):
+                        if database.SummarizeEnabled(server, summary.get('mod')) and (datetime.datetime.now() - summaries.get(str(server.id)).lastUpdate).seconds / 60 > database.GetSummarize(server, summary.get('mod')):
                             keyCounts[summary.get('category')] = keyCounts.get(summary.get('category')) + 1
                     for a, b in keyCounts.items():
                         if b > 0: e.description += '{}: {} events\n'.format(keycodes.get(a), b)
@@ -150,7 +150,8 @@ class Cyberlog(commands.Cog):
         if message.author.id != bot.get_guild(channel.guild.id).me.id: return
         e = message.embeds[0]
         f = e.footer.text
-        fid = f[f.find(':')+2:]
+        try: fid = f[f.find(':')+2:]
+        except: fid = str(message.id)
         me = channel.guild.me
         if str(ej) == 'ℹ':
             if 'Message was edited' in e.title or 'edit details' in e.title or 'event recaps' in e.title:
@@ -351,7 +352,7 @@ class Cyberlog(commands.Cog):
                     grabbedSummaries[str(message.id)]['queue'] = sorted(grabbedSummaries.get(str(message.id)).get('queue'), key = lambda x: x.get('category'))
                     grabbedSummaries[str(message.id)]['sorted'] = 0
                     summ = grabbedSummaries.get(str(message.id))
-                    e.description='**{} total events**\n\n'.format(len(summ.get('queue')))
+                    e.description='**{} total events**\nFrom {} {} to now\n\n'.format(len(summ.get('queue')), summ.get('lastUpdate').strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(message.guild))
                     keycodes = {0: 'Message edits', 1: 'Message deletions', 2: 'Channel creations', 3: 'Channel edits', 4: 'Channel deletions', 5: 'New members',
                     6: 'Members that left', 7: 'Member unbanned', 8: 'Member updates', 9: 'Username/pfp updates', 10: 'Server updates', 11: 'Role creations', 
                     12: 'Role edits', 13: 'Role deletions', 14: 'Emoji updates', 15: 'Voice Channel updates'}
@@ -413,12 +414,11 @@ class Cyberlog(commands.Cog):
             template.set_footer(text=embed.footer.text)
             await message.edit(content=None,embed=template)
             reactions = queue[current].get('reactions')
-            if not all(a in reactions for a in [str(b) for b in message.reactions]):
-                for r in message.reactions:
-                    if str(r) not in ['⬅', '◀', '▶']:
-                        await message.remove_reaction(r, message.guild.me)
-                for rr in reactions:
-                    await message.add_reaction(rr)     
+            for r in message.reactions:
+                if str(r) not in ['⬅', '◀', '▶']:
+                    await message.remove_reaction(r, message.guild.me)
+            for rr in reactions:
+                await message.add_reaction(rr)     
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
