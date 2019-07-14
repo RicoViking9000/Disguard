@@ -80,7 +80,7 @@ class Cyberlog(commands.Cog):
             global summaries
             global loading
             for server in self.bot.guilds:
-                if database.GeneralSummarizeEnabled(server):
+                if database.GeneralSummarizeEnabled(server) and (datetime.datetime.now() - summaries.get(str(server.id)).lastUpdate).seconds / 60 > database.GetSummarize(server, summary.get('mod')):
                     e = discord.Embed(title='Server events recap', description='**{} total events**\nFrom {} {} to now\n\n'.format(len(summaries.get(str(server.id)).queue), summaries.get(str(server.id)).lastUpdate.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(server)),timestamp=datetime.datetime.utcnow(), color=0x0000FF)
                     keycodes = {0: 'Message edits', 1: 'Message deletions', 2: 'Channel creations', 3: 'Channel edits', 4: 'Channel deletions', 5: 'New members',
                     6: 'Members that left', 7: 'Member unbanned', 8: 'Member updates', 9: 'Username/pfp updates', 10: 'Server updates', 11: 'Role creations', 
@@ -90,7 +90,7 @@ class Cyberlog(commands.Cog):
                         keyCounts[a] = 0
                     summaries.get(str(server.id)).categorize()
                     for summary in summaries.get(str(server.id)).queue:
-                        if database.SummarizeEnabled(server, summary.get('mod')) and (datetime.datetime.now() - summaries.get(str(server.id)).lastUpdate).seconds / 60 > database.GetSummarize(server, summary.get('mod')):
+                        if database.SummarizeEnabled(server, summary.get('mod')):
                             keyCounts[summary.get('category')] = keyCounts.get(summary.get('category')) + 1
                     for a, b in keyCounts.items():
                         if b > 0: e.description += '{}: {} events\n'.format(keycodes.get(a), b)
@@ -545,6 +545,8 @@ class Cyberlog(commands.Cog):
                     afterC+='... '
                 b=m+1
             if b==start:b+=1
+        if len(beforeC) >= 1024: beforeC = 'Message content too long to display here'
+        if len(afterC) >= 1024: afterC = 'Message content too long to display here'
         embed.description="Author: "+after.author.mention+" ("+after.author.name+")"
         embed.timestamp=timestamp
         embed.add_field(name="Previously: ", value=beforeC if len(beforeC) > 0 else '(No new content)',inline=False)
