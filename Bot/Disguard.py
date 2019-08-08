@@ -1,4 +1,4 @@
-'''This file contains the main runtime operations of Disguard. Cogs; the main features, are split into a trio of files'''
+'''This file contains the main runtime operations of Disguard. Cogs, the main features, are split into a trio of files'''
 
 import discord
 from discord.ext import commands
@@ -9,6 +9,7 @@ import database
 import Antispam
 import Cyberlog
 import os
+import datetime
 
 booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation']
@@ -35,7 +36,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         Antispam.PrepareFilters(bot)
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
-        print("Indexing...")
         for server in bot.guilds:
             print('Indexing '+server.name)
             for channel in server.text_channels:
@@ -43,15 +43,23 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 try: os.makedirs(path)
                 except FileExistsError: pass
                 try: 
-                    async for message in channel.history(limit=10000000):
-                        if str(message.id)+".txt" in os.listdir(path): break
-                        try: f = open(path+"/"+str(message.id)+".txt", "w+")
+                    async for message in channel.history(limit=None):
+                        if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
+                        try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                         except FileNotFoundError: pass
-                        try: f.write(message.author.name+"\n"+str(message.author.id)+"\n"+message.content)
+                        try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
                         except UnicodeEncodeError: pass
                         try: f.close()
                         except: pass
+                        if (datetime.datetime.utcnow() - message.created_at).days < 30 and database.GetImageLogPerms(server):
+                            attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+                            try: os.makedirs(attach)
+                            except FileExistsError: pass
+                            for attachment in message.attachments:
+                                try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                                except discord.HTTPException: pass
                 except discord.Forbidden: pass
+            Cyberlog.indexed[server.id] = True
         print("Indexed")
     booted = True
     print("Booted")

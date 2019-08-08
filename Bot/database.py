@@ -5,6 +5,7 @@ import dns
 import secure
 import discord
 import profanityfilter
+import datetime
 from discord.ext import commands
 
 mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
@@ -24,6 +25,13 @@ class LogModule(object):
         self.channel = channelID #which channel is this sent to?
         self.color = embedColor #custom color used for embed [LATER]
         self.advanced = advanced #enable advanced mode? [LATER]
+        self.lastUpdate = datetime.datetime.utcnow()
+    def update(self, entry): #Shorten database code line - input data from database, return updated object, updated object goes into database
+        self.read = entry.get('read')
+        self.enabled = entry.get('enabled')
+        self.summarize = entry.get('summarize')
+        self.channel = entry.get('channel')
+        return self
 
 def Initialize(token):
     '''Configure the database based on if bot is Disguard or Disguard Beta'''
@@ -77,7 +85,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
     'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
     'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
     "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
-    "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.is_default() and not role.managed],
+    "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
     'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
     "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
         "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
@@ -115,16 +123,21 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
         'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
         'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
-        'summarize': 0 if log is None or log.get('summarize') is None else log.get('summarize'),
-        "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else vars(LogModule("message", "Send logs when a message is edited or deleted", True, log.get('message').get('read'), log.get('message').get('enabled'), 0, log.get('message').get('channel'))),
-        "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else vars(LogModule("doorguard", "Send logs when a member joins or leaves server", True, log.get('doorguard').get('read'), log.get('doorguard').get('enabled'), 0, log.get('doorguard').get('channel'))),
-        "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else vars(LogModule("channel", "Send logs when channel is created, edited, or deleted", True, log.get('channel').get('read'), log.get('channel').get('enabled'), 0, log.get('channel').get('channel'))),
-        "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator", True, log.get('member').get('read'), log.get('member').get('enabled'), 0, log.get('member').get('channel'))),
-        "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted",True, log.get('role').get('read'), log.get('role').get('enabled'), 0, log.get('role').get('channel'))),
-        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted", True, log.get('emoji').get('read'), log.get('emoji').get('enabled'), 0, log.get('emoji').get('channel'))),
-        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail", True, log.get('server').get('read'), log.get('server').get('enabled'), 0, log.get('server').get('channel'))),
-        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change", True, log.get('voice').get('read'), log.get('voice').get('enabled'), 0, log.get('voice').get('channel')))}}}, True)
+        'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
+        'lastUpdate': datetime.datetime.utcnow() if serv is None or serv.get('lastUpdate') is None else serv.get('lastUpdate'),
+        "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else vars(LogModule("message", "Send logs when a message is edited or deleted").update(GetCyberMod(s, 'message'))),
+        "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else vars(LogModule("doorguard", "Send logs when a member joins or leaves server").update(GetCyberMod(s, 'doorguard'))),
+        "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else vars(LogModule("channel", "Send logs when channel is created, edited, or deleted").update(GetCyberMod(s, 'channel'))),
+        "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(GetCyberMod(s, 'member'))),
+        "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted").update(GetCyberMod(s, 'role'))),
+        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(GetCyberMod(s, 'emoji'))),
+        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(GetCyberMod(s, 'server'))),
+        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(GetCyberMod(s, 'voice')))}}}),
     membDict = {}
+    if serv is not None:
+        spam = serv.get("antispam") #antispam object from database
+        log = serv.get("cyberlog") #cyberlog object from database
+        members = serv.get("members")
     for m in s.members: #Create dict 
         membDict[str(m.id)] = m.name
         membDict[m.name] = m.id
@@ -175,13 +188,17 @@ def GetMainLogChannel(s: discord.Guild):
     '''Returns the log channel associated with the server (general one), if one is set'''
     return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel"))
 
+def GetCyberMod(s: discord.Guild, mod: str):
+    '''Returns the specified module of the Cyberlog object'''
+    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod)
+
 def GetReadPerms(s: discord.Guild, mod: str):
     '''Return if the bot should read the server audit log for logs'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("read")
+    return GetCyberMod(s, mod).get("read")
 
 def GetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled') and (servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None or servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel") is not None) 
+    return GetCyberMod(s, mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled') and (servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None or servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel") is not None) 
 
 def SimpleGetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server (lightweight)
@@ -330,7 +347,7 @@ def DashboardManageServer(server: discord.Guild, member: discord.Member):
     '''Initialize dashboard permissions; which servers a member can manage'''
     for memb in server.members:
         if member.id == memb.id:
-            return ManageServer(memb)
+            return ManageServer(memb) or member.id == server.owner.id
     return False
 
 def GetSummarize(s: discord.Guild, mod):
@@ -398,3 +415,51 @@ def GetTimezone(s: discord.Guild):
 def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''
     return servers.find_one({"server_id": s.id}).get('tzname')
+
+def GetServer(s: discord.Guild):
+    '''Return server object'''
+    return servers.find_one({'server_id': s.id})
+
+def SetLastUpdate(s: discord.Guild, d: datetime.datetime, mod: None):
+    '''Update the last time a server was summarized, optional module argument'''
+    if mod is None: servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.lastUpdate': d}})
+    else: servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.'+mod+'.lastUpdate': d}})
+
+def GetLastUpdate(s: discord.Guild, mod: None):
+    '''Returns a datetime object representing the last time the server or a module was recapped'''
+    if mod is None: return servers.find_one({"server_id": s.id}).get("cyberlog.lastUpdate")
+    else: return GetCyberMod(s, mod).get('lastUpdate')
+
+def GetOldestUpdate(s: discord.Guild, mods):
+    '''Returns the oldest update date from a list of provided modules. Useful for when people configure different settings for different modules'''
+    return min([GetLastUpdate(s, m) for m in mods]) + datetime.timedelta(hours=GetTimezone(s))
+
+def UpdateChannel(channel: discord.abc.GuildChannel):
+    '''Updates the channel.updated and channel.name attributes of the given channel. .updated is used for stats on channel edit'''
+    servers.update_one({'server_id': channel.guild.id, 'allChannels.id': channel.id}, {'$set': {
+        'allChannels.$.updated': datetime.datetime.utcnow(),
+        'allChannels.$.name': channel.name,
+        'allChannels.$.oldUpdate': GetChannelUpdate(channel)}})
+
+def UpdateRole(role: discord.Role):
+    '''Updates the role.updated and role.name attributes of the given role. .updated is used for stats on role edit'''
+    servers.update_one({'server_id': role.guild.id, 'roles.id': role.id}, {'$set': {
+        'roles.$.updated': datetime.datetime.utcnow(),
+        'roles.$.name': role.name,
+        'roles.$.oldUpdate': GetRoleUpdate(role)}})
+
+def GetChannelUpdate(channel: discord.abc.GuildChannel):
+    '''Returns the channel.updated attribute, which is the last time the channel was updated'''
+    return [a.get('updated') for a in servers.find_one({'server_id': channel.guild.id}).get('allChannels') if a.get('id') == channel.id][0]
+
+def GetOldChannelUpdate(channel: discord.abc.GuildChannel):
+    '''Returns the channel.oldUpdate attribute, which is the time it was updated 2 times ago'''
+    return [a.get('oldUpdate') for a in servers.find_one({'server_id': channel.guild.id}).get('allChannels') if a.get('id') == channel.id][0]
+
+def GetRoleUpdate(role: discord.Role):
+    '''Returns the role.updated attribute, which is the last time the role was updated'''
+    return [a.get('updated') for a in servers.find_one({'server_id': role.guild.id}).get('roles') if a.get('id') == role.id][0]
+
+def GetOldRoleUpdate(role: discord.Role):
+    '''Returns the role.oldUpdate attribute, which is the time it was updated 2 times ago'''
+    return [a.get('oldUpdate') for a in servers.find_one({'server_id': role.guild.id}).get('roles') if a.get('id') == role.id][0] 

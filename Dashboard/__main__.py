@@ -120,10 +120,11 @@ def server(id):
         r = request.form
         d = datetime.datetime.utcnow()
         o = r.get('offset')
+        nz = r.get('tzname')
         dt = datetime.datetime(int(o[:o.find('-')]), int(o[o.find('-')+1:o.find('-')+3]), int(o[o.find('-')+4:o.find('-')+6]), int(o[o.find('T')+1:o.find(':')]), int(o[o.find(':')+1:]))
         if dt > d: difference = round((dt - d).seconds/3600)
         else: difference = round((dt - d).seconds/3600) - 24
-        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference}})
+        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz}})
         return redirect(url_for('server', id=id)) 
     return render_template('general.html', servObj=serv, date=d, id=id)
 
