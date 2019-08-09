@@ -250,7 +250,7 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden: pass
                 channel = bot.get_channel(int(fid))
                 if channel is None: return await message.edit(content='Unable to provide channel information; it was probably deleted')
-                result = ChannelInfo(channel, await channel.invites(), None if type(channel) is not discord.TextChannel else await channel.pins(), await message.guild.audit_logs(limit=None).flatten())
+                result = ChannelInfo(channel, None if type(channel) is discord.CategoryChannel else await channel.invites(), None if type(channel) is not discord.TextChannel else await channel.pins(), await message.guild.audit_logs(limit=None).flatten())
                 await message.edit(content=result[0],embed=result[1])
             if 'Server updated' in e.title:
                 try: await message.clear_reactions()
