@@ -134,6 +134,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(GetCyberMod(s, 'server'))),
         "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(GetCyberMod(s, 'voice')))}}}),
     membDict = {}
+    serv = servers.find_one({"server_id": s.id})
     if serv is not None:
         spam = serv.get("antispam") #antispam object from database
         log = serv.get("cyberlog") #cyberlog object from database
