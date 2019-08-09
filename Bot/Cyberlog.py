@@ -868,7 +868,7 @@ class Cyberlog(commands.Cog):
             if type(before) is discord.TextChannel:
                 if before.topic != after.topic:
                     beforeTopic = before.topic if before.topic is not None and len(before.topic) > 0 else "<No topic>"
-                    afterTopic = after.topic if after.topic is not None and len(before.topic) > 0 else "<No topic>"
+                    afterTopic = after.topic if after.topic is not None and len(after.topic) > 0 else "<No topic>"
                     embed.add_field(name="Prev topic",value=beforeTopic)
                     embed.add_field(name="New topic",value=afterTopic)
                     data['oldTopic'] = beforeTopic
