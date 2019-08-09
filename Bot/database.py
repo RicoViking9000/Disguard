@@ -66,6 +66,7 @@ def VerifyServers(b: commands.Bot):
 def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
+    print('Verifying server: {} - {}'.format(s.name, s.id))
     serv = servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
         servers.delete_one({'server_id': s.id})
@@ -132,7 +133,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted").update(GetCyberMod(s, 'role'))),
         "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(GetCyberMod(s, 'emoji'))),
         "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(GetCyberMod(s, 'server'))),
-        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(GetCyberMod(s, 'voice')))}}}),
+        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(GetCyberMod(s, 'voice')))}}},upsert=True)
     membDict = {}
     serv = servers.find_one({"server_id": s.id})
     if serv is not None:
