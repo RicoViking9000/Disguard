@@ -1599,7 +1599,7 @@ class Cyberlog(commands.Cog):
                 embeds.append(e)
             for c in channels:
                 types = {discord.TextChannel: '📜', discord.VoiceChannel: '🎙', discord.CategoryChannel: '📂'}
-                e = await ChannelInfo(c, [] if type(c) is discord.CategoryChannel else await c.invites(), None if type(c) is not discord.TextChannel else await c.pins(), logs)[1]
+                e = (await ChannelInfo(c, [] if type(c) is discord.CategoryChannel else await c.invites(), None if type(c) is not discord.TextChannel else await c.pins(), logs))[1]
                 mainKeys.append('{}{}'.format(types.get(type(c)), c.name))
                 embeds.append(e)
             for i in invites:
