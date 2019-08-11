@@ -33,8 +33,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 bot.load_extension(cog)
             except:
                 pass
-        database.Verification(bot)
-        Antispam.PrepareFilters(bot)
+        await database.Verification(bot)
+        await Antispam.PrepareFilters(bot)
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         for server in bot.guilds:
@@ -52,7 +52,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                         except UnicodeEncodeError: pass
                         try: f.close()
                         except: pass
-                        if (datetime.datetime.utcnow() - message.created_at).days < 30 and database.GetImageLogPerms(server):
+                        if (datetime.datetime.utcnow() - message.created_at).days < 30 and await database.GetImageLogPerms(server):
                             attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
                             try: os.makedirs(attach)
                             except FileExistsError: pass
@@ -69,12 +69,17 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
 async def verify(ctx):
     if ctx.author.id == 247412852925661185:
         status = await ctx.send("Verifying...")
-        database.Verification(bot)
+        await database.Verification(bot)
         await status.delete()
 
 @bot.command()
 async def help(ctx):
     await ctx.send(embed=discord.Embed(description="[View help here](https://disguard.netlify.com/commands)"))
+
+@bot.command()
+async def ping(ctx):
+    m = await ctx.send('Pong!')
+    await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
     
 
 database.Initialize(secure.token())

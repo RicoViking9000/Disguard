@@ -1,14 +1,17 @@
 '''This file creates, verifies, and manages database entries as necessary during Disguard's operation
    This file also houses various useful methods that can be used across multiple files'''
 import pymongo
+import motor.motor_asyncio
 import dns
 import secure
 import discord
 import profanityfilter
 import datetime
+import asyncio
 from discord.ext import commands
 
-mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
+#mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
+mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
 db = None
 servers = None
 users = None
@@ -47,29 +50,30 @@ def Initialize(token):
 
 
 '''Checking events'''
-def Verification(b: commands.Bot):
+async def Verification(b: commands.Bot):
     '''Longest operation. Checks entire usable database *twice*, and verifies it's as it should be, creating entries as necessary'''
-    VerifyServers(b)
-    VerifyUsers(b)
-    VerifyUsers(b)
+    await VerifyServers(b)
+    await VerifyUsers(b)
+    await VerifyUsers(b)
 
-def VerifyServers(b: commands.Bot):
+async def VerifyServers(b: commands.Bot):
     '''Ensures all servers have database entries; adding and removing as necessary'''
     '''First: Index all bot servers, and verify them'''
-    for s in b.guilds:
-        VerifyServer(s, b)
-    for result in servers.find(): #Delete servers that disguard is no longer a part of
-        if b.get_guild(result.get("server_id")) is None:
-            servers.delete_one({"server_id": result.get("server_id")})
-    '''Second: Index database entries to check for extraneous entries'''
+    for s in b.guilds: await VerifyServer(s, b)
 
-def VerifyServer(s: discord.Guild, b: commands.Bot):
+#def VerifyServer(s: discord.Guild, b: commands.Bot):
+#    asyncio.get_event_loop().run_until_complete(__VerifyServer(s, b))
+
+def run(method, *args):
+    asyncio.get_event_loop().run_until_complete(method(*args))
+
+async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
-    serv = servers.find_one({"server_id": s.id})
+    serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
-        servers.delete_one({'server_id': s.id})
+        await servers.delete_one({'server_id': s.id})
         return
     spam = None
     log = None
@@ -79,7 +83,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         log = serv.get("cyberlog") #cyberlog object from database
         members = serv.get("members")
     membIDs = [memb.id for memb in s.members]
-    servers.update_one({"server_id": s.id}, {"$set": { #update database
+    await servers.update_one({"server_id": s.id}, {"$set": { #update database
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
@@ -126,16 +130,16 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
         'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
         'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
         'lastUpdate': datetime.datetime.utcnow() if serv is None or serv.get('lastUpdate') is None else serv.get('lastUpdate'),
-        "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else vars(LogModule("message", "Send logs when a message is edited or deleted").update(GetCyberMod(s, 'message'))),
-        "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else vars(LogModule("doorguard", "Send logs when a member joins or leaves server").update(GetCyberMod(s, 'doorguard'))),
-        "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else vars(LogModule("channel", "Send logs when channel is created, edited, or deleted").update(GetCyberMod(s, 'channel'))),
-        "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(GetCyberMod(s, 'member'))),
-        "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted").update(GetCyberMod(s, 'role'))),
-        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(GetCyberMod(s, 'emoji'))),
-        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(GetCyberMod(s, 'server'))),
-        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(GetCyberMod(s, 'voice')))}}},upsert=True)
+        "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else vars(LogModule("message", "Send logs when a message is edited or deleted").update(await GetCyberMod(s, 'message'))),
+        "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else vars(LogModule("doorguard", "Send logs when a member joins or leaves server").update(await GetCyberMod(s, 'doorguard'))),
+        "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else vars(LogModule("channel", "Send logs when channel is created, edited, or deleted").update(await GetCyberMod(s, 'channel'))),
+        "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(await GetCyberMod(s, 'member'))),
+        "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted").update(await GetCyberMod(s, 'role'))),
+        "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(await GetCyberMod(s, 'emoji'))),
+        "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(await GetCyberMod(s, 'server'))),
+        "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(await GetCyberMod(s, 'voice')))}}},upsert=True)
     membDict = {}
-    serv = servers.find_one({"server_id": s.id})
+    if serv is None: serv = await servers.find_one({"server_id": s.id})
     if serv is not None:
         spam = serv.get("antispam") #antispam object from database
         log = serv.get("cyberlog") #cyberlog object from database
@@ -151,7 +155,7 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
                     member=m
                     break
         try:
-            servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
+            await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
                 "members.$.id": id,
                 "members.$.name": membDict.get(str(id)),
                 "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
@@ -159,240 +163,237 @@ def VerifyServer(s: discord.Guild, b: commands.Bot):
                 "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
             }}, True)
         except: #new member joined since last database refresh
-            servers.update_one({'server_id': s.id}, {'$push': { 'members': {
+            await servers.update_one({'server_id': s.id}, {'$push': { 'members': {
                 'id': id,
                 'name': membDict.get(str(id)),
                 'warnings': spam.get('warn'),
                 'quickMessages': [],
                 'lastMessages': []}}})
 
-def VerifyUsers(b: commands.Bot):
+async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
     '''First: Go through all members, verifying they have entries and variables'''
-    for user in b.get_all_members():
-        VerifyUser(user, b)
-    for result in users.find(): #Delete users that aren't in any disguard servers
-        if b.get_user(result.get("user_id")) is None:
-            users.delete_one({"user_id": result.get("user_id")})
+    for user in b.get_all_members(): await VerifyUser(user, b)
     
-def VerifyUser(m: discord.Member, b: commands.Bot):
+async def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''
-    users.update_one({"user_id": m.id}, {"$set": { #update database
+    if b.get_user(m.id) is None: await users.delete_one({'user_id': m.id})
+    else: await users.update_one({"user_id": m.id}, {"$set": { #update database
     "username": m.name,
     "user_id": m.id,
-    "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if DashboardManageServer(server, m)]}}, True)
+    "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
 
-def GetLogChannel(s: discord.Guild, mod: str):
+async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
-    return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel")) if servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None else s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel"))
+    return s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel")) if await (servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None else s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
 
-def GetMainLogChannel(s: discord.Guild):
+async def GetMainLogChannel(s: discord.Guild):
     '''Returns the log channel associated with the server (general one), if one is set'''
-    return s.get_channel(servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel"))
+    return s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
 
-def GetCyberMod(s: discord.Guild, mod: str):
+async def GetCyberMod(s: discord.Guild, mod: str):
     '''Returns the specified module of the Cyberlog object'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod)
+    return (await (servers.find_one({"server_id": s.id}))).get("cyberlog").get(mod)
 
-def GetReadPerms(s: discord.Guild, mod: str):
+async def GetReadPerms(s: discord.Guild, mod: str):
     '''Return if the bot should read the server audit log for logs'''
-    return GetCyberMod(s, mod).get("read")
+    return await GetCyberMod(s, mod).get("read")
 
-def GetEnabled(s: discord.Guild, mod: str):
+async def GetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server'''
-    return GetCyberMod(s, mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled') and (servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("channel") is not None or servers.find_one({"server_id": s.id}).get("cyberlog").get("defaultChannel") is not None) 
+    return await GetCyberMod(s, mod).get("enabled") and (await servers.find_one({"server_id": s.id})).get("cyberlog").get('enabled') and ((await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None or (await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel") is not None) 
 
-def SimpleGetEnabled(s: discord.Guild, mod: str):
+async def SimpleGetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server (lightweight)
     REMEMBER THAT THIS DOESN'T MAKE SURE THAT THE CHANNEL IS VALID'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog").get(mod).get("enabled") and servers.find_one({"server_id": s.id}).get("cyberlog").get('enabled')
+    return (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("enabled") and (await servers.find_one({"server_id": s.id})).get("cyberlog").get('enabled')
 
-def GetImageLogPerms(s: discord.Guild):
+async def GetImageLogPerms(s: discord.Guild):
     '''Check if image logging is enabled for the current server'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog").get('image')
+    return (await servers.find_one({"server_id": s.id})).get("cyberlog").get('image')
 
-def GetAntiSpamObject(s: discord.Guild):
+async def GetAntiSpamObject(s: discord.Guild):
     '''Return the Antispam database object - use 'get' to get the other objects'''
-    return servers.find_one({"server_id": s.id}).get("antispam")
+    return (await servers.find_one({"server_id": s.id})).get("antispam")
 
-def GetCyberlogObject(s: discord.Guild):
+async def GetCyberlogObject(s: discord.Guild):
     '''Return the cyberlog database object'''
-    return servers.find_one({"server_id": s.id}).get("cyberlog")
+    return (await servers.find_one({"server_id": s.id})).get("cyberlog")
 
-def GetMembersList(s: discord.Guild):
+async def GetMembersList(s: discord.Guild):
     '''Return list of members DB entry objects for a server'''
-    return servers.find_one({"server_id": s.id}).get("members")
+    return (await servers.find_one({"server_id": s.id})).get("members")
 
-def PauseMod(s: discord.Guild, mod):
+async def PauseMod(s: discord.Guild, mod):
     '''Pauses logging for a server'''
-    servers.update_one({"server_id": s.id}, {"$set": {mod+".enabled": False}})
+    await servers.update_one({"server_id": s.id}, {"$set": {mod+".enabled": False}})
 
-def ResumeMod(s: discord.Guild, mod):
+async def ResumeMod(s: discord.Guild, mod):
     '''Resumes logging for a server'''
-    servers.update_one({"server_id": s.id}, {"$set": {mod+".enabled": True}})
+    await servers.update_one({"server_id": s.id}, {"$set": {mod+".enabled": True}})
 
-def GetServerCollection():
+async def GetServerCollection():
     '''Return servers collection object'''
     return servers
 
-def GetAllServers():
+async def GetAllServers():
     '''Return all servers...'''
-    return servers.find()
+    return await servers.find()
 
-def GetProfanityFilter(s: discord.Guild):
+async def GetProfanityFilter(s: discord.Guild):
     '''Return profanityfilter object'''
-    return GetAntiSpamObject(s).get("filter")
+    return (await GetAntiSpamObject(s)).get("filter")
 
-def GetPrefix(s: discord.Guild):
+async def GetPrefix(s: discord.Guild):
     '''Return prefix associated with the server'''
-    return servers.find_one({"server_id": s.id}).get('prefix')
+    return (await servers.find_one({"server_id": s.id})).get('prefix')
 
-def UpdateMemberLastMessages(server: int, member: int, messages):
+async def UpdateMemberLastMessages(server: int, member: int, messages):
     '''Updates database entry for lastMessages modification
     Server: id of server the member belongs to
     Member: id of member
     Messages: list of messages to replace the old list with'''
-    servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.lastMessages": messages}})
+    await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.lastMessages": messages}})
 
-def UpdateMemberQuickMessages(server: int, member: int, messages):
+async def UpdateMemberQuickMessages(server: int, member: int, messages):
     '''Updates database entry for quickMessages modification
     Server: id of server the member belongs to
     Member: id of member
     Messages: list of messages to replace the old list with'''
-    servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.quickMessages": messages}})
+    await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.quickMessages": messages}})
 
-def UpdateMemberWarnings(server: discord.Guild, member: discord.Member, warnings: int):
+async def UpdateMemberWarnings(server: discord.Guild, member: discord.Member, warnings: int):
     '''Updates database entry for a member's warnings
     Server: Server the member belongs to
     Member: The member to update
     Warnings: Number of warnings to replace current version with'''
-    servers.update_one({"server_id": server.id, "members.id": member.id}, {"$set": {"members.$.warnings": warnings}})
+    await servers.update_one({"server_id": server.id, "members.id": member.id}, {"$set": {"members.$.warnings": warnings}})
 
-def GetChannelExclusions(s: discord.Guild):
+async def GetChannelExclusions(s: discord.Guild):
     '''Not to be confused with DefaultChannelExclusions(). Returns server's channel exclusions
     s: discord.Guild object (server) to get the exclusions from'''
-    return GetAntiSpamObject(s).get("channelExclusions")
+    return (await GetAntiSpamObject(s)).get("channelExclusions")
 
-def GetLogChannelExclusions(s: discord.Guild):
+async def GetLogChannelExclusions(s: discord.Guild):
     '''Get the channel exclusions for the Cyberlog module'''
-    return GetCyberlogObject(s).get("channelExclusions")
+    return (await GetCyberlogObject(s)).get("channelExclusions")
 
-def GetRoleExclusions(s: discord.Guild):
+async def GetRoleExclusions(s: discord.Guild):
     '''Not to be confused with DefaultRoleExclusions(). Returns server's role exclusions
     s: discord.Guild object (server) to get the exclusions from'''
-    return GetAntiSpamObject(s).get("roleExclusions")
+    return (await GetAntiSpamObject(s)).get("roleExclusions")
 
-def GetLogRoleExclusions(s: discord.Guild):
+async def GetLogRoleExclusions(s: discord.Guild):
     '''Get the role exclusions for the Cyberlog module'''
-    return GetCyberlogObject(s).get("roleExclusions")
+    return (await GetCyberlogObject(s)).get("roleExclusions")
 
-def GetMemberExclusions(s: discord.Guild):
+async def GetMemberExclusions(s: discord.Guild):
     '''Not to be confused with DefaultMemberExclusions(). Returns server's member exclusions
     s: discord.Guild object (server) to get the exclusions from'''
-    return GetAntiSpamObject(s).get("memberExclusions")
+    return (await GetAntiSpamObject(s)).get("memberExclusions")
 
-def GetLogMemberExclusions(s: discord.Guild):
+async def GetLogMemberExclusions(s: discord.Guild):
     '''Get the member exclusions for the cyberlog module'''
-    return GetCyberlogObject(s).get("memberExclusions")
+    return (await GetCyberlogObject(s)).get("memberExclusions")
 
-def DefaultChannelExclusions(server: discord.Guild): 
+async def DefaultChannelExclusions(server: discord.Guild): 
     '''For now, return array of IDs of all channels with 'spam' in the name. Will be customizable later'''
     return [a.id for a in iter(server.channels) if "spam" in a.name]
 
-def DefaultRoleExclusions(server: discord.Guild): 
+async def DefaultRoleExclusions(server: discord.Guild): 
     '''For now, return array of IDs of all roles that can manage server. Will be customizable later'''
     return [a.id for a in iter(server.roles) if a.permissions.administrator or a.permissions.manage_guild]
 
-def DefaultMemberExclusions(server: discord.Guild): 
+async def DefaultMemberExclusions(server: discord.Guild): 
     '''For now, return array of the ID of server owner. Will be customizable later'''
     return [server.owner.id]
 
-def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
+async def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
     for a in member.roles:
         if a.permissions.administrator or a.permissions.manage_guild:
             return True
     return False
 
-def ManageRoles(member: discord.Member):
+async def ManageRoles(member: discord.Member):
     '''Does this member have the Manage Roles permission'''
     for a in member.roles:
         if a.permissions.administrator or a.permissions.manage_roles:
             return True
     return False
 
-def KickMembers(member: discord.Member):
+async def KickMembers(member: discord.Member):
     '''Does this member have the Kick Members permission'''
     for a in member.roles:
         if a.permissions.administrator or a.permissions.kick_members:
             return True
     return False
 
-def BanMembers(member: discord.Member):
+async def BanMembers(member: discord.Member):
     '''Does this member have the Ban Members permission'''
     for a in member.roles:
         if a.permissions.administrator or a.permissions.ban_members:
             return True
     return False
 
-def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.Member):
+async def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.Member):
     '''Check to see if we shouldn't log a message delete event
     True to proceed
     False to not log'''
-    if channel.id in GetLogChannelExclusions(channel.guild) or member.id in GetLogMemberExclusions(channel.guild):
+    if channel.id in await GetLogChannelExclusions(channel.guild) or member.id in await GetLogMemberExclusions(channel.guild):
         return False
     for role in member.roles:
-        if role.id in GetLogRoleExclusions(channel.guild):
+        if role.id in await GetLogRoleExclusions(channel.guild):
             return False
     return True
 
-def DashboardManageServer(server: discord.Guild, member: discord.Member):
+async def DashboardManageServer(server: discord.Guild, member: discord.Member):
     '''Initialize dashboard permissions; which servers a member can manage'''
     for memb in server.members:
         if member.id == memb.id:
-            return ManageServer(memb) or member.id == server.owner.id
+            return await ManageServer(memb) or member.id == server.owner.id
     return False
 
-def GetSummarize(s: discord.Guild, mod):
+async def GetSummarize(s: discord.Guild, mod):
     '''Get the summarize value'''
-    return GetCyberlogObject(s).get(mod).get('summarize') if GetCyberlogObject(s).get('summarize') != GetCyberlogObject(s).get(mod).get('summarize') else GetCyberlogObject(s).get('summarize')
+    return await GetCyberlogObject(s).get(mod).get('summarize') if await GetCyberlogObject(s).get('summarize') != await GetCyberlogObject(s).get(mod).get('summarize') else await GetCyberlogObject(s).get('summarize')
 
-def SummarizeEnabled(s: discord.Guild, mod):
+async def SummarizeEnabled(s: discord.Guild, mod):
     '''Is summarizing enabled for this module?'''
-    return GetCyberlogObject(s).get('summarize') != 0 and GetCyberlogObject(s).get(mod).get('summarize') != 1
+    return await GetCyberlogObject(s).get('summarize') != 0 and await GetCyberlogObject(s).get(mod).get('summarize') != 1
 
-def GeneralSummarizeEnabled(s: discord.Guild):
+async def GeneralSummarizeEnabled(s: discord.Guild):
     '''Is summarizing enabled for this server?'''
-    return GetCyberlogObject(s).get('summarize') != 0
+    return await GetCyberlogObject(s).get('summarize') != 0
 
-def StringifyPermissions(p: discord.Permissions):
+async def StringifyPermissions(p: discord.Permissions):
     '''Turn a permissions object into a partially stringified version'''
     return [a[0] for a in iter(p) if a[1]]
 
-def AppendSummary(s: discord.Guild, summary):
+async def AppendSummary(s: discord.Guild, summary):
     '''Appends a Cyberlog.Summary object to a server's database entry'''
-    servers.update_one({'server_id': s.id}, {'$push': {'summaries': vars(summary) }})
+    await servers.update_one({'server_id': s.id}, {'$push': {'summaries': vars(summary) }})
 
-def GetSummary(s: discord.Guild, id: int):
+async def GetSummary(s: discord.Guild, id: int):
     '''Return a summary object from a server and message ID'''
-    return [a for a in servers.find_one({"server_id": s.id}).get('summaries') if a.get('id') == id][0]
+    return await servers.find_one({'server_id': s.id, 'summaries.$.id': id})
 
-def StringifyExtras(r: discord.Role):
+async def StringifyExtras(r: discord.Role):
     '''Turns a role into a partially stringified version for things like mentionable/displayed separately'''
     s = []
     if r.hoist: s.append('displayed separately')
     if r.mentionable: s.append('mentionable')
     return s
 
-def StringifyBoth(r: discord.Role):
+async def StringifyBoth(r: discord.Role):
     '''Turns a role into a combination of the above two'''
-    perms = StringifyPermissions(r.permissions)
-    perms.extend(StringifyExtras(r))
+    perms = await StringifyPermissions(r.permissions)
+    perms.extend(await StringifyExtras(r))
     return perms
 
-def ComparePerms(b: discord.Role, a: discord.Role):
+async def ComparePerms(b: discord.Role, a: discord.Role):
     '''Bold or strikethrough differences'''
-    bef = StringifyBoth(b)
-    aft = StringifyBoth(a)
+    bef = await StringifyBoth(b)
+    aft = await StringifyBoth(a)
     s = []
     for perm in bef:
         if perm not in aft: s.append('~~{}~~'.format(perm))
@@ -401,67 +402,91 @@ def ComparePerms(b: discord.Role, a: discord.Role):
         if perm not in bef and perm not in s: s.append('**{}**'.format(perm))
     return s
 
-def UnchangedPerms(b: discord.Role, a: discord.Role):
+async def UnchangedPerms(b: discord.Role, a: discord.Role):
     '''Only return things that aren't changed'''
-    root = StringifyBoth(b)
-    new = StringifyBoth(a)
+    root = await StringifyBoth(b)
+    new = await StringifyBoth(a)
     returns = []
     for r in root:
         if r in new: returns.append(r)
     return returns
 
-def GetTimezone(s: discord.Guild):
+async def GetTimezone(s: discord.Guild):
     '''Return the timezone offset from UTC for a given server'''
-    return servers.find_one({"server_id": s.id}).get('offset')
+    return (await servers.find_one({"server_id": s.id})).get('offset')
 
-def GetNamezone(s: discord.Guild):
+async def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''
-    return servers.find_one({"server_id": s.id}).get('tzname')
+    return (await servers.find_one({"server_id": s.id})).get('tzname')
 
-def GetServer(s: discord.Guild):
+async def GetServer(s: discord.Guild):
     '''Return server object'''
-    return servers.find_one({'server_id': s.id})
+    return await servers.find_one({'server_id': s.id})
 
-def SetLastUpdate(s: discord.Guild, d: datetime.datetime, mod: None):
+async def SetLastUpdate(s: discord.Guild, d: datetime.datetime, mod: None):
     '''Update the last time a server was summarized, optional module argument'''
-    if mod is None: servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.lastUpdate': d}})
-    else: servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.'+mod+'.lastUpdate': d}})
+    if mod is None: await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.lastUpdate': d}})
+    else: await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.'+mod+'.lastUpdate': d}})
 
-def GetLastUpdate(s: discord.Guild, mod: None):
+async def GetLastUpdate(s: discord.Guild, mod: None):
     '''Returns a datetime object representing the last time the server or a module was recapped'''
-    if mod is None: return servers.find_one({"server_id": s.id}).get("cyberlog.lastUpdate")
-    else: return GetCyberMod(s, mod).get('lastUpdate')
+    if mod is None: return await servers.find_p({"server_id": s.id}).get("cyberlog.lastUpdate")
+    else: return await GetCyberMod(s, mod).get('lastUpdate')
 
-def GetOldestUpdate(s: discord.Guild, mods):
+async def GetOldestUpdate(s: discord.Guild, mods):
     '''Returns the oldest update date from a list of provided modules. Useful for when people configure different settings for different modules'''
-    return min([GetLastUpdate(s, m) for m in mods]) + datetime.timedelta(hours=GetTimezone(s))
+    return min([GetLastUpdate(s, m) for m in mods]) + datetime.timedelta(hours=await GetTimezone(s))
 
-def UpdateChannel(channel: discord.abc.GuildChannel):
+async def UpdateChannel(channel: discord.abc.GuildChannel):
     '''Updates the channel.updated and channel.name attributes of the given channel. .updated is used for stats on channel edit'''
     servers.update_one({'server_id': channel.guild.id, 'allChannels.id': channel.id}, {'$set': {
         'allChannels.$.updated': datetime.datetime.utcnow(),
         'allChannels.$.name': channel.name,
-        'allChannels.$.oldUpdate': GetChannelUpdate(channel)}})
+        'allChannels.$.oldUpdate': await GetChannelUpdate(channel)}})
 
-def UpdateRole(role: discord.Role):
+async def UpdateRole(role: discord.Role):
     '''Updates the role.updated and role.name attributes of the given role. .updated is used for stats on role edit'''
     servers.update_one({'server_id': role.guild.id, 'roles.id': role.id}, {'$set': {
         'roles.$.updated': datetime.datetime.utcnow(),
         'roles.$.name': role.name,
-        'roles.$.oldUpdate': GetRoleUpdate(role)}})
+        'roles.$.oldUpdate': await GetRoleUpdate(role)}})
 
-def GetChannelUpdate(channel: discord.abc.GuildChannel):
+async def GetChannelUpdate(channel: discord.abc.GuildChannel):
     '''Returns the channel.updated attribute, which is the last time the channel was updated'''
-    return [a.get('updated') for a in servers.find_one({'server_id': channel.guild.id}).get('allChannels') if a.get('id') == channel.id][0]
+    return (await servers.find_one({'server_id': channel.guild.id, 'channels.$.id': channel.id})).get('updated')
 
-def GetOldChannelUpdate(channel: discord.abc.GuildChannel):
+async def GetOldChannelUpdate(channel: discord.abc.GuildChannel):
     '''Returns the channel.oldUpdate attribute, which is the time it was updated 2 times ago'''
-    return [a.get('oldUpdate') for a in servers.find_one({'server_id': channel.guild.id}).get('allChannels') if a.get('id') == channel.id][0]
+    return (await servers.find_one({'server_id': channel.guild.id, 'channels.$.id': channel.id})).get('oldUpdate')
 
-def GetRoleUpdate(role: discord.Role):
+async def GetRoleUpdate(role: discord.Role):
     '''Returns the role.updated attribute, which is the last time the role was updated'''
-    return [a.get('updated') for a in servers.find_one({'server_id': role.guild.id}).get('roles') if a.get('id') == role.id][0]
+    return (await servers.find_one({'server_id': role.guild.id, 'roles.$.id': role.id})).get('updated')
 
-def GetOldRoleUpdate(role: discord.Role):
+async def GetOldRoleUpdate(role: discord.Role):
     '''Returns the role.oldUpdate attribute, which is the time it was updated 2 times ago'''
-    return [a.get('oldUpdate') for a in servers.find_one({'server_id': role.guild.id}).get('roles') if a.get('id') == role.id][0] 
+    return (await servers.find_one({'server_id': role.guild.id, 'roles.$.id': role.id})).get('oldUpdate')
+
+async def VerifyChannel(c: discord.abc.GuildChannel, new=False):
+    '''Verifies a channel. Single database operation of VerifyServer'''
+    if new: await servers.update_one({'server_id': c.guild.id}, {'$push': {'channels': {'name': c.name, 'id': c.id}}})
+    else: await servers.update_one({"server_id": c.guild.id, 'channels.$.id': c.id}, {"$set": {"name": c.name}})
+
+async def VerifyMember(m: discord.Member, new=False):
+    '''Verifies a member. Single database operation of VerifyServer'''
+    antis = await servers.find_one({"server_id": m.guild.id}).get('antispam')
+    if new:
+        await servers.update_one({'server_id': m.guild.id}, {'$push': { 'members': {
+            'id': m.id,
+            'name': m.name,
+            'warnings': antis.get('warn'),
+            'quickMessages': [],
+            'lastMessages': []}}})
+    else: await servers.update_one({"server_id": m.guild.id, "members.id": id}, {"$set": {"members.$.name": m.name}})
+
+async def VerifyRole(r: discord.Role, new=False):
+    '''Verifies a role. Single database operation of VerifyServer'''
+    if new: await servers.update_one({'server_id': r.guild.id}, {'$push': {'roles': {'name': r.name, 'id': r.id}}})
+    else: await servers.update_one({'server_id': r.guild.id, 'roles.$.id': r.id}, {'$set': {'name': r.name}})
+ 
+

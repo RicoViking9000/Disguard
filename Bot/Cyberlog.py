@@ -13,6 +13,7 @@ imageLogChannel = discord.TextChannel
 pauseDelete = 0
 serverDelete = None
 loading = None
+summarizeOn=False
 
 invites = {}
 edits = {}
@@ -91,44 +92,45 @@ class Cyberlog(commands.Cog):
         self.summarize.cancel()
         self.DeleteAttachments.cancel()
 
-    @tasks.loop(minutes=5)
+    @tasks.loop(minutes=30)
     async def summarize(self):
-        try:
-            global summaries
-            global loading
-            for server in self.bot.guilds:
-                if database.GeneralSummarizeEnabled(server):
-                    s = summaries.get(str(server.id))
-                    s.categorize()
-                    q = s.queue
-                    if len(q) == 0: return
-                    keep = [a for a in q if (datetime.datetime.utcnow() - database.GetLastUpdate(server, a.get('mod'))).seconds / 60 > database.GetSummarize(server, a.get('mod'))]
-                    discard = [a for a in q if a not in keep] #Discards move on to the new ServerSummary event, since these events will be posted later
-                    mods = list(collections.Counter([a.get('mod') for a in keep]).keys())
-                    e = discord.Embed(title='Server events recap', description='**{} total events**\nFrom {} {} to now\n\n'.format(len(keep), database.GetOldestUpdate(server, mods).strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(server)),timestamp=datetime.datetime.utcnow(), color=0x0000FF)
-                    #keycodes = {0: 'Message edits', 1: 'Message deletions', 2: 'Channel creations', 3: 'Channel edits', 4: 'Channel deletions', 5: 'New members',
-                    #6: 'Members that left', 7: 'Member unbanned', 8: 'Member updates', 9: 'Username/pfp updates', 10: 'Server updates', 11: 'Role creations', 
-                    #12: 'Role edits', 13: 'Role deletions', 14: 'Emoji updates', 15: 'Voice Channel updates'}
-                    keyCounts = {} #Keycodes holds descriptions of events, keycounts hold respective count of events
-                    for a in range(16):
-                        keyCounts[a] = 0
-                    for summary in keep:
-                        if database.SummarizeEnabled(server, summary.get('mod')): #Keeping this down here instead of in keep algorithm prevents stray events
-                            keyCounts[summary.get('category')] = keyCounts.get(summary.get('category')) + 1
-                    #for a, b in keyCounts.items():
-                    #    if b > 0: e.description += '{}: {} events\n'.format(keycodes.get(a), b)
-                    for a in discord.Embed.from_dict(Summarize(keep, keyCounts)[0]).fields: e.add_field(name=a.name,value=a.value)
-                    e.description+='\n\nPress 🗓 to sort events by timestamp\nPress 📓 to view summary or details'
-                    if len(keep) > 0:
-                        m = await database.GetMainLogChannel(server).send(embed=e) #Process smart embeds in the future
-                        e.set_footer(text='Event ID: {}'.format(m.id))
-                        s.id = m.id
-                        database.AppendSummary(server, s)
-                        await m.edit(embed=e)
-                        for a in ['🗓', '📓']:
-                            await m.add_reaction(a)
-                        summaries[str(server.id)] = ServerSummary(queue=discard)
-        except Exception as e: traceback.print_exc() #print('Error: {}\n{}'.format(e, vars(s)))
+        if summarizeOn:
+            try:
+                global summaries
+                global loading
+                for server in self.bot.guilds:
+                    if await database.GeneralSummarizeEnabled(server):
+                        s = summaries.get(str(server.id))
+                        s.categorize()
+                        q = s.queue
+                        if len(q) == 0: return
+                        keep = [a for a in q if (datetime.datetime.utcnow() - await database.GetLastUpdate(server, a.get('mod'))).seconds / 60 > await database.GetSummarize(server, a.get('mod'))]
+                        discard = [a for a in q if a not in keep] #Discards move on to the new ServerSummary event, since these events will be posted later
+                        mods = list(collections.Counter([a.get('mod') for a in keep]).keys())
+                        e = discord.Embed(title='Server events recap', description='**{} total events**\nFrom {} {} to now\n\n'.format(len(keep), await database.GetOldestUpdate(server, mods).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(server)),timestamp=datetime.datetime.utcnow(), color=0x0000FF)
+                        #keycodes = {0: 'Message edits', 1: 'Message deletions', 2: 'Channel creations', 3: 'Channel edits', 4: 'Channel deletions', 5: 'New members',
+                        #6: 'Members that left', 7: 'Member unbanned', 8: 'Member updates', 9: 'Username/pfp updates', 10: 'Server updates', 11: 'Role creations', 
+                        #12: 'Role edits', 13: 'Role deletions', 14: 'Emoji updates', 15: 'Voice Channel updates'}
+                        keyCounts = {} #Keycodes holds descriptions of events, keycounts hold respective count of events
+                        for a in range(16):
+                            keyCounts[a] = 0
+                        for summary in keep:
+                            if await database.SummarizeEnabled(server, summary.get('mod')): #Keeping this down here instead of in keep algorithm prevents stray events
+                                keyCounts[summary.get('category')] = keyCounts.get(summary.get('category')) + 1
+                        #for a, b in keyCounts.items():
+                        #    if b > 0: e.description += '{}: {} events\n'.format(keycodes.get(a), b)
+                        for a in discord.Embed.from_dict(Summarize(keep, keyCounts)[0]).fields: e.add_field(name=a.name,value=a.value)
+                        e.description+='\n\nPress 🗓 to sort events by timestamp\nPress 📓 to view summary or details'
+                        if len(keep) > 0:
+                            m = await (await database.GetMainLogChannel(server)).send(embed=e) #Process smart embeds in the future
+                            e.set_footer(text='Event ID: {}'.format(m.id))
+                            s.id = m.id
+                            await database.AppendSummary(server, s)
+                            await m.edit(embed=e)
+                            for a in ['🗓', '📓']:
+                                await m.add_reaction(a)
+                            summaries[str(server.id)] = ServerSummary(queue=discard)
+            except Exception as e: traceback.print_exc() #print('Error: {}\n{}'.format(e, vars(s)))
         global bot
         for server in bot.guilds:
             try:
@@ -160,6 +162,7 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
+        await asyncio.sleep(2)
         path = "Indexes/{}/{}".format(message.guild.id, message.channel.id)
         try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
         except FileNotFoundError: return
@@ -169,7 +172,7 @@ class Cyberlog(commands.Cog):
         except: pass
         if message.author.bot:
             return
-        if database.GetImageLogPerms(message.guild) and len(message.attachments) > 0:
+        if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0:
             path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
             try: os.makedirs(path2)
             except FileExistsError: pass
@@ -250,18 +253,18 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden: pass
                 channel = bot.get_channel(int(fid))
                 if channel is None: return await message.edit(content='Unable to provide channel information; it was probably deleted')
-                result = ChannelInfo(channel, None if type(channel) is discord.CategoryChannel else await channel.invites(), None if type(channel) is not discord.TextChannel else await channel.pins(), await message.guild.audit_logs(limit=None).flatten())
+                result = await ChannelInfo(channel, None if type(channel) is discord.CategoryChannel else await channel.invites(), None if type(channel) is not discord.TextChannel else await channel.pins(), await message.guild.audit_logs(limit=None).flatten())
                 await message.edit(content=result[0],embed=result[1])
             if 'Server updated' in e.title:
                 try: await message.clear_reactions()
                 except discord.Forbidden: pass
-                await message.edit(content='Embed will retract in 3 minutes',embed=ServerInfo(message.guild, await message.guild.audit_logs(limit=None).flatten(), await message.guild.bans(), await message.guild.webhooks(), await message.guild.invites()))
+                await message.edit(content='Embed will retract in 3 minutes',embed=await ServerInfo(message.guild, await message.guild.audit_logs(limit=None).flatten(), await message.guild.bans(), await message.guild.webhooks(), await message.guild.invites()))
             if 'Role was updated' in e.title:
                 try: await message.clear_reactions()
                 except discord.Forbidden: pass
                 role = message.guild.get_role(int(fid))
                 if role is None: return await message.edit(content='Unable to provide role information; it was probably deleted')
-                await message.edit(content='Embed will retract in 3 minutes',embed=RoleInfo(role, await role.guild.audit_logs(limit=None).flatten()))
+                await message.edit(content='Embed will retract in 3 minutes',embed=await RoleInfo(role, await role.guild.audit_logs(limit=None).flatten()))
             await asyncio.sleep(180)
             if message.embeds[0] != e:
                 if 'React with' in e.title or 'event recaps' in e.title or 'Message was edited' in e.title or 'Channel was updated' in e.title:
@@ -282,9 +285,9 @@ class Cyberlog(commands.Cog):
                 eo = edits.get(fid)
                 after = eo.message
                 details = discord.Embed(title='Message edit details',description='Author: {}\n__Viewing message edit history__'.format(after.author.name),timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-                details.add_field(name='{} {}'.format((eo.created + datetime.timedelta(hours=database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(message.guild)), value=eo.history[0].before, inline=False)
+                details.add_field(name='{} {}'.format((eo.created + datetime.timedelta(hours=await database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild)), value=eo.history[0].before, inline=False)
                 for entry in eo.history:
-                    details.add_field(name='{} {}'.format((entry.time + datetime.timedelta(hours=database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(message.guild)), value=entry.after,inline=False)
+                    details.add_field(name='{} {}'.format((entry.time + datetime.timedelta(hours=await database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild)), value=entry.after,inline=False)
                 details.add_field(name='Navigation', value='ℹ - full edited message\n📜 - message edit history\n🗒 - message in context')
                 details.set_footer(text='Message ID: {}'.format(after.id))
                 await message.edit(content=None,embed=details)
@@ -323,14 +326,14 @@ class Cyberlog(commands.Cog):
                 member = message.guild.get_member(int(fid))
                 details = discord.Embed(title=e.title, description=member.mention+" ("+member.name+")\n\n__Viewing member information__",timestamp=datetime.datetime.utcnow(),color=0x008000)
                 details.set_footer(text=e.footer.text)
-                joined=member.joined_at + datetime.timedelta(hours=database.GetTimezone(message.guild))
-                created=member.created_at + datetime.timedelta(hours=database.GetTimezone(message.guild))
-                details.add_field(name='Joined',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(message.guild), (datetime.datetime.utcnow()-joined).days))
-                details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(message.guild), (datetime.datetime.utcnow()-created).days))
+                joined=member.joined_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))
+                created=member.created_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))
+                details.add_field(name='Joined',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild), (datetime.datetime.utcnow()-joined).days))
+                details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild), (datetime.datetime.utcnow()-created).days))
                 details.add_field(name='Currently',value='{}{}'.format('📱' if member.is_on_mobile() else '', member.status))
                 details.add_field(name='Top role',value=member.top_role)
                 details.add_field(name='Role count',value=len(member.roles))
-                details.description+='\n\n**Permissions:** {}'.format(', '.join(database.StringifyPermissions(member.guild_permissions)))
+                details.description+='\n\n**Permissions:** {}'.format(', '.join(await database.StringifyPermissions(member.guild_permissions)))
                 details.add_field(name='Navigation',value='ℹ - member statistics\n🔍 - member information\n🕹 - member quick actions')
                 details.set_thumbnail(url=member.avatar_url)
                 await message.edit(content=None,embed=details)
@@ -350,7 +353,8 @@ class Cyberlog(commands.Cog):
             if 'New member' in e.title:
                 member = user.guild.get_member(int(fid))
                 await message.edit(content='{}, are you sure you would like to mute {} for an indefinite period (until a mod removes it)? Type `yes` within 10s to confirm'.format(user.mention, member.name))
-                def checkMute(m): return 'yes' in m.content.lower() and message.channel == m.channel and m.author.id == user.id and database.ManageRoles(user)
+                canManage = await database.ManageRoles(user)
+                def checkMute(m): return 'yes' in m.content.lower() and message.channel == m.channel and m.author.id == user.id and canManage
                 try: result = await bot.wait_for('message',check=checkMute,timeout=10)
                 except asyncio.TimeoutError: await message.edit(content=None)
                 else: 
@@ -379,7 +383,8 @@ class Cyberlog(commands.Cog):
             if 'New member' in e.title:
                 member = user.guild.get_member(int(fid))
                 await message.edit(content='{}, are you sure you would like to kick {}? Type a reason for the kick within 30s to confirm; to skip a reason, type `none`; to cancel, don\'t send a message'.format(user.mention, member.name))
-                def checkKick(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and database.KickMembers(user)
+                canKick = await database.KickMembers(user)
+                def checkKick(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and canKick
                 try: result = await bot.wait_for('message',check=checkKick,timeout=30)
                 except asyncio.TimeoutError: await message.edit(content=None)
                 else:
@@ -392,7 +397,8 @@ class Cyberlog(commands.Cog):
             if 'New member' in e.title:
                 member = user.guild.get_member(int(fid))
                 await message.edit(content='{}, are you sure you would like to ban {}? Type a reason for the ban within 30s to confirm; to skip a reason, type `none`; to cancel, don\'t send a message'.format(user.mention, member.name))
-                def checkBan(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and database.BanMembers(user)
+                canBan = await database.BanMembers(user)
+                def checkBan(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and canBan
                 try: result = await bot.wait_for('message',check=checkBan,timeout=30)
                 except asyncio.TimeoutError: await message.edit(content=None)
                 else:
@@ -403,7 +409,7 @@ class Cyberlog(commands.Cog):
                 await message.remove_reaction(ej, user)
         if str(ej) in ['🗓', '📁', '⬅']:
             if 'events recap' in e.title or 'event recaps' in e.title:
-                grabbedSummaries[str(message.id)] = database.GetSummary(message.guild, message.id)
+                grabbedSummaries[str(message.id)] = await database.GetSummary(message.guild, message.id)
                 if str(ej) == '🗓':
                     grabbedSummaries[str(message.id)]['queue'] = sorted(grabbedSummaries.get(str(message.id)).get('queue'), key = lambda x: x.get('timestamp'))
                     grabbedSummaries[str(message.id)]['sorted'] = 1
@@ -419,7 +425,7 @@ class Cyberlog(commands.Cog):
                     grabbedSummaries[str(message.id)]['queue'] = sorted(grabbedSummaries.get(str(message.id)).get('queue'), key = lambda x: x.get('category'))
                     grabbedSummaries[str(message.id)]['sorted'] = 0
                     summ = grabbedSummaries.get(str(message.id))
-                    e.description='**{} total events**\nFrom {} {} to now\n\n'.format(len(summ.get('queue')), summ.get('lastUpdate').strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(message.guild))
+                    e.description='**{} total events**\nFrom {} {} to now\n\n'.format(len(summ.get('queue')), summ.get('lastUpdate').strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild))
                     keycodes = {0: 'Message edits', 1: 'Message deletions', 2: 'Channel creations', 3: 'Channel edits', 4: 'Channel deletions', 5: 'New members',
                     6: 'Members that left', 7: 'Member unbanned', 8: 'Member updates', 9: 'Username/pfp updates', 10: 'Server updates', 11: 'Role creations', 
                     12: 'Role edits', 13: 'Role deletions', 14: 'Emoji updates', 15: 'Voice Channel updates'}
@@ -427,7 +433,7 @@ class Cyberlog(commands.Cog):
                     for a in range(16):
                         keyCounts[a] = 0
                     for summary in summ.get('queue'):    
-                        if database.SummarizeEnabled(message.guild, summary.get('mod')) and (datetime.datetime.now() - summ.get('lastUpdate')).seconds * 60 > database.GetSummarize(message.guild, summary.get('mod')):
+                        if await database.SummarizeEnabled(message.guild, summary.get('mod')) and (datetime.datetime.now() - summ.get('lastUpdate')).seconds * 60 > await database.GetSummarize(message.guild, summary.get('mod')):
                             keyCounts[summary.get('category')] = keyCounts.get(summary.get('category')) + 1
                     for a, b in keyCounts.items():
                         if b > 0: e.description += '{}: {} events\n'.format(keycodes.get(a), b)
@@ -458,7 +464,7 @@ class Cyberlog(commands.Cog):
                 queue = grabbedSummaries.get(str(message.id)).get('queue')
                 sort = grabbedSummaries.get(str(message.id)).get('sorted')
             except AttributeError: 
-                queue = database.GetSummary(message.guild, message.id).get('queue')
+                queue = await database.GetSummary(message.guild, message.id).get('queue')
                 sort = 0
             embed = discord.Embed.from_dict(queue[0].get('embed'))
             template = discord.Embed(title='Server event recaps',description='Sort: Category' if sort is 0 else 'Sort: Timestamp',color=embed.color,timestamp=embed.timestamp)
@@ -479,7 +485,7 @@ class Cyberlog(commands.Cog):
                 queue = grabbedSummaries.get(str(message.id)).get('queue')
                 sort = grabbedSummaries.get(str(message.id)).get('sorted')
             except AttributeError: 
-                queue = database.GetSummary(message.guild, message.id).get('queue')
+                queue = await database.GetSummary(message.guild, message.id).get('queue')
                 sort = 0
             current = int(e.description[e.description.find('Viewing event')+14:e.description.find('of')-1]) - 1
             if str(ej) == '◀':
@@ -523,13 +529,13 @@ class Cyberlog(commands.Cog):
         try: after = await c.fetch_message(payload.message_id)
         except discord.NotFound: return
         g = bot.get_guild(int(payload.data.get('guild_id')))
-        if not database.SimpleGetEnabled(g, 'message'):
+        if not await database.SimpleGetEnabled(g, 'message'):
             return
-        if not database.CheckCyberlogExclusions(after.channel, after.author) or after.author.bot:
+        if not await database.CheckCyberlogExclusions(after.channel, after.author) or after.author.bot:
             return
         load=discord.Embed(title="Message was edited (React with ℹ to see details)",description=str(loading),color=0x0000FF)
         embed = load.copy()
-        c = database.GetLogChannel(g, 'message')
+        c = await database.GetLogChannel(g, 'message')
         if c is None: return
         #msg = await c.send(embed=embed)
         before = ""
@@ -634,7 +640,7 @@ class Cyberlog(commands.Cog):
         embed.set_footer(text="Message ID: " + str(after.id))
         embed.set_thumbnail(url=after.author.avatar_url)
         data = {'author': after.author.id, 'name': after.author.name, 'server': after.guild.id, 'message': after.id}
-        if database.SummarizeEnabled(g, 'message'):
+        if await database.SummarizeEnabled(g, 'message'):
             global summaries
             summaries.get(str(g.id)).add('message', 0, datetime.datetime.now(), data, embed, reactions=['ℹ'])
             #await msg.delete()
@@ -655,7 +661,7 @@ class Cyberlog(commands.Cog):
         global imageLogChannel
         message = None
         g = message.guild if message is not None else bot.get_guild(payload.guild_id)
-        c = database.GetLogChannel(g, 'message')
+        c = await database.GetLogChannel(g, 'message')
         try: 
             message = payload.cached_message
             data = {'author': message.author.id, 'name': message.author.name, 'server': g.id}
@@ -666,7 +672,7 @@ class Cyberlog(commands.Cog):
             return
         elif pauseDelete == 0:
             serverDelete = None
-        if not database.GetEnabled(g, 'message'):
+        if not await database.GetEnabled(g, 'message'):
             return
         embed=discord.Embed(title="Message was deleted",timestamp=datetime.datetime.utcnow(),color=0xff0000)
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
@@ -683,9 +689,9 @@ class Cyberlog(commands.Cog):
         except OSError: attachments = None
         #s = None
         if message is not None:
-            if not database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot:
+            if not await database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot:
                 return
-            embed.description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: {} {}".format((message.created_at + datetime.timedelta(hours=database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(message.guild))
+            embed.description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: {} {}".format((message.created_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild))
             embed.set_thumbnail(url=message.author.avatar_url)
             if len(embed.image.url) < 1:
                 for ext in ['.png', '.jpg', '.gif', '.webp']:
@@ -705,7 +711,7 @@ class Cyberlog(commands.Cog):
                     authorID = int(fl[fl.find('_')+1:fl.find('.')])
                     for line, l in enumerate(f): #like before, line is line number, l is line content
                         if line == 0:
-                            created = datetime.datetime.strptime(l.strip(), '%b %d, %Y - %I:%M %p') + datetime.timedelta(hours=database.GetTimezone(bot.get_guild(payload.guild_id)))
+                            created = datetime.datetime.strptime(l.strip(), '%b %d, %Y - %I:%M %p') + datetime.timedelta(hours=await database.GetTimezone(bot.get_guild(payload.guild_id)))
                         elif line == 1:
                             authorName = l
                         elif line == 2:
@@ -714,7 +720,7 @@ class Cyberlog(commands.Cog):
                     os.remove(directory+"/"+fl)
                     author = bot.get_guild(payload.guild_id).get_member(authorID)
                     data = {'author': authorID, 'name': authorName, 'server': payload.guild_id, message: payload.message_id}
-                    if author is None or author.bot or author not in g.members or not database.CheckCyberlogExclusions(bot.get_channel(payload.channel_id), author):
+                    if author is None or author.bot or author not in g.members or not await database.CheckCyberlogExclusions(bot.get_channel(payload.channel_id), author):
                         return
                     embed.description=""
                     if author is not None: 
@@ -724,7 +730,7 @@ class Cyberlog(commands.Cog):
                         embed.description+="Author: "+authorName+"\n"
                         ma = author
                     embed.description+="Channel: "+bot.get_channel(payload.channel_id).mention+"\n"
-                    embed.description+='Sent: {} {}\n'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(bot.get_guild(payload.guild_id)))
+                    embed.description+='Sent: {} {}\n'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(bot.get_guild(payload.guild_id)))
                     embed.add_field(name="Content",value="(No content)" if messageContent is "" or len(messageContent)<1 else messageContent)
                     for ext in ['.png', '.jpg', '.gif', '.webp']:
                         if ext in messageContent:
@@ -735,7 +741,7 @@ class Cyberlog(commands.Cog):
             if f is None:
                 return await c.send(embed=discord.Embed(title="Message was deleted",description='Unable to provide more information',timestamp=datetime.datetime.utcnow(),color=0xff0000))
         content=None
-        if database.GetReadPerms(g, "message"):
+        if await database.GetReadPerms(g, "message"):
             try:
                 async for log in g.audit_logs(limit=1):
                     if log.action == discord.AuditLogAction.message_delete and log.target == ma and (datetime.datetime.utcnow() - log.created_at).seconds < 10:
@@ -750,7 +756,7 @@ class Cyberlog(commands.Cog):
         #    else:
         #        await s.edit(content=content,embed=embed,files=attachments)
         #else:
-        if database.SummarizeEnabled(g, 'message'):
+        if await database.SummarizeEnabled(g, 'message'):
             summaries.get(str(g.id)).add('message', 1, datetime.datetime.now(), data, embed,content=content)
         else:
             try: await c.send(content=content,embed=embed,files=attachments)
@@ -761,7 +767,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when server channel is created'''
         global bot
         content=None
-        if database.GetEnabled(channel.guild, "channel"):
+        if await database.GetEnabled(channel.guild, "channel"):
             data = {'channel': channel.id, 'name': channel.name, 'server': channel.guild.id}
             if type(channel) is discord.TextChannel:
                 chan = "📜 Text"
@@ -775,7 +781,7 @@ class Cyberlog(commands.Cog):
             embed=discord.Embed(title=chan + " Channel was created", description=channel.mention+" ("+channel.name+")" if type(channel) is discord.TextChannel else channel.name,color=0x008000,timestamp=datetime.datetime.utcnow())
             if type(channel) is not discord.CategoryChannel:
                 embed.add_field(name="Category",value=str(channel.category.name))
-            if database.GetReadPerms(channel.guild, "channel"):
+            if await database.GetReadPerms(channel.guild, "channel"):
                 try:
                     async for log in channel.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.channel_create:
@@ -784,21 +790,21 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             embed.set_footer(text="Channel ID: "+str(channel.id))
-            if database.SummarizeEnabled(channel.guild, 'channel'):
+            if await database.SummarizeEnabled(channel.guild, 'channel'):
                 summaries.get(str(channel.guild.id)).add('channel', 2, datetime.datetime.now(), data, embed,content=content)
             else:
-                await database.GetLogChannel(channel.guild, "channel").send(content=content,embed=embed)
+                await (await database.GetLogChannel(channel.guild, "channel")).send(content=content,embed=embed)
         if type(channel) is discord.TextChannel:
             path = "Indexes/{}/{}".format(channel.guild.id, channel.id)
             try: os.makedirs(path)
             except FileExistsError: pass
-        database.VerifyServer(channel.guild, bot) #Update database to reflect creation. This call is used frequently here. Placed at bottom to avoid delay before logging
+            await database.VerifyServer(channel.guild, bot)
 
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when server channel is updated'''
         global bot
-        if database.GetEnabled(before.guild, "channel"):
+        if await database.GetEnabled(before.guild, "channel"):
             content=None
             data = {'channel': before.id, 'server': before.guild.id, 'oldName': before.name, 'newName': after.name}
             if type(before) is discord.TextChannel:
@@ -813,7 +819,7 @@ class Cyberlog(commands.Cog):
             embed=discord.Embed(title=chan + " Channel was updated", description=before.mention if type(before) is discord.TextChannel else before.name,color=0x0000FF,timestamp=datetime.datetime.utcnow())
             embed.description+=' (Press ℹ to view channel details)'
             reactions = ['ℹ']
-            if database.GetReadPerms(before.guild, "channel"):
+            if await database.GetReadPerms(before.guild, "channel"):
                 try:
                     async for log in before.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.channel_update:
@@ -902,18 +908,18 @@ class Cyberlog(commands.Cog):
                 data['oldCategory'] = beforeCat
                 data['newCategory'] = afterCat
             if len(embed.fields) > 0 or 'position' in embed.description or 'overwrites' in embed.description:
-                if database.SummarizeEnabled(before.guild, 'channel'):
+                if await database.SummarizeEnabled(before.guild, 'channel'):
                     summaries.get(str(before.guild.id)).add('channel', 3, datetime.datetime.now(), data, embed,content=content, reactions=reactions)
                 else:
-                    message = await database.GetLogChannel(before.guild, "channel").send(content=content,embed=embed)
+                    message = await (await database.GetLogChannel(before.guild, "channel")).send(content=content,embed=embed)
                     for reaction in reactions: await message.add_reaction(reaction)
-        database.VerifyServer(before.guild, bot)
+        if type(before) is discord.TextChannel and before.name != after.name: await database.VerifyServer(after.guild, bot)
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when channel is deleted'''
         global bot
-        if database.GetEnabled(channel.guild, "channel"):
+        if await database.GetEnabled(channel.guild, "channel"):
             content=None
             data = {'channel': channel.name, 'id': channel.id, 'server': channel.guild.id}
             if type(channel) is discord.TextChannel:
@@ -928,7 +934,7 @@ class Cyberlog(commands.Cog):
             embed=discord.Embed(title=chan + " Channel was deleted", description=channel.name,color=0xff0000,timestamp=datetime.datetime.utcnow())
             if type(channel) is not discord.CategoryChannel:
                 embed.add_field(name="Category",value=str(channel.category.name))
-            if database.GetReadPerms(channel.guild, "channel"):
+            if await database.GetReadPerms(channel.guild, "channel"):
                 try:
                     async for log in channel.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.channel_delete:
@@ -937,18 +943,18 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             embed.set_footer(text="Channel ID: "+str(channel.id))
-            if database.SummarizeEnabled(channel.guild, 'channel'):
+            if await database.SummarizeEnabled(channel.guild, 'channel'):
                 summaries.get(str(channel.guild.id)).add('channel', 4, datetime.datetime.now(), data, embed,content=content)
             else:
-                await database.GetLogChannel(channel.guild, "channel").send(content=content,embed=embed)
-        database.VerifyServer(channel.guild, bot)
+                await (await database.GetLogChannel(channel.guild, "channel")).send(content=content,embed=embed)
+        if type(channel) is discord.TextChannel: await database.VerifyServer(channel.guild, bot)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member joins a server'''
         global bot
         global invites
-        if database.GetEnabled(member.guild, "doorguard"):
+        if await database.GetEnabled(member.guild, "doorguard"):
             newInv = []
             content=None
             count=len(member.guild.members)
@@ -969,10 +975,10 @@ class Cyberlog(commands.Cog):
                 newInv = await member.guild.invites()
             except discord.Forbidden:
                 content="Tip: I can determine who invited new members if I have the <Manage Server> permissions"
-                if database.SummarizeEnabled(member.guild, 'doorguard'):
+                if await database.SummarizeEnabled(member.guild, 'doorguard'):
                     return summaries.get(str(member.guild.id)).add('doorguard', 5, datetime.datetime.now(), member.id, data, embed,content=content,reactions=['ℹ'])
                 else:
-                    return await database.GetLogChannel(member.guild, 'doorguard').send(content=content,embed=embed)
+                    return await (await database.GetLogChannel(member.guild, 'doorguard')).send(content=content,embed=embed)
             #All this below it only works if the bot successfully works with invites
             try:
                 for invite in newInv:
@@ -996,26 +1002,26 @@ class Cyberlog(commands.Cog):
                         pass
             except AttributeError: embed.add_field(name='Invited by',value='N/A')
             invites[str(member.guild.id)] = newInv
-            if database.SummarizeEnabled(member.guild, 'doorguard'):
+            if await database.SummarizeEnabled(member.guild, 'doorguard'):
                 summaries.get(str(member.guild.id)).add('doorguard', 5, datetime.datetime.now(), data, embed,content=content,reactions=['ℹ'])
             else:
-                msg = await database.GetLogChannel(member.guild, "doorguard").send(content=content,embed=embed)
+                msg = await (await database.GetLogChannel(member.guild, "doorguard")).send(content=content,embed=embed)
                 await msg.add_reaction('ℹ')
-        database.VerifyServer(member.guild, bot)
-        database.VerifyUser(member, bot)
+        await database.VerifyServer(member.guild, bot)
+        await database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member leaves a server'''
         global bot
-        if database.GetEnabled(member.guild, "doorguard"):
+        if await database.GetEnabled(member.guild, "doorguard"):
             await asyncio.sleep(1)
             content=None
             embed=None
             if embed is None: 
                 embed=discord.Embed(title="Member left",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
                 data = {'id': member.id, 'name': member.name, 'type': 'Leave', 'server': member.guild.id}
-                if database.GetReadPerms(member.guild, 'doorguard'):
+                if await database.GetReadPerms(member.guild, 'doorguard'):
                     try:
                         async for log in member.guild.audit_logs(limit=1):
                             if log.target == member:
@@ -1037,20 +1043,20 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Here for",value=str(span.days)+" days, "+str(hours)+" hours, "+str(minutes)+" minutes, "+str(span.seconds - hours*3600 - minutes*60)+" seconds")
             embed.set_thumbnail(url=member.avatar_url)
             embed.set_footer(text="User ID: "+str(member.id))
-            if database.SummarizeEnabled(member.guild, 'doorguard'):
+            if await database.SummarizeEnabled(member.guild, 'doorguard'):
                 summaries.get(str(member.guild.id)).add('doorguard', 6, datetime.datetime.now(), data, embed,content=content)
             else:
-                await database.GetLogChannel(member.guild, "doorguard").send(content=content,embed=embed)
-        database.VerifyServer(member.guild, bot)
-        database.VerifyUser(member, bot)
+                await (await database.GetLogChannel(member.guild, "doorguard")).send(content=content,embed=embed)
+        await database.VerifyServer(member.guild, bot)
+        await database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User):
-        if database.GetEnabled(guild, 'doorguard'):
+        if await database.GetEnabled(guild, 'doorguard'):
             embed=discord.Embed(title=user.name+" was unbanned",description="",timestamp=datetime.datetime.utcnow(),color=0x008000)
             content=None
             data = {'member': user.id, 'name': user.name, 'server': guild.id}
-            if database.GetReadPerms(guild, 'doorguard'):
+            if await database.GetReadPerms(guild, 'doorguard'):
                 try:
                     async for log in guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.unban:
@@ -1067,15 +1073,15 @@ class Cyberlog(commands.Cog):
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>\nI also need that permission to determine if a member was kicked/banned"
             embed.set_thumbnail(url=user.avatar_url)
             embed.set_footer(text="User ID: "+str(user.id))
-            if database.SummarizeEnabled(guild, 'doorguard'):
+            if await database.SummarizeEnabled(guild, 'doorguard'):
                 summaries.get(str(guild.id)).add('doorguard', 7, datetime.datetime.now(), data, embed,content=content)
             else:
-                await database.GetLogChannel(guild, 'doorguard').send(content=content,embed=embed)
+                await (await database.GetLogChannel(guild, 'doorguard')).send(content=content,embed=embed)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with this bot'''
-        if (before.nick != after.nick or before.roles != after.roles) and database.GetEnabled(before.guild, "member"):
+        if (before.nick != after.nick or before.roles != after.roles) and await database.GetEnabled(before.guild, "member"):
             content=None
             data = {'member': before.id, 'name': before.name, 'server': before.guild.id}
             embed=discord.Embed(title="Member's server attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
@@ -1090,11 +1096,11 @@ class Cyberlog(commands.Cog):
                 removed = []
                 for f in after.roles:
                     if f not in before.roles:
-                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")):
+                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(await database.GetAntiSpamObject(before.guild).get("customRoleID")):
                             added.append(f.name)
                 for f in before.roles:
                     if f not in after.roles:
-                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(database.GetAntiSpamObject(before.guild).get("customRoleID")) and f in before.guild.roles:
+                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(await database.GetAntiSpamObject(before.guild).get("customRoleID")) and f in before.guild.roles:
                             removed.append(f.name)
                 if len(added) > 0: 
                     embed.add_field(name='Role(s) added',value=', '.join(added))
@@ -1124,12 +1130,12 @@ class Cyberlog(commands.Cog):
             embed.set_thumbnail(url=before.avatar_url)
             embed.set_footer(text="Member ID: "+str(before.id))
             if len(embed.fields) > 0:
-                if database.SummarizeEnabled(before.guild, 'member'):
+                if await database.SummarizeEnabled(before.guild, 'member'):
                     summaries.get(str(before.guild.id)).add('member', 8, datetime.datetime.now(), data, embed,content=content)
                 else:
-                    await database.GetLogChannel(before.guild, "member").send(content=content,embed=embed)
+                    await (await database.GetLogChannel(before.guild, "member")).send(content=content,embed=embed)
         global bot
-        database.VerifyUser(before, bot)
+        await database.VerifyUser(before, bot)
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
@@ -1164,13 +1170,13 @@ class Cyberlog(commands.Cog):
         embed.set_footer(text="User ID: "+str(after.id))
         for server in servers:
             data['server'] = server.id
-            database.VerifyServer(server, bot)
-            if database.GetEnabled(server, "member"):
-                if database.SummarizeEnabled(server, 'member'):
+            await database.VerifyServer(server, bot)
+            if await database.GetEnabled(server, "member"):
+                if await database.SummarizeEnabled(server, 'member'):
                     summaries.get(str(server.id)).add('member', 9, datetime.datetime.now(), data, embed)
                 else:
-                    await database.GetLogChannel(server, "member").send(embed=embed)
-        database.VerifyUser(membObj, bot)
+                    await (await database.GetLogChannel(server, "member")).send(embed=embed)
+        await database.VerifyUser(membObj, bot)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -1178,9 +1184,9 @@ class Cyberlog(commands.Cog):
         global bot
         global globalLogChannel
         await globalLogChannel.send(embed=discord.Embed(title="Joined server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0x008000))
-        database.VerifyServer(guild, bot)
+        await database.VerifyServer(guild, bot)
         for member in guild.members:
-            database.VerifyUser(member, bot)
+            await database.VerifyUser(member, bot)
         post=None
         global loading
         content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: <https://disguard.herokuapp.com>\n{}Please wait while I index your server's messages...".format(loading)
@@ -1213,11 +1219,11 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
         global bot
-        if database.GetEnabled(before, 'server'):
+        if await database.GetEnabled(before, 'server'):
             embed=discord.Embed(title="Server updated (React with ℹ to view server details)",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
             content=None
             data = {'server': before.id}
-            if database.GetReadPerms(before, 'server'):
+            if await database.GetReadPerms(before, 'server'):
                 try:
                     async for log in before.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.guild_update:
@@ -1263,12 +1269,12 @@ class Cyberlog(commands.Cog):
                 embed.set_image(url=after.icon_url)
             if len(embed.fields) > 0:
                 reactions = ['ℹ']
-                if database.SummarizeEnabled(before, 'server'):
+                if await database.SummarizeEnabled(before, 'server'):
                     summaries.get(str(before.id)).add('server', 10, datetime.datetime.now(), data, embed,content=content, reactions=reactions)
                 else:
-                    message = await database.GetLogChannel(before, 'server').send(content=content,embed=embed)
+                    message = await (await database.GetLogChannel(before, 'server')).send(content=content,embed=embed)
                     for r in reactions: await message.add_reaction(r)
-        database.VerifyServer(after, bot)
+        await database.VerifyServer(after, bot)
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):
@@ -1276,43 +1282,43 @@ class Cyberlog(commands.Cog):
         global bot
         global globalLogChannel
         await globalLogChannel.send(embed=discord.Embed(title="Left server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0xff0000))
-        database.VerifyServer(guild, bot)
+        await database.VerifyServer(guild, bot)
         for member in guild.members:
-            database.VerifyUser(member, bot)
+            await database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is created'''
         global bot
-        if database.GetEnabled(role.guild, "role"):
+        if await database.GetEnabled(role.guild, "role"):
             content=None
             data = {'role': role.id, 'name': role.name, 'server': role.guild.id}
             embed=discord.Embed(title="🚩Role created",timestamp=datetime.datetime.utcnow(),description=" ",color=0x008000)
             embed.description="Name: "+role.name if role.name != "new role" else ""
             embed.set_footer(text='Role ID: {}'.format(role.id))
-            if database.GetReadPerms(role.guild, "role"):
+            if await database.GetReadPerms(role.guild, "role"):
                 try:
                     async for log in role.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.role_create: 
                             embed.description+="\nCreated by: "+log.user.mention+" ("+log.user.name+")"
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
-            if database.SummarizeEnabled(role.guild, 'role'):
+            if await database.SummarizeEnabled(role.guild, 'role'):
                 summaries.get(str(role.guild.id)).add('role', 11, datetime.datetime.now(), data, embed,content=content)
             else:
-                await database.GetLogChannel(role.guild, "role").send(content=content,embed=embed)
-        database.VerifyServer(role.guild, bot)
+                await (await database.GetLogChannel(role.guild, "role")).send(content=content,embed=embed)
+        await database.VerifyServer(role.guild, bot)
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is deleted'''
         global bot
-        if database.GetEnabled(role.guild, "role"):
+        if await database.GetEnabled(role.guild, "role"):
             data = {'role': role.id, 'name': role.name, 'server': role.guild.id}
             content=None
             embed=discord.Embed(title="🚩Role deleted",description="Role: "+role.name,timestamp=datetime.datetime.utcnow(),color=0xff0000)
             embed.set_footer(text='Role ID: {}'.format(role.id))
-            if database.GetReadPerms(role.guild, "role"):
+            if await database.GetReadPerms(role.guild, "role"):
                 try:
                     async for log in role.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.role_delete: 
@@ -1320,24 +1326,24 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: <View Audit Log>"
             embed.description+="\n:warning: "+str(len(role.members))+" members lost this role :warning:"
-            if database.SummarizeEnabled(role.guild, 'role'):
+            if await database.SummarizeEnabled(role.guild, 'role'):
                 summaries.get(str(role.guild.id)).add('role', 12, datetime.datetime.now(), data, embed,content=content)
             else:
-                await database.GetLogChannel(role.guild, "role").send(content=content,embed=embed)
-        database.VerifyServer(role.guild, bot)
+                await (await database.GetLogChannel(role.guild, "role")).send(content=content,embed=embed)
+        await database.VerifyServer(role.guild, bot)
         for member in role.members:
-            database.VerifyUser(member, bot)
+            await database.VerifyUser(member, bot)
 
     @commands.Cog.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is updated'''
         global bot
-        if database.GetEnabled(before.guild, "role"):
+        if await database.GetEnabled(before.guild, "role"):
             content=None
             data = {'server': before.guild.id, 'role': before.id, 'oldName': before.name, 'newName': after.name}
             color=0x0000FF if before.color == after.color else after.color
             embed=discord.Embed(title="🚩Role was updated (React with ℹ to view role details)",description="Name: "+ after.name if before.name == after.name else "Name: "+before.name+" → "+after.name,color=color,timestamp=datetime.datetime.utcnow())
-            if database.GetReadPerms(before.guild, "role"):
+            if await database.GetReadPerms(before.guild, "role"):
                 try:
                     async for log in before.guild.audit_logs(limit=1): #Color too
                             if log.action == discord.AuditLogAction.role_update:
@@ -1386,19 +1392,19 @@ class Cyberlog(commands.Cog):
             embed.set_footer(text="Role ID: "+str(before.id))
             if len(embed.fields)>0 or before.name != after.name:
                 reactions = ['ℹ']
-                if database.SummarizeEnabled(before.guild, 'role'):
+                if await database.SummarizeEnabled(before.guild, 'role'):
                     summaries.get(str(before.guild.id)).add('role', 13, datetime.datetime.now(), data, embed,content=content, reactions=reactions)
                 else:
-                    message = await database.GetLogChannel(before.guild, "role").send(content=content,embed=embed)
+                    message = await (await database.GetLogChannel(before.guild, "role")).send(content=content,embed=embed)
                     for reac in reactions: await message.add_reaction(reac)
-        database.VerifyServer(before.guild, bot)
+        if before.name != after.name: await database.VerifyServer(after.guild, bot)
         for member in after.members:
-            database.VerifyUser(member, bot)
+            await database.VerifyUser(member, bot)
     
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild: discord.Guild, before, after):
         '''[DISCORD API METHOD] Called when emoji list is updated (creation, update, deletion)'''
-        if not database.GetEnabled(guild, "emoji"):
+        if not await database.GetEnabled(guild, "emoji"):
             return
         content=None
         embed=None
@@ -1409,7 +1415,7 @@ class Cyberlog(commands.Cog):
             embed=discord.Embed(title=" ",description=" ",timestamp=datetime.datetime.utcnow(),color=0x008000)
         else:
             embed=discord.Embed(title=" ",description=" ",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-        if database.GetReadPerms(guild, "emoji"):
+        if await database.GetReadPerms(guild, "emoji"):
             try:
                 async for log in guild.audit_logs(limit=1):
                     if log.action == discord.AuditLogAction.emoji_delete or log.action==discord.AuditLogAction.emoji_create or log.action==discord.AuditLogAction.emoji_update:
@@ -1443,14 +1449,14 @@ class Cyberlog(commands.Cog):
                     embed.set_footer(text=embed.footer.text+"Emoji ID: "+str(before[a].id))
                     embed.set_image(url=before[a].url)
         if len(embed.fields)>0:
-            if database.SummarizeEnabled(guild, 'emoji'):
+            if await database.SummarizeEnabled(guild, 'emoji'):
                 summaries.get(str(guild.id)).add('emoji', 14, datetime.datetime.now(), data, embed,content=content)
             else:
-                await database.GetLogChannel(guild, "emoji").send(content=content,embed=embed)
+                await (await database.GetLogChannel(guild, "emoji")).send(content=content,embed=embed)
     
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-        if not database.GetEnabled(member.guild, 'voice'):
+        if not await database.GetEnabled(member.guild, 'voice'):
             return
         embed=discord.Embed(title="Voice Channel update",description=member.mention,timestamp=datetime.datetime.utcnow(),color=0x0000FF)
         data = {'server': member.guild.id, 'member': member.id, 'name': member.name, 'oldChannel': before.channel.id, 'newChannel': after.channel.id}
@@ -1467,7 +1473,7 @@ class Cyberlog(commands.Cog):
                     embed.add_field(name="🔨 🗣",value="Force unmuted")
                 else:
                     embed.add_field(name="🔨 🤐",value="Force muted")
-            if not database.GetReadPerms(member.guild, 'voice'): #this is used to determine mod-only actions for variable convenience since audit logs aren't available
+            if not await database.GetReadPerms(member.guild, 'voice'): #this is used to determine mod-only actions for variable convenience since audit logs aren't available
                 if before.self_deaf != after.self_deaf:
                     if before.self_deaf:
                         embed.add_field(name="🔊",value="Undeafened")
@@ -1483,10 +1489,10 @@ class Cyberlog(commands.Cog):
                     af = "(Disconnected)" if after.channel is None else after.channel.name
                     embed.add_field(name="🔀",value="Channel: "+b4+" → "+af)
         if len(embed.fields) < 1: return
-        if database.SummarizeEnabled(member.guild, 'voice'):
+        if await database.SummarizeEnabled(member.guild, 'voice'):
             summaries.get(str(member.guild.id)).add('voice', 15, datetime.datetime.now(), data, embed)
         else:
-            await database.GetLogChannel(member.guild, 'voice').send(embed=embed)
+            await (await database.GetLogChannel(member.guild, 'voice')).send(embed=embed)
 
     @commands.command()
     async def pause(self, ctx, *args):
@@ -1506,37 +1512,37 @@ class Cyberlog(commands.Cog):
             classify = 'Antispam'
         if len(args) == 1:
             await status.edit(content=classify+" was paused by "+ctx.author.name)
-            if ctx.channel != database.GetLogChannel(ctx.guild, 'message'):
-                await database.GetLogChannel(ctx.guild, 'message').send(classify+" was paused by "+ctx.author.name)
-            database.PauseMod(ctx.guild, classify.lower())
+            if ctx.channel != await database.GetLogChannel(ctx.guild, 'message'):
+                await (await database.GetLogChannel(ctx.guild, 'message')).send(classify+" was paused by "+ctx.author.name)
+            await database.PauseMod(ctx.guild, classify.lower())
             return
         duration = ParsePauseDuration((" ").join(args[1:]))
         embed=discord.Embed(title=classify+" was paused",description="by "+ctx.author.mention+" ("+ctx.author.name+")\n\n"+(" ").join(args[1:]),color=0x008000,timestamp=datetime.datetime.utcnow()+datetime.timedelta(seconds=duration))
         embed.set_footer(text="Logging will resume")
         embed.set_thumbnail(url=ctx.author.avatar_url)
-        logged = await database.GetLogChannel(ctx.guild, 'message').send(embed=embed)
+        logged = await (await database.GetLogChannel(ctx.guild, 'message')).send(embed=embed)
         try:
             await logged.pin()
         except discord.Forbidden:
             pass
         await status.edit(content="✅",embed=embed)
-        database.PauseMod(ctx.guild, classify.lower())
+        await database.PauseMod(ctx.guild, classify.lower())
         await asyncio.sleep(duration)
-        database.ResumeMod(ctx.guild, classify.lower())
+        await database.ResumeMod(ctx.guild, classify.lower())
         try:
             await logged.delete()
         except discord.Forbidden:
             pass
-        await database.GetLogChannel(ctx.guild, 'message').send(classify+" was unpaused",delete_after=60*60*24)
+        await (await database.GetLogChannel(ctx.guild, 'message')).send(classify+" was unpaused",delete_after=60*60*24)
     @commands.command()
     async def unpause(self, ctx, *args):
         if len(args) < 1: return await ctx.send("Please provide module `antispam` or `logging` to unpause")
         args = [a.lower() for a in args]
         if 'antispam' in args:
-            database.ResumeMod(ctx.guild, 'antispam')
+            await database.ResumeMod(ctx.guild, 'antispam')
             await ctx.send("✅Successfully resumed antispam moderation")
         if 'logging' in args:
-            database.ResumeMod(ctx.guild, 'cyberlog')
+            await database.ResumeMod(ctx.guild, 'cyberlog')
             await ctx.send("✅Successfully resumed logging")
     
     @commands.command()
@@ -1584,22 +1590,22 @@ class Cyberlog(commands.Cog):
             try: bans = await ctx.guild.bans()
             except: pass
             for m in members:
-                e = MemberInfo(m)
+                e = await MemberInfo(m)
                 mainKeys.append('👮{}'.format(m.name))
                 embeds.append(e)
             for r in roles:
-                e = RoleInfo(r, logs)
+                e = await RoleInfo(r, logs)
                 mainKeys.append('🚩{}'.format(r.name))
                 embeds.append(e)
             for c in channels:
                 types = {discord.TextChannel: '📜', discord.VoiceChannel: '🎙', discord.CategoryChannel: '📂'}
-                e = ChannelInfo(c, [] if type(c) is discord.CategoryChannel else await c.invites(), None if type(c) is not discord.TextChannel else await c.pins(), logs)[1]
+                e = await ChannelInfo(c, [] if type(c) is discord.CategoryChannel else await c.invites(), None if type(c) is not discord.TextChannel else await c.pins(), logs)[1]
                 mainKeys.append('{}{}'.format(types.get(type(c)), c.name))
                 embeds.append(e)
             for i in invites:
                 if i.code.lower() in arg.lower() or arg.lower() in i.code.lower():
                     mainKeys.append('💌{}'.format(i.url))
-                    embeds.append(InviteInfo(i, ctx.guild))
+                    embeds.append(await InviteInfo(i, ctx.guild))
             for em in bot.emojis:
                 if em.name.lower() in arg.lower() or arg.lower() in em.name.lower():
                     mainKeys.append('{}{}'.format(em,em.name))
@@ -1607,39 +1613,39 @@ class Cyberlog(commands.Cog):
                         owner = await ctx.guild.fetch_emoji(em.id)
                         owner = owner.user
                     except: owner=None
-                    embeds.append(EmojiInfo(em,owner))
+                    embeds.append(await EmojiInfo(em,owner))
             if arg not in emoji.UNICODE_EMOJI and arg not in [str(emoji) for emoji in bot.emojis]:
                 try: 
                     partial = await PartialEmojiConverter.convert(ctx, arg)
                     mainKeys.append('{}{}'.format(partial, partial.name))
-                    embeds.append(PartialEmojiInfo(partial))
+                    embeds.append(await PartialEmojiInfo(partial))
                 except: pass
             if 'server' in arg or 'guild' in arg or arg in ctx.guild.name.lower() or ctx.guild.name.lower() in arg:
                 mainKeys.append('ℹServer information')
                 try: hooks = await ctx.guild.webhooks()
                 except: hooks = None
-                embeds.append(ServerInfo(ctx.guild, logs, bans, hooks, invites))
+                embeds.append(await ServerInfo(ctx.guild, logs, bans, hooks, invites))
             if 'roles' in arg:
                 mainKeys.append('ℹRole list information')
-                embeds.append(RoleListInfo(ctx.guild.roles, logs))
+                embeds.append(await RoleListInfo(ctx.guild.roles, logs))
             if 'members' in arg or 'people' in arg or 'users' in arg or 'bots' in arg:
                 mainKeys.append('ℹMember list information')
-                embeds.append(MemberListInfo(ctx.guild.members))
+                embeds.append(await MemberListInfo(ctx.guild.members))
             if 'channels' in arg:
                 mainKeys.append('ℹChannel list information')
-                embeds.append(ChannelListInfo(ctx.guild.channels, logs))
+                embeds.append(await ChannelListInfo(ctx.guild.channels, logs))
             if 'emoji' in arg or 'emotes' in arg:
                 mainKeys.append('ℹEmoji information')
-                embeds.append(EmojiListInfo(ctx.guild.emojis, logs))
+                embeds.append(await EmojiListInfo(ctx.guild.emojis, logs))
             if 'invites' in arg:
                 mainKeys.append('ℹInvites information')
-                embeds.append(InvitesListInfo(invites, logs))
+                embeds.append(await InvitesListInfo(invites, logs))
             if 'bans' in arg:
                 mainKeys.append('ℹBans information')
-                embeds.append(BansListInfo(bans, logs, ctx.guild))
+                embeds.append(await BansListInfo(bans, logs, ctx.guild))
             if 'dev' in arg or 'owner' in arg or 'master' in arg or 'creator' in arg or 'author' in arg or 'disguard' in arg or 'bot' in arg:
                 mainKeys.append('{}Information about me'.format(bot.get_emoji(569191704523964437)))
-                embeds.append(BotInfo(await bot.application_info()))
+                embeds.append(await BotInfo(await bot.application_info()))
             main.description='**{} RESULTS** for *{}*\n**Type the number of the option to view**\n'.format(len(embeds), arg)
             for result in range(len(mainKeys)):
                 main.description+='\n{}: {}'.format(result + 1, mainKeys[result])
@@ -1695,7 +1701,7 @@ def ConfigureSummaries(b):
     for server in b.guilds:
         summaries[str(server.id)] = ServerSummary()
 
-def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
+async def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
     '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
     embed=discord.Embed(title=s.name,description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description),timestamp=datetime.datetime.utcnow(),color=yellow)
     online=bot.get_emoji(606534231631462421)
@@ -1730,7 +1736,7 @@ def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
     embed.description+='\n\n**Features:** {}'.format(', '.join(s.features) if len(s.features) > 0 else 'None')
     embed.description+='\n\n**Nitro boosters:** {}/{}, **perks:** {}'.format(s.premium_subscription_count,perkDict.get(s.premium_tier),', '.join(perks))
     #embed.set_thumbnail(url=s.icon_url)
-    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(s), (datetime.datetime.utcnow()-created).days),inline=False)
+    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(s), (datetime.datetime.utcnow()-created).days),inline=False)
     embed.add_field(name='Region',value=str(s.region))
     embed.add_field(name='AFK Timeout',value='{}s --> {}'.format(s.afk_timeout, s.afk_channel))
     if s.max_presences is not None: embed.add_field(name='Max Presences',value='{} (BETA)'.format(s.max_presences))
@@ -1752,7 +1758,7 @@ def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
     embed.set_footer(text='Server ID: {}'.format(s.id))
     return embed
 
-def ChannelInfo(channel: discord.abc.GuildChannel, invites, pins, logs):
+async def ChannelInfo(channel: discord.abc.GuildChannel, invites, pins, logs):
     permString = None
     types = {discord.TextChannel: '📜', discord.VoiceChannel: '🎙', discord.CategoryChannel: '📂'}
     details = discord.Embed(title='{}{}'.format(types.get(type(channel)),channel.name), description='',color=yellow, timestamp=datetime.datetime.utcnow())
@@ -1776,16 +1782,16 @@ def ChannelInfo(channel: discord.abc.GuildChannel, invites, pins, logs):
         string='\n'.join(['     {}: {:>{diff}}'.format(kk.name, english.get(vv), diff=25 - len(kk.name)) for kk,vv in iter(v.items())])
         temp.append(string)
         permString = '```Channel permission overwrites\n{}```'.format('\n'.join(temp))
-    created=channel.created_at + datetime.timedelta(hours=database.GetTimezone(channel.guild))
+    created=channel.created_at + datetime.timedelta(hours=await database.GetTimezone(channel.guild))
     updated = None
     for log in logs:
         if log.action == discord.AuditLogAction.channel_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
             if log.target == channel:
-                updated = log.created_at + datetime.timedelta(hours=database.GetTimezone(channel.guild))
+                updated = log.created_at + datetime.timedelta(hours=await database.GetTimezone(channel.guild))
                 break
     if updated is None: updated = created
-    details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(channel.guild), (datetime.datetime.utcnow()-created).days))
-    details.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(channel.guild), (datetime.datetime.utcnow()-updated).days)))
+    details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(channel.guild), (datetime.datetime.utcnow()-created).days))
+    details.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(channel.guild), (datetime.datetime.utcnow()-updated).days)))
     inviteCount = []
     for inv in iter(invites): inviteCount.append(inv.inviter)
     details.add_field(name='Invites to here',value='None' if len(inviteCount) is 0 else ', '.join(['{} by {}'.format(a[1], a[0].name) for a in iter(collections.Counter(inviteCount).most_common())]))
@@ -1808,16 +1814,16 @@ def ChannelInfo(channel: discord.abc.GuildChannel, invites, pins, logs):
         details.set_field_at(5, name='Message count',value='about {}'.format(count))
     return [permString, details]
 
-def RoleInfo(r: discord.Role, logs):
+async def RoleInfo(r: discord.Role, logs):
     #sortedRoles = sorted(r.guild.roles, key = lambda x: x.position, reverse=True)
     #start = r.position - 3
     #if start < 0: start = 0
-    created = r.created_at + datetime.timedelta(hours=database.GetTimezone(r.guild))
+    created = r.created_at + datetime.timedelta(hours=await database.GetTimezone(r.guild))
     updated = None
     for log in logs:
         if log.action == discord.AuditLogAction.role_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
             if log.target == r:
-                updated = log.created_at + datetime.timedelta(hours=database.GetTimezone(r.guild))
+                updated = log.created_at + datetime.timedelta(hours=await database.GetTimezone(r.guild))
                 break
     if updated is None: updated = created
     embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ', '.join([p[0] for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
@@ -1825,13 +1831,13 @@ def RoleInfo(r: discord.Role, logs):
     embed.add_field(name='Displayed separately',value=r.hoist)
     embed.add_field(name='Externally managed',value=r.managed)
     embed.add_field(name='Mentionable',value=r.mentionable)
-    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(r.guild), (datetime.datetime.utcnow()-created).days))
-    embed.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(r.guild), (datetime.datetime.utcnow()-updated).days)))
+    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(r.guild), (datetime.datetime.utcnow()-created).days))
+    embed.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(r.guild), (datetime.datetime.utcnow()-updated).days)))
     embed.add_field(name='Belongs to',value='{} members'.format(len(r.members)))
     embed.set_footer(text='Role ID: {}'.format(r.id))
     return embed
 
-def MemberInfo(m: discord.Member):
+async def MemberInfo(m: discord.Member):
     embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=yellow)
     online=bot.get_emoji(606534231631462421)
     idle=bot.get_emoji(606534231610490907)
@@ -1848,17 +1854,17 @@ def MemberInfo(m: discord.Member):
         embed.description+='\n\n • {}'.format('\n • '.join(current))
     embed.description+='\n\n**Member\'s highest role is {} and they have the following permissions:** {}'.format(m.top_role.name,'Administrator' if m.guild_permissions.administrator else ', '.join([p[0] for p in iter(m.guild_permissions) if p[1]]))
     boosting = m.premium_since
-    joined = m.joined_at + datetime.timedelta(hours=database.GetTimezone(m.guild))
-    created = m.created_at + datetime.timedelta(hours=database.GetTimezone(m.guild))
+    joined = m.joined_at + datetime.timedelta(hours=await database.GetTimezone(m.guild))
+    created = m.created_at + datetime.timedelta(hours=await database.GetTimezone(m.guild))
     if m.voice is None: voice = 'None'
     else:
         voice = '{}{} in {}{}'.format('🔇' if m.voice.mute or m.voice.self_mute else '', '🤐' if m.voice.deaf or m.voice.self_deaf else '','N/A' if m.voice.channel is None else m.voice.channel.name, ', AFK' if m.voice.afk else '')
     if boosting is None: embed.add_field(name='Boosting server',value='Nope :(')
     else:
-        boosting += datetime.timedelta(hours=database.GetTimezone(m.guild))
-        embed.add_field(name='Boosting server',value='{}'.format('Since {} {} ({} days ago)'.format(boosting.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(m.guild), (datetime.datetime.utcnow()-boosting).days)))
-    embed.add_field(name='Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(m.guild), (datetime.datetime.utcnow()-created).days))
-    embed.add_field(name='Joined server',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(m.guild), (datetime.datetime.utcnow()-joined).days))
+        boosting += datetime.timedelta(hours=await database.GetTimezone(m.guild))
+        embed.add_field(name='Boosting server',value='{}'.format('Since {} {} ({} days ago)'.format(boosting.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(m.guild), (datetime.datetime.utcnow()-boosting).days)))
+    embed.add_field(name='Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(m.guild), (datetime.datetime.utcnow()-created).days))
+    embed.add_field(name='Joined server',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(m.guild), (datetime.datetime.utcnow()-joined).days))
     embed.add_field(name='Posts',value=MemberPosts(m))
     embed.add_field(name='Roles',value='{}: {}'.format(len(m.roles),', '.join([role.name for role in m.roles])))
     embed.add_field(name='🎙',value=voice)
@@ -1866,30 +1872,30 @@ def MemberInfo(m: discord.Member):
     embed.set_footer(text='Member ID: {}'.format(m.id))
     return embed
     
-def EmojiInfo(e: discord.Emoji, owner):
-    created = e.created_at + datetime.timedelta(hours=database.GetTimezone(e.guild))
+async def EmojiInfo(e: discord.Emoji, owner):
+    created = e.created_at + datetime.timedelta(hours=await database.GetTimezone(e.guild))
     embed = discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow)
     embed.set_image(url=e.url)
     embed.set_footer(text='Emoji ID: {}'.format(e.id))
     embed.add_field(name='Twitch emoji',value=e.managed)
     if owner is not None: embed.add_field(name='Uploaded by',value='{} ({})'.format(owner.mention, owner.name))
     embed.add_field(name='Server',value=e.guild.name)
-    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(e.guild), (datetime.datetime.utcnow()-created).days))
+    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(e.guild), (datetime.datetime.utcnow()-created).days))
     return embed
 
-def PartialEmojiInfo(e: discord.PartialEmoji):
+async def PartialEmojiInfo(e: discord.PartialEmoji):
     embed=discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow)
     embed.set_image(url=e.url)
     embed.set_footer(text='Emoji ID: {}'.format(e.id))
     return embed
 
-def InviteInfo(i: discord.Invite, s): #s: server
+async def InviteInfo(i: discord.Invite, s): #s: server
     embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow)
     embed.set_thumbnail(url=i.guild.icon_url)
     expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age)
-    created = i.created_at + datetime.timedelta(hours=database.GetTimezone(s))
-    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(s), (datetime.datetime.utcnow()-created).days))
-    embed.add_field(name='Expires',value='{} {}'.format(expires.strftime("%b %d, %Y - %I:%M %p"), database.GetNamezone(s)))
+    created = i.created_at + datetime.timedelta(hours=await database.GetTimezone(s))
+    embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(s), (datetime.datetime.utcnow()-created).days))
+    embed.add_field(name='Expires',value='{} {}'.format(expires.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(s)))
     embed.add_field(name='Server',value=i.guild.name)
     embed.add_field(name='Channel',value=i.guild.name)
     embed.add_field(name='Used',value='{}/{} times'.format(i.uses, '∞' if i.max_uses is 0 else i.max_uses))
@@ -1897,7 +1903,7 @@ def InviteInfo(i: discord.Invite, s): #s: server
     #In the future, once bot is more popular, integrate server stats from other servers
     return embed
 
-def BotInfo(app):
+async def BotInfo(app):
     embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow)
     embed.set_footer(text='My ID: {}'.format(app.id))
     embed.set_thumbnail(url=app.icon_url)
@@ -1911,7 +1917,7 @@ def BotInfo(app):
     embed.add_field(name='Users',value=len(bot.users))
     return embed
 
-def EmojiListInfo(emojis, logs):
+async def EmojiListInfo(emojis, logs):
     '''Prereq: len(emojis) > 0'''
     embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=datetime.datetime.utcnow(),color=yellow)
     static = [str(e) for e in emojis if not e.animated]
@@ -1921,7 +1927,7 @@ def EmojiListInfo(emojis, logs):
     if logs is not None: embed.add_field(name='Total emojis ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.emoji_create])))
     return embed
 
-def ChannelListInfo(channels, logs):
+async def ChannelListInfo(channels, logs):
     '''Prereq: len(channels) > 0'''
     codes = {discord.TextChannel: '📜', discord.VoiceChannel: '🎙', discord.CategoryChannel: '📂'}
     embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow)
@@ -1934,7 +1940,7 @@ def ChannelListInfo(channels, logs):
     if logs is not None: embed.add_field(name='Total channels ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.channel_create])))
     return embed
 
-def RoleListInfo(roles, logs):
+async def RoleListInfo(roles, logs):
     '''Prereq: len(roles) > 0'''
     embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow)
     embed.description='Total roles: {}\n\n • {}'.format(len(roles), '\n • '.join([r.name for r in roles]))
@@ -1946,7 +1952,7 @@ def RoleListInfo(roles, logs):
     if logs is not None: embed.add_field(name='Total roles ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.role_create])))
     return embed
 
-def MemberListInfo(members):
+async def MemberListInfo(members):
     embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow)
     posts=[]
     for channel in members[0].guild.text_channels:
@@ -1974,13 +1980,13 @@ def MemberListInfo(members):
     embed.add_field(name='Administrators',value=len([m for m in members if m.guild_permissions.administrator]))
     return embed
 
-def InvitesListInfo(invites, logs):
+async def InvitesListInfo(invites, logs):
     embed=discord.Embed(title='{}\'s invites'.format(invites[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow)
     embed.description='Total invites: {}\n\n • {}'.format(len(invites), '\n • '.join(['discord.gg/**{}**: Goes to {}, created by {}'.format(i.code, i.channel.name, i.inviter.name) for i in invites]))
     if logs is not None: embed.add_field(name='Total invites ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.invite_create])))
     return embed
 
-def BansListInfo(bans, logs, s): #s=server
+async def BansListInfo(bans, logs, s): #s=server
     embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=datetime.datetime.utcnow(),color=yellow)
     embed.description='Users currently banned: {}'.format(len(bans))
     if len(bans) == 0: return embed
@@ -1990,13 +1996,13 @@ def BansListInfo(bans, logs, s): #s=server
         for b in bans:
             for l in logs:
                 if l.action == discord.AuditLogAction.ban and l.target == b.user:
-                    created = l.created_at + datetime.timedelta(hours=database.GetTimezone(s))
+                    created = l.created_at + datetime.timedelta(hours=await database.GetTimezone(s))
                     array.append('{}: {} banned on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/y@%H:%M'), '(No reason specified)' if b.reason is None else b.reason))
                     current.append(b.user)
         other=[]
         for l in logs:
             if l.action == discord.AuditLogAction.ban and l.target not in current:
-                created = l.created_at + datetime.timedelta(hours=database.GetTimezone(s))
+                created = l.created_at + datetime.timedelta(hours=await database.GetTimezone(s))
                 other.append('{}: {} banned on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/y@%H:%M'), '(No reason specified)' if l.reason is None else l.reason))
     else:
         for b in bans:

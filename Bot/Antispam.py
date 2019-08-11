@@ -23,11 +23,13 @@ class Antispam(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        await asyncio.sleep(2)
         '''[DISCORD API METHOD] Called when message is sent'''
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
-        spam = database.GetAntiSpamObject(message.guild)
-        servers = database.GetMembersList(message.guild)
+        spam = await database.GetAntiSpamObject(message.guild)
+        if not spam.get('enabled'): return #return if antispam isn't enabled
+        servers = await database.GetMembersList(message.guild)
         person = None
         '''IMPLEMENT QUICKMESSAGE/LASTMESSAGE MESSAGE ARRAYS'''
         #The following lines of code deal with a member's lastMessages and quickMessages:
@@ -43,7 +45,7 @@ class Antispam(commands.Cog):
                 quickMessages = member.get("quickMessages")
                 if message.content is not None and len(message.content) > 0:
                     lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
-                if message.channel.id not in database.GetChannelExclusions(message.guild) and not CheckRoleExclusions(message.author) and message.author.id not in database.GetMemberExclusions(message.guild):
+                if message.channel.id not in await database.GetChannelExclusions(message.guild) and not await CheckRoleExclusions(message.author) and message.author.id not in await database.GetMemberExclusions(message.guild):
                     quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
                     for msg in lastMessages:
                         if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
@@ -55,14 +57,13 @@ class Antispam(commands.Cog):
                             quickMessages.remove(msg)
                         if len(quickMessages) > spam.get("quickMessages")[0]:
                             quickMessages.pop(0)
-                    database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
-                    database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+                    await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+                    await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
                     break
-        if not spam.get('enabled'): return #return if antispam isn't enabled
         if spam.get('exclusionMode') == 0:
-            if not (message.channel.id in spam.get('channelExclusions') and CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
+            if not (message.channel.id in spam.get('channelExclusions') and await CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
         else:
-            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or CheckRoleExclusions(message.author): return
+            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or await CheckRoleExclusions(message.author): return
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         reason = [] #List of reasons (long version) that a member was flagged for
@@ -90,7 +91,7 @@ class Antispam(commands.Cog):
                             reason.append("Repeated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
                             short.append("Repeated messages")
                             lastMessages = []
-                            database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+                            await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
                     if 0 not in spam.get("quickMessages"):
                         timeOne = quickMessages[0].get("created")
                         timeLast = quickMessages[-1].get("created")
@@ -99,7 +100,7 @@ class Antispam(commands.Cog):
                             reason.append("Sending too many messages in too little time\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
                             short.append("Spamming messages too fast")
                             quickMessages = []
-                            database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+                            await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available
             changes = 0
@@ -248,7 +249,7 @@ class Antispam(commands.Cog):
         role = None #The role to use if applicable
         if person.get("warnings") >= 1:
             try:
-                database.UpdateMemberWarnings(message.guild, message.author, person.get("warnings") - 1)
+                await database.UpdateMemberWarnings(message.guild, message.author, person.get("warnings") - 1)
                 successful = True
                 warned = True
             except:
@@ -369,11 +370,11 @@ class Antispam(commands.Cog):
             except discord.Forbidden:
                 pass
         
-def CheckRoleExclusions(member: discord.Member):
+async def CheckRoleExclusions(member: discord.Member):
     '''Checks a member's roles to determine if their roles are in the exceptions list
         Return True if a member's role is in the list'''
     for role in member.roles:
-        if role.id in database.GetAntiSpamObject(member.guild).get('roleExclusions'):
+        if role.id in await database.GetAntiSpamObject(member.guild).get('roleExclusions'):
             return True
     return False
 
@@ -384,12 +385,12 @@ def GetRoleManagementPermissions(member: discord.Member):
             return True
     return False
 
-def PrepareFilters(bot: commands.Bot):
+async def PrepareFilters(bot: commands.Bot):
     '''Initialize the local profanityfilter objects'''
     global filters
     global loading
     for server in bot.guilds:
-        filters[str(server.id)] = database.GetProfanityFilter(server)
+        filters[str(server.id)] = await database.GetProfanityFilter(server)
     for e in bot.emojis:
         if e.id == 573298271775227914:
             loading = e
