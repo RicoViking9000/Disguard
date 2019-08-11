@@ -26,6 +26,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     '''Method called when bot connects and all the internals are ready'''
     global booted
     if not booted:
+        booted=True
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening))
         for cog in cogs:
             try:
@@ -61,7 +62,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 except discord.Forbidden: pass
             Cyberlog.indexed[server.id] = True
         print("Indexed")
-    booted = True
     print("Booted")
     await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))
 
