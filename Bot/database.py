@@ -185,7 +185,7 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
 
 async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
-    return s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel")) if (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None else s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
+    return s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel")) if (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None else s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
 
 async def GetMainLogChannel(s: discord.Guild):
     '''Returns the log channel associated with the server (general one), if one is set'''
