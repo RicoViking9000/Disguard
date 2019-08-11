@@ -185,7 +185,7 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
 
 async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
-    return s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel")) if await (servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None else s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
+    return s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel")) if (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None else s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
 
 async def GetMainLogChannel(s: discord.Guild):
     '''Returns the log channel associated with the server (general one), if one is set'''
@@ -193,7 +193,7 @@ async def GetMainLogChannel(s: discord.Guild):
 
 async def GetCyberMod(s: discord.Guild, mod: str):
     '''Returns the specified module of the Cyberlog object'''
-    return (await (servers.find_one({"server_id": s.id}))).get("cyberlog").get(mod)
+    return (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod)
 
 async def GetReadPerms(s: discord.Guild, mod: str):
     '''Return if the bot should read the server audit log for logs'''
@@ -355,15 +355,15 @@ async def DashboardManageServer(server: discord.Guild, member: discord.Member):
 
 async def GetSummarize(s: discord.Guild, mod):
     '''Get the summarize value'''
-    return await GetCyberlogObject(s).get(mod).get('summarize') if await GetCyberlogObject(s).get('summarize') != await GetCyberlogObject(s).get(mod).get('summarize') else await GetCyberlogObject(s).get('summarize')
+    return (await GetCyberlogObject(s)).get(mod).get('summarize') if (await GetCyberlogObject(s)).get('summarize') != (await GetCyberlogObject(s)).get(mod).get('summarize') else (await GetCyberlogObject(s)).get('summarize')
 
 async def SummarizeEnabled(s: discord.Guild, mod):
     '''Is summarizing enabled for this module?'''
-    return await GetCyberlogObject(s).get('summarize') != 0 and await GetCyberlogObject(s).get(mod).get('summarize') != 1
+    return (await GetCyberlogObject(s)).get('summarize') != 0 and (await GetCyberlogObject(s)).get(mod).get('summarize') != 1
 
 async def GeneralSummarizeEnabled(s: discord.Guild):
     '''Is summarizing enabled for this server?'''
-    return await GetCyberlogObject(s).get('summarize') != 0
+    return (await GetCyberlogObject(s)).get('summarize') != 0
 
 async def StringifyPermissions(p: discord.Permissions):
     '''Turn a permissions object into a partially stringified version'''
