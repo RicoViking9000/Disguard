@@ -374,7 +374,7 @@ async def CheckRoleExclusions(member: discord.Member):
     '''Checks a member's roles to determine if their roles are in the exceptions list
         Return True if a member's role is in the list'''
     for role in member.roles:
-        if role.id in await database.GetAntiSpamObject(member.guild).get('roleExclusions'):
+        if role.id in (await database.GetAntiSpamObject(member.guild)).get('roleExclusions'):
             return True
     return False
 
