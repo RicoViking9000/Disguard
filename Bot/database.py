@@ -197,11 +197,11 @@ async def GetCyberMod(s: discord.Guild, mod: str):
 
 async def GetReadPerms(s: discord.Guild, mod: str):
     '''Return if the bot should read the server audit log for logs'''
-    return await GetCyberMod(s, mod).get("read")
+    return (await GetCyberMod(s, mod)).get("read")
 
 async def GetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server'''
-    return await GetCyberMod(s, mod).get("enabled") and (await servers.find_one({"server_id": s.id})).get("cyberlog").get('enabled') and ((await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None or (await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel") is not None) 
+    return (await GetCyberMod(s, mod)).get("enabled") and (await servers.find_one({"server_id": s.id})).get("cyberlog").get('enabled') and ((await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None or (await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel") is not None) 
 
 async def SimpleGetEnabled(s: discord.Guild, mod: str):
     '''Check if this module is enabled for the current server (lightweight)
