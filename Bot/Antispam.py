@@ -23,7 +23,6 @@ class Antispam(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        await asyncio.sleep(2)
         '''[DISCORD API METHOD] Called when message is sent'''
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return

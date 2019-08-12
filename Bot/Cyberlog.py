@@ -162,7 +162,6 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
-        await asyncio.sleep(2)
         path = "Indexes/{}/{}".format(message.guild.id, message.channel.id)
         try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
         except FileNotFoundError: return
