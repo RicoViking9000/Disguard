@@ -44,16 +44,16 @@ class Moderation(commands.Cog):
             return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
         if len(args) < 1:
             return await ctx.send('Please refer to my help site for usage. THis is a placeholder message; interactive command will be out soon')
-            #timeout=discord.Embed(title='Purge command',description='Timed out')
-            #embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command!\n\n',timestamp=datetime.datetime.utcnow(),color=discord.Color.blue())
-            #embed.description+='First, what channel(s) are you thinking of purging? Make sure the channel(s) are hyperlinked. To purge from this channel ({}), type `here`, to purge from all text channels, type `all`'.format(ctx.channel.mention)
-            #embed.set_footer(text='Type cancel to cancel the command')
-            #embed.set_author(name='Waiting for input',icon_url='https://cdn.discordapp.com/emojis/605060517861785610.gif')
-            #message = await ctx.send(embed=embed)
-            #def channels(m): return m.author==ctx.author and len(m.channel_mentions) > 0 or 'all' in m.content or 'here' in m.content or 'cancel' in m.content
-            #try: post = self.bot.wait_for('message',check=channels, timeout=120)
-            #except asyncio.TimeoutError: return await message.edit(embed=timeout)
-            #await message.edit(content=None)
+            timeout=discord.Embed(title='Purge command',description='Timed out')
+            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command!\n\n',timestamp=datetime.datetime.utcnow(),color=discord.Color.blue())
+            embed.description+='First, what channel(s) are you thinking of purging? Make sure the channel(s) are hyperlinked. To purge from this channel ({}), type `here`, to purge from all text channels, type `all`'.format(ctx.channel.mention)
+            embed.set_footer(text='Type cancel to cancel the command')
+            embed.set_author(name='Waiting for input',icon_url='https://cdn.discordapp.com/emojis/605060517861785610.gif')
+            message = await ctx.send(embed=embed)
+            def channels(m): return m.author==ctx.author and len(m.channel_mentions) > 0 or 'all' in m.content or 'here' in m.content or 'cancel' in m.content
+            try: post = self.bot.wait_for('message',check=channels, timeout=120)
+            except asyncio.TimeoutError: return await message.edit(embed=timeout)
+            await message.edit(content=None)
 
 
         current.botMessage = await ctx.send(str(loading)+"Parsing filters...")

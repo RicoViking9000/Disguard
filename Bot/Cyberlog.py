@@ -1125,7 +1125,8 @@ class Cyberlog(commands.Cog):
                 newNick = after.nick if after.nick is not None else "<No nickname>"
                 embed.add_field(name="Prev nickname",value=oldNick)
                 embed.add_field(name="New nickname",value=newNick)
-                data['oldNick'] = oldNick, data['newNick'] = newNick
+                data['oldNick'] = oldNick
+                data['newNick'] = newNick
             embed.set_thumbnail(url=before.avatar_url)
             embed.set_footer(text="Member ID: "+str(before.id))
             if len(embed.fields) > 0:
@@ -1458,7 +1459,9 @@ class Cyberlog(commands.Cog):
         if not await database.GetEnabled(member.guild, 'voice'):
             return
         embed=discord.Embed(title="Voice Channel update",description=member.mention,timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-        data = {'server': member.guild.id, 'member': member.id, 'name': member.name, 'oldChannel': before.channel.id, 'newChannel': after.channel.id}
+        data = {'server': member.guild.id, 'member': member.id, 'name': member.name}
+        data['oldChannel'] = before.channel.id if before.channel is not None else None
+        data['newChannel'] = after.channel.id if after.channel is not None else None
         if before.afk != after.afk:
             embed.add_field(name="💤",value="Went AFK (was in "+before.channel.name+")")
         else: #that way, we don't get duplicate logs with AFK and changing channels
