@@ -1096,11 +1096,11 @@ class Cyberlog(commands.Cog):
                 removed = []
                 for f in after.roles:
                     if f not in before.roles:
-                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(await database.GetAntiSpamObject(before.guild).get("customRoleID")):
+                        if f.name != "RicobotAutoMute" and f != before.guild.get_role((await database.GetAntiSpamObject(before.guild)).get("customRoleID")):
                             added.append(f.name)
                 for f in before.roles:
                     if f not in after.roles:
-                        if f.name != "RicobotAutoMute" and f != before.guild.get_role(await database.GetAntiSpamObject(before.guild).get("customRoleID")) and f in before.guild.roles:
+                        if f.name != "RicobotAutoMute" and f != before.guild.get_role((await database.GetAntiSpamObject(before.guild)).get("customRoleID")) and f in before.guild.roles:
                             removed.append(f.name)
                 if len(added) > 0: 
                     embed.add_field(name='Role(s) added',value=', '.join(added))
