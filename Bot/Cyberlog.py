@@ -688,9 +688,10 @@ class Cyberlog(commands.Cog):
         except OSError: attachments = None
         #s = None
         if message is not None:
-            if not await database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot:
-                return
-            embed.description="Author: "+message.author.mention+" ("+message.author.name+")\nChannel: "+message.channel.mention+"\nSent: {} {}".format((message.created_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild))
+            try:
+                if not await database.CheckCyberlogExclusions(message.channel, message.author) or message.author.bot: return
+            except: pass
+            embed.description="Author: "+message.author.mention+" ("+message.author.name+"){}\nChannel: "+message.channel.mention+"\nSent: {} {}".format(' (no longer here)' if ma is None else '',(message.created_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild))
             embed.set_thumbnail(url=message.author.avatar_url)
             if len(embed.image.url) < 1:
                 for ext in ['.png', '.jpg', '.gif', '.webp']:
@@ -1463,7 +1464,8 @@ class Cyberlog(commands.Cog):
         data['oldChannel'] = before.channel.id if before.channel is not None else None
         data['newChannel'] = after.channel.id if after.channel is not None else None
         if before.afk != after.afk:
-            embed.add_field(name="💤",value="Went AFK (was in "+before.channel.name+")")
+            if after.afk: embed.add_field(name="💤",value="Went AFK (was in "+before.channel.name+")")
+            else: embed.add_field(name='🚫💤',value='No longer AFK; currently in {}'.format(after.channel.name))
         else: #that way, we don't get duplicate logs with AFK and changing channels
             if before.deaf != after.deaf:
                 if before.deaf: #member is no longer force deafened
@@ -1749,7 +1751,7 @@ async def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
     try: embed.add_field(name='Locale',value=s.preferred_locale)
     except: pass
     embed.add_field(name='Audit logs',value=0 if logs is None else len(logs))
-    if s.system_channel is not None: embed.add_field(name='System channel',value='{}: {}'.format(s.system_channel.mention, ', '.join([k[0] for k in (iter(s.system_channel.flags))])))
+    if s.system_channel is not None: embed.add_field(name='System channel',value='{}: {}'.format(s.system_channel.mention, ', '.join([k[0] for k in (iter(s.system_channel_flags))])))
     embed.add_field(name='Role count',value=len(s.roles) - 1)
     embed.add_field(name='Owner',value=s.owner.mention)
     embed.add_field(name='Banned members',value=0 if bans is None else len(bans))
