@@ -8,6 +8,7 @@ import discord
 import profanityfilter
 import datetime
 import asyncio
+import faulthandler
 from discord.ext import commands
 
 #mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
@@ -15,6 +16,7 @@ mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
 db = None
 servers = None
 users = None
+faulthandler.enable()
 
 class LogModule(object):
     '''Used for consistent controlling of logging'''
