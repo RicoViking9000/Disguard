@@ -3,6 +3,7 @@
     <head>
         <title>Disguard Commands</title>
         <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
     </head>
     <body>
         <header>
@@ -10,20 +11,36 @@
                 <ul id="navig">
                     <li> <a href="index.html">Home</a></li>
                     <li> <a href="features.html">Features</a></li>
-                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a class=active href="commands.html">Commands</a></li>
                     <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
                     <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
                     <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
                 </ul>
             </nav>
         </header>
-    <h1>List of commands</h1>
+    <h1 class=pageHeader>List of commands</h1>
     <h3>Prefix: . (period), customizable through server dashboard<br>Click the name of a command to learn more<br>Arguments surrounded by |pipestems| are optional</h3>
-    <ul id=commandsList>
-        <li><a href=purge.html>purge {number}</a><p class=comDesc>Purge {number} messages</p></li>
-        <li><a href=commands.html>help</a><p class=comDesc>Shortcut to this page</p></li>
-        <li><a href=pause.html>pause {module} |{duration}|</a><p class=comDesc>Pause an active module for a duration</p></li>
-        <li><a href=pause.html>unpause</a><p class=comDesc>Unpaused a paused active module</p></li>
-        <li><a href=info.html>info {search term}</a><p class=comDesc>Intelligent search engine for server data, this searches members, roles, channels, and much more</p></li>
-    </ul>
+    <table id=comTable>
+        <tr>
+            <th>Command name</th>
+            <th>Command description</th>
+        </tr>
+        <tr>
+            <td><a href=purge.html>purge |{number}|</a></td>
+            <td class=comDesc>Purge {number} messages. Omit {number} to enter interactive setup</td>
+        </tr>
+        <tr>
+            <td><a href=commands.html>help</a></td>
+            <td class=comDesc>Shortcut to this page</td>
+        </tr>
+        <tr>
+            <td><a href=pause.html>pause {module} |{duration}|<br>unpause {module}</a></td>
+            <td class=comDesc>Pause or unpause an active module (logging or antispam)</td>
+        </tr>
+        <tr>
+            <td><a href=info.html>info {search term}</a></td>
+            <td class=comDesc>Intelligent search feature for server objects: Members, roles, channels, emojis, invites, etc. Type what you want to search for.</td>
+        </tr>
+    </table>
     </body>

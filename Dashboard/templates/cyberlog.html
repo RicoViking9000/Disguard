@@ -24,8 +24,10 @@
         <h1 class=mod-header>Cybersecurity/Logging</h1>
         <div class=mod-main>
             <form class=mod-main method="POST">
-                Logging module<br><input type="radio" name="enabled" value=True {%if cyberlog.enabled%}checked{%endif%}>Enabled
-                <br><input type="radio" name="enabled" value=False {%if not cyberlog.enabled%}checked{%endif%}>Disabled
+                <div class=masterSwitch>
+                    Logging module<br><input type="radio" name="enabled" value=True {%if cyberlog.enabled%}checked{%endif%}>Enabled
+                    <br><input type="radio" name="enabled" value=False {%if not cyberlog.enabled%}checked{%endif%}>Disabled
+                </div>
                 <br>Post log recaps every so often instead of in real time to prevent spam and to save space <select name=summarize>
                     <option value=0 {%if cyberlog.summarize==0%}selected{%endif%}>Disabled</option>
                     <option value=15 {%if cyberlog.summarize==15%}selected{%endif%}>Every 15 minutes</option>
@@ -151,6 +153,7 @@
                     <legend class=log-mod-title>Member</legend>
                     <p class=log-mod-desc>{{cyberlog.member.description}}</p>
                     Use this module? <select name=member><option value=True {%if cyberlog.member.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.member.enabled%}selected{%endif%}>Disabled</option></select><br>
+                    Enable which logs? <select name=memberGlobal><option value=0 {%if cyberlog.memberGlobal == 0%}selected{%endif%}>Only member role/nickname change</option><option value=1 {%if cyberlog.memberGlobal == 1%}selected{%endif%}>Only user profile pic/username change</option><option value=2 {%if cyberlog.memberGlobal == 2%}selected{%endif%}>Both</option></select><br>
                     Overwrite default log channel <select name=memberChannel><option value=None {%if not cyberlog.member.channel%}selected{%endif%}>(Disabled)</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if cyberlog.member.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>

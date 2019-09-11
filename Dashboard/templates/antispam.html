@@ -26,8 +26,10 @@
         </div>
         <div>
             <form class=mod-main method="POST">
+                <div class=masterSwitch>
                 Antispam Module<br><input type="radio" name="enabled" value=True {%if automod.enabled%}checked{%endif%}>Enabled
                 <br><input type="radio" name="enabled" value=False {%if not automod.enabled%}checked{%endif%}>Disabled
+                </div>
                 <fieldset>
                     <legend>Consequences</legend>
                     Members have<input type="number" name=warn value={{automod.warn}}>warnings before receiving the below action<br>

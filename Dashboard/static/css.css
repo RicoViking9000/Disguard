@@ -1,4 +1,19 @@
-* {background-color: rgb(46, 46, 46); color: rgb(255, 255, 255)}
-.trioTitle {font-size: 45px; display: inline;}
-.trioDesc {display: inline}
+* {background-color: rgb(46, 46, 46); color:white;
+    font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif}
 .pageTitle {font-size: 60px}
+.center {text-align: center}
+.ChooseServer {height: 200px; width: 200px; display: inline-block; font-size: 12px; margin-left: 1%; margin-right: 1%; text-align: center}
+.ChooseServer:hover * {background-color: black}
+select {padding: 10px 20px; font-size: 15px}
+input[type=submit] {padding: 10px 30px; background-color: green; border-radius: 25px}
+input:not([type=submit]) {padding: 10px 40px; font-size: 15px; color: red}
+select {color: red}
+select:disabled {background-color: black}
+fieldset {border-color: blue}
+#genServer *{height: 100px; background-color: maroon; line-height: 100px; width: 98%; margin: 1%}
+#genServer {padding-bottom: 10px}
+#antispam *, #moderation *, #cyberlog *{width: 31.3%; height: 310px; background-color: navy; line-height: 310px; float: left; margin: 1%}
+#genServer *, #antispam *, #moderation *, #cyberlog *{display: inline-block; vertical-align: middle; text-align: center; font-size: 27px; border-radius: 30px}
+#antispam:hover *, #moderation:hover *, #cyberlog:hover *{background-color: blue}
+#genServer:hover *{background-color: red}
+

@@ -199,6 +199,7 @@ def cyberlog(id):
         "enabled": r.get('enabled').lower() == 'true',
         "image": r.get('imageLogging').lower() == 'true',
         "defaultChannel": None if r.get('defaultChannel').lower() == 'none' or r.get('defaultChannel') is None else int(r.get('defaultChannel')),
+        'memberGlobal': int(r.get('memberGlobal')),
         'summarize': int(r.get('summarize')),
         "channelExclusions": cex,
         "roleExclusions": rex,

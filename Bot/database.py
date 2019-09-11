@@ -8,6 +8,7 @@ import discord
 import profanityfilter
 import datetime
 import asyncio
+import faulthandler
 from discord.ext import commands
 
 #mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
@@ -15,6 +16,7 @@ mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
 db = None
 servers = None
 users = None
+faulthandler.enable()
 
 class LogModule(object):
     '''Used for consistent controlling of logging'''
@@ -125,6 +127,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
         "image": False if log is None or log.get('image') is None else log.get('enabled'),
         "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
+        'memberGlobal': 2 if log is None or log.get('memberGlobal') is None else log.get('memberGlobal'),
         "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
         'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
         'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
@@ -154,6 +157,8 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                 if m.get('id') == id:
                     member=m
                     break
+    for m in (await servers.find_one({'server_id': s.id})).get('members'):
+        if m.get('id') not in membIDs: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
         try:
             await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
                 "members.$.id": id,

@@ -57,8 +57,9 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                             try: os.makedirs(attach)
                             except FileExistsError: pass
                             for attachment in message.attachments:
-                                try: await attachment.save('{}/{}'.format(attach, attachment.filename))
-                                except discord.HTTPException: pass
+                                if attachment.size / 1000000 > 8:
+                                    try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                                    except discord.HTTPException: pass
                 except discord.Forbidden: pass
             Cyberlog.indexed[server.id] = True
         print("Indexed")
@@ -80,7 +81,7 @@ async def help(ctx):
 async def ping(ctx):
     m = await ctx.send('Pong!')
     await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
-    
+
 
 database.Initialize(secure.token())
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
