@@ -177,7 +177,7 @@ class Cyberlog(commands.Cog):
             try: os.makedirs(path2)
             except FileExistsError: pass
             for a in message.attachments:
-                if attachment.size / 1000000 > 8:
+                if a.size / 1000000 > 8:
                     try: await a.save(path2+'/'+a.filename)
                     except discord.HTTPException: pass
 
@@ -1538,6 +1538,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         encounter = datetime.datetime.now()
+        if isinstance(error, commands.CommandNotFound): return
         m = await ctx.send('{}, I encountered an error: **{}**. Would you like to send diagnostics to my developer? React with the check mark if you would like to. Note that your server name, channel name, your username, and your command message content and IDs will be shared with my developer.'.format(ctx.author.name, str(error)))
         await m.add_reaction('✅')
         def check(r, u): return str(r) == '✅' and u.id == ctx.author.id
