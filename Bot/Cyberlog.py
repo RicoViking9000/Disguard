@@ -536,7 +536,7 @@ class Cyberlog(commands.Cog):
                             except UnicodeEncodeError: pass
                             break
                     f.close()
-        except: return await c.send(content='I\'m still indexing messages, so details aren\'t available',embed=embed)
+        except FileNotFoundError: return await c.send(content='Currently unable to locate message details in filesystem',embed=embed)
         if before == after.content:
             return #await msg.delete()
         timestamp = datetime.datetime.utcnow()
@@ -725,8 +725,8 @@ class Cyberlog(commands.Cog):
                                     url = messageContent[message.content.find('http'):messageContent.find(ext)+len(ext)+1]
                                     embed.set_image(url=url)
                         break #the for loop
-            except:
-                embed.description='I\'m still indexing messages, so details aren\'t available at this time'
+            except FileNotFoundError:
+                embed.description='Currently unable to locate message data in filesystem'
                 return await msg.edit(embed=embed)
             if f is None:
                 return await msg.edit(embed=discord.Embed(title="Message was deleted",description='Unable to provide more information',timestamp=datetime.datetime.utcnow(),color=0xff0000))
@@ -1539,7 +1539,7 @@ class Cyberlog(commands.Cog):
     async def on_command_error(self, ctx, error):
         encounter = datetime.datetime.now()
         if isinstance(error, commands.CommandNotFound): return
-        m = await ctx.send('{}, I encountered an error: **{}**. Would you like to send diagnostics to my developer? React with the check mark if you would like to. Note that your server name, channel name, your username, and your command message content and IDs will be shared with my developer.'.format(ctx.author.name, str(error)))
+        m = await ctx.send('{}, I encountered an error: **{}**. React with the check mark if you would like to send diagnostics to my dev. Note that your server name, channel name, your username, and your command message content and IDs will be shared with my developer.'.format(ctx.author.name, str(error)))
         await m.add_reaction('✅')
         def check(r, u): return str(r) == '✅' and u.id == ctx.author.id
         r, u = await bot.wait_for('reaction_add', check=check)
@@ -1691,6 +1691,7 @@ class Cyberlog(commands.Cog):
             indiv = await BansListInfo(bans, logs, ctx.guild)
         if len(arg) == 0:
             await message.edit(content='{}Loading content'.format(loading)) 
+            mainKeys.append('ℹInformation about you :)')
             indiv = await MemberInfo(ctx.author)
         if 'me' == arg:
             await message.edit(content='{}Loading content'.format(loading))

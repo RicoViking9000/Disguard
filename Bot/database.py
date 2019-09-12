@@ -16,7 +16,6 @@ mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
 db = None
 servers = None
 users = None
-faulthandler.enable()
 
 class LogModule(object):
     '''Used for consistent controlling of logging'''
