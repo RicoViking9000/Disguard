@@ -23,6 +23,7 @@ grabbedSummaries = {}
 indexed = {}
 info = {}
 lightningLogging = {}
+members = {}
 
 yellow=0xffff00
 green=0x008000
@@ -734,7 +735,7 @@ class Cyberlog(commands.Cog):
         if readPerms(g, "message"):
             try:
                 async for log in g.audit_logs(limit=1):
-                    if log.action == discord.AuditLogAction.message_delete and log.target == ma and (datetime.datetime.utcnow() - log.created_at).seconds < 10:
+                    if log.action == discord.AuditLogAction.message_delete and log.target.id == ma.id and (datetime.datetime.utcnow() - log.created_at).seconds < 10:
                         embed.description+="\nDeleted by: "+log.user.mention+" ("+log.user.name+")"
             except discord.Forbidden:
                 content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
@@ -958,6 +959,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when member joins a server'''
         global bot
         global invites
+        global members
         if logEnabled(member.guild, "doorguard"):
             newInv = []
             content=None
@@ -1004,6 +1006,7 @@ class Cyberlog(commands.Cog):
                 msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed)
                 await msg.add_reaction('ℹ')
                 await VerifyLightningLogs(msg, 'doorguard')
+        members[member.guild.id] = member.guild.members
         await database.VerifyServer(member.guild, bot)
         await database.VerifyUser(member, bot)
 
@@ -1011,19 +1014,18 @@ class Cyberlog(commands.Cog):
     async def on_member_remove(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member leaves a server'''
         global bot
+        global members
         if logEnabled(member.guild, "doorguard"):
-            message = await logChannel(member.guild, 'doorguard').send('{} left\nDelaying for two seconds to accurately determine method of removal based on audit logs(leave, kick, ban)'.format(member.name))
-            await asyncio.sleep(2)
             content=None
-            embed=None
+            embed=None #Custom embeds later
             if embed is None: 
                 embed=discord.Embed(title="👮❌Member left",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
                 embed.set_author(name='Lightning logging™',icon_url='https://cdn.discordapp.com/attachments/567741860559454210/618238065072144415/latest-removebg-preview.png')
                 data = {'id': member.id, 'name': member.name, 'type': 'Leave', 'server': member.guild.id}
                 if readPerms(member.guild, 'doorguard'):
                     try:
-                        async for log in member.guild.audit_logs(limit=1):
-                            if log.target == member:
+                        async for log in member.guild.audit_logs(limit=2):
+                            if log.target.id == member.id:
                                 if log.action == discord.AuditLogAction.kick:
                                     embed.title = '👮👢{} was kicked'.format(member.name)
                                     embed.description="Kicked by: "+log.user.mention+" ("+log.user.name+")"
@@ -1035,6 +1037,7 @@ class Cyberlog(commands.Cog):
                                     embed.description="Banned by: "+log.user.mention+" ("+log.user.name+")"
                                     data['type'] = 'Ban'
                                     embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
+                                break
                     except discord.Forbidden:
                         content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             span = datetime.datetime.utcnow() - member.joined_at
@@ -1048,15 +1051,16 @@ class Cyberlog(commands.Cog):
                     val.append('{} hours'.format(times[2]))
                     if times[3] > 0: val.append('{} days')
             embed.add_field(name="Here for",value=', '.join(reversed(val)))
-            sortedMembers = sorted(member.guild.members, lambda x: x.joined_at)
-            embed.description+='\n(Was {}{} member; now we have {} members'.format(sortedMembers.index(member)+1, suffix(sortedMembers.index(member)+1), len(sortedMembers)-1)
+            sortedMembers = sorted(list(members.get(member.guild.id)), key=lambda x: x.joined_at)
+            embed.description+='\n(Was {}{} member; now we have {} members)'.format(sortedMembers.index(member)+1, suffix(sortedMembers.index(member)+1), len(sortedMembers)-1)
             embed.set_thumbnail(url=member.avatar_url)
             embed.set_footer(text="User ID: "+str(member.id))
             #if await database.SummarizeEnabled(member.guild, 'doorguard'):
             #    summaries.get(str(member.guild.id)).add('doorguard', 6, datetime.datetime.now(), data, embed,content=content)
             #else:
-            await message.edit(content=content,embed=embed)
+            message = await logChannel(member.guild, 'doorguard').send(content=content,embed=embed)
             await VerifyLightningLogs(message, 'doorguard')
+        members[member.guild.id] = member.guild.members
         await database.VerifyServer(member.guild, bot)
         await database.VerifyUser(member, bot)
 
@@ -1074,7 +1078,7 @@ class Cyberlog(commands.Cog):
                             embed.description = "by "+log.user.mention+" ("+log.user.name+")"
                     async for log in guild.audit_logs(limit=None):
                         if log.action == discord.AuditLogAction.ban:
-                            if log.target == user:
+                            if log.target.id == user.id:
                                 span = datetime.datetime.utcnow() - log.created_at
                                 hours = span.seconds//3600
                                 minutes = (span.seconds//60)%60
@@ -1138,7 +1142,7 @@ class Cyberlog(commands.Cog):
             if before.nick != after.nick:
                 try:
                     async for log in before.guild.audit_logs(limit=1):
-                        if log.action == discord.AuditLogAction.member_update and log.target == before: 
+                        if log.action == discord.AuditLogAction.member_update and log.target.id == before.id: 
                             embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
@@ -1838,6 +1842,7 @@ def ConfigureSummaries(b):
     global summaries
     for server in b.guilds:
         summaries[str(server.id)] = ServerSummary()
+        members[server.id] = server.members
 
 async def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
     '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
@@ -1927,7 +1932,7 @@ async def ChannelInfo(channel: discord.abc.GuildChannel, invites, pins, logs):
     updated = None
     for log in logs:
         if log.action == discord.AuditLogAction.channel_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
-            if log.target == channel:
+            if log.target.id == channel.id:
                 updated = log.created_at + datetime.timedelta(hours=await database.GetTimezone(channel.guild))
                 break
     if updated is None: updated = created
@@ -1963,7 +1968,7 @@ async def RoleInfo(r: discord.Role, logs):
     updated = None
     for log in logs:
         if log.action == discord.AuditLogAction.role_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
-            if log.target == r:
+            if log.target.id == r.id:
                 updated = log.created_at + datetime.timedelta(hours=await database.GetTimezone(r.guild))
                 break
     if updated is None: updated = created

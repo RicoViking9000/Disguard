@@ -533,7 +533,7 @@ class Moderation(commands.Cog):
             if actuallyPurge:
                 await current.botMessage.edit(content=str(loading)+"Purging...")
                 Cyberlog.beginPurge(ctx.guild)
-                messages = await current.channel.purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
+                messages = await current.channel[0].purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
                 Cyberlog.endPurge(ctx.guild)
                 await current.botMessage.edit(content="**Successfully purged "+str(len(messages) - 1)+" messages :ok_hand:**",delete_after=5)
             else:
