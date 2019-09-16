@@ -57,7 +57,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                             try: os.makedirs(attach)
                             except FileExistsError: pass
                             for attachment in message.attachments:
-                                if attachment.size / 1000000 > 8:
+                                if attachment.size / 1000000 < 8:
                                     try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                                     except discord.HTTPException: pass
                 except discord.Forbidden: pass

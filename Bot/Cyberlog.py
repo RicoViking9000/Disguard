@@ -178,7 +178,7 @@ class Cyberlog(commands.Cog):
             try: os.makedirs(path2)
             except FileExistsError: pass
             for a in message.attachments:
-                if a.size / 1000000 > 8:
+                if a.size / 1000000 < 8:
                     try: await a.save(path2+'/'+a.filename)
                     except discord.HTTPException: pass
 
