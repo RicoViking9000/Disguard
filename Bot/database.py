@@ -156,9 +156,8 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                 if m.get('id') == id:
                     member=m
                     break
-    try:
-        for m in (await servers.find_one({'server_id': s.id})).get('members'):
-            if m.get('id') not in membIDs: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
+    for m in (await servers.find_one({'server_id': s.id})).get('members'):
+        if m.get('id') in membIDs or (await servers.find_one({'server_id': s.id})).get('members') is None or (await servers.find_one({'server_id': s.id})) is None:
             try:
                 await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
                     "members.$.id": id,
@@ -174,7 +173,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                     'warnings': spam.get('warn'),
                     'quickMessages': [],
                     'lastMessages': []}}})
-    except: pass
+        else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
 
 async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
