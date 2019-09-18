@@ -157,17 +157,16 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                 'warnings': spam.get('warn'),
                 'quickMessages': [],
                 'lastMessages': []}}}, True)
-    else:
-        for member in (await servers.find_one({'server_id': s.id})).get('members'):
-            if member.get('id') in membIDs:
-                await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
-                    "members.$.id": m.get('id'),
-                    "members.$.name": membDict.get(str(m.get('id'))),
-                    "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
-                    "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
-                    "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
-                }}, True)
-            else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
+    for member in (await servers.find_one({'server_id': s.id})).get('members'):
+        if member.get('id') in membIDs:
+            await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
+                "members.$.id": m.get('id'),
+                "members.$.name": membDict.get(str(m.get('id'))),
+                "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
+                "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
+                "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
+            }}, True)
+        else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
 
 async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
