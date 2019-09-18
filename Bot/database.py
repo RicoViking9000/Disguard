@@ -156,23 +156,25 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                 if m.get('id') == id:
                     member=m
                     break
-    for m in (await servers.find_one({'server_id': s.id})).get('members'):
-        if m.get('id') not in membIDs: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
-        try:
-            await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
-                "members.$.id": id,
-                "members.$.name": membDict.get(str(id)),
-                "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
-                "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
-                "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
-            }}, True)
-        except: #new member joined since last database refresh
-            await servers.update_one({'server_id': s.id}, {'$push': { 'members': {
-                'id': id,
-                'name': membDict.get(str(id)),
-                'warnings': spam.get('warn'),
-                'quickMessages': [],
-                'lastMessages': []}}})
+    try:
+        for m in (await servers.find_one({'server_id': s.id})).get('members'):
+            if m.get('id') not in membIDs: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
+            try:
+                await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
+                    "members.$.id": id,
+                    "members.$.name": membDict.get(str(id)),
+                    "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
+                    "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
+                    "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
+                }}, True)
+            except: #new member joined since last database refresh
+                await servers.update_one({'server_id': s.id}, {'$push': { 'members': {
+                    'id': id,
+                    'name': membDict.get(str(id)),
+                    'warnings': spam.get('warn'),
+                    'quickMessages': [],
+                    'lastMessages': []}}})
+    except: pass
 
 async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''

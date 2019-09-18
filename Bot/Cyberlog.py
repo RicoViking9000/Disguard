@@ -1215,6 +1215,7 @@ class Cyberlog(commands.Cog):
         global globalLogChannel
         await globalLogChannel.send(embed=discord.Embed(title="➕Joined server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0x008000))
         await database.VerifyServer(guild, bot)
+        await database.VerifyServer(guild, bot)
         for member in guild.members:
             await database.VerifyUser(member, bot)
         post=None
