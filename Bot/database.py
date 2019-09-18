@@ -159,13 +159,15 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                 'lastMessages': []}}}, True)
     for member in (await servers.find_one({'server_id': s.id})).get('members'):
         if member.get('id') in membIDs:
-            await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
-                "members.$.id": member.get('id'),
-                "members.$.name": membDict.get(str(member.get('id'))),
-                "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
-                "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
-                "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
-            }}, True)
+            try:
+                await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
+                    "members.$.id": member.get('id'),
+                    "members.$.name": membDict.get(str(member.get('id'))),
+                    "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
+                    "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
+                    "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
+                }}, upsert=True)
+            except: pass
         else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
 
 async def VerifyUsers(b: commands.Bot):
