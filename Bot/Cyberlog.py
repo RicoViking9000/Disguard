@@ -1049,7 +1049,7 @@ class Cyberlog(commands.Cog):
                 val.append('{} minutes'.format(times[1]))
                 if sum(times[2:]) > 0:
                     val.append('{} hours'.format(times[2]))
-                    if times[3] > 0: val.append('{} days')
+                    if times[3] > 0: val.append('{} days'.format(times[3]))
             embed.add_field(name="Here for",value=', '.join(reversed(val)))
             sortedMembers = sorted(list(members.get(member.guild.id)), key=lambda x: x.joined_at)
             embed.description+='\n(Was {}{} member; now we have {} members)'.format(sortedMembers.index(member)+1, suffix(sortedMembers.index(member)+1), len(sortedMembers)-1)
@@ -1088,7 +1088,7 @@ class Cyberlog(commands.Cog):
                                     val.append('{} minutes'.format(times[1]))
                                     if sum(times[2:]) > 0:
                                         val.append('{} hours'.format(times[2]))
-                                        if times[3] > 0: val.append('{} days')
+                                        if times[3] > 0: val.append('{} days'.format(times[3]))
                                 embed.add_field(name="Banned for",value=', '.join(reversed(val)))
                                 break
                 except discord.Forbidden:
