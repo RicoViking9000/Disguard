@@ -168,7 +168,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                     "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
                 }}, upsert=True)
             except: pass
-        else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': m.get('id')}}})
+        else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': member.get('id')}}})
 
 async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
