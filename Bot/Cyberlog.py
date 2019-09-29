@@ -1243,7 +1243,7 @@ class Cyberlog(commands.Cog):
                     except: pass
             except discord.Forbidden: pass
         indexed[guild.id] = True
-        try: await message.edit(content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: <https://disguard.herokuapp.com>")
+        try: await post.edit(content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: <https://disguard.herokuapp.com>")
         except: pass
 
     @commands.Cog.listener()

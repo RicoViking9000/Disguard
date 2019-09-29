@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import database
 import datetime
 import profanityfilter
@@ -20,6 +20,12 @@ class ParodyMessage(object):
 class Antispam(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.updateFilters.start()
+
+    @tasks.loop(minutes=10)
+    async def updateFilters(self):
+        await PrepareFilters(self.bot)
+
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -205,39 +211,40 @@ class Antispam(commands.Cog):
                 reason.append("Attempting to tag `@here` without permission to\n\n" + parsed)
                 short.append("Attempting to tag `here`")
         if spam.get("profanityEnabled"):
-            if len(message.content) > 0:
-                parsed = ""
-                spaces = 0
-                for a in message.content:
-                    if a == " ":
-                        spaces += 1
-                global filters
-                currentFilter = profanityfilter.ProfanityFilter()
-                currentFilter._censor_list = filters.get(str(message.guild.id))
-                filtered = currentFilter.censor(message.content.lower())
-                arr = message.content.lower().split(" ")
-                prof = filtered.split(" ")
-                for a in range(len(arr)):
-                    if arr[a] != prof[a]:
-                        parsed += "**" + arr[a] + "** "
-                    else:
-                        parsed += arr[a] + " "
-                if filtered != message.content.lower():
-                    censorCount = 0
-                    for a in filtered:
-                        if a == "*":
-                            censorCount += 1
-                    if censorCount / (len(filtered) - spaces) >= spam.get('profanityTolerance'):
-                        flag = True
-                        reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
-                        short.append("Profanity")
+            try:
+                if len(message.content) > 0:
+                    parsed = ""
+                    spaces = 0
+                    for a in message.content:
+                        if a == " ":
+                            spaces += 1
+                    currentFilter = profanityfilter.ProfanityFilter()
+                    currentFilter._censor_list = filters.get(str(message.guild.id))
+                    filtered = currentFilter.censor(message.content.lower())
+                    arr = message.content.lower().split(" ")
+                    prof = filtered.split(" ")
+                    for a in range(len(arr)):
+                        if arr[a] != prof[a]:
+                            parsed += "**" + arr[a] + "** "
+                        else:
+                            parsed += arr[a] + " "
+                    if filtered != message.content.lower():
+                        censorCount = 0
+                        for a in filtered:
+                            if a == "*":
+                                censorCount += 1
+                        if censorCount / (len(filtered) - spaces) >= spam.get('profanityTolerance'):
+                            flag = True
+                            reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
+                            short.append("Profanity")
+            except TypeError: print(filters.get(str(message.guild.id)))
         if not flag: 
             return
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
             return await message.channel.send("I flagged user `" + str(message.author) + "`, but need Manage Role permissions for the current consequence to be given. There are two solutions:\n  •Add the Manage Role permissions to me\n  •Enter your server's web dashboard and change the punishment for being flagged")
         if spam.get("delete"):
             try:
-                Cyberlog.AvoidDeletionLogging(1, message.guild)
+                Cyberlog.AvoidDeletionLogging(message)
                 await message.delete()
             except:
                 await message.channel.send("I require Manage Message permissions to carry out deleting messages upon members being flagged")
