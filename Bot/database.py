@@ -147,7 +147,15 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     for m in s.members: #Create dict 
         membDict[str(m.id)] = m.name
         membDict[m.name] = m.id
-    if (await servers.find_one({'server_id': s.id})).get('members') is None or (await servers.find_one({'server_id': s.id})) is None: await servers.update_one({'server_id': s.id}, {'$set': {'members': []}}, True)
+    if (await servers.find_one({'server_id': s.id})).get('members') is None or (await servers.find_one({'server_id': s.id})) is None: 
+        await servers.update_one({'server_id': s.id}, {'$set': {'members': []}}, True)
+        for id in membIDs:
+            await servers.update_one({"server_id": s.id}, {"$push": { 'members': {
+                'id': id,
+                'name': membDict.get(str(id)),
+                'warnings': spam.get('warn'),
+                'quickMessages': [],
+                'lastMessages': []}}}, True)
     if any(m.get('id') not in membIDs for m in members):
         toUpdate = [m.get('id') for m in members if m.get('id') not in membIDs]
         for person in toUpdate:
