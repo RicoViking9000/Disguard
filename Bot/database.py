@@ -147,7 +147,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     for m in s.members: #Create dict 
         membDict[str(m.id)] = m.name
         membDict[m.name] = m.id
-    if (await servers.find_one({'server_id': s.id})).get('members') is None or (await servers.find_one({'server_id': s.id})) is None: 
+    if (await servers.find_one({'server_id': s.id})).get('members') is None or (await servers.find_one({'server_id': s.id})) is None or (await servers.find_one({'server_id': s.id})).get('members') is []: 
         await servers.update_one({'server_id': s.id}, {'$set': {'members': []}}, True)
         for id in membIDs:
             await servers.update_one({"server_id": s.id}, {"$push": { 'members': {
