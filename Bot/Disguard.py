@@ -2,7 +2,6 @@
 
 import discord
 from discord.ext import commands
-import pymongo
 import dns
 import secure
 import database
@@ -10,9 +9,7 @@ import Antispam
 import Cyberlog
 import os
 import datetime
-import faulthandler
 
-faulthandler.enable()
 
 booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation']
@@ -48,21 +45,22 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 except FileExistsError: pass
                 try: 
                     async for message in channel.history(limit=None):
-                        if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
-                        try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
-                        except FileNotFoundError: pass
-                        try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
-                        except UnicodeEncodeError: pass
-                        try: f.close()
-                        except: pass
-                        if (datetime.datetime.utcnow() - message.created_at).days < 7 and await database.GetImageLogPerms(server) and not message.author.bot:
-                            attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-                            try: os.makedirs(attach)
-                            except FileExistsError: pass
-                            for attachment in message.attachments:
-                                if attachment.size / 1000000 < 8:
-                                    try: await attachment.save('{}/{}'.format(attach, attachment.filename))
-                                    except discord.HTTPException: pass
+                        if not message.author.bot:
+                            if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
+                            try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
+                            except FileNotFoundError: pass
+                            try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
+                            except UnicodeEncodeError: pass
+                            try: f.close()
+                            except: pass
+                            if (datetime.datetime.utcnow() - message.created_at).days < 7 and await database.GetImageLogPerms(server):
+                                attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+                                try: os.makedirs(attach)
+                                except FileExistsError: pass
+                                for attachment in message.attachments:
+                                    if attachment.size / 1000000 < 8:
+                                        try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                                        except discord.HTTPException: pass
                 except discord.Forbidden: pass
             Cyberlog.indexed[server.id] = True
         print("Indexed")
@@ -86,7 +84,7 @@ async def ping(ctx):
     await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
 
 
-database.Initialize(secure.token())
-bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
-#database.Initialize(secure.beta())
-#bot.run(secure.beta())
+#database.Initialize(secure.token())
+#bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
+database.Initialize(secure.beta())
+bot.run(secure.beta())
