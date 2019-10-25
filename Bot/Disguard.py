@@ -84,7 +84,7 @@ async def ping(ctx):
     await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
 
 
-#database.Initialize(secure.token())
-#bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
-database.Initialize(secure.beta())
-bot.run(secure.beta())
+database.Initialize(secure.token())
+bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
+#database.Initialize(secure.beta())
+#bot.run(secure.beta())
