@@ -52,7 +52,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                         except UnicodeEncodeError: pass
                         try: f.close()
                         except: pass
-                        if (datetime.datetime.utcnow() - message.created_at).days < 30 and await database.GetImageLogPerms(server):
+                        if (datetime.datetime.utcnow() - message.created_at).days < 7 and await database.GetImageLogPerms(server) and not message.author.bot:
                             attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
                             try: os.makedirs(attach)
                             except FileExistsError: pass
