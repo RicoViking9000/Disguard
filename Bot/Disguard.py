@@ -10,6 +10,9 @@ import Antispam
 import Cyberlog
 import os
 import datetime
+import faulthandler
+
+faulthandler.enable()
 
 booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation']
