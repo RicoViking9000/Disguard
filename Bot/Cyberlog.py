@@ -14,6 +14,7 @@ pauseDelete = []
 serverPurge = {}
 loading = None
 summarizeOn=False
+indexes = '/media/pi/SONIC/Indexes'
 
 invites = {}
 edits = {}
@@ -151,7 +152,7 @@ class Cyberlog(commands.Cog):
                     try:
                         path='Attachments/{}/{}'.format(server.id, channel.id)
                         for fl in os.listdir(path):
-                            with open('Indexes/{}/{}/{}.txt'.format(server.id, channel.id, fl)) as f:
+                            with open('{}/{}/{}/{}.txt'.format(indexes,server.id, channel.id, fl)) as f:
                                 for line, content in enumerate(f):
                                     if line==0: timestamp=datetime.datetime.strptime(content, '%b %d, %Y - %I:%M %p')
                             if (datetime.datetime.utcnow() - timestamp).days > 7:
@@ -164,7 +165,7 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
-        path = "Indexes/{}/{}".format(message.guild.id, message.channel.id)
+        path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
         try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
         except FileNotFoundError: return
         try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
@@ -526,7 +527,7 @@ class Cyberlog(commands.Cog):
         #msg = await c.send(embed=embed)
         before = ""
         try:
-            path = 'Indexes/{}/{}'.format(payload.data.get('guild_id'), payload.data.get('channel_id'))
+            path = '{}/{}/{}'.format(indexes, payload.data.get('guild_id'), payload.data.get('channel_id'))
             for fl in os.listdir(path):
                 if fl == '{}_{}.txt'.format(payload.message_id, after.author.id):
                     f = open(path+'/'+fl, 'r+')
@@ -692,7 +693,7 @@ class Cyberlog(commands.Cog):
             msg = await c.send(embed=embed)
             f=None
             try:
-                directory = "Indexes/{}/{}".format(payload.guild_id,payload.channel_id)
+                directory = "{}/{}/{}".format(indexes, payload.guild_id,payload.channel_id)
                 for fl in os.listdir(directory):
                     if str(payload.message_id) in fl:
                         f = open(directory+"/"+fl, "r")
@@ -794,7 +795,7 @@ class Cyberlog(commands.Cog):
             msg = await logChannel(channel.guild, "channel").send(content=content,embed=embed)
             await VerifyLightningLogs(msg, 'channel')
         if type(channel) is discord.TextChannel:
-            path = "Indexes/{}/{}".format(channel.guild.id, channel.id)
+            path = "{}/{}/{}".format(indexes, channel.guild.id, channel.id)
             try: os.makedirs(path)
             except FileExistsError: pass
             await database.VerifyServer(channel.guild, bot)
@@ -1229,7 +1230,7 @@ class Cyberlog(commands.Cog):
                     try: post = await channel.send(content) #Update later to provide more helpful information
                     except discord.Forbidden: pass
         for channel in guild.text_channels:
-            path = "Indexes/{}/{}".format(guild.id, channel.id)
+            path = "{}/{}/{}".format(indexes, guild.id, channel.id)
             try: os.makedirs(path)
             except FileExistsError: pass
             try: 
@@ -1864,7 +1865,7 @@ async def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
     else: perks = perks0
     messages = 0
     for chan in s.text_channels:
-        path = "Indexes/{}/{}".format(s.id, chan.id)
+        path = "{}/{}/{}".format(indexes, s.id, chan.id)
         messages+=len(os.listdir(path))
     created = s.created_at
     ht = bot.get_emoji(615690135589224476)
@@ -1955,7 +1956,7 @@ async def ChannelInfo(channel: discord.abc.GuildChannel, invites, pins, logs):
     if type(channel) is discord.CategoryChannel:
         details.add_field(name='NSFW',value=channel.is_nsfw())
     if type(channel) is discord.TextChannel:
-        path = "Indexes/{}/{}".format(channel.guild.id, channel.id)
+        path = "{}/{}/{}".format(indexes, channel.guild.id, channel.id)
         count = len(os.listdir(path))
         details.set_field_at(5, name='Message count',value='about {}'.format(count))
     return [permString, details]
@@ -2105,7 +2106,7 @@ async def MemberListInfo(members):
     embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow)
     posts=[]
     for channel in members[0].guild.text_channels:
-        path = "Indexes/{}/{}".format(members[0].guild.id, channel.id)
+        path = "{}/{}/{}".format(indexes, members[0].guild.id, channel.id)
         for f in os.listdir(path):
             posts.append(int(f[f.find('_')+1:f.find('.')]))
     most = ['{} with {}'.format(bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
@@ -2256,7 +2257,7 @@ async def Summarize(queue, keycounts):
 def MemberPosts(m: discord.Member):
     messageCount=0
     for channel in m.guild.text_channels:
-        path = "Indexes/{}/{}".format(m.guild.id, channel.id)
+        path = "{}/{}/{}".format(indexes, m.guild.id, channel.id)
         for f in os.listdir(path):
             if str(m.id) in f: messageCount+=1
     return messageCount

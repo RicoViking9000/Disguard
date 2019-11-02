@@ -21,6 +21,8 @@ def prefix(bot, message):
 bot = commands.Bot(command_prefix=prefix)
 bot.remove_command('help')
 
+indexes = '/media/pi/SONIC/Indexes'
+
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
     '''Method called when bot connects and all the internals are ready'''
@@ -40,7 +42,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         for server in bot.guilds:
             print('Indexing '+server.name)
             for channel in server.text_channels:
-                path = "Indexes/{}/{}".format(server.id, channel.id)
+                path = "{}/{}/{}".format(indexes,server.id, channel.id)
                 try: os.makedirs(path)
                 except FileExistsError: pass
                 try: 
