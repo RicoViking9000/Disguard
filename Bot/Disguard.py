@@ -21,7 +21,7 @@ def prefix(bot, message):
 bot = commands.Bot(command_prefix=prefix)
 bot.remove_command('help')
 
-indexes = '/media/pi/SONIC/Indexes'
+indexes = 'Indexes'
 
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
@@ -46,7 +46,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 try: os.makedirs(path)
                 except FileExistsError: pass
                 try: 
-                    async for message in channel.history(limit=None):
+                    async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=150)):
                         if not message.author.bot:
                             if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
                             try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")

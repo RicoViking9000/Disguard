@@ -14,7 +14,7 @@ pauseDelete = []
 serverPurge = {}
 loading = None
 summarizeOn=False
-indexes = '/media/pi/SONIC/Indexes'
+indexes = 'Indexes'
 
 invites = {}
 edits = {}
@@ -538,7 +538,9 @@ class Cyberlog(commands.Cog):
                             except UnicodeEncodeError: pass
                             break
                     f.close()
-        except FileNotFoundError: return await c.send(content='Currently unable to locate message details in filesystem',embed=embed)
+        except FileNotFoundError:
+            embed.description=None 
+            return await c.send(content='Currently unable to locate message details in filesystem',embed=embed)
         if before == after.content:
             return #await msg.delete()
         timestamp = datetime.datetime.utcnow()
@@ -1214,7 +1216,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when the bot joins a server'''
         global bot
         global globalLogChannel
-        await globalLogChannel.send(embed=discord.Embed(title="➕Joined server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0x008000))
+        await globalLogChannel.send(embed=discord.Embed(title="➕Joined server",description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0x008000))
         await database.VerifyServer(guild, bot)
         for member in guild.members:
             await database.VerifyUser(member, bot)
@@ -1234,7 +1236,7 @@ class Cyberlog(commands.Cog):
             try: os.makedirs(path)
             except FileExistsError: pass
             try: 
-                async for message in channel.history(limit=None):
+                async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=150)):
                     if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
                     try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                     except FileNotFoundError: pass
@@ -1314,7 +1316,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when the bot leaves a server'''
         global bot
         global globalLogChannel
-        await globalLogChannel.send(embed=discord.Embed(title="❌Left server",description=guild.name,timestamp=datetime.datetime.utcnow(),color=0xff0000))
+        await globalLogChannel.send(embed=discord.Embed(title="❌Left server",description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0xff0000))
         await database.VerifyServer(guild, bot)
         for member in guild.members:
             await database.VerifyUser(member, bot)
