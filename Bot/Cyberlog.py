@@ -1236,7 +1236,7 @@ class Cyberlog(commands.Cog):
             try: os.makedirs(path)
             except FileExistsError: pass
             try: 
-                async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=90)):
+                async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=60)):
                     if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
                     try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                     except FileNotFoundError: pass

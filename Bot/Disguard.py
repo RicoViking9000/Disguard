@@ -46,7 +46,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 try: os.makedirs(path)
                 except FileExistsError: pass
                 try: 
-                    async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=90)):
+                    async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=60)):
                         if not message.author.bot:
                             if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
                             try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
