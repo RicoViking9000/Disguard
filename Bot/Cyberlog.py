@@ -1236,7 +1236,7 @@ class Cyberlog(commands.Cog):
             try: os.makedirs(path)
             except FileExistsError: pass
             try: 
-                async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=60)):
+                async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=30)):
                     if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
                     try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                     except FileNotFoundError: pass
@@ -1997,10 +1997,13 @@ async def MemberInfo(m: discord.Member):
     if len(m.activities) > 0:
         current=[]
         for act in m.activities:
-            if act.type is discord.ActivityType.playing: current.append('playing {}: {}, {}'.format(act.name, act.details, act.state))
-            elif act.type is discord.ActivityType.streaming: current.append('streaming {}'.format(act.name))
-            elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append('Listening to Spotify\n{}'.format('\n'.join(['🎵{}'.format(act.title), '👮{}'.format(', '.join(act.artists)), '💿{}'.format(act.album)])))
-            elif act.type is discord.ActivityType.watching: current.append('watching {}'.format(act.name))
+            try:
+                if act.type is discord.ActivityType.playing: current.append('playing {}: {}, {}'.format(act.name, act.details, act.state))
+                elif act.type is discord.ActivityType.streaming: current.append('streaming {}'.format(act.name))
+                elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append('Listening to Spotify\n{}'.format('\n'.join(['🎵{}'.format(act.title), '👮{}'.format(', '.join(act.artists)), '💿{}'.format(act.album)])))
+                elif act.type is discord.ActivityType.watching: current.append('watching {}'.format(act.name))
+            except:
+                current.append('Error parsing activity')
         embed.description+='\n\n • {}'.format('\n • '.join(current))
     embed.description+='\n\n**Member\'s highest role is {} and they have the following permissions:** {}'.format(m.top_role.name,'Administrator' if m.guild_permissions.administrator else ', '.join([p[0] for p in iter(m.guild_permissions) if p[1]]))
     boosting = m.premium_since
