@@ -513,12 +513,12 @@ class Cyberlog(commands.Cog):
         global bot
         global edits
         global loading #We have to get the previous content from indexed message and current from guild.get_message
+        g = bot.get_guild(int(payload.data.get('guild_id')))
+        if not logEnabled(g, 'message'): return
         c = bot.get_channel(int(payload.data.get('channel_id')))
         try: after = await c.fetch_message(payload.message_id)
         except discord.NotFound: return
         except discord.Forbidden: print('{} lacks permissions for message edit for some reason'.format(bot.get_guild(int(payload.data.get('guild_id'))).name))
-        g = bot.get_guild(int(payload.data.get('guild_id')))
-        if not logEnabled(g, 'message'): return
         if not logExclusions(after.channel, after.author) or after.author.bot: return
         load=discord.Embed(title="📜✏ Message was edited (React with ℹ to see details)",description=str(loading),color=0x0000FF)
         load.set_author(name='Lightning logging™',icon_url='https://cdn.discordapp.com/attachments/567741860559454210/618238065072144415/latest-removebg-preview.png')
@@ -651,6 +651,8 @@ class Cyberlog(commands.Cog):
         global loading
         global bot
         global imageLogChannel
+        if serverPurge.get(payload.guild_id): return
+        if not logEnabled(g, 'message'): return
         try: 
             message = payload.cached_message
             data = {'author': message.author.id, 'name': message.author.name, 'server': payload.guild_id}
@@ -661,8 +663,6 @@ class Cyberlog(commands.Cog):
         if payload.message_id in pauseDelete:
             pauseDelete.remove(payload.message_id)
             return
-        if serverPurge.get(payload.guild_id): return
-        if not logEnabled(g, 'message'): return
         embed=discord.Embed(title="📜❌ Message was deleted",timestamp=datetime.datetime.utcnow(),color=0xff0000)
         embed.set_author(name='Lightning logging™',icon_url='https://cdn.discordapp.com/attachments/567741860559454210/618238065072144415/latest-removebg-preview.png')
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
