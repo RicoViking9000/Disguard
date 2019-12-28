@@ -516,6 +516,7 @@ class Cyberlog(commands.Cog):
         c = bot.get_channel(int(payload.data.get('channel_id')))
         try: after = await c.fetch_message(payload.message_id)
         except discord.NotFound: return
+        except discord.Forbidden: print('{} lacks permissions for message edit for some reason'.format(bot.get_guild(int(payload.data.get('guild_id'))).name))
         g = bot.get_guild(int(payload.data.get('guild_id')))
         if not logEnabled(g, 'message'): return
         if not logExclusions(after.channel, after.author) or after.author.bot: return
