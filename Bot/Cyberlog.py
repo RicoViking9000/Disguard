@@ -652,13 +652,13 @@ class Cyberlog(commands.Cog):
         global bot
         global imageLogChannel
         if serverPurge.get(payload.guild_id): return
+         g = message.guild if message is not None else bot.get_guild(payload.guild_id)
         if not logEnabled(g, 'message'): return
         try: 
             message = payload.cached_message
             data = {'author': message.author.id, 'name': message.author.name, 'server': payload.guild_id}
         except AttributeError:
             message = None
-        g = message.guild if message is not None else bot.get_guild(payload.guild_id)
         c = logChannel(g, 'message')
         if payload.message_id in pauseDelete:
             pauseDelete.remove(payload.message_id)
