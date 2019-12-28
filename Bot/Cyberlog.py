@@ -652,7 +652,7 @@ class Cyberlog(commands.Cog):
         global bot
         global imageLogChannel
         if serverPurge.get(payload.guild_id): return
-        g = message.guild if message is not None else bot.get_guild(payload.guild_id)
+        g = bot.get_guild(payload.guild_id)
         if not logEnabled(g, 'message'): return
         try: 
             message = payload.cached_message
