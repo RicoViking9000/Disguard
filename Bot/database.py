@@ -73,7 +73,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
-    if verifications.get(s.id) is not None and (datetime.datetime.now() - verifications.get(s.id)).minutes < 10: return
+    if verifications.get(s.id) is not None and (datetime.datetime.now() - verifications.get(s.id)).seconds < 600: return
     verifications[s.id] = datetime.datetime.now()
     serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
