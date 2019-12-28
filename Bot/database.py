@@ -17,6 +17,7 @@ db = None
 servers = None
 users = None
 
+verifications = {}
 class LogModule(object):
     '''Used for consistent controlling of logging'''
     def __init__(self, name, description, embed=True, audit=True, enabled=True, summarize=0, channelID=None, embedColor=None, advanced=False):
@@ -72,6 +73,8 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
+    if (datetime.datetime.now() - verifications.get(s.id)).minutes < 10: return
+    verifications[s.id] = datetime.datetime.now()
     serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
         await servers.delete_one({'server_id': s.id})
