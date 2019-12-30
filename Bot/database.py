@@ -72,9 +72,9 @@ def run(method, *args):
 async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
-    print('Verifying server: {} - {}'.format(s.name, s.id))
     if verifications.get(s.id) is not None and (datetime.datetime.now() - verifications.get(s.id)).seconds < 600: return
     verifications[s.id] = datetime.datetime.now()
+    print('Verifying server: {} - {}'.format(s.name, s.id))
     serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
         await servers.delete_one({'server_id': s.id})
@@ -188,6 +188,8 @@ async def VerifyUsers(b: commands.Bot):
     
 async def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''
+    if verifications.get(s.id) is not None and (datetime.datetime.now() - verifications.get(s.id)).seconds < 600: return
+    print('Verifying member: {} - {} in server {} - {}'.format(m.name, m.id, m.guild.name, m.guild.id))
     if b.get_user(m.id) is None: await users.delete_one({'user_id': m.id})
     else: await users.update_one({"user_id": m.id}, {"$set": { #update database
     "username": m.name,
