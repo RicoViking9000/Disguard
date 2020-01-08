@@ -53,15 +53,23 @@ class Antispam(commands.Cog):
                 if message.channel.id not in await database.GetChannelExclusions(message.guild) and not await CheckRoleExclusions(message.author) and message.author.id not in await database.GetMemberExclusions(message.guild):
                     quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
                     for msg in lastMessages:
-                        if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
-                            lastMessages.remove(msg)
-                        if len(lastMessages) > spam.get("congruent")[1]:
-                            lastMessages.pop(0)
+                        try:
+                            if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
+                                lastMessages.remove(msg)
+                            if len(lastMessages) > spam.get("congruent")[1]:
+                                lastMessages.pop(0)
+                        except: 
+                            lastMessages = []
+                            print('Resetting lastmessages for {}, {}'.format(message.author.name, message.guild.name))
                     for msg in quickMessages:
-                        if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
-                            quickMessages.remove(msg)
-                        if len(quickMessages) > spam.get("quickMessages")[0]:
-                            quickMessages.pop(0)
+                        try:
+                            if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
+                                quickMessages.remove(msg)
+                            if len(quickMessages) > spam.get("quickMessages")[0]:
+                                quickMessages.pop(0)
+                        except:
+                            quickMessages = []
+                            print('Resetting quickmessages for {}, {}'.format(message.author.name, message.guild.name))
                     await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
                     await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
                     break
