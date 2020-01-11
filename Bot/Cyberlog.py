@@ -1649,8 +1649,9 @@ class Cyberlog(commands.Cog):
             roles = []
             channels = []
             emojis = []
-        try: logs = await ctx.guild.audit_logs(limit=None).flatten()
-        except: logs = None
+        #try: logs = await ctx.guild.audit_logs(limit=None).flatten()
+        #except: logs = None
+        logs = None
         try: invites = await ctx.guild.invites()
         except: invites = None
         try: bans = await ctx.guild.bans()
@@ -1894,7 +1895,7 @@ async def ServerInfo(s: discord.Guild, logs, bans, hooks, invites):
     embed.add_field(name='Default notifications',value=str(s.default_notifications)[str(s.default_notifications).find('.')+1:])
     try: embed.add_field(name='Locale',value=s.preferred_locale)
     except: pass
-    embed.add_field(name='Audit logs',value=0 if logs is None else len(logs))
+    embed.add_field(name='Audit logs',value='N/A' if logs is None else len(logs))
     if s.system_channel is not None: embed.add_field(name='System channel',value='{}: {}'.format(s.system_channel.mention, ', '.join([k[0] for k in (iter(s.system_channel_flags))])))
     embed.add_field(name='Role count',value=len(s.roles) - 1)
     embed.add_field(name='Owner',value=s.owner.mention)
@@ -1934,11 +1935,12 @@ async def ChannelInfo(channel: discord.abc.GuildChannel, invites, pins, logs):
         permString = '```Channel permission overwrites\n{}```'.format('\n'.join(temp))
     created=channel.created_at + datetime.timedelta(hours=await database.GetTimezone(channel.guild))
     updated = None
-    for log in logs:
-        if log.action == discord.AuditLogAction.channel_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
-            if log.target.id == channel.id:
-                updated = log.created_at + datetime.timedelta(hours=await database.GetTimezone(channel.guild))
-                break
+    if logs is not None:
+        for log in logs:
+            if log.action == discord.AuditLogAction.channel_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
+                if log.target.id == channel.id:
+                    updated = log.created_at + datetime.timedelta(hours=await database.GetTimezone(channel.guild))
+                    break
     if updated is None: updated = created
     details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(channel.guild), (datetime.datetime.utcnow()-created).days))
     details.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(channel.guild), (datetime.datetime.utcnow()-updated).days)))
