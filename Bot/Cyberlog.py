@@ -1559,7 +1559,7 @@ class Cyberlog(commands.Cog):
             await m.clear_reactions()
         except: pass
         ty, v, tr = sys.exc_info()
-        traceback.print_tb()
+        traceback.print_tb(tr)
         embed=discord.Embed(title='⚠An error has occured⚠',description=''.join(traceback.format_exception(ty, v, tr)),timestamp=datetime.datetime.utcnow(),color=red)
         embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
         embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id))
