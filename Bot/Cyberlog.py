@@ -1546,6 +1546,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         import traceback
+        import sys
         encounter = datetime.datetime.now()
         if isinstance(error, commands.CommandNotFound): return
         m = await ctx.send('{}, I encountered an error: **{}**. React with the check mark if you would like to send diagnostics to my dev. Note that your server name, channel name, your username, and your command message content and IDs will be shared with my developer.'.format(ctx.author.name, str(error)))
@@ -1557,7 +1558,7 @@ class Cyberlog(commands.Cog):
             await m.remove_reaction(r, u)
             await m.clear_reactions()
         except: pass
-        embed=discord.Embed(title='⚠An error has occured⚠',description=traceback.format_exc(),timestamp=datetime.datetime.utcnow(),color=red)
+        embed=discord.Embed(title='⚠An error has occured⚠',description=traceback.format_tb(sys.last_traceback),timestamp=datetime.datetime.utcnow(),color=red)
         embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
         embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id))
         embed.add_field(name='Channel',value='{} ({}){}'.format(ctx.channel.name, ctx.channel.id, '(NSFW)' if ctx.channel.is_nsfw() else ''))
