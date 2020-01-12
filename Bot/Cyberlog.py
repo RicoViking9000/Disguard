@@ -1558,7 +1558,7 @@ class Cyberlog(commands.Cog):
             await m.remove_reaction(r, u)
             await m.clear_reactions()
         except: pass
-        embed=discord.Embed(title='⚠An error has occured⚠',description=traceback.format_tb(sys.last_traceback),timestamp=datetime.datetime.utcnow(),color=red)
+        embed=discord.Embed(title='⚠An error has occured⚠',description=traceback.format_tb(sys.exc_info()[2]),timestamp=datetime.datetime.utcnow(),color=red)
         embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
         embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id))
         embed.add_field(name='Channel',value='{} ({}){}'.format(ctx.channel.name, ctx.channel.id, '(NSFW)' if ctx.channel.is_nsfw() else ''))
