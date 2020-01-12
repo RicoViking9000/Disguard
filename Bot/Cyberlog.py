@@ -1543,43 +1543,39 @@ class Cyberlog(commands.Cog):
         msg = await (logChannel(member.guild, 'voice')).send(embed=embed)
         await VerifyLightningLogs(msg, 'voice')
 
-    # @commands.Cog.listener()
-    # async def on_command_error(self, ctx, error):
-    #     import traceback
-    #     import sys
-    #     encounter = datetime.datetime.now()
-    #     if isinstance(error, commands.CommandNotFound): return
-    #     m = await ctx.send('{}, I encountered an error: **{}**. React with the check mark if you would like to send diagnostics to my dev. Note that your server name, channel name, your username, and your command message content and IDs will be shared with my developer.'.format(ctx.author.name, str(error)))
-    #     await m.add_reaction('✅')
-    #     def check(r, u): return str(r) == '✅' and u.id == ctx.author.id
-    #     r, u = await bot.wait_for('reaction_add', check=check)
-    #     await m.edit(content=loading)
-    #     try: 
-    #         await m.remove_reaction(r, u)
-    #         await m.clear_reactions()
-    #     except: pass
-    #     ty, v, tr = sys.exc_info()
-    #     traceback.print_tb(tr)
-    #     embed=discord.Embed(title='⚠An error has occured⚠',description=''.join(traceback.format_exception(ty, v, tr)),timestamp=datetime.datetime.utcnow(),color=red)
-    #     embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
-    #     embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id))
-    #     embed.add_field(name='Channel',value='{} ({}){}'.format(ctx.channel.name, ctx.channel.id, '(NSFW)' if ctx.channel.is_nsfw() else ''))
-    #     embed.add_field(name='Author',value='{} ({})'.format(ctx.author.name, ctx.author.id))
-    #     embed.add_field(name='Message',value='{} ({})'.format(ctx.message.content, ctx.message.id))
-    #     embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y - %I:%M %p EST'))
-    #     embed.add_field(name='Received',value=datetime.datetime.now().strftime('%b %d, %Y - %I:%M %p EST'))
-    #     log = await bot.get_channel(620787092582170664).send(embed=embed)
-    #     await m.edit(content='Here\'s what was sent to my dev. Changed your mind? React with the X, and this message will be deleted and hidden from my dev',embed=embed)
-    #     await m.add_reaction('❌')
-    #     def check2(r, u): return str(r) == '❌' and u.id == ctx.author.id
-    #     r, u = await bot.wait_for('reaction_add', check=check2)
-    #     await m.edit(content=loading)
-    #     try: 
-    #         await m.remove_reaction(r, u)
-    #         await m.clear_reactions()
-    #     except: pass
-    #     await log.delete()
-    #     await m.edit(content='⚠An error occured: **{}**, and I was unable to execute your command'.format(str(error)),embed=None)
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx, error):
+        encounter = datetime.datetime.now()
+        if isinstance(error, commands.CommandNotFound): return
+        m = await ctx.send('{}, I encountered an error: **{}**. React with the check mark if you would like to send diagnostics to my dev. Note that your server name, channel name, your username, and your command message content and IDs will be shared with my developer.'.format(ctx.author.name, str(error)))
+        await m.add_reaction('✅')
+        def check(r, u): return str(r) == '✅' and u.id == ctx.author.id
+        r, u = await bot.wait_for('reaction_add', check=check)
+        await m.edit(content=loading)
+        try: 
+            await m.remove_reaction(r, u)
+            await m.clear_reactions()
+        except: pass
+        embed=discord.Embed(title='⚠An error has occured⚠',description=str(error),timestamp=datetime.datetime.utcnow(),color=red)
+        embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
+        embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id))
+        embed.add_field(name='Channel',value='{} ({}){}'.format(ctx.channel.name, ctx.channel.id, '(NSFW)' if ctx.channel.is_nsfw() else ''))
+        embed.add_field(name='Author',value='{} ({})'.format(ctx.author.name, ctx.author.id))
+        embed.add_field(name='Message',value='{} ({})'.format(ctx.message.content, ctx.message.id))
+        embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y - %I:%M %p EST'))
+        embed.add_field(name='Received',value=datetime.datetime.now().strftime('%b %d, %Y - %I:%M %p EST'))
+        log = await bot.get_channel(620787092582170664).send(embed=embed)
+        await m.edit(content='Here\'s what was sent to my dev. Changed your mind? React with the X, and this message will be deleted and hidden from my dev',embed=embed)
+        await m.add_reaction('❌')
+        def check2(r, u): return str(r) == '❌' and u.id == ctx.author.id
+        r, u = await bot.wait_for('reaction_add', check=check2)
+        await m.edit(content=loading)
+        try: 
+            await m.remove_reaction(r, u)
+            await m.clear_reactions()
+        except: pass
+        await log.delete()
+        await m.edit(content='⚠An error occured: **{}**, and I was unable to execute your command'.format(str(error)),embed=None)
 
     @commands.command()
     async def pause(self, ctx, *args):
