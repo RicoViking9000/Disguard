@@ -1014,7 +1014,7 @@ class Cyberlog(commands.Cog):
                 await VerifyLightningLogs(msg, 'doorguard')
         if member.guild.id == 460611346837405696: #Check account age; requested feature
             if acctAge < pvzServerAgeKick:
-                try: await member.send('You have been kicked from {} due to a request by the administrators: Your account must be {} days old for you to join the server. You can rejoin the server **{} UTC**.'.format(meber.guild.name, pvzServerAgeKick,
+                try: await member.send('You have been kicked from {} due to a request by the administrators: Your account must be {} days old for you to join the server. You can rejoin the server **{} UTC**.'.format(member.guild.name, pvzServerAgeKick,
                 (member.created_at + datetime.timedelta(days=pvzServerAgeKick)).strftime('%b %d, %Y - %I:%M %p')))
                 except discord.Forbidden: embed.description+='\nI will kick this member, but I can\'t DM them explaining why they were kicked'
                 await member.kick(reason='Account must be {} days old'.format(pvzServerAgeKick))
