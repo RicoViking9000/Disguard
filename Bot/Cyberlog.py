@@ -1829,9 +1829,11 @@ class Cyberlog(commands.Cog):
     async def ageKick(self, ctx, num: int):
         global pvzServerAgeKick
         if ctx.guild.id == 460611346837405696: 
-            if await database.ManageServer(ctx.author): pvzServerAgeKick = num
+            if await database.ManageServer(ctx.author): 
+                pvzServerAgeKick = num
+                await ctx.send('Successfully set pvzServerAgeKick to {} days old'.format(num))
             else: await ctx.send('You need manage server permissions to use this')
-        await ctx.send('Successfully set pvzServerAgeKick to {} days old'.format(num))
+        
 
 def ParsePauseDuration(s: str):
     '''Convert a string into a number of seconds to ignore antispam or logging'''
