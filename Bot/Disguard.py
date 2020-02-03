@@ -143,13 +143,13 @@ async def on_message(message):
     if any(word in message.content.lower().split(' ') for word in ['isn', 'not']): return
     now = datetime.datetime.utcnow()
     adjusted = now + datetime.timedelta(hours=await database.GetTimezone(message.guild))
-    days = collections.deque(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
-    months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    days = collections.deque(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+    months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
     ref = collections.deque([(a, b) for a, b in {1:31, 2:29, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}.items()]) #Number of days in each month. As with days, this dict may need to move around
     ref.rotate(-1 * (adjusted.month - 1)) #Current month moves to the front
     #Check if name of month is in message. Before days because some ppl may specify a day and month
     birthday = None
-    if any(c in message.content.lower() for c in months) or 'the' in message.content.lower().split(' '):
+    if any(c in message.content.lower().split(' ') for c in months) or 'the' in message.content.lower().split(' '):
         words = message.content.split(' ')
         for word in words:
             before = word
@@ -159,9 +159,9 @@ async def on_message(message):
                 word = word.replace('nd', '')
                 word = word.replace('rd', '')
                 word = word.replace('th', '')
-            if any(c in message.content.lower() for c in months):
+            if any(c in message.content.lower().split(' ') for c in months):
                 try: 
-                    birthday = datetime.datetime(2020, months.index([d for d in months if d in message.content.lower()][0]) + 1, int(word))
+                    birthday = datetime.datetime(2020, months.index([d for d in months if d in message.content.lower().split(' ')][0]) + 1, int(word))
                     break
                 except: pass
             else:
@@ -169,7 +169,7 @@ async def on_message(message):
                     try: birthday = datetime.datetime(2020, datetime.datetime.now().month, int(word))
                     except: pass
     #Check if day of the week is in message
-    elif any(c in message.content.lower() for c in days):
+    elif any(c in message.content.lower().split(' ') for c in days):
         currentDay = days.index(adjusted.strftime('%a').lower())
         targetDay = days.index([d for d in days if d in message.content.lower()][0])
         days.rotate(-1 * currentDay) #Current day is now at the start for proper calculations
