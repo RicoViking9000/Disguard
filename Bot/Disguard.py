@@ -152,6 +152,7 @@ async def on_message(message):
     if any(c in message.content.lower() for c in months) or 'the' in message.content.lower().split(' '):
         words = message.content.split(' ')
         for word in words:
+            before = word
             #truncate the suffix if the user provided one
             if any(str(letter) in word for letter in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]):
                 word = word.replace('st', '')
@@ -164,8 +165,9 @@ async def on_message(message):
                     break
                 except: pass
             else:
-                try: birthday = datetime.datetime(2020, datetime.datetime.now().month, int(word))
-                except: pass
+                if before != word:
+                    try: birthday = datetime.datetime(2020, datetime.datetime.now().month, int(word))
+                    except: pass
     #Check if day of the week is in message
     elif any(c in message.content.lower() for c in days):
         currentDay = days.index(adjusted.strftime('%a').lower())
@@ -208,7 +210,7 @@ async def on_message(message):
         for member in message.mentions: target.append(member)
         successful = True
     else:
-        async for m in message.channel.history(limit=1000):
+        async for m in message.channel.history(limit=250):
             if any(word in m.content.lower() for word in ['when', 'what']): successful = True
     #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
     if birthday:
