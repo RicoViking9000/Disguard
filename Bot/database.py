@@ -89,8 +89,10 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
-    'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
+    'offset': -5 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
     'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
+    'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
+    'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
     "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
     "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
     'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
@@ -191,10 +193,13 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
     if verifications.get(m.guild.id) is not None and (datetime.datetime.now() - verifications.get(m.guild.id)).seconds < 600: return
     if m.guild.id == 658111579216412672: return
     print('Verifying member: {} - {} in server {} - {}'.format(m.name, m.id, m.guild.name, m.guild.id))
+    current = await users.find_one({'user_id': m.id})
     if b.get_user(m.id) is None: await users.delete_one({'user_id': m.id})
     else: await users.update_one({"user_id": m.id}, {"$set": { #update database
     "username": m.name,
     "user_id": m.id,
+    'birthdayMessages': [] if current is None or current.get('birthdayMessages') is None else current.get('birthdayMessages'),
+    'birthday': None if current is None or current.get('birthday') is None else current.get('birthday'),
     "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
 
 async def GetLogChannel(s: discord.Guild, mod: str):
@@ -428,6 +433,51 @@ async def UnchangedPerms(b: discord.Role, a: discord.Role):
 async def GetTimezone(s: discord.Guild):
     '''Return the timezone offset from UTC for a given server'''
     return (await servers.find_one({"server_id": s.id})).get('offset')
+
+async def UpdateTimezone(s: discord.Guild, o):
+    '''Sets the new timezone offset from UTC for a given server
+    o: the new offset in hours from UTC: negative is behind, positive is ahead'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'offset': o}})
+
+async def GetBirthdate(s: discord.Guild):
+    '''Return the time associated with a server's Birthday Management'''
+    return (await servers.find_one({'server_id': s.id})).get('birthdate')
+
+async def GetBirthday(s: discord.Guild):
+    '''Return the channel associated with a server's Birthday Management'''
+    return (await servers.find_one({'server_id': s.id})).get('birthday')
+
+async def SetBirthday(m: discord.Member, d):
+    '''Update a member's birthday information'''
+    await users.update_one({'user_id': m.id}, {'$set': {'birthday': d}})
+
+async def GetMemberBirthday(m: discord.Member):
+    '''Return a member's birthday'''
+    return (await users.find_one({'user_id': m.id})).get('birthday')
+
+async def GetBirthdayMessages(m: discord.Member):
+    '''Return a member's birthday messages'''
+    return (await users.find_one({'user_id': m.id})).get('birthdayMessages')
+
+async def SetBirthdayMessage(m: discord.Member, msg, auth, servers):
+    '''Update a member's birthday messages (receiving)'''
+    await users.update_one({'user_id': m.id}, {'$push': {'birthdayMessages': {
+        'message': msg.content,
+        'author': auth.id,
+        'authName': auth.name,
+        'servers': [s.id for s in servers]}}}) 
+
+async def ResetBirthdayMessages(m: discord.Member):
+    '''Resets a member's birthday messages (once their birthday has happened)'''
+    await users.update_one({'user_id': m.id}, {'$set': {'birthdayMessages': []}})
+
+async def GetAge(m: discord.Member):
+    '''Return the age of a member'''
+    return (await users.find_one({'user_id': m.id})).get('age')
+
+async def SetAge(m: discord.Member, age):
+    '''Set the age of a  member'''
+    await users.update_one({'user_id': m.id}, {'$set': {'age': age}})
 
 async def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''

@@ -116,17 +116,23 @@ def server(id):
         return redirect(ReRoute())
     serv = servers.find_one({"server_id": id})
     d = (datetime.datetime.utcnow() + datetime.timedelta(hours=serv.get('offset'))).strftime('%Y-%m-%dT%H:%M')
+    d2 = serv.get('birthdate').strftime('%H:%M')
     if request.method == 'POST':
         r = request.form
         d = datetime.datetime.utcnow()
         o = r.get('offset')
+        bd = r.get('birthday')
+        bdt = r.get('birthdate')
         nz = r.get('tzname')
         dt = datetime.datetime(int(o[:o.find('-')]), int(o[o.find('-')+1:o.find('-')+3]), int(o[o.find('-')+4:o.find('-')+6]), int(o[o.find('T')+1:o.find(':')]), int(o[o.find(':')+1:]))
+        decrement = int(bdt[bdt.find(':')+1:])
+        while decrement % 5 != 0: decrement -= 1
+        dt2 = datetime.datetime(2020, 1, 1, int(bdt[:bdt.find(':')]), decrement)
         if dt > d: difference = round((dt - d).seconds/3600)
         else: difference = round((dt - d).seconds/3600) - 24
-        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz}})
+        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz, 'birthday': int(bd), 'birthdate': dt2}})
         return redirect(url_for('server', id=id)) 
-    return render_template('general.html', servObj=serv, date=d, id=id)
+    return render_template('general.html', servObj=serv, date=d, date2=d2, id=id)
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
 def antispam(id):

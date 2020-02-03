@@ -166,6 +166,7 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
+        if type(message.channel) is discord.DMChannel: return
         path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
         try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
         except FileNotFoundError: return
@@ -192,6 +193,7 @@ class Cyberlog(commands.Cog):
         global loading
         global grabbedSummaries
         channel = bot.get_channel(payload.channel_id)
+        if type(channel) is not discord.TextChannel: return
         try: message = await channel.fetch_message(payload.message_id)
         except: return
         user = bot.get_guild(channel.guild.id).get_member(payload.user_id)

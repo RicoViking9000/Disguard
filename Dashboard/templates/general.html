@@ -25,6 +25,13 @@
         <h1 class=mod-header>General server settings</h1>
             <form class=mod-main method="POST">
                 Server prefix: <input type="text" name=prefix value={{servObj.prefix}}><br>
-                Server time (minutes don't matter): <input type="datetime-local" name=offset value={{date}}> <input type='text' name='tzname' value={{servObj.tzname}}> (optional custom timezone name; displayed when appropriate)
-                <br><input type="submit" value="Save">
+                Server time (minutes don't matter): <input type="datetime-local" name=offset value={{date}}><br>
+                Server time zone name <input type='text' name='tzname' value={{servObj.tzname}}><br>
+                Birthday announcements <select name=birthday><option value=0 {%if servObj.birthday == 0%}selected{%endif%}>[Disabled]</option>
+                {%for channel in servObj.channels%}
+                    <option value={{channel.id}} {%if servObj.birthday == channel.id%}selected{%endif%}>Send to #{{channel.name}}</option>
+                {%endfor%}
+                </select><br>
+                Announce birthdays at what time (Increments of 5 minutes) <input type="time" name=birthdate value={{date2}}><br>
+                <input type="submit" value="Save">
             </form>

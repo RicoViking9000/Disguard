@@ -6,7 +6,10 @@
   width: 50px;
   height: 50px;
   margin: auto;
+  background: transparent;
+  text-align: center;
 }
+
 .loader .circle {
   position: absolute;
   width: 38px;
@@ -16,6 +19,8 @@
   animation-iteration-count: infinite;
   animation-name: orbit;
   animation-duration: 5.5s;
+  background-color: transparent;
+
 }
 .loader .circle:after {
   content: '';
@@ -23,8 +28,8 @@
   width: 6px;
   height: 6px;
   border-radius: 5px;
-  background: rgb(167, 167, 167);
-  box-shadow: 0 0 9px rgba(255, 255, 255, .7);
+  background: rgb(255, 0, 0);
+  box-shadow: 0 0 9px rgba(255, 0, 0, 0.7);
 }
 .loader .circle:nth-child(2) {
   animation-delay: 240ms;
