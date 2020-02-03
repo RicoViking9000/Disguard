@@ -213,9 +213,11 @@ async def on_message(message):
     #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
     if birthday:
         bdays = {} #Local storage b/c database operations take time and resources
-        for member in target: 
-            bdays[member.id] = (await database.GetMemberBirthday(member)).strftime('%B %d')
-            if bdays.get(member.id) == birthday.strftime('%B %d'): target.remove(member)
+        for member in target:
+            bday = await database.GetMemberBirthday(member)
+            if bday is not None:
+                bdays[member.id] = bday.strftime('%B %d')
+                if bdays.get(member.id) == birthday.strftime('%B %d'): target.remove(member)
     if successful and birthday and len(target) > 0:
         draft=discord.Embed(title='🍰 Birthday Management Confirmation', color=yellow, timestamp=datetime.datetime.utcnow())
         draft.description='{}, would you like to set **{}** as your birthday?'.format(', '.join([a.name for a in target]), birthday.strftime('%B %d'))
