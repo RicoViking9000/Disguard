@@ -81,12 +81,15 @@ async def configureServerBirthdayAnnouncements():
     if int(datetime.datetime.utcnow().strftime('%M')) % 5 == 0:
         serverBirthdayAnnouncements.start()
         configureServerBirthdayAnnouncements.cancel()
+
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
     '''Method called when bot connects and all the internals are ready'''
     global booted
+    global loading
     if not booted:
         booted=True
+        loading = bot.get_emoji(573298271775227914)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening))
         for cog in cogs:
             try:
@@ -125,8 +128,10 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
             Cyberlog.indexed[server.id] = True
             #Accounting for Daylight Savings time like three months after it ended :D Sorry for the wait
             if await database.GetTimezone(server) in [-4, -5, -6, -7]:
+                await database.UpdateTimezone(server, await database.GetTimezone(server) - 1)
         print("Indexed")
         configureDailyBirthdayAnnouncements.start()
+        configureServerBirthdayAnnouncements.start()
     print("Booted")
     await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))
 
@@ -240,6 +245,7 @@ async def on_message(message):
                 embed.set_author(name=message.author.name, icon_url=message.author.avatar_url)
                 embed.description = 'Your age has been successfully saved, and will be used for your next birthday announcement.'
                 await mess.edit(embed=embed)
+
 @bot.command()
 async def verify(ctx):
     if ctx.author.id == 247412852925661185:
@@ -341,6 +347,7 @@ async def birthdayContinuation(birthday, target, draft, message, mess, user):
             await u.send('Your personal message for {} has been successfully set. To add a personal message to anyone, set your birthday, age, or view your birthday management, you may use the `birthday` command.'.format(recipient))
         except asyncio.TimeoutError:
             await u.send('Birthday management timed out')
+            break
 
 database.Initialize(secure.token())
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
