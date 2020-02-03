@@ -35,21 +35,18 @@ loading = None
 @tasks.loop(hours=24)
 async def dailyBirthdayAnnouncements():
     try:
-        for server in bot.guilds:
-            for member in server.members:
-                print('here')
-                if await database.GetMemberBirthday(member) is not None:
-                    print((await database.GetMemberBirthday(member)).day)
-                    print((datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).day)
-                    if (await database.GetMemberBirthday(member)).day == (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).day:
-                        age = await database.GetAge(member) + 1
-                        await database.SetAge(member, age)
-                        messages = await database.GetBirthdayMessages(member)
-                        embed=discord.Embed(title='🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name), timestamp=datetime.datetime.utcnow(), color=yellow)
-                        embed.description='You have {} personal messages\n{:-^34s}\n{}'.format(len(messages), 'Messages', '\n'.join(['• {}: {}'.format(m.get('authName') if server.get_member(m.get('author')) is None else server.get_member(m.get('author')).mention, m.get('message')) for m in messages]))
-                        try: await member.send(embed=embed)
-                        except: pass
-                        await database.ResetBirthdayMessages(member)
+        for member in bot.get_all_members():
+            if await database.GetMemberBirthday(member) is not None:
+                if (await database.GetMemberBirthday(member)).day == datetime.datetime.now().day:
+                    age = await database.GetAge(member) + 1
+                    await database.SetAge(member, age)
+                    messages = await database.GetBirthdayMessages(member)
+                    embed=discord.Embed(title='🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name), timestamp=datetime.datetime.utcnow(), color=yellow)
+                    embed.description='You have {} personal messages\n{:-^34s}\n{}'.format(len(messages), 'Messages', '\n'.join(['• {}: {} (sent @ {})'.format(m.get('authName') if bot.get_user(m.get('author')) is None else bot.get_user(m.get('author')).mention,
+                    m.get('message'), 'N/A' if m.get('created') is None else (m.get('created') + datetime.timedelta(hours=await database.GetTimezone(server))).strftime("%b %d, %Y - %I:%M %p")) for m in messages]))
+                    try: await member.send(embed=embed)
+                    except: pass
+                    await database.ResetBirthdayMessages(member)
     except: traceback.print_exc()
 
 @tasks.loop(minutes=5)
@@ -71,7 +68,6 @@ async def serverBirthdayAnnouncements():
 
 @tasks.loop(minutes=1)
 async def configureDailyBirthdayAnnouncements():
-    print(datetime.datetime.utcnow().strftime('%H:%M'))
     if datetime.datetime.utcnow().strftime('%H:%M') == '12:45': 
         dailyBirthdayAnnouncements.start()
         configureDailyBirthdayAnnouncements.cancel()
@@ -140,13 +136,20 @@ async def on_message(message):
     '''Birthday processing, two parts. First, get a date, then check to see if the user is talking about birthdays.'''
     if message.author.bot: return
     if type(message.channel) is discord.DMChannel: return
-    if any(word in message.content.lower().split(' ') for word in ['isn', 'not']): return
+    if any(word in message.content.lower().split(' ') for word in ['isn', 'not', 'you', 'your']): return #Blacklisted words
     now = datetime.datetime.utcnow()
     adjusted = now + datetime.timedelta(hours=await database.GetTimezone(message.guild))
-    days = collections.deque(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
-    months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+    shortDays = collections.deque(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
+    longDays = collections.deque(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+    shortMonths = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    longMonths = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
     ref = collections.deque([(a, b) for a, b in {1:31, 2:29, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}.items()]) #Number of days in each month. As with days, this dict may need to move around
     ref.rotate(-1 * (adjusted.month - 1)) #Current month moves to the front
+    #Determine if user specified long or short day/month in response
+    if any(c in message.content.lower().split(' ') for c in shortMonths): months = shortMonths
+    else: months = longMonths
+    if any(c in message.content.lower().split(' ') for c in shortDays): days = shortDays
+    else: days = longDays
     #Check if name of month is in message. Before days because some ppl may specify a day and month
     birthday = None
     if any(c in message.content.lower().split(' ') for c in months) or 'the' in message.content.lower().split(' '):
@@ -176,13 +179,14 @@ async def on_message(message):
         #Target is days until the day the user typed in chat. targetDay - currentDay is still the same as before the rotation
         birthday = adjusted + datetime.timedelta(days=targetDay-currentDay)
         if birthday < adjusted and 'was' not in message.content.lower().split(' '): birthday += datetime.timedelta(days=7) #If target is a weekday already past, jump it to next week; since that's what they mean, if they didn't say 'was' in their sentence 
-    elif any(c in message.content.lower().split(' ') for c in ['today', 'yesterday', 'ago']):
+    elif any(c in message.content.lower().split(' ') for c in ['today', 'yesterday', 'ago', 'tomorrow']):
         if any(word in message.content.lower().split(' ') for word in ['birthday', 'bday']) and 'today' in message.content.lower().split(' '):
             if 'half' not in message.content.lower().split(' '): await message.channel.send('Happy Birthday! 🍰')
             birthday = adjusted
         elif 'yesterday' in message.content.lower().split(' '):
             if 'half' not in message.content.lower().split(' '): await message.channel.send('Happy Belated Birthday! 🍰')
             birthday = adjusted - datetime.timedelta(days=1)
+        elif 'tomorrow' in message.content.lower().split(' '): birthday = adjusted + datetime.timedelta(days=1)
         else:
             for word in message.content.split(' '):
                 try: num = int(word)
@@ -233,9 +237,11 @@ async def on_message(message):
         for w in message.content.lower().split(' '):
             try: num = int(w)
             except: num = None
-            if num != None:
+            currentAge = await database.GetAge(message.author)
+            if num != None and num != currentAge:
                 draft=discord.Embed(title='🍰 Birthday Management Confirmation', color=yellow, timestamp=datetime.datetime.utcnow())
-                draft.description='{}, would you like to set **{}** as your age?\n\nThis is purely for personalization purposes for the birthday module; my developer gains nothing by having your age in a database, and the only time your age will be displayed is on your birthday.'.format(message.author.name, num)
+                draft.description='{}, would you like to set **{}** as your age?{}\n\nThis is purely for personalization purposes for the birthday module; my developer gains nothing by having your age in a database, and the only time your age will be displayed is on your birthday.'.format(message.author.name, num,
+                '' if currentAge == num else '\n\nI currently have {} as your age; reacting with the check will overwrite this.'.format(currentAge))
                 mess = await message.channel.send(embed=draft)
                 await mess.add_reaction('✅')
                 def ageCheck(r, u): return u == message.author and str(r) == '✅' 
@@ -276,7 +282,7 @@ async def birthday(ctx, *args):
 
 async def birthdayContinuation(birthday, target, draft, message, mess, user):
     def check(r, u):
-        return u == user and str(r) == '✅'
+        return u == user and str(r) == '✅' and r.message.id == mess.id
     u = await bot.wait_for('reaction_add', check=check)
     draft.description = '{} Saving'.format(loading)
     if len(target) == 1 or all([await database.GetMemberBirthday(m) == birthday for m in target if m != u[1]]): #Clear confirmation embed if only one person or if everybody already set their birthday
@@ -299,7 +305,7 @@ async def birthdayContinuation(birthday, target, draft, message, mess, user):
     await mess.edit(embed=embed)
     await mess.add_reaction('🍰')
     def cakeReac(r, u):
-        return str(r) == '🍰' and u not in target and not u.bot
+        return str(r) == '🍰' and u not in target and not u.bot and r.message.id == mess.id
     while True:
         try: 
             r, u = await bot.wait_for('reaction_add', check=cakeReac)
