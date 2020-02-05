@@ -204,6 +204,7 @@ async def on_message(message):
     #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
     #First we check to see if the user is talking about themself
     target = [message.author]
+    successful = False
     if any(word in message.content.lower() for word in ['my birthday', 'my bday' 'mine is']): successful = True
     elif any(word in message.content.lower().split(' ') for word in ['is', 'are']) and not any(word in message.content.lower().split(' ') for word in ['my', 'mine']) and len(message.mentions) > 0: 
         #The user most likely tagged someone else, referring to their birthday
