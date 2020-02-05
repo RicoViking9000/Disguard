@@ -122,9 +122,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                                         except discord.HTTPException: pass
                 except discord.Forbidden: pass
             Cyberlog.indexed[server.id] = True
-            #Accounting for Daylight Savings time like three months after it ended :D Sorry for the wait
-            if await database.GetTimezone(server) in [-4, -5, -6, -7]:
-                await database.UpdateTimezone(server, await database.GetTimezone(server) - 1)
         print("Indexed")
         configureDailyBirthdayAnnouncements.start()
         configureServerBirthdayAnnouncements.start()
@@ -180,7 +177,7 @@ async def on_message(message):
         birthday = adjusted + datetime.timedelta(days=targetDay-currentDay)
         if birthday < adjusted and 'was' not in message.content.lower().split(' '): birthday += datetime.timedelta(days=7) #If target is a weekday already past, jump it to next week; since that's what they mean, if they didn't say 'was' in their sentence 
     elif any(c in message.content.lower().split(' ') for c in ['today', 'yesterday', 'ago', 'tomorrow']):
-        if any(word in message.content.lower().split(' ') for word in ['birthday', 'bday']) and 'today' in message.content.lower().split(' '):
+        if any(word in message.content.lower() for word in ['my birthday', 'my bday' 'mine is']) and 'today' in message.content.lower().split(' '):
             if 'half' not in message.content.lower().split(' '): await message.channel.send('Happy Birthday! 🍰')
             birthday = adjusted
         elif 'yesterday' in message.content.lower().split(' '):
@@ -207,15 +204,15 @@ async def on_message(message):
     #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
     #First we check to see if the user is talking about themself
     target = [message.author]
-    if any(word in message.content.lower().split(' ') for word in ['my', 'mine']) and any(word in message.content.lower() for word in ['birthday', 'bday']): successful = True
+    if any(word in message.content.lower() for word in ['my birthday', 'my bday' 'mine is']): successful = True
     elif any(word in message.content.lower().split(' ') for word in ['is', 'are']) and not any(word in message.content.lower().split(' ') for word in ['my', 'mine']) and len(message.mentions) > 0: 
         #The user most likely tagged someone else, referring to their birthday
         target = []
         for member in message.mentions: target.append(member)
         successful = True
     else:
-        async for m in message.channel.history(limit=250):
-            if any(word in m.content.lower() for word in ['when', 'what']): successful = True
+        async for m in message.channel.history(limit=10): #How many messages to check back for question words
+            if any(word in m.content.lower() for word in ['when', 'what']) and any(word in m.content.lower() for word in ['your birthday', 'yours']): successful = True
     #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
     if birthday:
         bdays = {} #Local storage b/c database operations take time and resources
@@ -241,7 +238,7 @@ async def on_message(message):
             if num != None and num != currentAge:
                 draft=discord.Embed(title='🍰 Birthday Management Confirmation', color=yellow, timestamp=datetime.datetime.utcnow())
                 draft.description='{}, would you like to set **{}** as your age?{}\n\nThis is purely for personalization purposes for the birthday module; my developer gains nothing by having your age in a database, and the only time your age will be displayed is on your birthday.'.format(message.author.name, num,
-                '' if currentAge == num else '\n\nI currently have {} as your age; reacting with the check will overwrite this.'.format(currentAge))
+                '' if currentAge == num or currentAge is None else '\n\nI currently have {} as your age; reacting with the check will overwrite this.'.format(currentAge))
                 mess = await message.channel.send(embed=draft)
                 await mess.add_reaction('✅')
                 def ageCheck(r, u): return u == message.author and str(r) == '✅' 
