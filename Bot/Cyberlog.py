@@ -2022,7 +2022,7 @@ async def MemberInfo(m: discord.Member):
         for act in m.activities:
             try:
                 if act.type is discord.ActivityType.playing: current.append('playing {}: {}, {}'.format(act.name, act.details, act.state))
-                elif act.type is discord.ActivityType.custom: current.append('{}{}'.format(act.emoji if act.emoji is not None, act.name if act.name is not None))
+                elif act.type is discord.ActivityType.custom: current.append('{}{}'.format(act.emoji if act.emoji is not None else '', act.name if act.name is not None else ''))
                 elif act.type is discord.ActivityType.streaming: current.append('streaming {}'.format(act.name))
                 elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append('Listening to Spotify\n{}'.format('\n'.join(['🎵{}'.format(act.title), '👮{}'.format(', '.join(act.artists)), '💿{}'.format(act.album)])))
                 elif act.type is discord.ActivityType.watching: current.append('watching {}'.format(act.name))
