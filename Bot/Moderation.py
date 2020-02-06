@@ -92,6 +92,7 @@ class Moderation(commands.Cog):
             embed.set_author(name='Please wait',icon_url=url)
             if 'y' in post.content:
                 embed.set_author(name='Indexing messages',icon_url=url)
+                embed.set_footer(text='I\'m aware that the numbers are wack; full-service message indexes (used for percent calculation) will be restored soon')
                 loadingBar = ["o-------------------", "-o------------------", "--o-----------------", "---o----------------", "----o---------------", "-----o--------------", "------o-------------", "-------o------------", "--------o-----------", "---------o----------", "----------o---------", "-----------o--------", "------------o-------", "-------------o------", "--------------o-----", "---------------o----", "----------------o---", "-----------------o--", "------------------o-", "-------------------o"]
                 embed.description='0/{} messages, 0/{} channels\n\n0% {}\n\n0 messages per second, Time remaining: N/A'.format(total, len(channels), loadingBar[0])
                 await message.edit(embed=embed)
@@ -103,13 +104,14 @@ class Moderation(commands.Cog):
                     async for m in c.history(limit=None):
                         status['m']+=1
                         if (datetime.datetime.now() - lastUpdate).seconds > 3:
-                            embed.description='{}/{} messages, {}/{} channels\n\n{}% {}'.format(status.get('m'),total, status.get('c'),len(channels), 100*round(status.get('m')/total, 2), loadingBar[round(20 * (round((status.get('m') / total), 2)))])
+                            embed.description='{}/{} messages, {}/{} channels\n\n{}% {}'.format(status.get('m'),total, status.get('c'),len(channels), 100*round(status.get('m')/total, 2), loadingBar[round(19 * (round((status.get('m') / total), 2)))] if status.get('m') < total else loadingBar[19])
                             embed.description+='\n\n{} messages per second, Time remaining: {}'.format(round((status.get('m') - status.get('last')) / 3), ETA(status.get('m'), round((status.get('m') - status.get('last')) / 3), total))
                             await message.edit(embed=embed)
                             lastUpdate = datetime.datetime.now()
                             status['last'] = status.get('m')
                         messages.append(m)
             embed.set_author(name='Waiting for input')
+            embed.set_footer(text='Type cancel to cancel the command. Timeout is 120s')
             try:
                 Cyberlog.AvoidDeletionLogging(post) 
                 await post.delete()
@@ -485,7 +487,7 @@ class Moderation(commands.Cog):
             embed.set_author(name='Thanks for purging!', icon_url='https://cdn.discordapp.com/emojis/569191704523964437.png')
             maximum = '∞' if limit is None else limit
             embed.description='Purged {} out of {} requested messages ({}%)\n'.format(current.purgeStat.get(2), maximum, '∞' if maximum == '∞' else round(current.purgeStat.get(2) / maximum * 100))
-            embed.description+='Purged {} out of {} possible messages ({}%)\n'.format(current.purgeStat.get(2), len(messages), 'N/A' if not messages else round(current.purgeStat.get(2) / len(messages) * 100))
+            embed.description+='Purged {} out of {} possible messages ({}%)\n'.format(current.purgeStat.get(2), len(messages), '∞' if message is None else round(current.purgeStat.get(2) / len(messages) * 100))
             if timeTaken.seconds < 60: embed.description+='Time taken: {} seconds'.format(timeTaken.seconds)
             else: embed.description+='Time taken: {} minutes'.format(round(timeTaken.seconds / 60))
             embed.set_footer(text='If you have feedback, head to bit.ly/2disguard to find more information')

@@ -465,6 +465,7 @@ async def SetBirthdayMessage(m: discord.Member, msg, auth, servers):
         'message': msg.content,
         'author': auth.id,
         'authName': auth.name,
+        'created': datetime.datetime.utcnow(),
         'servers': [s.id for s in servers]}}}) 
 
 async def ResetBirthdayMessages(m: discord.Member):

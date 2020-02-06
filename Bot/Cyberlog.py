@@ -1175,7 +1175,7 @@ class Cyberlog(commands.Cog):
                 msg = await (logChannel(before.guild, "member")).send(content=content,embed=embed)
                 await VerifyLightningLogs(msg, 'member')
         global bot
-        await database.VerifyUser(before, bot)
+        if before.roles != after.roles: await database.VerifyUser(before, bot)
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
@@ -1574,6 +1574,7 @@ class Cyberlog(commands.Cog):
         embed.add_field(name='Message',value='{} ({})'.format(ctx.message.content, ctx.message.id))
         embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y - %I:%M %p EST'))
         embed.add_field(name='Received',value=datetime.datetime.now().strftime('%b %d, %Y - %I:%M %p EST'))
+        embed.add_field(name='Details',value=traceback.format_exc())
         log = await bot.get_channel(620787092582170664).send(embed=embed)
         await m.edit(content='Here\'s what was sent to my dev. Changed your mind? React with the X, and this message will be deleted and hidden from my dev',embed=embed)
         await m.add_reaction('❌')
@@ -2021,6 +2022,7 @@ async def MemberInfo(m: discord.Member):
         for act in m.activities:
             try:
                 if act.type is discord.ActivityType.playing: current.append('playing {}: {}, {}'.format(act.name, act.details, act.state))
+                elif act.type is discord.ActivityType.custom: current.append('{}{}'.format(act.emoji if act.emoji is not None, act.name if act.name is not None))
                 elif act.type is discord.ActivityType.streaming: current.append('streaming {}'.format(act.name))
                 elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append('Listening to Spotify\n{}'.format('\n'.join(['🎵{}'.format(act.title), '👮{}'.format(', '.join(act.artists)), '💿{}'.format(act.album)])))
                 elif act.type is discord.ActivityType.watching: current.append('watching {}'.format(act.name))
@@ -2342,7 +2344,7 @@ async def FindMoreMembers(g: discord.Guild, arg):
         if arg in str(m.id): return 'ID matches: \'{}\''.format(m.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(m.id))
         if arg in m.mention: return 'Mentioned', 100
         if len(m.activities) > 0:
-            if any(arg in a.name.lower() for a in m.activities): return 'Playing \'{}\''.format([a.name for a in m.activities if arg in a.name.lower()][0]).replace(arg, '**{}**'.format(arg)), compareMatch(arg, [a.name for a in m.activities if arg in a.name.lower()][0])
+            if any(arg in a.name.lower() for a in m.activities): return 'Playing \'{}\''.format([a.name for a in m.activities if a.name is not None and arg in a.name.lower()][0]).replace(arg, '**{}**'.format(arg)), compareMatch(arg, [a.name for a in m.activities if arg in a.name.lower()][0])
             if any('Spotify' in a.name for a in m.activities):
                 for a in m.activities:
                     if 'Spotify' in a.name:
