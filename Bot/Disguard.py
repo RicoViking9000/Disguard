@@ -206,7 +206,7 @@ async def on_message(message):
     target = [message.author]
     successful = False
     if any(word in message.content.lower() for word in ['my birthday', 'my bday' 'mine is']): successful = True
-    elif any(word in message.content.lower().split(' ') for word in ['is', 'are']) and not any(word in message.content.lower().split(' ') for word in ['my', 'mine']) and len(message.mentions) > 0: 
+    elif any(word in message.content.lower().split(' ') for word in ['is', 'are']) and not any(word in message.content.lower().split(' ') for word in ['my', 'mine']) and len(message.mentions) > 0 and any(word in message.content.lower() for word in ['birthday', 'bday']): 
         #The user most likely tagged someone else, referring to their birthday
         target = []
         for member in message.mentions: target.append(member)
