@@ -1015,7 +1015,7 @@ class Cyberlog(commands.Cog):
                 msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed)
                 await msg.add_reaction('ℹ')
                 await VerifyLightningLogs(msg, 'doorguard')
-        if member.guild.id in list(ageKicks.values()): #Check account age; requested feature
+        if member.guild.id in list(ageKicks.keys()): #Check account age; requested feature
             if acctAge < ageKicks.get(member.guild.id) and member.id not in whitelists.get(member.guild.id):
                 try: await member.send('You have been kicked from **{}** due to a request by the administrators: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
                     ageKicks.get(member.guild.id), (member.created_at + datetime.timedelta(hours=await database.GetTimezone(member.guild)) + datetime.timedelta(days=pvzServerAgeKick)).strftime('%b %d, %Y - %I:%M %p'), 
@@ -1833,11 +1833,18 @@ class Cyberlog(commands.Cog):
     @commands.command()
     async def ageKick(self, ctx, num: int):
         global ageKicks
-        if ctx.guild.id in list(ageKicks.values()):
+        if ctx.guild.id in list(ageKicks.keys()):
             if await database.ManageServer(ctx.author): 
                 ageKicks[ctx.guild.id] = num
                 await ctx.send('Successfully set ageKicks - {} to {} days old'.format(ctx.guild.name, num))
             else: await ctx.send('You need manage server permissions to use this')
+
+    @commands.command()
+    async def whitelist(self, ctx, num: int):
+        global whitelists
+        target = await self.bot.fetch_user(num)
+        whitelists[ctx.guild.id].append(target.id)
+        await ctx.send('Successfully added **{}** to the ageKick join whitelist for {}.'.format(target.name, ctx.guild.name))
         
 
 def ParsePauseDuration(s: str):
