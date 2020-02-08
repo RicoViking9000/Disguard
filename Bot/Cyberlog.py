@@ -15,7 +15,8 @@ serverPurge = {}
 loading = None
 summarizeOn=False
 indexes = 'Indexes'
-pvzServerAgeKick = 2 #Account age threshold hardcoded for the PVZ server
+ageKicks = {460611346837405696: 2, 567160550086279178: 4} #pvzServer, harryServer
+whitelists = {460611346837405696: [], 567160550086279178: []}
 
 invites = {}
 edits = {}
@@ -1014,12 +1015,13 @@ class Cyberlog(commands.Cog):
                 msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed)
                 await msg.add_reaction('ℹ')
                 await VerifyLightningLogs(msg, 'doorguard')
-        if member.guild.id == 460611346837405696: #Check account age; requested feature
-            if acctAge < pvzServerAgeKick:
-                try: await member.send('You have been kicked from {} due to a request by the administrators: Your account must be {} days old for you to join the server. You can rejoin the server **{} UTC**.'.format(member.guild.name, pvzServerAgeKick,
-                (member.created_at + datetime.timedelta(days=pvzServerAgeKick)).strftime('%b %d, %Y - %I:%M %p')))
+        if member.guild.id in list(ageKicks.values()): #Check account age; requested feature
+            if acctAge < ageKicks.get(member.guild.id) and member.id not in whitelists.get(member.guild.id):
+                try: await member.send('You have been kicked from **{}** due to a request by the administrators: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
+                    ageKicks.get(member.guild.id), (member.created_at + datetime.timedelta(hours=await database.GetTimezone(member.guild)) + datetime.timedelta(days=pvzServerAgeKick)).strftime('%b %d, %Y - %I:%M %p'), 
+                    await database.GetNamezone(member.guild)))
                 except discord.Forbidden: embed.description+='\nI will kick this member, but I can\'t DM them explaining why they were kicked'
-                await member.kick(reason='Account must be {} days old'.format(pvzServerAgeKick))
+                await member.kick(reason='Account must be {} days old'.format(ageKicks.get(member.guild.id)))
         members[member.guild.id] = member.guild.members
         await database.VerifyServer(member.guild, bot)
         await database.VerifyUser(member, bot)
@@ -1830,11 +1832,11 @@ class Cyberlog(commands.Cog):
 
     @commands.command()
     async def ageKick(self, ctx, num: int):
-        global pvzServerAgeKick
-        if ctx.guild.id == 460611346837405696: 
+        global ageKicks
+        if ctx.guild.id in list(ageKicks.values()):
             if await database.ManageServer(ctx.author): 
-                pvzServerAgeKick = num
-                await ctx.send('Successfully set pvzServerAgeKick to {} days old'.format(num))
+                ageKicks[ctx.guild.id] = num
+                await ctx.send('Successfully set ageKicks - {} to {} days old'.format(ctx.guild.name, num))
             else: await ctx.send('You need manage server permissions to use this')
         
 
