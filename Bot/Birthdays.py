@@ -176,6 +176,9 @@ class Birthdays(commands.Cog):
             await mess.add_reaction('✅')
             await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple 'threads' for anyone to react to if necessary
         if any(word in message.content.lower().split(' ') for word in ['age', 'im', 'i\'m']) or 'i am' in message.content.lower(): #Deal with age
+            if 'i am' in message.content.lower():
+                if len(message.content.lower().split(' ')) > 3:
+                    if 'year' not in message.content.lower().split(' ')[3]: return
             if await database.GetMemberBirthday(message.author) is None: return
             for w in message.content.lower().split(' '):
                 try: num = int(w)
