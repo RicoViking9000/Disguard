@@ -1018,7 +1018,7 @@ class Cyberlog(commands.Cog):
         if member.guild.id in list(ageKicks.keys()): #Check account age; requested feature
             if acctAge < ageKicks.get(member.guild.id) and member.id not in whitelists.get(member.guild.id):
                 try: await member.send('You have been kicked from **{}** due to a request by the administrators: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
-                    ageKicks.get(member.guild.id), (member.created_at + datetime.timedelta(hours=await database.GetTimezone(member.guild)) + datetime.timedelta(days=pvzServerAgeKick)).strftime('%b %d, %Y - %I:%M %p'), 
+                    ageKicks.get(member.guild.id), (member.created_at + datetime.timedelta(hours=await database.GetTimezone(member.guild)) + datetime.timedelta(days=ageKicks.get(member.guild.id))).strftime('%b %d, %Y - %I:%M %p'), 
                     await database.GetNamezone(member.guild)))
                 except discord.Forbidden: embed.description+='\nI will kick this member, but I can\'t DM them explaining why they were kicked'
                 await member.kick(reason='Account must be {} days old'.format(ageKicks.get(member.guild.id)))
