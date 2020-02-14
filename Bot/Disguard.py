@@ -34,15 +34,36 @@ async def valentinesDaySend():
         valentinesDaySend.cancel()
     try:
         path = 'G:/My Drive/Other/ur mom'
+        lex = bot.get_emoji(674389988363993116)
         image = False
         while not image:
             resultingPic = random.randint(0, len(os.listdir(path)))
             if not '.ini' in os.listdir(path)[resultingPic]: image = True
-        await bot.get_user(596381991151337482).send(file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+        m = await bot.get_user(596381991151337482).send(content='**__OPTIONS__**\n{}: Send to Lex\n➡: Send to <#619549837578338306>'.format(lex),file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+        for r in [lex, '➡']: await m.add_reaction(r)
         def cancelCheck(r, u): return str(r) == '❌' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
-        await bot.wait_for('reaction_add', check=cancelCheck)
-        await bot.get_user(596381991151337482).send('Cancelled picture sending. `.lexy` to restart.')
-        valentinesDaySend.cancel()
+        def lexCheck(r, u): return type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116 and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
+        def arrowCheck(r, u): return str(r) == '➡' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
+        while True:
+            done, pending = await asyncio.wait([bot.wait_for('reaction_add', check=cancelCheck), bot.wait_for('reaction_add', check=lexCheck), bot.wait_for('reaction_add', check=arrowCheck)], return_when=asyncio.FIRST_COMPLETED)
+            stuff = done.pop().result()
+            for future in pending: future.cancel()
+            if str(stuff[0]) == '❌':
+                await bot.get_user(596381991151337482).send('Cancelled picture sending. `.lexy` to restart.')
+                valentinesDaySend.cancel()
+            else:
+                m2 = await bot.get_user(596381991151337482).send('Type a message to go along with the image, or react with a check to send it without a message')
+                await m2.add_reaction('✅')
+                def messageCheck(m): return m.author.id == 596381991151337482 and type(m.channel) is discord.DMChannel
+                def checkCheck(r, u): return str(r) == '✅' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
+                done2, pending2 = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=checkCheck)], return_when=asyncio.FIRST_COMPLETED)
+                stuff2 = done2.pop().result()
+                for future in pending2: future.cancel()
+                if type(stuff2) is discord.Message: customMessage = '{}: {}'.format(stuff2.author.name, stuff2.content)
+                else: customMessage = None
+                if type(stuff) is tuple: await bot.get_user(596381991151337482).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+                else: await bot.get_channel(567741860559454210).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+                await bot.get_user(596381991151337482).send('Successfully sent')
     except: traceback.print_exc()
 
 @tasks.loop(minutes=1)
