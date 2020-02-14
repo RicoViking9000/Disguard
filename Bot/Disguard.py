@@ -29,6 +29,7 @@ indexes = 'Indexes'
 
 @tasks.loop(hours=1)
 async def valentinesDaySend():
+    print('In the Loop')
     if datetime.datetime.now().strftime('%H:%M') > '22:45':
         await bot.get_user(596381991151337482).send(secure.endVD())
         valentinesDaySend.cancel()
@@ -64,12 +65,15 @@ async def valentinesDaySend():
                 if type(stuff) is tuple: await bot.get_user(596381991151337482).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
                 else: await bot.get_channel(567741860559454210).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
                 await bot.get_user(596381991151337482).send('Successfully sent')
-    except: traceback.print_exc()
+    except: 
+        print('VALENTINES EVENT ERROR')
+        traceback.print_exc()
 
 @tasks.loop(minutes=1)
 async def valentinesDayKickoff():
     if datetime.datetime.now().strftime('%H:%M') >= '07:45' and datetime.datetime.now().strftime('%m %d') == '02 14':
         await bot.get_user(596381991151337482).send(secure.vd())
+        print('Sent message to her')
         valentinesDaySend.start()
         valentinesDayKickoff.cancel()
 
