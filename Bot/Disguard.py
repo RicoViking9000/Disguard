@@ -63,7 +63,7 @@ async def valentinesDaySend():
                 for future in pending2: future.cancel()
                 if type(stuff2) is discord.Message: customMessage = '{}: {}'.format(stuff2.author.name, stuff2.content)
                 else: customMessage = None
-                if type(stuff) is tuple: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+                if type(stuff[0]) is discord.Emoji: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
                 else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
                 await bot.get_user(596381991151337482).send('Successfully sent')
     except: 
