@@ -47,7 +47,7 @@ async def valentinesDaySend():
 
 @tasks.loop(minutes=1)
 async def valentinesDayKickoff():
-    if datetime.datetime.now().strftime('%H:%M') >= '07:45':
+    if datetime.datetime.now().strftime('%H:%M') >= '07:45' and datetime.datetime.now().strftime('%m %d') == '02 14':
         await bot.get_user(596381991151337482).send(secure.vd())
         valentinesDaySend.start()
         valentinesDayKickoff.cancel()
