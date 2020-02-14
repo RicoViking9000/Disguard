@@ -29,8 +29,9 @@ indexes = 'Indexes'
 
 @tasks.loop(hours=1)
 async def valentinesDaySend():
-    print('In the Loop')
-    if datetime.datetime.now().strftime('%H:%M') > '22:45':
+    print(bot.get_channel(567741860559454210).name)
+    print(bot.get_channel(567741860559454210).guild.name)
+    if datetime.datetime.now().strftime('%H:%M') > '23:45':
         await bot.get_user(596381991151337482).send(secure.endVD())
         valentinesDaySend.cancel()
     try:
@@ -62,18 +63,16 @@ async def valentinesDaySend():
                 for future in pending2: future.cancel()
                 if type(stuff2) is discord.Message: customMessage = '{}: {}'.format(stuff2.author.name, stuff2.content)
                 else: customMessage = None
-                if type(stuff) is tuple: await bot.get_user(596381991151337482).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
-                else: await bot.get_channel(567741860559454210).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+                if type(stuff) is tuple: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+                else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
                 await bot.get_user(596381991151337482).send('Successfully sent')
     except: 
-        print('VALENTINES EVENT ERROR')
         traceback.print_exc()
 
 @tasks.loop(minutes=1)
 async def valentinesDayKickoff():
     if datetime.datetime.now().strftime('%H:%M') >= '07:45' and datetime.datetime.now().strftime('%m %d') == '02 14':
         await bot.get_user(596381991151337482).send(secure.vd())
-        print('Sent message to her')
         valentinesDaySend.start()
         valentinesDayKickoff.cancel()
 
