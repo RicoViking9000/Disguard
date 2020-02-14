@@ -26,59 +26,43 @@ bot = commands.Bot(command_prefix=prefix)
 bot.remove_command('help')
 
 indexes = 'Indexes'
+path = 'G:/My Drive/Other/ur mom'
 
-@tasks.loop(hours=1)
+@tasks.loop(minutes=30)
 async def valentinesDaySend():
-    print(bot.get_channel(567741860559454210).name)
-    print(bot.get_channel(567741860559454210).guild.name)
-    if datetime.datetime.now().strftime('%H:%M') > '23:45':
-        await bot.get_user(596381991151337482).send(secure.endVD())
-        valentinesDaySend.cancel()
+    k = bot.get_user(596381991151337482)
     try:
-        path = 'G:/My Drive/Other/ur mom'
         lex = bot.get_emoji(674389988363993116)
         image = False
         while not image:
             resultingPic = random.randint(0, len(os.listdir(path)))
-            if not '.ini' in os.listdir(path)[resultingPic]: image = True
-        m = await bot.get_user(596381991151337482).send(content='**__OPTIONS__**\n{}: Send to Lex\n➡: Send to <#619549837578338306>'.format(lex),file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+            if not any(n in os.listdir(path)[resultingPic] for n in ['.ini', 'VID_20191031_190028_2']): image = True
+        e = discord.Embed(title='❤ Lexy ❤',description='**{0:-^83s}\n{2}**\n**{1:-^80s}**\n{3}'.format('OPTIONS', 'INFORMATION', '{}: Send to Lex\n➡: Send to <#619549837578338306>'.format(lex),
+            'Image {} of {}'.format(resultingPic + 1, len([f for f in os.listdir(path) if '.ini' not in f]))), color=0xffff00, timestamp=datetime.datetime.utcnow())
+        f = discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic])
+        if '.mp4' in f.filename: m = await k.send(embed=e,file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+        else: 
+            e.set_image(url=(await bot.get_user(322059776710410241).send(file=f)).attachments[0].url)
+            m = await k.send(embed=e)
         for r in [lex, '➡']: await m.add_reaction(r)
-        def cancelCheck(r, u): return str(r) == '❌' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
-        def lexCheck(r, u): return type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116 and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
-        def arrowCheck(r, u): return str(r) == '➡' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
-        while True:
-            done, pending = await asyncio.wait([bot.wait_for('reaction_add', check=cancelCheck), bot.wait_for('reaction_add', check=lexCheck), bot.wait_for('reaction_add', check=arrowCheck)], return_when=asyncio.FIRST_COMPLETED)
-            stuff = done.pop().result()
-            for future in pending: future.cancel()
-            if str(stuff[0]) == '❌':
-                await bot.get_user(596381991151337482).send('Cancelled picture sending. `.lexy` to restart.')
-                valentinesDaySend.cancel()
-            else:
-                m2 = await bot.get_user(596381991151337482).send('Type a message to go along with the image, or react with a check to send it without a message')
-                await m2.add_reaction('✅')
-                def messageCheck(m): return m.author.id == 596381991151337482 and type(m.channel) is discord.DMChannel
-                def checkCheck(r, u): return str(r) == '✅' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
-                done2, pending2 = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=checkCheck)], return_when=asyncio.FIRST_COMPLETED)
-                stuff2 = done2.pop().result()
-                for future in pending2: future.cancel()
-                if type(stuff2) is discord.Message: customMessage = '{}: {}'.format(stuff2.author.name, stuff2.content)
-                else: customMessage = None
-                if type(stuff[0]) is discord.Emoji: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
-                else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
-                await bot.get_user(596381991151337482).send('Successfully sent')
     except: 
         traceback.print_exc()
+    if datetime.datetime.now().strftime('%H') == '00':
+        await k.send(secure.endVD())
+        valentinesDaySend.cancel()
 
-@tasks.loop(minutes=1)
+@tasks.loop(count=1)
 async def valentinesDayKickoff():
-    if datetime.datetime.now().strftime('%H:%M') >= '07:45' and datetime.datetime.now().strftime('%m %d') == '02 14':
-        await bot.get_user(596381991151337482).send(secure.vd())
-        valentinesDaySend.start()
-        valentinesDayKickoff.cancel()
+    await bot.get_user(596381991151337482).send(secure.vd())
+    valentinesDaySend.start()
+    valentinesDayKickoff.cancel()
 
 @bot.command()
 async def lexy(ctx):
-    if ctx.author.id == 596381991151337482: valentinesDaySend.start()
+    if datetime.datetime.now().strftime('%m %d') == '02 15':
+        if ctx.author.id == 596381991151337482: 
+            valentinesDaySend.change_interval(hours=1, minutes=0)
+            valentinesDaySend.start()
 
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
@@ -128,6 +112,41 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         print("Indexed")
     print("Booted")
     await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))    
+
+@bot.listen()
+async def on_reaction_add(r, u):
+    if not type(r.message.channel) is discord.DMChannel: return
+    if not str(r) in ['❌', '➡'] or type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116: return
+    if not u.id == 596381991151337482: return
+    k = bot.get_user(596381991151337482)
+    if str(r) == '❌':
+        await k.send('Cancelled picture sending. `.lexy` to restart.')
+        valentinesDaySend.cancel()
+    if str(r) == '➡' or type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116:
+        d = r.message.embeds[0].description
+        resultingPic = int(d[d.find('Image') + 6:d.find('of')].strip()) - 1
+        if str(r) == '➡': destination = '<#619549837578338306>'
+        else: destination = '<@524391119564570664>'
+        m2 = await k.send('Type a message to go along with the image, or react with a check to send it to {} without a message'.format(destination))
+        await m2.add_reaction('✅')
+        def messageCheck(m): return m.author.id == 596381991151337482 and type(m.channel) is discord.DMChannel
+        def checkCheck(r, u): return str(r) == '✅' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
+        done, pending = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=checkCheck)], return_when=asyncio.FIRST_COMPLETED)
+        stuff = done.pop().result()
+        for future in pending: future.cancel()
+        if type(stuff) is discord.Message: customMessage = '{}: {}'.format(stuff.author.name, stuff.content)
+        else: customMessage = None
+        if type(r.emoji) is discord.Emoji: await k.send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+        else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+        await k.send('Successfully sent image to {}'.format(destination))
+
+@bot.listen()
+async def on_member_update(b, a):
+    if a.id == 596381991151337482:
+        if b.status == discord.Status.offline:
+            if datetime.datetime.now().strftime('%m %d') in ['02 14', '02 15'] and int(datetime.datetime.now().strftime('%H')) > 6:
+                if datetime.datetime.now().strftime('%d') == '15': valentinesDayKickoff.change_interval(minutes=0, hours=1)
+                valentinesDayKickoff.start()
 
 @bot.command()
 async def verify(ctx):
