@@ -12,6 +12,7 @@ import datetime
 import collections
 import asyncio
 import traceback
+import random
 
 
 booted = False
@@ -26,6 +27,35 @@ bot.remove_command('help')
 
 indexes = 'Indexes'
 
+@tasks.loop(hours=1)
+async def valentinesDaySend():
+    if datetime.datetime.now().strftime('%H:%M') > '22:45':
+        await bot.get_user(596381991151337482).send(secure.endVD())
+        valentinesDaySend.cancel()
+    try:
+        path = 'G:/My Drive/Other/ur mom'
+        image = False
+        while not image:
+            resultingPic = random.randint(0, len(os.listdir(path)))
+            if not '.ini' in os.listdir(path)[resultingPic]: image = True
+        await bot.get_user(596381991151337482).send(file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+        def cancelCheck(r, u): return str(r) == '❌' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
+        await bot.wait_for('reaction_add', check=cancelCheck)
+        await bot.get_user(596381991151337482).send('Cancelled picture sending. `.lexy` to restart.')
+        valentinesDaySend.cancel()
+    except: traceback.print_exc()
+
+@tasks.loop(minutes=1)
+async def valentinesDayKickoff():
+    if datetime.datetime.now().strftime('%H:%M') >= '07:45':
+        await bot.get_user(596381991151337482).send(secure.vd())
+        valentinesDaySend.start()
+        valentinesDayKickoff.cancel()
+
+@bot.command()
+async def lexy(ctx):
+    if ctx.author.id == 596381991151337482: valentinesDaySend.start()
+
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
     '''Method called when bot connects and all the internals are ready'''
@@ -34,6 +64,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     if not booted:
         booted=True
         loading = bot.get_emoji(573298271775227914)
+        valentinesDayKickoff.start()
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening))
         for cog in cogs:
             try:
