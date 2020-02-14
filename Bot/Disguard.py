@@ -136,7 +136,7 @@ async def on_reaction_add(r, u):
         for future in pending: future.cancel()
         if type(stuff) is discord.Message: customMessage = '{}: {}'.format(stuff.author.name, stuff.content)
         else: customMessage = None
-        if type(r.emoji) is discord.Emoji: await k.send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
+        if type(r.emoji) is discord.Emoji: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
         else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
         await k.send('Successfully sent image to {}'.format(destination))
 
