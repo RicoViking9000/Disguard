@@ -68,7 +68,7 @@ async def lexy(ctx):
 async def reset(ctx):
     if ctx.author.id == 247412852925661185:
         async for m in bot.get_user(596381991151337482).history():
-            if (m.created_at() - datetime.timedelta(hours=5)).strftime('%d %H') == '15 01':
+            if (m.created_at - datetime.timedelta(hours=5)).strftime('%d %H') == '15 01':
                 await ctx.send(content=m.content, embed=None if len(m.embeds) == 0 else m.embeds[0])
                 await m.delete()
                 await asyncio.sleep(5)
