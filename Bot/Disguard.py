@@ -142,11 +142,13 @@ async def on_reaction_add(r, u):
 
 @bot.listen()
 async def on_member_update(b, a):
-    if a.id == 596381991151337482:
-        if b.status == discord.Status.offline:
-            if datetime.datetime.now().strftime('%m %d') in ['02 14', '02 15'] and int(datetime.datetime.now().strftime('%H')) > 6:
-                if datetime.datetime.now().strftime('%d') == '15': valentinesDayKickoff.change_interval(minutes=0, hours=1)
-                valentinesDayKickoff.start()
+    if a.guild.id == 611301150129651763:
+        if a.id == 596381991151337482:
+            if b.status == discord.Status.offline:
+                if datetime.datetime.now().strftime('%m %d') in ['02 14', '02 15'] and int(datetime.datetime.now().strftime('%H')) > 6:
+                    if datetime.datetime.now().strftime('%d') == '15': valentinesDayKickoff.change_interval(minutes=0, hours=2)
+                    try: valentinesDayKickoff.start()
+                    except RuntimeError: pass
 
 @bot.command()
 async def verify(ctx):
