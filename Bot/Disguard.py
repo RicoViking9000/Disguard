@@ -64,6 +64,15 @@ async def lexy(ctx):
             valentinesDaySend.change_interval(hours=1, minutes=0)
             valentinesDaySend.start()
 
+@bot.command()
+async def reset(ctx):
+    if ctx.author.id == 247412852925661185:
+        async for m in await bot.get_user(596381991151337482).history():
+            if (m.created_at() - datetime.timedelta(hours=5)).strftime('%d %H') == '15 01':
+                await ctx.send(content=m.content, embed=None if len(m.embeds) == 0 else m.embeds[0])
+                await m.delete()
+                await asyncio.sleep(5)
+
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
     '''Method called when bot connects and all the internals are ready'''
@@ -72,7 +81,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     if not booted:
         booted=True
         loading = bot.get_emoji(573298271775227914)
-        valentinesDayKickoff.start()
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening))
         for cog in cogs:
             try:
