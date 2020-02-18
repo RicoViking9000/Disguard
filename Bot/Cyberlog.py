@@ -1559,6 +1559,10 @@ class Cyberlog(commands.Cog):
     async def on_command_error(self, ctx, error):
         encounter = datetime.datetime.now()
         if isinstance(error, commands.CommandNotFound): return
+        elif isinstance(error, commands.CommandOnCooldown):
+            if ctx.command.name == 'lexy':
+                if ctx.author.id == 596381991151337482: return await ctx.send('lol kailey, i know u want those hot lexy pics, but a boi *that* hot requires a *slight* cooldown time :P ;)\n\nu can use this command again in {} seconds'.format(round(error.retry_after)))
+                elif ctx.author.id == 524391119564570664: return await ctx.send('lmao lex, u want more pics of urself? just wait {} seconds for the cooldown to end 😂'.format(round(error.retry_after)))
         m = await ctx.send('{}, I encountered an error: **{}**. React with the check mark if you would like to send diagnostics to my dev. Note that your server name, channel name, your username, and your command message content and IDs will be shared with my developer.'.format(ctx.author.name, str(error)))
         await m.add_reaction('✅')
         def check(r, u): return str(r) == '✅' and u.id == ctx.author.id
@@ -2353,8 +2357,8 @@ async def FindMoreMembers(g: discord.Guild, arg):
         if arg in str(m.id): return 'ID matches: \'{}\''.format(m.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(m.id))
         if arg in m.mention: return 'Mentioned', 100
         if len(m.activities) > 0:
-            if any(arg in a.name.lower() for a in m.activities): return 'Playing \'{}\''.format([a.name for a in m.activities if a.name is not None and arg in a.name.lower()][0]).replace(arg, '**{}**'.format(arg)), compareMatch(arg, [a.name for a in m.activities if arg in a.name.lower()][0])
-            if any('Spotify' in a.name for a in m.activities):
+            if any(arg in a.name.lower() for a in m.activities if a.name is not None): return 'Playing \'{}\''.format([a.name for a in m.activities if a.name is not None and arg in a.name.lower()][0]).replace(arg, '**{}**'.format(arg)), compareMatch(arg, [a.name for a in m.activities if arg in a.name.lower()][0])
+            if any('Spotify' in a.name for a in m.activities if a.name is not None):
                 for a in m.activities:
                     if 'Spotify' in a.name:
                         if arg in a.title.lower(): return 'Listening to {} by {}'.format(a.title.replace(arg, '**{}**'.format(arg)), ', '.join(a.artists)), compareMatch(arg, a.title)

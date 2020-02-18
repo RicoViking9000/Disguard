@@ -18,60 +18,28 @@ import random
 booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays']
 print("Booting...")
+prefixes = {}
 
 def prefix(bot, message):
-    return '.' if type(message.channel) is not discord.TextChannel else database.GetPrefix(message.guild)
+    return '.' if type(message.channel) is not discord.TextChannel else prefixes.get(message.guild.id)
 
 bot = commands.Bot(command_prefix=prefix)
 bot.remove_command('help')
 
 indexes = 'Indexes'
-path = 'G:/My Drive/Other/ur mom'
+urMom = 'G:/My Drive/Other/ur mom'
 
-@tasks.loop(minutes=30)
-async def valentinesDaySend():
-    k = bot.get_user(596381991151337482)
-    try:
-        lex = bot.get_emoji(674389988363993116)
-        image = False
-        while not image:
-            resultingPic = random.randint(0, len(os.listdir(path)))
-            if not any(n in os.listdir(path)[resultingPic] for n in ['.ini', 'VID_20191031_190028_2']): image = True
-        e = discord.Embed(title='❤ Lexy ❤',description='**{0:-^83s}\n{2}**\n**{1:-^80s}**\n{3}'.format('OPTIONS', 'INFORMATION', '{}: Send to Lex\n➡: Send to <#619549837578338306>'.format(lex),
-            'Image {} of {}'.format(resultingPic + 1, len([f for f in os.listdir(path) if '.ini' not in f]))), color=0xffff00, timestamp=datetime.datetime.utcnow())
-        f = discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic])
-        if '.mp4' in f.filename: m = await k.send(embed=e,file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
-        else: 
-            e.set_image(url=(await bot.get_user(322059776710410241).send(file=f)).attachments[0].url)
-            m = await k.send(embed=e)
-        for r in [lex, '➡']: await m.add_reaction(r)
-    except: 
-        traceback.print_exc()
-    if datetime.datetime.now().strftime('%H') == '00':
-        await k.send(secure.endVD())
-        valentinesDaySend.cancel()
+@tasks.loop(minutes=1)
+async def updatePrefixes():
+    for server in bot.guilds: prefixes[server.id] = await database.GetPrefix(server)
 
-@tasks.loop(count=1)
-async def valentinesDayKickoff():
-    await bot.get_user(596381991151337482).send(secure.vd())
-    valentinesDaySend.start()
-    valentinesDayKickoff.cancel()
-
-@bot.command()
-async def lexy(ctx):
-    if datetime.datetime.now().strftime('%m %d') == '02 15':
-        if ctx.author.id == 596381991151337482: 
-            valentinesDaySend.change_interval(hours=1, minutes=0)
-            valentinesDaySend.start()
-
-@bot.command()
-async def reset(ctx):
-    if ctx.author.id == 247412852925661185:
-        async for m in bot.get_user(596381991151337482).history():
-            if (m.created_at - datetime.timedelta(hours=5)).strftime('%d %H') == '15 01':
-                await ctx.send(content=m.content, embed=None if len(m.embeds) == 0 else m.embeds[0])
-                await m.delete()
-                await asyncio.sleep(5)
+@tasks.loop(minutes=1)
+async def anniversaryDayKickoff():
+    if datetime.datetime.now().strftime('%m %d %y %H:%M') == '02 18 20 09:35':
+        embed=discord.Embed(title=datetime.datetime.now().strftime('%B %d, %Y %H:%M %p'),description=secure.anniversary(),color=0xffff00, timestamp=datetime.datetime.utcnow())
+        embed.set_image(url='https://cdn.discordapp.com/attachments/567741860559454210/679183155500154885/JPEG_20200124_114705.jpg')
+        await bot.get_user(596381991151337482).send(embed=embed)
+        anniversaryDayKickoff.cancel()
 
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
@@ -89,6 +57,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 pass
         await database.Verification(bot)
         await Antispam.PrepareFilters(bot)
+        updatePrefixes.start()
+        anniversaryDayKickoff.start()
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         for server in bot.guilds:
@@ -119,7 +89,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
             Cyberlog.indexed[server.id] = True
         print("Indexed")
     print("Booted")
-    await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))    
+    await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))
 
 @bot.listen()
 async def on_reaction_add(r, u):
@@ -148,16 +118,6 @@ async def on_reaction_add(r, u):
         else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
         await k.send('Successfully sent image to {}'.format(destination))
 
-@bot.listen()
-async def on_member_update(b, a):
-    if a.guild.id == 611301150129651763:
-        if a.id == 596381991151337482:
-            if b.status == discord.Status.offline:
-                if datetime.datetime.now().strftime('%m %d') in ['02 14', '02 15'] and int(datetime.datetime.now().strftime('%H')) > 6:
-                    if datetime.datetime.now().strftime('%d') == '15': valentinesDayKickoff.change_interval(minutes=0, hours=2)
-                    try: valentinesDayKickoff.start()
-                    except RuntimeError: pass
-
 @bot.command()
 async def verify(ctx):
     if ctx.author.id == 247412852925661185:
@@ -179,3 +139,22 @@ database.Initialize(secure.token())
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
 #database.Initialize(secure.beta())
 #bot.run(secure.beta())
+@commands.cooldown(2, 15, commands.BucketType.member)
+@bot.command()
+async def lexy(ctx):
+    if ctx.author.id in [247412852925661185, 596381991151337482, 524391119564570664]:
+        lex = bot.get_emoji(674389988363993116)
+        image = False
+        while not image:
+            resultingPic = random.randint(0, len(os.listdir(urMom)))
+            if not any(n in os.listdir(urMom)[resultingPic] for n in ['.ini', 'VID_20191031_190028_2']): image = True
+        e = discord.Embed(title='❤ Lexy ❤',description='**{0:-^83s}\n{2}**\n**{1:-^80s}**\n{3}'.format('OPTIONS', 'INFORMATION', '{}: Send to Lex\n➡: Send to <#619549837578338306>'.format(lex),
+            'Image {} of {}'.format(resultingPic + 1, len([f for f in os.listdir(urMom) if '.ini' not in f]))), color=0xffff00, timestamp=datetime.datetime.utcnow())
+        f = discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic])
+        if '.mp4' in f.filename: m = await ctx.author.send(embed=e,file=discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic]))
+        else: 
+            e.set_image(url=(await bot.get_user(322059776710410241).send(file=f)).attachments[0].url)
+            m = await ctx.author.send(embed=e)
+        for r in [lex, '➡']: await m.add_reaction(r)
+
+
