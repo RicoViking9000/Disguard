@@ -134,11 +134,6 @@ async def ping(ctx):
     m = await ctx.send('Pong!')
     await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
 
-
-database.Initialize(secure.token())
-bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
-#database.Initialize(secure.beta())
-#bot.run(secure.beta())
 @commands.cooldown(2, 15, commands.BucketType.member)
 @bot.command()
 async def lexy(ctx):
@@ -158,3 +153,7 @@ async def lexy(ctx):
         for r in [lex, '➡']: await m.add_reaction(r)
 
 
+database.Initialize(secure.token())
+bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
+#database.Initialize(secure.beta())
+#bot.run(secure.beta())
