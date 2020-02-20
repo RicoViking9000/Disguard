@@ -93,30 +93,25 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
 
 @bot.listen()
 async def on_reaction_add(r, u):
-    if not type(r.message.channel) is discord.DMChannel: return
-    if not str(r) in ['❌', '➡'] or type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116: return
-    if not u.id == 596381991151337482: return
-    k = bot.get_user(596381991151337482)
-    if str(r) == '❌':
-        await k.send('Cancelled picture sending. `.lexy` to restart.')
-        valentinesDaySend.cancel()
-    if str(r) == '➡' or type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116:
-        d = r.message.embeds[0].description
-        resultingPic = int(d[d.find('Image') + 6:d.find('of')].strip()) - 1
-        if str(r) == '➡': destination = '<#619549837578338306>'
-        else: destination = '<@524391119564570664>'
-        m2 = await k.send('Type a message to go along with the image, or react with a check to send it to {} without a message'.format(destination))
-        await m2.add_reaction('✅')
-        def messageCheck(m): return m.author.id == 596381991151337482 and type(m.channel) is discord.DMChannel
-        def checkCheck(r, u): return str(r) == '✅' and u.id == 596381991151337482 and type(r.message.channel) is discord.DMChannel
-        done, pending = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=checkCheck)], return_when=asyncio.FIRST_COMPLETED)
-        stuff = done.pop().result()
-        for future in pending: future.cancel()
-        if type(stuff) is discord.Message: customMessage = '{}: {}'.format(stuff.author.name, stuff.content)
-        else: customMessage = None
-        if type(r.emoji) is discord.Emoji: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
-        else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(path,os.listdir(path)[resultingPic]), os.listdir(path)[resultingPic]))
-        await k.send('Successfully sent image to {}'.format(destination))
+    if type(r.message.channel) is not discord.DMChannel: return
+    if str(r) != '➡' or type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116: return
+    if u.id not in [247412852925661185, 596381991151337482, 524391119564570664, 282671063530209283]: return
+    d = r.message.embeds[0].description
+    resultingPic = int(d[d.find('Image') + 6:d.find('of')].strip()) - 1
+    if str(r) == '➡': destination = '<#619549837578338306>'
+    else: destination = '<@524391119564570664>'
+    m2 = await u.send('Type a message to go along with the image, or react with a check to send it to {} without a message'.format(destination))
+    await m2.add_reaction('✅')
+    def messageCheck(m): return m.author == u and type(m.channel) is discord.DMChannel
+    def checkCheck(r, u): return str(r) == '✅' and r.message.id == m2.id
+    done, pending = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=checkCheck)], return_when=asyncio.FIRST_COMPLETED)
+    stuff = done.pop().result()
+    for future in pending: future.cancel()
+    if type(stuff) is discord.Message: customMessage = '{}: {}'.format(stuff.author.name, stuff.content)
+    else: customMessage = None
+    if type(r.emoji) is discord.Emoji: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic]))
+    else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic]))
+    await u.send('Successfully sent image to {}'.format(destination))
 
 @bot.command()
 async def verify(ctx):

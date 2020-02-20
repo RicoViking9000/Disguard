@@ -175,6 +175,7 @@ class Birthdays(commands.Cog):
             mess = await message.channel.send(embed=draft)
             await mess.add_reaction('✅')
             await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple 'threads' for anyone to react to if necessary
+        return
         if any(word in message.content.lower().split(' ') for word in ['age', 'im', 'i\'m']) or 'i am' in message.content.lower(): #Deal with age
             if 'i am' in message.content.lower():
                 if len(message.content.lower().split(' ')) > 3:
