@@ -18,6 +18,9 @@ servers = None
 users = None
 
 verifications = {}
+defaultAgeKickDM = ''''You have been kicked from **{}** temporarily due to their antispam configuration: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
+                    ageKick, canRejoin.strftime(formatter), timezone)'''
+
 class LogModule(object):
     '''Used for consistent controlling of logging'''
     def __init__(self, name, description, embed=True, audit=True, enabled=True, summarize=0, channelID=None, embedColor=None, advanced=False):
@@ -72,8 +75,6 @@ def run(method, *args):
 async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
-    if verifications.get(s.id) is not None and (datetime.datetime.now() - verifications.get(s.id)).seconds < 600: return
-    verifications[s.id] = datetime.datetime.now()
     print('Verifying server: {} - {}'.format(s.name, s.id))
     serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
@@ -124,7 +125,10 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "memberExclusions": await DefaultMemberExclusions(s) if serv is None or spam.get('memberExclusions') is None else spam.get('memberExclusions'), #Don't filter messages sent by a member in this list
         "profanityEnabled": False if serv is None or spam.get("profanityEnabled") is None else spam.get('profanityEnabled'), #Is the profanity filter enabled
         "profanityTolerance": 0.25 if serv is None or spam.get('profanityTolerance') is None else spam.get('profanityTolerance'), #% of message to be profanity to be flagged
-        "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter")}, #Profanity filter list
+        "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter"), #Profanity filter list
+        'ageKick': None if serv is None or spam.get('ageKick') is None else spam.get('ageKick'), #NEED TO REDO DATABASE ALGORITHM SO ON DEMAND VARIABLES ARENT OVERWRITTEN
+        'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
+        'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist')},
     "cyberlog": {
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
         "image": False if log is None or log.get('image') is None else log.get('enabled'),
@@ -317,7 +321,7 @@ async def GetLogMemberExclusions(s: discord.Guild):
 
 async def DefaultChannelExclusions(server: discord.Guild): 
     '''For now, return array of IDs of all channels with 'spam' in the name. Will be customizable later'''
-    return [a.id for a in iter(server.channels) if "spam" in a.name]
+    return [a.id for a in iter(server.channels) if any(word in a.name for word in ['spam', 'bot'])]
 
 async def DefaultRoleExclusions(server: discord.Guild): 
     '''For now, return array of IDs of all roles that can manage server. Will be customizable later'''
@@ -328,6 +332,7 @@ async def DefaultMemberExclusions(server: discord.Guild):
     return [server.owner.id]
 
 async def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
+    if member.id == member.guild.owner.id: return True
     for a in member.roles:
         if a.permissions.administrator or a.permissions.manage_guild:
             return True
@@ -367,9 +372,10 @@ async def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.
 
 async def DashboardManageServer(server: discord.Guild, member: discord.Member):
     '''Initialize dashboard permissions; which servers a member can manage'''
+    if member.id == 247412852925661185: return True
     for memb in server.members:
         if member.id == memb.id:
-            return await ManageServer(memb) or member.id == server.owner.id
+            return await ManageServer(memb)
     return False
 
 async def GetSummarize(s: discord.Guild, mod):
@@ -480,6 +486,35 @@ async def SetAge(m: discord.Member, age):
     '''Set the age of a  member'''
     await users.update_one({'user_id': m.id}, {'$set': {'age': age}})
 
+async def AppendWishlistEntry(m: discord.Member, entry):
+    '''Append a wishlist entry to a member's wish list'''
+    await users.update_one({'user_id': m.id}, {'$push': {'wishList': entry}}, True)
+
+async def GetWishlist(m: discord.Member):
+    '''Return the wishlist of a member'''
+    return (await users.find_one({'user_id': m.id})).get('wishList')
+
+async def GetAgeKick(s: discord.Guild):
+    '''Gets the ageKick of a server'''
+    return (await servers.find_one({'server_id': s.id})).get('antispam').get('ageKick')
+
+async def SetAgeKick(s: discord.Guild, ageKick):
+    '''Sets the ageKick of a server'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKick': ageKick}}, True)
+
+async def GetWhitelist(s: discord.Guild):
+    '''Gets the whitelist for the ageKick of a server [list of int-IDs]'''
+    return (await servers.find_one({'server_id': s.id})).get('antispam').get('ageKickWhitelist')
+
+async def AppendWhitelistEntry(s: discord.Guild, entry):
+    '''Appends to the ageKick whitelist of a server'''
+    await servers.update_one({'server_id': s.id}, {'$push': {'antispam.ageKickWhitelist': entry}}, True)
+
+async def GetAgeKickDM(s: discord.Guild):
+    '''Returns the custom DM message of the ageKick module for a server'''
+    return (await servers.find_one({'server_id': s.id})).get('antispam').get('ageKickDM')
+
+async def SetAgeKickDM(s: discord.Guild, message):
 async def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''
     return (await servers.find_one({"server_id": s.id})).get('tzname')

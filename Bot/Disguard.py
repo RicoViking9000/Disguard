@@ -13,12 +13,20 @@ import collections
 import asyncio
 import traceback
 import random
+import logging
+import inspect
 
 
 booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays']
 print("Booting...")
 prefixes = {}
+
+logger = logging.getLogger('discord')
+logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
 
 def prefix(bot, message):
     return '.' if type(message.channel) is not discord.TextChannel else prefixes.get(message.guild.id)
@@ -129,10 +137,18 @@ async def ping(ctx):
     m = await ctx.send('Pong!')
     await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
 
+@commands.is_owner()
+@bot.command(name='eval')
+async def evaluate(ctx, *args):
+    args = ' '.join(args)
+    result = eval(args)
+    if inspect.iscoroutine(result): await ctx.send(await eval(args))
+    else: await ctx.send(result)
+
 @commands.cooldown(2, 15, commands.BucketType.member)
 @bot.command()
 async def lexy(ctx):
-    if ctx.author.id in [247412852925661185, 596381991151337482, 524391119564570664]:
+    if ctx.author.id in [247412852925661185, 596381991151337482, 524391119564570664, 282671063530209283]:
         lex = bot.get_emoji(674389988363993116)
         image = False
         while not image:

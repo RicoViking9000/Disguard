@@ -6,10 +6,14 @@ import profanityfilter
 import emoji
 import Cyberlog
 import asyncio
-import profanityfilter
 
 filters = {}
 loading = None
+
+yellow=0xffff00
+green=0x008000
+red=0xff0000
+blue=0x0000FF
 
 class ParodyMessage(object):
     def __init__(self, content, created):
@@ -20,6 +24,7 @@ class ParodyMessage(object):
 class Antispam(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         self.updateFilters.start()
 
     @tasks.loop(minutes=10)
@@ -383,6 +388,52 @@ class Antispam(commands.Cog):
                 await message.guild.get_channel(spam.get("log")[1]).send(embed=lcEmbed)
             except discord.Forbidden:
                 pass
+    
+    @commands.command()
+    async def ageKick(self, ctx, *args):
+        loading = discord.Embed(description='{} Loading...'.format(self.loading),color=yellow,timestamp=datetime.datetime.utcnow())
+        m = await ctx.send(embed=loading)
+        if not await database.ManageServer(ctx.author): return await m.edit(content='You need manage server, administrator, or owner permissions to use this', embed=None)
+        if len(args) == 0:
+            wl = await database.GetWhitelist(ctx.guild)
+            e=discord.Embed(title='Age Kick Information: {}'.format(ctx.guild.name),description='**{0:–^70}**\n{2}\n**{1:–^70}**\n{3}'.format('WHITELIST IDs', 'RECIPIENT DM MESSAGE',
+            ' • '.join(str(w) for w in wl) if wl is not None and len(wl) > 0 else '(Whitelist is empty)', await database.GetAgeKickDM(ctx.guild)),color=yellow,timestamp=datetime.datetime.utcnow())
+            e.add_field(name='Kick Accounts',value='Under {} days old'.format(await database.GetAgeKick(ctx.guild)))
+            await m.edit(embed=e)
+        else:
+            arg = args[0]
+            e = discord.Embed(title='Age Kick Configuration',description='{} Saving...'.format(self.loading),color=yellow,timestamp=datetime.datetime.utcnow())
+            await m.edit(embed=e)
+            if len(args) == 1:
+                try: 
+                    arg = int(arg)
+                    if arg > 1000: 
+                        await database.AppendWhitelistEntry(ctx.guild,arg)
+                        e.description='ID {} added to age kick whitelist'.format(arg)
+                    else:
+                        await database.SetAgeKick(ctx.guild,arg)
+                        e.description='Now accounts under {} days old that join will be automatically kicked'.format(arg)
+                except:
+                    await database.SetAgeKickDM(ctx.guild,arg)
+                    e.description='Updated DM members receive upon being kicked to say `{}`'.format(arg)
+            else:
+                arg = ' '.join(args)
+                e.set_author(name='Please wait....')
+                e.description=('Because of the flexibility with customizing the custom DM message, my developer must approve of this message to make sure there are no security flaws. This message will be updated when'
+                    ' that happens. My developer will not know any identifying information; all that will be sent is the following text:\n\n{}').format(arg)
+                await m.edit(embed=e)
+                mm = await self.bot.get_channel(681949259192336406).send(embed=discord.Embed(title='Approve or Deny',description=arg))
+                for r in ['✅', '❌']: await mm.add_reaction(r)
+                def ownerCheck(r, u): return str(r) in ['✅', '❌'] and u.id == 247412852925661185 and r.message.id == mm.id 
+                r = await self.bot.wait_for('reaction_add', check=ownerCheck)
+                if str(r[0]) == '✅':
+                    await database.SetAgeKickDM(ctx.guild,arg)
+                    e.description='My developer has approved your request\n\nUpdated DM members receive upon being kicked to say `{}`'.format(arg)
+                else: e.description='My developer has denied your request on the grounds of security, please try another custom message or join my support server for assistance'
+            e.set_author(name='Success')
+            await m.edit(embed=e,delete_after=10)
+            await asyncio.sleep(10)
+            return await ctx.command.invoke(ctx)
         
 async def CheckRoleExclusions(member: discord.Member):
     '''Checks a member's roles to determine if their roles are in the exceptions list

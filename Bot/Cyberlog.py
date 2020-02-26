@@ -15,8 +15,6 @@ serverPurge = {}
 loading = None
 summarizeOn=False
 indexes = 'Indexes'
-ageKicks = {460611346837405696: 2, 567160550086279178: 4} #pvzServer, harryServer
-whitelists = {460611346837405696: [], 567160550086279178: []}
 
 invites = {}
 edits = {}
@@ -504,6 +502,7 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
+        if reaction.message.guild is None: return
         if user.bot or len(reaction.message.embeds) == 0 or reaction.message.author.id != reaction.message.guild.me.id:
             return
         global loading
@@ -1015,13 +1014,17 @@ class Cyberlog(commands.Cog):
                 msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed)
                 await msg.add_reaction('ℹ')
                 await VerifyLightningLogs(msg, 'doorguard')
-        if member.guild.id in list(ageKicks.keys()): #Check account age; requested feature
-            if acctAge < ageKicks.get(member.guild.id) and member.id not in whitelists.get(member.guild.id):
-                try: await member.send('You have been kicked from **{}** due to a request by the administrators: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
-                    ageKicks.get(member.guild.id), (member.created_at + datetime.timedelta(hours=await database.GetTimezone(member.guild)) + datetime.timedelta(days=ageKicks.get(member.guild.id))).strftime('%b %d, %Y - %I:%M %p'), 
-                    await database.GetNamezone(member.guild)))
+        ageKick = await database.GetAgeKick(member.guild)
+        if ageKick is not None: #Check account age; requested feature
+            if acctAge < ageKick and member.id not in await database.GetWhitelist(member.guild):
+                memberCreated = member.created_at + datetime.timedelta(hours=await database.GetTimezone(member.guild))
+                canRejoin = memberCreated + datetime.timedelta(days=ageKick)
+                formatter = '%b %d, %Y - %I:%M %p'
+                timezone = await database.GetNamezone(member.guild)
+                dm = (await database.GetAgeKickDM(member.guild))
+                try: await member.send(eval(dm))
                 except discord.Forbidden: embed.description+='\nI will kick this member, but I can\'t DM them explaining why they were kicked'
-                await member.kick(reason='Account must be {} days old'.format(ageKicks.get(member.guild.id)))
+                await member.kick(reason='[Antispam: ageKick] Account must be {} days old'.format(ageKick))
         members[member.guild.id] = member.guild.members
         await database.VerifyServer(member.guild, bot)
         await database.VerifyUser(member, bot)
@@ -1177,7 +1180,7 @@ class Cyberlog(commands.Cog):
                 msg = await (logChannel(before.guild, "member")).send(content=content,embed=embed)
                 await VerifyLightningLogs(msg, 'member')
         global bot
-        if before.roles != after.roles: await database.VerifyUser(before, bot)
+        if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, bot)
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
@@ -1833,23 +1836,6 @@ class Cyberlog(commands.Cog):
                     except: pass
                     await message.edit(content=None,embed=(await evalInfo(every[int(stuff.content)-1].obj, ctx.guild)))
                     await message.add_reaction('⬅')
-
-    @commands.command()
-    async def ageKick(self, ctx, num: int):
-        global ageKicks
-        if ctx.guild.id in list(ageKicks.keys()):
-            if await database.ManageServer(ctx.author): 
-                ageKicks[ctx.guild.id] = num
-                await ctx.send('Successfully set ageKicks - {} to {} days old'.format(ctx.guild.name, num))
-            else: await ctx.send('You need manage server permissions to use this')
-
-    @commands.command()
-    async def whitelist(self, ctx, num: int):
-        global whitelists
-        target = await self.bot.fetch_user(num)
-        whitelists[ctx.guild.id].append(target.id)
-        await ctx.send('Successfully added **{}** to the ageKick join whitelist for {}.'.format(target.name, ctx.guild.name))
-        
 
 def ParsePauseDuration(s: str):
     '''Convert a string into a number of seconds to ignore antispam or logging'''
