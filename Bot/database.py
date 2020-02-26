@@ -515,6 +515,9 @@ async def GetAgeKickDM(s: discord.Guild):
     return (await servers.find_one({'server_id': s.id})).get('antispam').get('ageKickDM')
 
 async def SetAgeKickDM(s: discord.Guild, message):
+    '''Sets the custom DM message of the ageKick module for a server'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKickDM': message}}, True)
+
 async def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''
     return (await servers.find_one({"server_id": s.id})).get('tzname')
