@@ -146,6 +146,8 @@ class Birthdays(commands.Cog):
                     try: birthday = datetime.datetime.strptime(message.content, "%m %d %y")
                     except: birthday = None
         if 'half' in message.content.lower().split(' ') and birthday: birthday = birthday + datetime.timedelta(days= sum(a[1] for a in list(ref)[:6])) #Deal with half birthdays; jump 6 months ahead
+        birthdayStart = datetime.datetime.now()
+        print('start of birthday on message')
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
         #First we check to see if the user is talking about themself
         target = [message.author]
@@ -175,7 +177,11 @@ class Birthdays(commands.Cog):
             mess = await message.channel.send(embed=draft)
             await mess.add_reaction('✅')
             await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple 'threads' for anyone to react to if necessary
+        result = (datetime.datetime.now() - birthdayStart).seconds
+        print('at the end of the birthdays on_message, took {} seconds'.format(result))
         return
+
+        
         if any(word in message.content.lower().split(' ') for word in ['age', 'im', 'i\'m']) or 'i am' in message.content.lower(): #Deal with age
             if 'i am' in message.content.lower():
                 if len(message.content.lower().split(' ')) > 3:

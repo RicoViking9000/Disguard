@@ -165,6 +165,8 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
+        print('saving message (cyberlog)...')
+        cyberlogStart = datetime.datetime.now()
         if type(message.channel) is discord.DMChannel: return
         path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
         try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
@@ -183,6 +185,8 @@ class Cyberlog(commands.Cog):
                 if a.size / 1000000 < 8:
                     try: await a.save(path2+'/'+a.filename)
                     except discord.HTTPException: pass
+        result = (datetime.datetime.now() - cyberlogStart).seconds
+        print('finished saving message (cyberlog), took {} seconds'.format(result))
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):

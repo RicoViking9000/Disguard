@@ -34,6 +34,8 @@ class Antispam(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        antispamStart = datetime.datetime.now()
+        print('entering antispam on_message')
         '''[DISCORD API METHOD] Called when message is sent'''
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
@@ -251,6 +253,8 @@ class Antispam(commands.Cog):
                             reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
                             short.append("Profanity")
             except TypeError: print(filters.get(str(message.guild.id)))
+        difference = (datetime.datetime.now() - antispamStart).seconds
+        print('returning if not flagged antispam on_message, took {} seconds'.format(difference))
         if not flag: 
             return
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
