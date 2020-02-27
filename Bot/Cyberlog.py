@@ -177,7 +177,7 @@ class Cyberlog(commands.Cog):
         except: pass
         if message.author.bot:
             return
-        print('saving message checkpoint 1: {} seconds'.format((datetime.datetime.now() - cyberlogStart).seconds)
+        print('saving message checkpoint 1: {} seconds'.format((datetime.datetime.now() - cyberlogStart).seconds))
         if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0:
             path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
             try: os.makedirs(path2)
