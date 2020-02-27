@@ -84,10 +84,22 @@ class Antispam(commands.Cog):
                     await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
                     break
         print('antispam checkpoint 2: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
+
+        rz = spam.get('exclusionMode')
+
+        print('checked exclusion mode: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
         
         await CheckRoleExclusions(message.author)
 
         print('checked role exclusions: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
+
+        rz = message.channel.id in spam.get('channelExclusions')
+
+        print('checked channel ID match: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
+
+        rz = message.author.id in spam.get('memberExclusions')
+
+        print('checked member ID match: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
 
 
         if spam.get('exclusionMode') == 0:
