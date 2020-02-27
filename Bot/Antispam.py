@@ -85,6 +85,11 @@ class Antispam(commands.Cog):
                     break
         print('antispam checkpoint 2: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
         
+        await CheckRoleExclusions(message.author)
+
+        print('checked role exclusions: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
+
+
         if spam.get('exclusionMode') == 0:
             if not (message.channel.id in spam.get('channelExclusions') and await CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
         else:
