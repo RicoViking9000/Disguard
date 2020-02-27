@@ -76,6 +76,7 @@ class Birthdays(commands.Cog):
         Birthday processing is done in two phases
         1. Find out of a valid date is in the message
         2. Find out of someone is talking about their own birthday based on context and words in the message'''
+        return
         if message.author.bot: return
         if type(message.channel) is discord.DMChannel: return
         if any(word in message.content.lower().split(' ') for word in ['isn', 'not', 'you', 'your']): return #Blacklisted words
