@@ -89,6 +89,9 @@ class Antispam(commands.Cog):
             if not (message.channel.id in spam.get('channelExclusions') and await CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
         else:
             if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or await CheckRoleExclusions(message.author): return
+
+        print('antispam checkpoint 3 - after spam.get(exclusionMode): {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
+        
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         reason = [] #List of reasons (long version) that a member was flagged for
@@ -126,6 +129,7 @@ class Antispam(commands.Cog):
                             short.append("Spamming messages too fast")
                             quickMessages = []
                             await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+        print('antispam checkpoint 4 - after quick/lastMessages: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available
             changes = 0
@@ -143,6 +147,7 @@ class Antispam(commands.Cog):
                 flag = True
                 reason.append("Too many emoji: " + parsed + "\n\n(" + str(changes) + " emoji detected; " + str(spam.get("emoji")) + " tolerated)")
                 short.append("Too many emoji")
+        print('antispam checkpoint 5: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
         if spam.get("mentions") != 0:
             if len(message.mentions) >= spam.get("mentions"):
                 flag = True
