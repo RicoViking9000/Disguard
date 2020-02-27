@@ -43,6 +43,9 @@ class Antispam(commands.Cog):
         if not spam.get('enabled'): return #return if antispam isn't enabled
         servers = await database.GetMembersList(message.guild)
         person = None
+
+        print('antispam checkpoint 1: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
+
         '''IMPLEMENT QUICKMESSAGE/LASTMESSAGE MESSAGE ARRAYS'''
         #The following lines of code deal with a member's lastMessages and quickMessages:
         #Sending eqivalent messages/sending too many messages too quickly, respectively

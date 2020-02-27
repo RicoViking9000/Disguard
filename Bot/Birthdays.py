@@ -162,6 +162,7 @@ class Birthdays(commands.Cog):
             async for m in message.channel.history(limit=10): #How many messages to check back for question words
                 if any(word in m.content.lower() for word in ['when', 'what']) and any(word in m.content.lower() for word in ['your birthday', 'yours']): successful = True
         #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
+        print('birthday checkpoint 1: {} seconds'.format((datetime.datetime.now() - birthdayStart).seconds))
         if birthday:
             bdays = {} #Local storage b/c database operations take time and resources
             for member in target:
@@ -169,6 +170,7 @@ class Birthdays(commands.Cog):
                 if bday is not None:
                     bdays[member.id] = bday.strftime('%B %d')
                     if bdays.get(member.id) == birthday.strftime('%B %d'): target.remove(member)
+        print('birthday checkpoint 2: {} seconds'.format((datetime.datetime.now() - birthdayStart).seconds))
         if successful and birthday and len(target) > 0:
             draft=discord.Embed(title='🍰 Birthday Management Confirmation', color=yellow, timestamp=datetime.datetime.utcnow())
             draft.description='{}, would you like to set **{}** as your birthday?'.format(', '.join([a.name for a in target]), birthday.strftime('%B %d'))
