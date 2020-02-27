@@ -83,6 +83,8 @@ class Antispam(commands.Cog):
                     await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
                     await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
                     break
+        print('antispam checkpoint 2: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
+        
         if spam.get('exclusionMode') == 0:
             if not (message.channel.id in spam.get('channelExclusions') and await CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
         else:
