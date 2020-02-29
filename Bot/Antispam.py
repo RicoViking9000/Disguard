@@ -35,7 +35,6 @@ class Antispam(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         antispamStart = datetime.datetime.now()
-        print('entering antispam on_message')
         '''[DISCORD API METHOD] Called when message is sent'''
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
@@ -43,8 +42,6 @@ class Antispam(commands.Cog):
         spam = server.get('antispam')
         if not spam.get('enabled'): return #return if antispam isn't enabled
         person = await database.GetMember(message.author)
-
-        print('antispam checkpoint 1: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
 
         '''IMPLEMENT QUICKMESSAGE/LASTMESSAGE MESSAGE ARRAYS'''
         #The following lines of code deal with a member's lastMessages and quickMessages:
@@ -55,6 +52,7 @@ class Antispam(commands.Cog):
         '''Removal if messages are too old'''
 
         '''FEB 29: I realize the previous code dealt with *every server member* during every message...  yeah, that won't fly anymore, and never should have. Bot will be a *lot* faster and more responsive now :)'''
+        
         lastMessages = person.get("lastMessages")
         quickMessages = person.get("quickMessages")
         if message.content is not None and len(message.content) > 0: lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
