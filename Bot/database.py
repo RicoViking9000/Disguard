@@ -266,7 +266,7 @@ async def GetAllUsers():
 
 async def GetMember(m: discord.Member):
     '''Returns a member of a server'''
-    return (await servers.find_one({"server_id": server, "members.id": m.id}))
+    return (await servers.find_one({"server_id": m.guild.id, "members.id": m.id}))
 
 async def GetProfanityFilter(s: discord.Guild):
     '''Return profanityfilter object'''
