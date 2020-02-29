@@ -166,7 +166,23 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
         if type(message.channel) is discord.DMChannel: return
-        await asyncio.wait(saveMessage(message), return_when=asyncio.FIRST_COMPLETED)
+        path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
+        try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
+        except FileNotFoundError: return
+        try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
+        except UnicodeEncodeError: pass
+        try: f.close()
+        except: pass
+        if message.author.bot:
+            return
+        if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0:
+            path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+            try: os.makedirs(path2)
+            except FileExistsError: pass
+            for a in message.attachments:
+                if a.size / 1000000 < 8:
+                    try: await a.save(path2+'/'+a.filename)
+                    except discord.HTTPException: pass
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
