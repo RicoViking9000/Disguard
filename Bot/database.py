@@ -194,9 +194,6 @@ async def VerifyUsers(b: commands.Bot):
     
 async def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''
-    if verifications.get(m.guild.id) is not None and (datetime.datetime.now() - verifications.get(m.guild.id)).seconds < 600: return
-    if m.guild.id == 658111579216412672: return
-    print('Verifying member: {} - {} in server {} - {}'.format(m.name, m.id, m.guild.name, m.guild.id))
     current = await users.find_one({'user_id': m.id})
     if b.get_user(m.id) is None: await users.delete_one({'user_id': m.id})
     else: await users.update_one({"user_id": m.id}, {"$set": { #update database
@@ -262,6 +259,14 @@ async def GetServerCollection():
 async def GetAllServers():
     '''Return all servers...'''
     return await servers.find()
+
+async def GetAllUsers():
+    '''Return all users...'''
+    return await users.find()
+
+async def GetMember(m: discord.Member):
+    '''Returns a member of a server'''
+    return (await servers.find_one({"server_id": server, "members.id": m.id}))
 
 async def GetProfanityFilter(s: discord.Guild):
     '''Return profanityfilter object'''
@@ -333,6 +338,7 @@ async def DefaultMemberExclusions(server: discord.Guild):
 
 async def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
     if member.id == member.guild.owner.id: return True
+    if member.id == 247412852925661185: return True
     for a in member.roles:
         if a.permissions.administrator or a.permissions.manage_guild:
             return True

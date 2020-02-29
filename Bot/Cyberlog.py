@@ -165,29 +165,8 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
-        print('saving message (cyberlog)...')
-        cyberlogStart = datetime.datetime.now()
         if type(message.channel) is discord.DMChannel: return
-        path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
-        try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
-        except FileNotFoundError: return
-        try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
-        except UnicodeEncodeError: pass
-        try: f.close()
-        except: pass
-        if message.author.bot:
-            return
-        print('saving message checkpoint 1: {} seconds'.format((datetime.datetime.now() - cyberlogStart).seconds))
-        if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0:
-            path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-            try: os.makedirs(path2)
-            except FileExistsError: pass
-            for a in message.attachments:
-                if a.size / 1000000 < 8:
-                    try: await a.save(path2+'/'+a.filename)
-                    except discord.HTTPException: pass
-        result = (datetime.datetime.now() - cyberlogStart).seconds
-        print('finished saving message (cyberlog), took {} seconds'.format(result))
+        await asyncio.wait(saveMessage(message), return_when=asyncio.FIRST_COMPLETED)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -2436,6 +2415,25 @@ async def VerifyLightningLogs(m: discord.Message, mod):
 async def ConfigureLightningLogs(bot: commands.Bot):
     '''Configure lightning logging vars'''
     for s in bot.guilds: lightningLogging[s.id] = await database.GetServer(s)
+
+async def saveMessage(message):
+    path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
+    try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
+    except FileNotFoundError: return
+    try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
+    except UnicodeEncodeError: pass
+    try: f.close()
+    except: pass
+    if message.author.bot:
+        return
+    if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0:
+        path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+        try: os.makedirs(path2)
+        except FileExistsError: pass
+        for a in message.attachments:
+            if a.size / 1000000 < 8:
+                try: await a.save(path2+'/'+a.filename)
+                except discord.HTTPException: pass
 
 async def evalInfo(obj, g: discord.Guild):
     if type(obj) is discord.Embed: return obj

@@ -56,6 +56,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     global loading
     if not booted:
         booted=True
+        updatePrefixes.start()
         loading = bot.get_emoji(573298271775227914)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening))
         for cog in cogs:
@@ -65,7 +66,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 pass
         await database.Verification(bot)
         await Antispam.PrepareFilters(bot)
-        updatePrefixes.start()
         anniversaryDayKickoff.start()
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))

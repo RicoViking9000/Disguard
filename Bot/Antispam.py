@@ -27,7 +27,7 @@ class Antispam(commands.Cog):
         self.loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         self.updateFilters.start()
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(minutes=1)
     async def updateFilters(self):
         await PrepareFilters(self.bot)
 
@@ -39,10 +39,10 @@ class Antispam(commands.Cog):
         '''[DISCORD API METHOD] Called when message is sent'''
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
-        spam = await database.GetAntiSpamObject(message.guild)
+        server = await database.GetServer(message.guild)
+        spam = server.get('antispam')
         if not spam.get('enabled'): return #return if antispam isn't enabled
-        servers = await database.GetMembersList(message.guild)
-        person = None
+        person = await database.GetMember(message.author)
 
         print('antispam checkpoint 1: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
 
@@ -53,62 +53,37 @@ class Antispam(commands.Cog):
         #Partially due to readibility(I can view things online) and reliability
         '''Adding newly sent messages to DB'''
         '''Removal if messages are too old'''
-        for member in servers:
-            if member.get("id") == message.author.id:
-                person = member
-                lastMessages = member.get("lastMessages")
-                quickMessages = member.get("quickMessages")
-                if message.content is not None and len(message.content) > 0:
-                    lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
-                if message.channel.id not in await database.GetChannelExclusions(message.guild) and not await CheckRoleExclusions(message.author) and message.author.id not in await database.GetMemberExclusions(message.guild):
-                    quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
-                    for msg in lastMessages:
-                        try:
-                            if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
-                                lastMessages.remove(msg)
-                            if len(lastMessages) > spam.get("congruent")[1]:
-                                lastMessages.pop(0)
-                        except: 
-                            lastMessages = []
-                            print('Resetting lastmessages for {}, {}'.format(message.author.name, message.guild.name))
-                    for msg in quickMessages:
-                        try:
-                            if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
-                                quickMessages.remove(msg)
-                            if len(quickMessages) > spam.get("quickMessages")[0]:
-                                quickMessages.pop(0)
-                        except:
-                            quickMessages = []
-                            print('Resetting quickmessages for {}, {}'.format(message.author.name, message.guild.name))
-                    await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
-                    await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
-                    break
-        print('antispam checkpoint 2: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
 
-        rz = spam.get('exclusionMode')
-
-        print('checked exclusion mode: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
-        
-        await CheckRoleExclusions(message.author)
-
-        print('checked role exclusions: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
-
-        rz = message.channel.id in spam.get('channelExclusions')
-
-        print('checked channel ID match: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
-
-        rz = message.author.id in spam.get('memberExclusions')
-
-        print('checked member ID match: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
-
-
+        '''FEB 29: I realize the previous code dealt with *every server member* during every message...  yeah, that won't fly anymore, and never should have. Bot will be a *lot* faster and more responsive now :)'''
+        lastMessages = person.get("lastMessages")
+        quickMessages = person.get("quickMessages")
+        if message.content is not None and len(message.content) > 0: lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
+        if message.channel.id not in await database.GetChannelExclusions(message.guild) and not await CheckRoleExclusions(message.author) and message.author.id not in await database.GetMemberExclusions(message.guild):
+            quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
+            for msg in lastMessages:
+                try:
+                    if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
+                        lastMessages.remove(msg)
+                    if len(lastMessages) > spam.get("congruent")[1]:
+                        lastMessages.pop(0)
+                except: 
+                    lastMessages = []
+                    print('Resetting lastmessages for {}, {}'.format(message.author.name, message.guild.name))
+            for msg in quickMessages:
+                try:
+                    if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
+                        quickMessages.remove(msg)
+                    if len(quickMessages) > spam.get("quickMessages")[0]:
+                        quickMessages.pop(0)
+                except:
+                    quickMessages = []
+                    print('Resetting quickmessages for {}, {}'.format(message.author.name, message.guild.name))
+            await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+            await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         if spam.get('exclusionMode') == 0:
             if not (message.channel.id in spam.get('channelExclusions') and await CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
         else:
-            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or await CheckRoleExclusions(message.author): return
-
-        print('antispam checkpoint 3 - after spam.get(exclusionMode): {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
-        
+            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or await CheckRoleExclusions(message.author): return        
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         reason = [] #List of reasons (long version) that a member was flagged for
@@ -116,36 +91,34 @@ class Antispam(commands.Cog):
         flag = False #was a member flagged?
         if spam.get("congruent")[0] != 0 or 0 not in spam.get("quickMessages"): 
             #Checking for lastMessages and quickMessages
-            for member in servers:
-                if member.get("id") == message.author.id:
-                    lastMessages = member.get("lastMessages")
-                    quickMessages = member.get("quickMessages")
-                    if spam.get("congruent")[0] != 0:
-                        likenessCounter = 1 #How many congruent messages were found while iterating over the list
-                        cont = None #Message content to be displayed in detailed log
-                        for a in range(len(lastMessages)):
-                            for b in range(len(lastMessages)):
-                                if a < b:
-                                    if lastMessages[a].get("content") == lastMessages[b].get("content"):
-                                        likenessCounter += 1
-                                        cont = lastMessages[a].get("content")
-                                        a += 1
-                                        break
-                        if likenessCounter >= spam.get("congruent")[0]:
-                            flag = True
-                            reason.append("Repeated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
-                            short.append("Repeated messages")
-                            lastMessages = []
-                            await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
-                    if 0 not in spam.get("quickMessages"):
-                        timeOne = quickMessages[0].get("created")
-                        timeLast = quickMessages[-1].get("created")
-                        if (timeLast - timeOne).seconds < spam.get("quickMessages")[1] and len(quickMessages) >= spam.get("quickMessages")[0]:
-                            flag = True
-                            reason.append("Sending too many messages in too little time\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
-                            short.append("Spamming messages too fast")
-                            quickMessages = []
-                            await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+            lastMessages = person.get("lastMessages")
+            quickMessages = person.get("quickMessages")
+            if spam.get("congruent")[0] != 0:
+                likenessCounter = 1 #How many congruent messages were found while iterating over the list
+                cont = None #Message content to be displayed in detailed log
+                for a in range(len(lastMessages)):
+                    for b in range(len(lastMessages)):
+                        if a < b:
+                            if lastMessages[a].get("content") == lastMessages[b].get("content"):
+                                likenessCounter += 1
+                                cont = lastMessages[a].get("content")
+                                a += 1
+                                break
+                if likenessCounter >= spam.get("congruent")[0]:
+                    flag = True
+                    reason.append("Repeated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
+                    short.append("Repeated messages")
+                    lastMessages = []
+                    await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+            if 0 not in spam.get("quickMessages"):
+                timeOne = quickMessages[0].get("created")
+                timeLast = quickMessages[-1].get("created")
+                if (timeLast - timeOne).seconds < spam.get("quickMessages")[1] and len(quickMessages) >= spam.get("quickMessages")[0]:
+                    flag = True
+                    reason.append("Sending too many messages in too little time\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
+                    short.append("Spamming messages too fast")
+                    quickMessages = []
+                    await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         print('antispam checkpoint 4 - after quick/lastMessages: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available

@@ -147,8 +147,6 @@ class Birthdays(commands.Cog):
                     try: birthday = datetime.datetime.strptime(message.content, "%m %d %y")
                     except: birthday = None
         if 'half' in message.content.lower().split(' ') and birthday: birthday = birthday + datetime.timedelta(days= sum(a[1] for a in list(ref)[:6])) #Deal with half birthdays; jump 6 months ahead
-        birthdayStart = datetime.datetime.now()
-        print('start of birthday on message')
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
         #First we check to see if the user is talking about themself
         target = [message.author]
@@ -163,7 +161,6 @@ class Birthdays(commands.Cog):
             async for m in message.channel.history(limit=10): #How many messages to check back for question words
                 if any(word in m.content.lower() for word in ['when', 'what']) and any(word in m.content.lower() for word in ['your birthday', 'yours']): successful = True
         #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
-        print('birthday checkpoint 1: {} seconds'.format((datetime.datetime.now() - birthdayStart).seconds))
         if birthday:
             bdays = {} #Local storage b/c database operations take time and resources
             for member in target:
@@ -171,7 +168,6 @@ class Birthdays(commands.Cog):
                 if bday is not None:
                     bdays[member.id] = bday.strftime('%B %d')
                     if bdays.get(member.id) == birthday.strftime('%B %d'): target.remove(member)
-        print('birthday checkpoint 2: {} seconds'.format((datetime.datetime.now() - birthdayStart).seconds))
         if successful and birthday and len(target) > 0:
             draft=discord.Embed(title='🍰 Birthday Management Confirmation', color=yellow, timestamp=datetime.datetime.utcnow())
             draft.description='{}, would you like to set **{}** as your birthday?'.format(', '.join([a.name for a in target]), birthday.strftime('%B %d'))
@@ -179,12 +175,7 @@ class Birthdays(commands.Cog):
                 if await database.GetMemberBirthday(member) is not None: draft.description+='\n\n{}I currently have {} as your birthday; reacting with the check will overwrite this.'.format('{}, '.format(member.name) if len(target) > 1 else '', bdays.get(member.id))
             mess = await message.channel.send(embed=draft)
             await mess.add_reaction('✅')
-            await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple 'threads' for anyone to react to if necessary
-        result = (datetime.datetime.now() - birthdayStart).seconds
-        print('at the end of the birthdays on_message, took {} seconds'.format(result))
-        return
-
-        
+            await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple 'threads' for anyone to react to if necessary        
         if any(word in message.content.lower().split(' ') for word in ['age', 'im', 'i\'m']) or 'i am' in message.content.lower(): #Deal with age
             if 'i am' in message.content.lower():
                 if len(message.content.lower().split(' ')) > 3:
