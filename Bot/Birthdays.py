@@ -29,9 +29,11 @@ class Birthdays(commands.Cog):
         try:
             for member in self.bot.get_all_members():
                 if await database.GetMemberBirthday(member) is not None:
-                    if (await database.GetMemberBirthday(member)).day == datetime.datetime.now().day:
-                        age = await database.GetAge(member) + 1
-                        await database.SetAge(member, age)
+                    if (await database.GetMemberBirthday(member)).strftime('%m%d') == datetime.datetime.now().strftime('%m%d'):
+                        age = await database.GetAge(member)
+                        if age is not None:
+                            age += 1
+                            await database.SetAge(member, age)
                         messages = await database.GetBirthdayMessages(member)
                         embed=discord.Embed(title='🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name), timestamp=datetime.datetime.utcnow(), color=yellow)
                         embed.description='You have {} personal messages\n{:-^34s}\n{}'.format(len(messages), 'Messages', '\n'.join(['• {}: {} (sent @ {})'.format(m.get('authName') if self.bot.get_user(m.get('author')) is None else self.bot.get_user(m.get('author')).mention,

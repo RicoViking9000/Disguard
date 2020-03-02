@@ -101,7 +101,10 @@ class Cyberlog(commands.Cog):
         for s in self.bot.guilds: lightningLogging[s.id] = await database.GetServer(s)
         for u in self.bot.users: lightningUsers[u.id] = await database.GetUser(u)
         for m in self.bot.get_all_members():
-            if m.status != discord.Status.offline: updateLastOnline(m, datetime.datetime.now())   
+            if m.status != discord.Status.offline: 
+                updateLastOnline(m, datetime.datetime.now())
+                await database.SetLastOnline(m, datetime.datetime.now())
+        
         if summarizeOn:
             try:
                 global summaries
@@ -2066,23 +2069,23 @@ class Cyberlog(commands.Cog):
         lastSeen = lastSeen.days * (3600 * 24) + lastSeen.seconds
         tail = 'seconds'
         if lastSeen > 60:
-            lastSeen / 60
+            lastSeen /= 60
             tail = 'minutes'
             if lastSeen > 60:
-                lastSeen / 60
+                lastSeen /= 60
                 tail = 'hours'
                 if lastSeen > 24:
-                    lastSeen / 24
+                    lastSeen /= 24
                     tail = 'days'
         tail2 = 'seconds'
         if membOnline > 60:
-            membOnline / 60
+            membOnline /= 60
             tail2 = 'minutes'
             if membOnline > 60:
-                membOnline / 60
+                membOnline /= 60
                 tail2 = 'hours'
                 if membOnline > 24:
-                    membOnline / 24
+                    membOnline /= 24
                     tail2 = 'days'
         online=bot.get_emoji(606534231631462421)
         idle=bot.get_emoji(606534231610490907)
