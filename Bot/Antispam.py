@@ -8,7 +8,6 @@ import Cyberlog
 import asyncio
 
 filters = {}
-loading = None
 
 yellow=0xffff00
 green=0x008000
@@ -34,14 +33,18 @@ class Antispam(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        antispamStart = datetime.datetime.now()
         '''[DISCORD API METHOD] Called when message is sent'''
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
-        server = await database.GetServer(message.guild)
+        server = Cyberlog.lightningLogging.get(message.guild.id)
         spam = server.get('antispam')
         if not spam.get('enabled'): return #return if antispam isn't enabled
-        person = await database.GetMember(message.author)
+        self.bot.loop.create_task(self.filterAntispam(message, spam))
+
+
+    async def filterAntispam(self, message: discord.Message, spam):
+        try: person = await database.GetMember(message.author)
+        except: return
 
         '''IMPLEMENT QUICKMESSAGE/LASTMESSAGE MESSAGE ARRAYS'''
         #The following lines of code deal with a member's lastMessages and quickMessages:
@@ -55,8 +58,9 @@ class Antispam(commands.Cog):
         
         lastMessages = person.get("lastMessages")
         quickMessages = person.get("quickMessages")
+        cRE = await CheckRoleExclusions(message.author)
         if message.content is not None and len(message.content) > 0: lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
-        if message.channel.id not in await database.GetChannelExclusions(message.guild) and not await CheckRoleExclusions(message.author) and message.author.id not in await database.GetMemberExclusions(message.guild):
+        if message.channel.id not in await database.GetChannelExclusions(message.guild) and not cRE and message.author.id not in await database.GetMemberExclusions(message.guild):
             quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
             for msg in lastMessages:
                 try:
@@ -79,9 +83,9 @@ class Antispam(commands.Cog):
             await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
             await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         if spam.get('exclusionMode') == 0:
-            if not (message.channel.id in spam.get('channelExclusions') and await CheckRoleExclusions(message.author) or message.author.id in spam.get('memberExclusions')): return
+            if not (message.channel.id in spam.get('channelExclusions') and cRE or message.author.id in spam.get('memberExclusions')): return
         else:
-            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or await CheckRoleExclusions(message.author): return        
+            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or cRE: return        
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         reason = [] #List of reasons (long version) that a member was flagged for
@@ -117,7 +121,6 @@ class Antispam(commands.Cog):
                     short.append("Spamming messages too fast")
                     quickMessages = []
                     await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
-        print('antispam checkpoint 4 - after quick/lastMessages: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available
             changes = 0
@@ -135,7 +138,6 @@ class Antispam(commands.Cog):
                 flag = True
                 reason.append("Too many emoji: " + parsed + "\n\n(" + str(changes) + " emoji detected; " + str(spam.get("emoji")) + " tolerated)")
                 short.append("Too many emoji")
-        print('antispam checkpoint 5: {} seconds'.format((datetime.datetime.now() - antispamStart).seconds))
         if spam.get("mentions") != 0:
             if len(message.mentions) >= spam.get("mentions"):
                 flag = True
@@ -251,8 +253,6 @@ class Antispam(commands.Cog):
                             reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
                             short.append("Profanity")
             except TypeError: print(filters.get(str(message.guild.id)))
-        difference = (datetime.datetime.now() - antispamStart).seconds
-        print('returning if not flagged antispam on_message, took {} seconds'.format(difference))
         if not flag: 
             return
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
@@ -459,9 +459,6 @@ async def PrepareFilters(bot: commands.Bot):
     global loading
     for server in bot.guilds:
         filters[str(server.id)] = await database.GetProfanityFilter(server)
-    for e in bot.emojis:
-        if e.id == 573298271775227914:
-            loading = e
 
 def setup(bot):
     bot.add_cog(Antispam(bot))

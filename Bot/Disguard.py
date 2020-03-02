@@ -22,11 +22,11 @@ cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays']
 print("Booting...")
 prefixes = {}
 
-logger = logging.getLogger('discord')
+""" logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
+logger.addHandler(handler) """
 
 def prefix(bot, message):
     return '.' if type(message.channel) is not discord.TextChannel else prefixes.get(message.guild.id)
@@ -69,35 +69,38 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         anniversaryDayKickoff.start()
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
+        print('Starting indexing...')
         for server in bot.guilds:
-            print('Indexing '+server.name)
-            for channel in server.text_channels:
-                path = "{}/{}/{}".format(indexes,server.id, channel.id)
-                try: os.makedirs(path)
-                except FileExistsError: pass
-                try: 
-                    async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=30)):
-                        if not message.author.bot:
-                            if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
-                            try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
-                            except FileNotFoundError: pass
-                            try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
-                            except UnicodeEncodeError: pass
-                            try: f.close()
-                            except: pass
-                            if (datetime.datetime.utcnow() - message.created_at).days < 7 and await database.GetImageLogPerms(server):
-                                attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-                                try: os.makedirs(attach)
-                                except FileExistsError: pass
-                                for attachment in message.attachments:
-                                    if attachment.size / 1000000 < 8:
-                                        try: await attachment.save('{}/{}'.format(attach, attachment.filename))
-                                        except discord.HTTPException: pass
-                except discord.Forbidden: pass
+            for channel in server.text_channels: bot.loop.create_task(indexMessages(server, channel))
             Cyberlog.indexed[server.id] = True
-        print("Indexed")
     print("Booted")
     await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))
+
+async def indexMessages(server, channel):
+    path = "{}/{}/{}".format(indexes,server.id, channel.id)
+    start = datetime.datetime.now()
+    try: os.makedirs(path)
+    except FileExistsError: pass
+    try: 
+        async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=30)):
+            if not message.author.bot:
+                if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
+                try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
+                except FileNotFoundError: pass
+                try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
+                except UnicodeEncodeError: pass
+                try: f.close()
+                except: pass
+                if (datetime.datetime.utcnow() - message.created_at).days < 7 and await database.GetImageLogPerms(server):
+                    attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+                    try: os.makedirs(attach)
+                    except FileExistsError: pass
+                    for attachment in message.attachments:
+                        if attachment.size / 1000000 < 8:
+                            try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                            except discord.HTTPException: pass
+    except discord.Forbidden: pass
+    print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 
 @bot.listen()
 async def on_reaction_add(r, u):
