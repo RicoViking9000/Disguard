@@ -199,6 +199,8 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
     else: await users.update_one({"user_id": m.id}, {"$set": { #update database
     "username": m.name,
     "user_id": m.id,
+    'lastActive': {'timestamp': datetime.datetime.min if current is None or current.get('lastActive') is None else current.get('lastActive').get('timestamp'), 'reason': 'Not tracked yet' if current is None or current.get('lastActive') is None else current.get('lastActive').get('reason')},
+    'lastOnline': datetime.datetime.min if current is None or current.get('lastOnline') is None else current.get('lastOnline'),
     'birthdayMessages': [] if current is None or current.get('birthdayMessages') is None else current.get('birthdayMessages'),
     'birthday': None if current is None or current.get('birthday') is None else current.get('birthday'),
     "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
@@ -263,6 +265,10 @@ async def GetAllServers():
 async def GetAllUsers():
     '''Return all users...'''
     return await users.find()
+
+async def GetUser(u: discord.User):
+    '''Returns a global user'''
+    return (await users.find_one({'user_id': u.id}))
 
 async def GetMember(m: discord.Member):
     '''Returns a member of a server'''
@@ -523,6 +529,14 @@ async def GetAgeKickDM(s: discord.Guild):
 async def SetAgeKickDM(s: discord.Guild, message):
     '''Sets the custom DM message of the ageKick module for a server'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKickDM': message}}, True)
+
+async def SetLastActive(u: discord.User, timestamp, reason):
+    '''Updates the last active attribute'''
+    await users.update_one({'user_id': u.id}, {'$set': {'lastActive': {'timestamp': timestamp, 'reason': reason}}}, True)
+
+async def SetLastOnline(u: discord.User, timestamp):
+    '''Updates the last online attribute'''
+    await users.update_one({'user_id': u.id}, {'$set': {'lastOnline': timestamp}}, True)
 
 async def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''

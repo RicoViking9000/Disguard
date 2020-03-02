@@ -2310,14 +2310,22 @@ class Cyberlog(commands.Cog):
                         string += ' & {} more'.format(len(t1) - len(t4))
                         if [bot.get_channel(c) for c in t1].count(None) > 0: #If channels were deleted since creation... count of indexes where bot can't find channel
                             string+=', incl. {} deleted since creation'.format([bot.get_channel(c) for c in t1].count(None))
+                    embed.add_field(name='Channel Creations',value=string)
                 if a == 3:
+                    v = {True: 'on', False: 'off'} #Used for NSFW, on/off is better than True/False
                     for c in counts[a]:  #t1: channel ID, t2: channel type, t3: old channel name, t4: changes, t5: used quickkey channel IDs
                         t1.append(queue[c].get('data').get('channel'))
                         t2.append(queue[c].get('data').get('type'))
+                        t3.append(queue[c].get('data').get('oldName'))
                         t4.append({'name': queue[c].get('data').get('oldName') != queue[c].get('data').get('newName'),
                         'topic': queue[c].get('data').get('oldTopic') != queue[c].get('data').get('newTopic'),
+                        'slowmode': queue[c].get('data').get('oldSlowmode') != queue[c].get('data').get('newSlowmode'),
+                        'nsfw': queue[c].get('data').get('oldNsfw') != queue[c].get('data').get('newNsfw'),
+                        'bitrate': queue[c].get('data').get('oldBitrate') != queue[c].get('data').get('newBitrate'),
                         'userLimit': queue[c].get('data').get('oldLimit') != queue[c].get('data').get('newLimit'),
                         'category': queue[c].get('data').get('oldCategory') != queue[c].get('data').get('newCategory')})
+                    for c in range(len(t1)):
+                        temp = [t2[c], t3[c], ': ']
                         if t4[c].get('name'): temp.append('Name changed to **{}**'.format(queue[c].get('data').get('newName')))
                         if t4[c].get('topic'): temp.append('Description updated')
                         if t4[c].get('slowmode'): temp.append('Slowmoded changed from {}s to {}s'.format(queue[c].get('data').get('oldSlowmode'), queue[c].get('data').get('newSlowmode')))
@@ -2325,6 +2333,7 @@ class Cyberlog(commands.Cog):
                         if t4[c].get('bitrate'): temp.append('Bitrate adjusted from **{} to **{}**'.format(queue[c].get('data').get('oldBitrate'), queue[c].get('data').get('newBitrate')))
                         if t4[c].get('userLimit'): temp.append('User limit changed from **{}** to **{}**'.format(queue[c].get('data').get('oldLimit'), queue[c].get('data').get('newLimit')))
                         if t4[c].get('category'): temp.append('Moved from category **{}** to **{}**'.format(queue[c].get('data').get('oldCategory'), queue[c].get('data').get('newCategory')))
+                        s.append(temp)
                     temp2 = []
                     for c in s[:5]: temp2.append('{}{}'.format(''.join(c[:3]), ', '.join(c[3:])))
                     if sum([len(c) for c in temp2]) > 128:
