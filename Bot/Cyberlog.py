@@ -101,10 +101,7 @@ class Cyberlog(commands.Cog):
         for s in self.bot.guilds: lightningLogging[s.id] = await database.GetServer(s)
         for u in self.bot.users: lightningUsers[u.id] = await database.GetUser(u)
         for m in self.bot.get_all_members():
-            if m.status != discord.Status.offline: 
-                updateLastOnline(m, datetime.datetime.now())
-                await database.SetLastOnline(m, datetime.datetime.now())
-        
+            if m.status != discord.Status.offline: await updateLastOnline(m, datetime.datetime.now())
         if summarizeOn:
             try:
                 global summaries
@@ -175,7 +172,7 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
-        updateLastActive(message.author, datetime.datetime.now(), 'Sent a message')
+        await updateLastActive(message.author, datetime.datetime.now(), 'Sent a message')
         if type(message.channel) is discord.DMChannel: return
         self.bot.loop.create_task(self.saveMessage(message))
 
@@ -210,7 +207,7 @@ class Cyberlog(commands.Cog):
         try: message = await channel.fetch_message(payload.message_id)
         except: return
         user = bot.get_guild(channel.guild.id).get_member(payload.user_id)
-        updateLastActive(user, datetime.datetime.now(), 'Added a reaction')
+        await updateLastActive(user, datetime.datetime.now(), 'Added a reaction')
         if user.bot: return
         if len(message.embeds) == 0: return
         if message.author.id != bot.get_guild(channel.guild.id).me.id: return
@@ -534,7 +531,7 @@ class Cyberlog(commands.Cog):
         try: after = await c.fetch_message(payload.message_id)
         except discord.NotFound: return
         except discord.Forbidden: print('{} lacks permissions for message edit for some reason'.format(bot.get_guild(int(payload.data.get('guild_id'))).name))
-        updateLastActive(after.author, datetime.datetime.now(), 'Edited a message')
+        await updateLastActive(after.author, datetime.datetime.now(), 'Edited a message')
         g = bot.get_guild(int(payload.data.get('guild_id')))
         if not logEnabled(g, 'message'): return
         if not logExclusions(after.channel, after.author) or after.author.bot: return
@@ -757,7 +754,7 @@ class Cyberlog(commands.Cog):
                 async for log in g.audit_logs(limit=1):
                     if log.action == discord.AuditLogAction.message_delete and log.target.id == author.id and (datetime.datetime.utcnow() - log.created_at).seconds < 10:
                         embed.description+="\nDeleted by: "+log.user.mention+" ("+log.user.name+")"
-                        updateLastActive(log.user, datetime.datetime.now(), 'Deleted a message')
+                        await updateLastActive(log.user, datetime.datetime.now(), 'Deleted a message')
             except discord.Forbidden:
                 content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
         #global summaries
@@ -771,7 +768,7 @@ class Cyberlog(commands.Cog):
         #if await database.SummarizeEnabled(g, 'message'):
         #    summaries.get(str(g.id)).add('message', 1, datetime.datetime.now(), data, embed,content=content)
         #else:
-        if author is not None: updateLastActive(author, datetime.datetime.now(), 'Deleted a message')
+        if author is not None: await updateLastActive(author, datetime.datetime.now(), 'Deleted a message')
         try: await msg.edit(content=content,embed=embed,files=attachments)
         except: 
             if msg is None: 
@@ -807,7 +804,7 @@ class Cyberlog(commands.Cog):
                         if log.action == discord.AuditLogAction.channel_create:
                             embed.description+="\nCreated by: "+log.user.mention+" ("+log.user.name+")"
                             embed.set_thumbnail(url=log.user.avatar_url)
-                            updateLastActive(log.user, datetime.datetime.now(), 'Created a channel')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Created a channel')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             embed.set_footer(text="Channel ID: "+str(channel.id))
@@ -849,7 +846,7 @@ class Cyberlog(commands.Cog):
                         if log.action == discord.AuditLogAction.channel_update:
                             embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
                             embed.set_thumbnail(url=log.user.avatar_url)
-                            updateLastActive(log.user, datetime.datetime.now(), 'Edited a channel')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Edited a channel')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`\n"
             embed.set_footer(text="Channel ID: "+str(before.id))
@@ -968,7 +965,7 @@ class Cyberlog(commands.Cog):
                         if log.action == discord.AuditLogAction.channel_delete:
                             embed.description+="\nDeleted by: "+log.user.mention+" ("+log.user.name+")"
                             embed.set_thumbnail(url=log.user.avatar_url)
-                            updateLastActive(log.user, datetime.datetime.now(), 'Deleted a channel')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Deleted a channel')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             embed.set_footer(text="Channel ID: "+str(channel.id))
@@ -985,7 +982,7 @@ class Cyberlog(commands.Cog):
         global bot
         global invites
         global members
-        updateLastActive(member, datetime.datetime.now(), 'Joined a server')
+        await updateLastActive(member, datetime.datetime.now(), 'Joined a server')
         if logEnabled(member.guild, "doorguard"):
             newInv = []
             content=None
@@ -1053,7 +1050,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when member leaves a server'''
         global bot
         global members
-        updateLastActive(member, datetime.datetime.now(), 'Left a server')
+        await updateLastActive(member, datetime.datetime.now(), 'Left a server')
         if logEnabled(member.guild, "doorguard"):
             content=None
             embed=None #Custom embeds later
@@ -1115,7 +1112,7 @@ class Cyberlog(commands.Cog):
                     async for log in guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.unban:
                             embed.description = "by "+log.user.mention+" ("+log.user.name+")"
-                            updateLastActive(log.user, datetime.datetime.now(), 'Unbanned a user')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Unbanned a user')
                     async for log in guild.audit_logs(limit=None):
                         if log.action == discord.AuditLogAction.ban:
                             if log.target.id == user.id:
@@ -1154,7 +1151,7 @@ class Cyberlog(commands.Cog):
                     async for log in before.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.member_role_update: 
                             embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
-                            updateLastActive(log.user, datetime.datetime.now(), 'Updated someone\'s roles')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Updated someone\'s roles')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
                 added = []
@@ -1185,7 +1182,7 @@ class Cyberlog(commands.Cog):
                     async for log in before.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.member_update and log.target.id == before.id: 
                             embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
-                            updateLastActive(log.user, datetime.datetime.now(), 'Updated a nickname')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Updated a nickname')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
                 oldNick = before.nick if before.nick is not None else "<No nickname>"
@@ -1209,10 +1206,11 @@ class Cyberlog(commands.Cog):
             for a in before.activities:
                 if a.type == discord.CustomActivity:
                     await asyncio.sleep(600) #Wait 10 minutes to make sure that the user isn't on Android app or is experiencing internet problems
-                    if before.status == after.status and before.name != after.name: updateLastActive(after, datetime.datetime.now(), 'Changed custom status')
+                    a = before.guild.get_member(before.id)
+                    if before.status == a.status and before.name != a.name: await updateLastActive(after, datetime.datetime.now(), 'Changed custom status')
         if before.status != after.status: #We don't want false positiives, so we only make use of changing to/from DND here
-            if any([a == discord.Status.dnd for a in [before.status, after.status]]): updateLastActive(after, datetime.datetime.now(), 'Changed status')
-            if after.status == discord.Status.invisible: updateLastOnline(after, datetime.datetime.now())
+            if after.status == discord.Status.offline: 
+                await updateLastOnline(after, datetime.datetime.now())
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
@@ -1236,18 +1234,18 @@ class Cyberlog(commands.Cog):
             if after.avatar_url is not None:
                 embed.set_image(url=after.avatar_url)
             embed.add_field(name="Profile Picture updated",value="Old: Thumbnail to the right\nNew: Image below")
-            updateLastActive(after, datetime.datetime.now(), 'Updated their profile picture')
+            await updateLastActive(after, datetime.datetime.now(), 'Updated their profile picture')
         else:
             embed.set_thumbnail(url=before.avatar_url)
         if before.discriminator != after.discriminator:
             data['discrim'] = True
             embed.add_field(name="Prev discriminator",value=before.discriminator)
             embed.add_field(name="New discriminator",value=after.discriminator)
-            updateLastActive(after, datetime.datetime.now(), 'Updated their discriminator')
+            await updateLastActive(after, datetime.datetime.now(), 'Updated their discriminator')
         if before.name != after.name:
             embed.add_field(name="Prev username",value=before.name)
             embed.add_field(name="New username",value=after.name)
-            updateLastActive(after, datetime.datetime.now(), 'Updated their username')
+            await updateLastActive(after, datetime.datetime.now(), 'Updated their username')
         embed.set_footer(text="User ID: "+str(after.id))
         for server in servers:
             try:
@@ -1318,7 +1316,7 @@ class Cyberlog(commands.Cog):
                         if log.action == discord.AuditLogAction.guild_update:
                             embed.description= "By: "+log.user.mention+" ("+log.user.name+")"
                             embed.set_thumbnail(url=log.user.avatar_url)
-                            updateLastActive(log.user, datetime.datetime.now(), 'Updated a server')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Updated a server')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             if before.afk_channel != after.afk_channel:
@@ -1393,7 +1391,7 @@ class Cyberlog(commands.Cog):
                     async for log in role.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.role_create: 
                             embed.description+="\nCreated by: "+log.user.mention+" ("+log.user.name+")"
-                            updateLastActive(log.user, datetime.datetime.now(), 'Created a role')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Created a role')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             #if await database.SummarizeEnabled(role.guild, 'role'):
@@ -1418,7 +1416,7 @@ class Cyberlog(commands.Cog):
                     async for log in role.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.role_delete: 
                             embed.description+="\nDeleted by: "+log.user.mention+" ("+log.user.name+")"
-                            updateLastActive(log.user, datetime.datetime.now(), 'Deleted a role')
+                            await updateLastActive(log.user, datetime.datetime.now(), 'Deleted a role')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             embed.description+="\n:warning: "+str(len(role.members))+" members lost this role :warning:"
@@ -1446,7 +1444,7 @@ class Cyberlog(commands.Cog):
                     async for log in before.guild.audit_logs(limit=1): #Color too
                             if log.action == discord.AuditLogAction.role_update:
                                 embed.description+="\nUpdated by: "+log.user.mention+" ("+log.user.name+")"
-                                updateLastActive(log.user, datetime.datetime.now(), 'Updated a role')
+                                await updateLastActive(log.user, datetime.datetime.now(), 'Updated a role')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             if before.color != after.color: 
@@ -1522,7 +1520,7 @@ class Cyberlog(commands.Cog):
                     if log.action == discord.AuditLogAction.emoji_delete or log.action==discord.AuditLogAction.emoji_create or log.action==discord.AuditLogAction.emoji_update:
                         embed.description = "By: "+log.user.mention+" ("+log.user.name+")"
                         embed.set_thumbnail(url=log.user.avatar_url)
-                        updateLastActive(log.user, datetime.datetime.now(), 'Updated emojis somewhere')
+                        await updateLastActive(log.user, datetime.datetime.now(), 'Updated emojis somewhere')
             except discord.Forbidden:
                 content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
         if len(before) > len(after): #Emoji was removed
@@ -1581,7 +1579,7 @@ class Cyberlog(commands.Cog):
                 else:
                     embed.add_field(name="🔨 🤐",value="Force muted")
             if not readPerms(member.guild, 'voice'): #the readPerms variable is used here to determine mod-only actions for variable convenience since audit logs aren't available
-                updateLastActive(member, datetime.datetime.now(), 'Voice channel activity')
+                await updateLastActive(member, datetime.datetime.now(), 'Voice channel activity')
                 if before.self_deaf != after.self_deaf:
                     if before.self_deaf:
                         embed.add_field(name="🔊",value="Undeafened")
@@ -1607,15 +1605,15 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_typing(self, c, u, w):
-        updateLastActive(u, datetime.datetime.now(), 'Started typing somewhere')
+        await updateLastActive(u, datetime.datetime.now(), 'Started typing somewhere')
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, p):
-        updateLastActive(self.bot.get_user(p.user_id), datetime.datetime.now(), 'Removed a reaction')
+        await updateLastActive(self.bot.get_user(p.user_id), datetime.datetime.now(), 'Removed a reaction')
 
     @commands.Cog.listener()
     async def on_webhooks_update(self, c):
-        updateLastActive((await c.guild.audit_logs(limit=1).flatten())[0].user, datetime.datetime.now(), 'Updated webhooks')
+        await updateLastActive((await c.guild.audit_logs(limit=1).flatten())[0].user, datetime.datetime.now(), 'Updated webhooks')
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -2087,6 +2085,8 @@ class Cyberlog(commands.Cog):
                 if membOnline > 24:
                     membOnline /= 24
                     tail2 = 'days'
+        membOnline = round(membOnline)
+        lastSeen = round(lastSeen)
         online=bot.get_emoji(606534231631462421)
         idle=bot.get_emoji(606534231610490907)
         dnd=bot.get_emoji(606534231576805386)
@@ -2567,14 +2567,16 @@ def timeZone(s: discord.Guild):
 def lastActive(u: discord.User):
     return lightningUsers.get(u.id).get('lastActive')
 
-def updateLastActive(u: discord.User, timestamp, reason):
+async def updateLastActive(u: discord.User, timestamp, reason):
     lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
+    await database.SetLastActive(u, timestamp, reason)
 
 def lastOnline(u: discord.User):
     return lightningUsers.get(u.id).get('lastOnline')
 
-def updateLastOnline(u: discord.User, timestamp):
+async def updateLastOnline(u: discord.User, timestamp):
     lightningUsers[u.id]['lastOnline'] = timestamp
+    await database.SetLastOnline(u, timestamp)
 
 def beginPurge(s: discord.Guild):
     '''Prevent logging of purge'''
