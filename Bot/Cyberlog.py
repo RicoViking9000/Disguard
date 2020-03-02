@@ -1653,7 +1653,7 @@ class Cyberlog(commands.Cog):
                 await m.edit(content='⚠An error occured: **{}**, and I was unable to execute your command'.format(str(error)),embed=None)
             try: await m.clear_reactions()
             except: pass
-            await m.edit(content='⚠ {}'.format(str(error)))
+            await m.edit(content='⚠ {}'.format(str(error)), embed=None)
 
     @commands.command()
     async def pause(self, ctx, *args):
@@ -2093,7 +2093,7 @@ class Cyberlog(commands.Cog):
         offline=bot.get_emoji(606534231492919312)
         activities = {discord.Status.online: online, discord.Status.idle: idle, discord.Status.dnd: dnd, discord.Status.offline: offline}
         embed.description='{}{} {}\n\n{}Last active {}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
-            'Last online {} {} ago\n'.format(membOnline, tail2) if m.status == discord.Status.offline else '', '{} {} ago: {}'.format(lastSeen, tail, mA.get('reason')))
+            'Last online {} {} ago\n'.format(membOnline, tail2) if m.status == discord.Status.offline else '', '{} {} ago ({})'.format(lastSeen, tail, mA.get('reason')))
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
