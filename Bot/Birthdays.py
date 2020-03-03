@@ -52,7 +52,7 @@ class Birthdays(commands.Cog):
                     if (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%H:%M') == (await database.GetBirthdate(server)).strftime('%H:%M'):
                         for member in server.members:
                             if await database.GetMemberBirthday(member) is not None:
-                                if (await database.GetMemberBirthday(member)).day == (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).day:
+                                if (await database.GetMemberBirthday(member)).strftime('%m%d') == (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%m%d'):
                                     messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
                                     toSend = '🍰 Hey hey, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
                                     '\n'.join(['• {}: {}'.format(server.get_member(m.get('author')).name, m.get('message')) for m in messages])))
