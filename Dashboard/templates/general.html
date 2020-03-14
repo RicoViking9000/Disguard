@@ -23,6 +23,7 @@
         </div>
         <a href="{{url_for('manageServer', id=id)}}"><h2 class=goBack>Back</h2></a>
         <h1 class=mod-header>General server settings</h1>
+        <h3>Microsoft Edge (Legacy or Chromium) is recommended for this portion of the website due to the convenient date/time features built into it</h3>
             <form class=mod-main method="POST">
                 Server prefix: <input type="text" name=prefix value={{servObj.prefix}}><br>
                 Server time (minutes don't matter): <input type="datetime-local" name=offset value={{date}}><br>
@@ -31,6 +32,11 @@
                 {%for channel in servObj.channels%}
                     <option value={{channel.id}} {%if servObj.birthday == channel.id%}selected{%endif%}>Send to #{{channel.name}}</option>
                 {%endfor%}
+                </select><br>
+                Automatic birthday configuration detection from messages: If date/age detected in message, ask if user wants to set that as their birthday/age <select name=birthdayMode> 
+                    <option value=0 {%if servObj.birthdayMode == 0%}selected{%endif%}>Don't auto detect; users configure only through birthday command</option>
+                    <option value=1 {%if servObj.birthdayMode == 1%}selected{%endif%}>Automatically detect and user reacts with cake to configure</option>
+                    <option value=2 {%if servObj.birthdayMode == 2%}selected{%endif%}>Automatically detect and bot replies to messages for user to configure</option>
                 </select><br>
                 Announce birthdays at what time (Increments of 5 minutes) <input type="time" name=birthdate value={{date2}}><br>
                 <input type="submit" value="Save">

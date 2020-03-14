@@ -65,7 +65,7 @@ class Moderation(commands.Cog):
             current.botMessage = message
             current.mentions = ctx.message
             messages = []
-            def channels(m): return m.author==ctx.author and len(m.channel_mentions) > 0 or any(s in m.content.lower() for s in ['a', 'h', 'cancel'])
+            def channels(m): return m.channel == ctx.channel and m.author==ctx.author and len(m.channel_mentions) > 0 or any(s in m.content.lower() for s in ['a', 'h', 'cancel'])
             try: post = await self.bot.wait_for('message',check=channels, timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait')
@@ -85,14 +85,14 @@ class Moderation(commands.Cog):
             current.channel=channels
             embed.description='Ok cool, {} for a total of {} messages BTW.\n\nWould you like me to index the channel(s) you selected to let you know how many messages match your filters as we progress through setup? This may take a long time if the channel(s) has/have lots of messages. If it takes longer than 5 minutes, I\'ll tag you when I\'m done. Type `yes` or `no`'.format(', '.join(['{} has {} posts'.format(channels[c].mention, counts[c]) for c in range(len(channels))]), total)
             await message.edit(embed=embed)
-            def index(m): return m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
+            def index(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=index,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             now = datetime.datetime.utcnow()
             embed.set_author(name='Please wait',icon_url=url)
             if 'y' in post.content:
                 embed.set_author(name='Indexing messages',icon_url=url)
-                embed.set_footer(text='I\'m aware that the numbers are wack; full-service message indexes (used for percent calculation) will be restored soon')
+                #await indexMessages(message, embed, total, channels)
                 loadingBar = ["o-------------------", "-o------------------", "--o-----------------", "---o----------------", "----o---------------", "-----o--------------", "------o-------------", "-------o------------", "--------o-----------", "---------o----------", "----------o---------", "-----------o--------", "------------o-------", "-------------o------", "--------------o-----", "---------------o----", "----------------o---", "-----------------o--", "------------------o-", "-------------------o"]
                 embed.description='0/{} messages, 0/{} channels\n\n0% {}\n\n0 messages per second, Time remaining: N/A'.format(total, len(channels), loadingBar[0])
                 await message.edit(embed=embed)
@@ -119,7 +119,7 @@ class Moderation(commands.Cog):
             if (datetime.datetime.utcnow() - now).seconds / 60 > 5: await ctx.channel.send('{}, I\'m done indexing'.format(ctx.author.mention),delete_after=10)
             embed.description='Next up, are you interested in purging messages containing certain text? Type `yes` to be taken to setup for those options or `no` to move on and skip this part.'
             await message.edit(embed=embed)
-            def textCondition(m): return m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
+            def textCondition(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=textCondition,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -139,7 +139,7 @@ class Moderation(commands.Cog):
                 except: pass
                 embed.description='Would you like to purge only messages containing certain text? Type the text to check for or `skip` to skip this step.'
                 await message.edit(embed=embed)
-                def contains(m): return m.author==ctx.author
+                def contains(m): return m.channel == ctx.channel and m.author==ctx.author
                 try: post = await self.bot.wait_for('message',check=contains,timeout=120)
                 except asyncio.TimeoutError: return await message.edit(embed=timeout)
                 embed.set_author(name='Please wait',icon_url=url)
@@ -155,7 +155,7 @@ class Moderation(commands.Cog):
                 if current.contains is not None: 
                     embed.description='Right now, messages matching the filter will be purged regardless of capitalization. Would you like the filter to be case sensitive and only purge messages matching the capitalization you specified? Type `yes` or `no`'
                     await message.edit(embed=embed)
-                    def caseSen(m): return m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
+                    def caseSen(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
                     try: post = await self.bot.wait_for('message',check=caseSen,timeout=120)
                     except asyncio.TimeoutError: return await message.edit(embed=timeout)
                     embed.set_author(name='Please wait',icon_url=url)
@@ -175,7 +175,7 @@ class Moderation(commands.Cog):
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
                 await message.edit(embed=embed)
-                def startsWith(m): return m.author==ctx.author
+                def startsWith(m): return m.channel == ctx.channel and m.author==ctx.author
                 try: post = await self.bot.wait_for('message',check=startsWith,timeout=120)
                 except asyncio.TimeoutError: return await message.edit(embed=timeout)
                 embed.set_author(name='Please wait',icon_url=url)
@@ -190,7 +190,7 @@ class Moderation(commands.Cog):
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
                 await message.edit(embed=embed)
-                def endsWith(m): return m.author==ctx.author
+                def endsWith(m): return m.channel == ctx.channel and m.author==ctx.author
                 try: post = await self.bot.wait_for('message',check=endsWith,timeout=120)
                 except asyncio.TimeoutError: return await message.edit(embed=timeout)
                 embed.set_author(name='Please wait',icon_url=url)
@@ -205,7 +205,7 @@ class Moderation(commands.Cog):
                 except: pass
             embed.description='Would you like to purge only messages belonging to bots/humans? Type `bots` to purge only bot messages, `humans` to purge only human messages, and `both` to purge any messages'
             await message.edit(embed=embed)
-            def bots(m): return m.author==ctx.author and any(s in m.content for s in ['bots', 'h', 'both', 'cancel'])
+            def bots(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['bots', 'h', 'both', 'cancel'])
             try: post = await self.bot.wait_for('message',check=bots,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -222,7 +222,7 @@ class Moderation(commands.Cog):
             embed.set_author(name='Waiting for input')
             embed.description='Would you like to purge only messages belonging to a certain author or set of authors? Enter comma and space (`, `) separated usernames, IDs, or mentions, or type `skip`'
             await message.edit(embed=embed)
-            def author(m): return m.author==ctx.author
+            def author(m): return m.channel == ctx.channel and m.author==ctx.author
             try: post = await self.bot.wait_for('message',check=author,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -236,7 +236,7 @@ class Moderation(commands.Cog):
                 mem = []
                 for p in ppl:
                     try:
-                        result = Cyberlog.FindMember(ctx.guild, p)
+                        result = self.bot.get_cog('Cyberlog').FindMember(ctx.guild, p)
                         if result is not None: mem.append(result)
                     except Exception as e: print(e)
                 current.author = mem
@@ -253,7 +253,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input')
             await message.edit(embed=embed)
-            def links(m): return m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
+            def links(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=links,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -268,7 +268,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input')
             await message.edit(embed=embed)
-            def invites(m): return m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
+            def invites(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=invites,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -283,7 +283,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input')
             await message.edit(embed=embed)
-            def images(m): return m.author==ctx.author and any(s in m.content for s in ['i', 'f', 'b', 'cancel', 'skip'])
+            def images(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['i', 'f', 'b', 'cancel', 'skip'])
             try: post = await self.bot.wait_for('message',check=images,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -303,7 +303,7 @@ class Moderation(commands.Cog):
                 await post.delete()
             except: pass
             await message.edit(embed=embed)
-            def embeds(m): return m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
+            def embeds(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=embeds,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -318,7 +318,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input')
             await message.edit(embed=embed)
-            def mentions(m): return m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
+            def mentions(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=mentions,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -333,7 +333,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input')
             await message.edit(embed=embed)
-            def reactions(m): return m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
+            def reactions(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=reactions,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -348,7 +348,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input')
             await message.edit(embed=embed)
-            def activity(m): return m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
+            def activity(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=activity,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -363,7 +363,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input')
             await message.edit(embed=embed)
-            def dates(m): return m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
+            def dates(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=dates,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -377,7 +377,7 @@ class Moderation(commands.Cog):
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
                 await message.edit(embed=embed)
-                def after(m): return m.author==ctx.author
+                def after(m): return m.channel == ctx.channel and m.author==ctx.author
                 try: post = await self.bot.wait_for('message',check=after,timeout=120)
                 except asyncio.TimeoutError: return await message.edit(embed=timeout)
                 embed.set_author(name='Please wait',icon_url=url)
@@ -392,7 +392,7 @@ class Moderation(commands.Cog):
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
                 await message.edit(embed=embed)
-                def before(m): return m.author==ctx.author
+                def before(m): return m.channel == ctx.channel and m.author==ctx.author
                 try: post = await self.bot.wait_for('message',check=before,timeout=120)
                 except asyncio.TimeoutError: return await message.edit(embed=timeout)
                 embed.set_author(name='Please wait',icon_url=url)
@@ -407,7 +407,7 @@ class Moderation(commands.Cog):
             except: pass
             embed.set_author(name='Waiting for input',icon_url=url)
             await message.edit(embed=embed)
-            def count(m): return m.author==ctx.author
+            def count(m): return m.channel == ctx.channel and m.author==ctx.author
             try: post = await self.bot.wait_for('message',check=count,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait',icon_url=url)
@@ -435,7 +435,7 @@ class Moderation(commands.Cog):
             embed.set_author(name='Waiting for input',icon_url=url)
             embed.description+='\n\nIf you are ready to purge, type `purge`, otherwise type `cancel`'
             await message.edit(embed=embed)
-            def ready(m): return m.author==ctx.author and any(s in m.content for s in ['purge', 'cancel'])
+            def ready(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content for s in ['purge', 'cancel'])
             try: post = await self.bot.wait_for('message',check=ready,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             if 'cancel' in post.content.lower(): return await message.edit(embed=cancel)

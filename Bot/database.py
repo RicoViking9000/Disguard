@@ -94,6 +94,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
     'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
     'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
+    'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
     "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
     "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
     'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
@@ -203,6 +204,7 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
     'lastOnline': datetime.datetime.min if current is None or current.get('lastOnline') is None else current.get('lastOnline'),
     'birthdayMessages': [] if current is None or current.get('birthdayMessages') is None else current.get('birthdayMessages'),
     'birthday': None if current is None or current.get('birthday') is None else current.get('birthday'),
+    'wishList': [] if current is None or current.get('wishList') is None else current.get('wishList'),
     "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
 
 async def GetLogChannel(s: discord.Guild, mod: str):
@@ -480,7 +482,7 @@ async def GetBirthdayMessages(m: discord.Member):
 async def SetBirthdayMessage(m: discord.Member, msg, auth, servers):
     '''Update a member's birthday messages (receiving)'''
     await users.update_one({'user_id': m.id}, {'$push': {'birthdayMessages': {
-        'message': msg.content,
+        'message': msg.clean_content,
         'author': auth.id,
         'authName': auth.name,
         'created': datetime.datetime.utcnow(),
@@ -502,9 +504,21 @@ async def AppendWishlistEntry(m: discord.Member, entry):
     '''Append a wishlist entry to a member's wish list'''
     await users.update_one({'user_id': m.id}, {'$push': {'wishList': entry}}, True)
 
+async def SetWishlist(m: discord.Member, wishlist):
+    '''Sets a member's wishlist to the specified list'''
+    await users.update_one({'user_id': m.id}, {'$set': {'wishList': wishlist}}, True)
+
 async def GetWishlist(m: discord.Member):
     '''Return the wishlist of a member'''
     return (await users.find_one({'user_id': m.id})).get('wishList')
+
+async def SetBirthdayMode(s: discord.Guild, mode):
+    '''Sets auto birthday detection mode: Disabled (0), cake only (1), enabled (2)'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'birthdayMode': mode}})
+
+async def GetBirthdayMode(s: discord.Guild, mode):
+    '''Returns auto birthday detection mode, see above for values'''
+    return (await servers.find_one({'server_id': s.id})).get('birthdayMode')
 
 async def GetAgeKick(s: discord.Guild):
     '''Gets the ageKick of a server'''

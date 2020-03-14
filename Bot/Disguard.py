@@ -66,15 +66,16 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 pass
         await database.Verification(bot)
         await Antispam.PrepareFilters(bot)
+        await bot.get_cog('Birthdays').updateBirthdays()
         anniversaryDayKickoff.start()
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         print('Starting indexing...')
         for server in bot.guilds:
-            for channel in server.text_channels: bot.loop.create_task(indexMessages(server, channel))
+            await asyncio.gather(*[indexMessages(server, c) for c in server.text_channels])
             Cyberlog.indexed[server.id] = True
     print("Booted")
-    await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="your servers", type=discord.ActivityType.watching))
+    await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="{} servers".format(len(bot.guilds)), type=discord.ActivityType.watching))
 
 async def indexMessages(server, channel):
     path = "{}/{}/{}".format(indexes,server.id, channel.id)
@@ -82,7 +83,7 @@ async def indexMessages(server, channel):
     try: os.makedirs(path)
     except FileExistsError: pass
     try: 
-        async for message in channel.history(limit=None, after=datetime.datetime.now() - datetime.timedelta(days=30)):
+        async for message in channel.history(limit=None):
             if not message.author.bot:
                 if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
                 try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")

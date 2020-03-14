@@ -130,7 +130,7 @@ def server(id):
         dt2 = datetime.datetime(2020, 1, 1, int(bdt[:bdt.find(':')]), decrement)
         if dt > d: difference = round((dt - d).seconds/3600)
         else: difference = round((dt - d).seconds/3600) - 24
-        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz, 'birthday': int(bd), 'birthdate': dt2}})
+        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz, 'birthday': int(bd), 'birthdate': dt2, 'birthdayMode': int(r.get('birthdayMode'))}})
         return redirect(url_for('server', id=id)) 
     return render_template('general.html', servObj=serv, date=d, date2=d2, id=id)
 
