@@ -234,7 +234,8 @@ class Birthdays(commands.Cog):
                     age.remove(a)
                     addLater.append(a)
             actionList += age
-            memberList = list(*[await self.bot.get_cog('Cyberlog').FindMoreMembers(g, arg) for g in self.bot.guilds])
+            memberList = []
+            for m in [await self.bot.get_cog('Cyberlog').FindMoreMembers(g, arg) for g in self.bot.guilds]: memberList += m
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
             memberList = [m.get('member') for m in memberList]
             memberList = [m for m in memberList if len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members])]
@@ -367,7 +368,8 @@ async def messageManagement(self, ctx, message, user, groups):
                     Cyberlog.AvoidDeletionLogging(result)
                     await result.delete()
                     await message.edit(embed=message.embeds[0])
-                    results = list(*[await self.bot.get_cog('Cyberlog').FindMoreMembers(g, result.content) for g in self.bot.guilds])
+                    results = []
+                    for m in [await self.bot.get_cog('Cyberlog').FindMoreMembers(g, result.content) for g in self.bot.guilds]: results += m
                     results.sort(key = lambda x: x.get('check')[1], reverse=True) #Sort results be relevance (returned from the FindMoreMembers function)
                     results = [r.get('member') for r in results] #Only take the member objects; we've already sorted and can trash everything else we don't need
                     results = [m for m in results if len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members])] #Filter by only reactor and target sharing a server with each other
