@@ -183,9 +183,11 @@ class Birthdays(commands.Cog):
             disguardSuggest = []
             weekBirthday = []
             for m in self.bot.users:
-                if m in ctx.guild.members and Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: currentServer.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
-                elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and (Cyberlog.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8 and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) > 1: weekBirthday.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
-                elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: disguardSuggest.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})                
+                try:
+                    if m in ctx.guild.members and Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: currentServer.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and (Cyberlog.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8 and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) > 1: weekBirthday.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: disguardSuggest.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                except AttributeError: pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
             disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members])) #Servers the author and target share
