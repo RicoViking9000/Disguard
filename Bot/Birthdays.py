@@ -10,7 +10,6 @@ import collections
 import copy
 import nltk
 
-nltk.download('popular')
 
 yellow=0xffff00
 green=0x008000
@@ -173,21 +172,20 @@ class Birthdays(commands.Cog):
         if len(args) == 0:
             embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), description='{} Fetching information from database...'.format(self.loading), color=yellow, timestamp=datetime.datetime.utcnow())
             embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
-            message = await ctx.send(embed=embed)
-            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(ctx.guild))
-            bday = await database.GetMemberBirthday(ctx.author)
+            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=Cyberlog.lightningLogging.get(ctx.guild.id).get('offset'))
+            bday = Cyberlog.lightningUsers.get(ctx.author.id).get('birthday')
             embed.add_field(name='Your Birthday',value='Unknown' if bday is None else bday.strftime('%a %b %d\n(In {} days)').format((bday - adjusted).days))
             embed.add_field(name='Your Age', value='Unknown' if await database.GetAge(ctx.author) is None else await database.GetAge(ctx.author))
-            embed.description = '{} Retrieving and processing global birthday information...'.format(self.loading)
-            await message.edit(embed=embed)
+            embed.description = '{} Processing global birthday information...'.format(self.loading)
+            message = await ctx.send(embed=embed)
             #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
             currentServer = []
             disguardSuggest = []
             weekBirthday = []
-            for m in self.bot.get_all_members():
-                if m in ctx.guild.members and await database.GetMemberBirthday(m) is not None: currentServer.append({'data': m, 'bday': await database.GetMemberBirthday(m)})
-                elif await database.GetMemberBirthday(m) is not None and (await database.GetMemberBirthday(m) - adjusted).days < 8 and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) > 1: weekBirthday.append({'data': m, 'bday': await database.GetMemberBirthday(m)})
-                elif await database.GetMemberBirthday(m) is not None: disguardSuggest.append({'data': m, 'bday': await database.GetMemberBirthday(m)})                
+            for m in self.bot.users:
+                if m in ctx.guild.members and Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: currentServer.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and (Cyberlog.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8 and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) > 1: weekBirthday.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: disguardSuggest.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})                
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
             disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members])) #Servers the author and target share
@@ -234,8 +232,7 @@ class Birthdays(commands.Cog):
                     age.remove(a)
                     addLater.append(a)
             actionList += age
-            memberList = []
-            for m in [await self.bot.get_cog('Cyberlog').FindMoreMembers(g, arg) for g in self.bot.guilds]: memberList += m
+            memberList = await self.bot.get_cog('Cyberlog').FindMoreMembers(self.bot.users, arg)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
             memberList = [m.get('member') for m in memberList]
             memberList = [m for m in memberList if len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members])]
@@ -245,7 +242,7 @@ class Birthdays(commands.Cog):
             if date is not None: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
             if len(actionList) == 1:
                 if type(actionList[0]) is int and actionList[0] < 10000: return await ageContinuation(self, actionList[0], ctx.author, message, embed, partial=True)
-                elif type(actionList[0]) is discord.Member:
+                elif type(actionList[0]) in [discord.User, discord.ClientUser]:
                     await message.edit(embed=await guestBirthdayViewer(self, ctx, actionList[0]))
                     await message.add_reaction('🍰')
                     if actionList[0] == ctx.author: await message.add_reaction('ℹ')
@@ -270,7 +267,7 @@ class Birthdays(commands.Cog):
                     return await message.edit(embed=embed)
             parsed = []
             for entry in actionList:
-                if type(entry) is discord.Member: parsed.append('View {}\'s birthday information'.format(entry.name))
+                if type(entry) in [discord.User, discord.ClientUser]: parsed.append('View {}\'s birthday information'.format(entry.name))
                 elif type(entry) is int: parsed.append('Set your age as **{}**'.format(entry))
                 else: parsed.append('Set your birthday as **{}**'.format(entry.strftime('%A, %b %d, %Y')))
             embed.description=''
@@ -296,7 +293,7 @@ class Birthdays(commands.Cog):
             try: await message.clear_reactions()
             except: pass
             if type(actionList[index]) is int: return await ageContinuation(self, actionList[index], ctx.author, message, embed, partial=True)
-            elif type(actionList[index]) is discord.Member:
+            elif type(actionList[index]) in [discord.User, discord.ClientUser]:
                 await message.edit(embed=await guestBirthdayViewer(self, ctx, actionList[index]))
                 await message.add_reaction('🍰')
                 if actionList[0] == ctx.author: await message.add_reaction('ℹ')
@@ -368,8 +365,7 @@ async def messageManagement(self, ctx, message, user, groups):
                     Cyberlog.AvoidDeletionLogging(result)
                     await result.delete()
                     await message.edit(embed=message.embeds[0])
-                    results = []
-                    for m in [await self.bot.get_cog('Cyberlog').FindMoreMembers(g, result.content) for g in self.bot.guilds]: results += m
+                    results = await self.bot.get_cog('Cyberlog').FindMoreMembers(self.bot.users, result.content)
                     results.sort(key = lambda x: x.get('check')[1], reverse=True) #Sort results be relevance (returned from the FindMoreMembers function)
                     results = [r.get('member') for r in results] #Only take the member objects; we've already sorted and can trash everything else we don't need
                     results = [m for m in results if len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members])] #Filter by only reactor and target sharing a server with each other
