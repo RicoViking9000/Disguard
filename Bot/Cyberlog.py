@@ -2565,14 +2565,16 @@ def lastActive(u: discord.User):
     return lightningUsers.get(u.id).get('lastActive')
 
 async def updateLastActive(u: discord.User, timestamp, reason):
-    lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
+    try: lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
+    except: pass
     await database.SetLastActive(u, timestamp, reason)
 
 def lastOnline(u: discord.User):
     return lightningUsers.get(u.id).get('lastOnline')
 
 async def updateLastOnline(u: discord.User, timestamp):
-    lightningUsers[u.id]['lastOnline'] = timestamp
+    try: lightningUsers[u.id]['lastOnline'] = timestamp
+    except: pass
     await database.SetLastOnline(u, timestamp)
 
 def beginPurge(s: discord.Guild):

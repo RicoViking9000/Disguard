@@ -72,6 +72,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         print('Starting indexing...')
         for server in bot.guilds:
+            print('Indexing {}'.format(server.name))
             await asyncio.gather(*[indexMessages(server, c) for c in server.text_channels])
             Cyberlog.indexed[server.id] = True
     print("Booted")
@@ -100,7 +101,8 @@ async def indexMessages(server, channel):
                         if attachment.size / 1000000 < 8:
                             try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                             except discord.HTTPException: pass
-    except discord.Forbidden: pass
+    except discord.Forbidden: 
+        print('Index error for {}'.format(server.name))
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 
 @bot.listen()
