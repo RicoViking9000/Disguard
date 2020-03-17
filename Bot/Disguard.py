@@ -78,15 +78,17 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     print("Booted")
     await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="{} servers".format(len(bot.guilds)), type=discord.ActivityType.watching))
 
-async def indexMessages(server, channel):
+async def indexMessages(server, channel, full=False):
     path = "{}/{}/{}".format(indexes,server.id, channel.id)
     start = datetime.datetime.now()
     try: os.makedirs(path)
     except FileExistsError: pass
     try: 
-        async for message in channel.history(limit=None):
+        async for message in channel.history(limit=None, oldest_first=full):
             if not message.author.bot:
-                if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
+                if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): 
+                    if not full: break
+                    else: continue #Skip the code below as to not overwrite message edit history, plus to skip saving message indexes we already have (program will keep running, however, this is intentional)
                 try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                 except FileNotFoundError: pass
                 try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
@@ -101,8 +103,7 @@ async def indexMessages(server, channel):
                         if attachment.size / 1000000 < 8:
                             try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                             except discord.HTTPException: pass
-    except discord.Forbidden: 
-        print('Index error for {}'.format(server.name))
+    except discord.Forbidden: print('Index error for {}'.format(server.name))
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 
 @bot.listen()
@@ -133,6 +134,22 @@ async def verify(ctx):
         status = await ctx.send("Verifying...")
         await database.Verification(bot)
         await status.delete()
+
+@commands.is_owner()
+@bot.command()
+async def index(ctx, t: int):
+    if t == 0: target = bot.guilds
+    else:
+        target = bot.get_channel(t)
+        if target is None:
+            target = bot.get_guild(t)
+            if target is None: return await ctx.send('No target found for <{}>'.format(t))
+    status = await ctx.send('Indexing...')
+    if type(target) is discord.Guild: await asyncio.gather(*[indexMessages(target, c, True) for c in target.text_channels])
+    elif type(target) is list:
+        for t in target: await asyncio.gather(*[indexMessages(t, c, True) for c in t.text_channels])
+    else: await asyncio.wait([indexMessages(ctx.guild, target, True)], return_when=asyncio.FIRST_COMPLETED)
+    await status.delete()
 
 @bot.command()
 async def help(ctx):

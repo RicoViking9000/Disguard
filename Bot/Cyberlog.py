@@ -540,8 +540,10 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden: print('{} lacks permissions for message edit for some reason'.format(bot.get_guild(int(payload.data.get('guild_id'))).name))
         await updateLastActive(after.author, datetime.datetime.now(), 'edited a message')
         g = bot.get_guild(int(payload.data.get('guild_id')))
+        if g is None: return
+        author = g.get_member(after.author.id)
         if not logEnabled(g, 'message'): return
-        if not logExclusions(after.channel, after.author) or after.author.bot: return
+        if not logExclusions(after.channel, author) or author.bot: return
         load=discord.Embed(title="📜✏ Message was edited (React with ℹ to see details)",description=str(loading),color=0x0000FF)
         embed = load.copy()
         c = logChannel(g, 'message')
@@ -551,12 +553,12 @@ class Cyberlog(commands.Cog):
         try:
             path = '{}/{}/{}'.format(indexes, payload.data.get('guild_id'), payload.data.get('channel_id'))
             for fl in os.listdir(path):
-                if fl == '{}_{}.txt'.format(payload.message_id, after.author.id):
+                if fl == '{}_{}.txt'.format(payload.message_id, author.id):
                     f = open(path+'/'+fl, 'r+')
                     for line, l in enumerate(f): #Line is line number, l is line content
                         if line == 2:
                             before = l
-                            try: f.write('\n{}\n{}\n{}'.format(after.created_at.strftime('%b %d, %Y - %I:%M %p'), after.author.name, after.content))
+                            try: f.write('\n{}\n{}\n{}'.format(after.created_at.strftime('%b %d, %Y - %I:%M %p'), author.name, after.content))
                             except UnicodeEncodeError: pass
                             break
                     f.close()
@@ -645,13 +647,13 @@ class Cyberlog(commands.Cog):
             if b==start:b+=1
         if len(beforeC) >= 1024: beforeC = 'Message content too long to display here'
         if len(afterC) >= 1024: afterC = 'Message content too long to display here'
-        embed.description="Author: "+after.author.mention+" ("+after.author.name+")"
+        embed.description="Author: "+author.mention+" ("+author.name+")"
         embed.timestamp=timestamp
         embed.add_field(name="Previously: ", value='[{}]({} \'Jump to message ;)\')'.format(beforeC if len(beforeC) > 0 else '(No new content)', after.jump_url),inline=False)
         embed.add_field(name="Now: ", value='[{}]({} \'Jump to message ;)\')'.format(afterC if len(afterC) > 0 else '(No new content)', after.jump_url),inline=False)
         embed.add_field(name="Channel: ", value=str(after.channel.mention))
         embed.set_footer(text="Message ID: " + str(after.id))
-        embed.set_thumbnail(url=after.author.avatar_url)
+        embed.set_thumbnail(url=author.avatar_url)
         #data = {'author': after.author.id, 'name': after.author.name, 'server': after.guild.id, 'message': after.id}
         #if await database.SummarizeEnabled(g, 'message'):
         #   global summaries
@@ -1844,7 +1846,8 @@ class Cyberlog(commands.Cog):
             if past or message.embeds[0].author.name is not discord.Embed.Empty and '⭐' in message.embeds[0].author.name: 
                 if len(every) > 0: 
                     for r in ['⬅']: await message.add_reaction(r)
-                desired = ctx.guild.get_member(int(message.embeds[0].footer.text[message.embeds[0].footer.text.find(':') + 1:]))
+                try: desired = ctx.guild.get_member(int(message.embeds[0].footer.text[message.embeds[0].footer.text.find(':') + 1:]))
+                except: desired = None
                 def checkBday(r, u): return u == desired and r.message.id == message.id and str(r) == '🍰'
                 def checkBack(r, u): return u == ctx.author and r.message.id == message.id and str(r) == '⬅'
                 if 'member details' in message.embeds[0].title.lower(): await message.add_reaction('🍰')
@@ -2102,7 +2105,7 @@ class Cyberlog(commands.Cog):
                 except:
                     current.append('Error parsing activity')
             embed.description+='\n\n • {}'.format('\n • '.join(current))
-        embed.description+='\n\nTop role: **{}**\n\nPermissions: **{}**\n\nReact 🍰 to switch to Birthday Information view'.format(m.top_role.name,'Administrator' if m.guild_permissions.administrator else ', '.join([p[0] for p in iter(m.guild_permissions) if p[1]]))
+        embed.description+='\n\nRoles: {}\n\nPermissions: {}\n\nReact 🍰 to switch to Birthday Information view'.format(' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ', '.join([p[0] for p in iter(m.guild_permissions) if p[1]]))
         boosting = m.premium_since
         joined = m.joined_at + datetime.timedelta(hours=tz)
         created = m.created_at + datetime.timedelta(hours=tz)
@@ -2116,7 +2119,6 @@ class Cyberlog(commands.Cog):
         embed.add_field(name='📆Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nz, (datetime.datetime.utcnow()-created).days))
         embed.add_field(name='📆Joined server',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p"), nz, (datetime.datetime.utcnow()-joined).days))
         embed.add_field(name='📜Posts',value=await self.MemberPosts(m))
-        embed.add_field(name='🚩Roles',value='{}: {}'.format(len(m.roles),', '.join([role.name for role in m.roles])))
         embed.add_field(name='🎙Voice Chat',value=voice)
         embed.set_thumbnail(url=m.avatar_url)
         embed.set_footer(text='Member ID: {}'.format(m.id))
@@ -2249,13 +2251,13 @@ class Cyberlog(commands.Cog):
                 for l in logs:
                     if l.action == discord.AuditLogAction.ban and l.target == b.user:
                         created = l.created_at + datetime.timedelta(hours=await database.GetTimezone(s))
-                        array.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/Y@%H:%M'), '(No reason specified)' if b.reason is None else b.reason))
+                        array.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/%Y@%H:%M'), '(No reason specified)' if b.reason is None else b.reason))
                         current.append(b.user)
             other=[]
             for l in logs:
                 if l.action == discord.AuditLogAction.ban and l.target not in current:
                     created = l.created_at + datetime.timedelta(hours=await database.GetTimezone(s))
-                    other.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/Y@%H:%M'), '(No reason specified)' if l.reason is None else l.reason))
+                    other.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/%Y@%H:%M'), '(No reason specified)' if l.reason is None else l.reason))
                     current.append(b.user)
         for b in bans:
             if b.user not in current: array.append('{}: Banned because {}'.format(b.user.name, '(No reason specified)' if b.reason is None else b.reason))
@@ -2263,7 +2265,7 @@ class Cyberlog(commands.Cog):
         if len(array) == 0: 
             null.description='Unable to provide ban info'
             return null
-        if logs is not None: embed.add_field(name='Banned previously',value='\n'.join(other)[:1023])
+        if logs is not None: embed.add_field(name='Banned previously',value='\n\n'.join([' • {}'.format(o) for o in other])[:1023])
         return embed
 
     async def Summarize(self, queue, keycounts):

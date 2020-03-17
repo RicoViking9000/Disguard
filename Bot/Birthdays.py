@@ -190,7 +190,7 @@ class Birthdays(commands.Cog):
                 except AttributeError: pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
-            disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members])) #Servers the author and target share
+            disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members]), reverse=True) #Servers the author and target share
             embed.description = '''**{7:–^70}**\n🍰: Send a birthday message to someone\n📆: Update your birthday\n🕯: Update your age\n📝: Edit your wish list\n👮‍♂️: Switch to Member Details view\n**{8:–^70}**\n{3}\n\n__{0}__\n{4}\n\n__{1}__\n{5}\n\n__{2}__\n{6}
                 '''.format('THIS SERVER', 'DISGUARD SUGGESTIONS', 'OTHER', 'To send a message to someone, use reactions or type `{}birthday <recipient>`'.format(ctx.prefix),
                 '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').name, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in currentServer[:5]]),
@@ -257,7 +257,7 @@ class Birthdays(commands.Cog):
                         if str(r[0]) == 'ℹ':
                             try: await message.delete()
                             except discord.Forbidden: pass
-                            return await ctx.invoke(ctx.command)
+                            return await self.birthday(ctx)
                         else:
                             await message.delete()
                             return await self.bot.get_cog('Cyberlog').info(ctx)
@@ -306,7 +306,7 @@ class Birthdays(commands.Cog):
                 for f in p: f.cancel()
                 if type(r) is tuple: 
                     await message.delete()
-                    if str(r[0]) == 'ℹ': return await ctx.invoke(ctx.command)
+                    if str(r[0]) == 'ℹ': return await self.birthday(ctx)
                     else: return await self.bot.get_cog('Cyberlog').info(ctx)
                         
 
