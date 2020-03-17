@@ -847,6 +847,7 @@ async def verifyAge(message, age):
         else: finder = 'im'
         try: number = int(s[1 + s.index(finder)])
         except: number = None
+        if abs(s.index(str(number)) - s.index(finder)) > 1: return False #I'm or I am is too far from the actual number so it's irrelevant
         if number:
             try: tail = s[s.index(str(number)):] #If there is content after the number, try to deal with it
             except: 
