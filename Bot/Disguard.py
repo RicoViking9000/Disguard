@@ -43,10 +43,10 @@ async def updatePrefixes():
 
 @tasks.loop(minutes=1)
 async def anniversaryDayKickoff():
-    if datetime.datetime.now().strftime('%m %d %y %H:%M') == '03 18 20 09:35':
+    if datetime.datetime.now().strftime('%m %d %y %H:%M') == '03 18 20 10:55':
         embed=discord.Embed(title=datetime.datetime.now().strftime('%B %d, %Y %H:%M %p'),description=secure.anniversary(),color=0xffff00, timestamp=datetime.datetime.utcnow())
         embed.set_image(url=secure.embedImage())
-        await bot.get_user(596381991151337482).send(embed=embed)
+        await bot.get_user(596381991151337482).send(content=secure.anniversaryMessage(), embed=embed)
         anniversaryDayKickoff.cancel()
 
 @bot.listen()
