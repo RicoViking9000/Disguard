@@ -110,7 +110,8 @@ class Birthdays(commands.Cog):
         self.bot.loop.create_task(self.messagehandler(message))
 
     async def messagehandler(self, message):
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=Cyberlog.lightningLogging.get(message.guild.id).get('offset'))
+        try: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=Cyberlog.lightningLogging.get(message.guild.id).get('offset'))
+        except: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(message.guild)) #Use database if local variables aren't available
         birthday = calculateDate(message, adjusted)
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
         #First we check to see if the user is talking about themself
@@ -136,10 +137,11 @@ class Birthdays(commands.Cog):
             await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple 'threads' for anyone to react to if necessary
         ages = calculateAge(message)
         ages = [a for a in ages if await verifyAge(message, a)]
-        currentAge = Cyberlog.lightningUsers.get(message.author.id).get('age')
+        try: currentAge = Cyberlog.lightningUsers.get(message.author.id).get('age')
+        except: currentAge = database.GetMemberBirthday(message.author) #Use database if local variables aren't available
         try: ages.remove(currentAge) #Remove the user's current age if it's in there
         except ValueError: pass
-        if currentAge is not None and len(ages) > 0:
+        if len(ages) > 0:
             if Cyberlog.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add candle reaction
                 def candleAutoVerify(r,u): return u == message.author and str(r) == '🕯' and r.message.id == message.id
                 await message.add_reaction('🕯')
@@ -185,8 +187,8 @@ class Birthdays(commands.Cog):
             for m in self.bot.users:
                 try:
                     if m in ctx.guild.members and Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: currentServer.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
-                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and (Cyberlog.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8 and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) > 1: weekBirthday.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
-                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: disguardSuggest.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1 and (Cyberlog.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1: disguardSuggest.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
                 except AttributeError: pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
@@ -526,7 +528,7 @@ async def firstAgeContinuation(self, ctx, author, message):
         except asyncio.TimeoutError: return await birthdayCancellation(message, birthdayCancelled, revert, new, author)
         for future in pending: future.cancel()
         if type(stuff) is discord.Message: #User typed an age, so we must parse it
-            result = calculateAge(stuff)
+            result = calculateAge(stuff)[0]
             try:
                 Cyberlog.AvoidDeletionLogging(stuff)
                 await stuff.delete()

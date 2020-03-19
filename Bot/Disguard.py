@@ -103,7 +103,7 @@ async def indexMessages(server, channel, full=False):
                         if attachment.size / 1000000 < 8:
                             try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                             except discord.HTTPException: pass
-                await asyncio.sleep(0.2)
+                if full: await asyncio.sleep(1)
     except discord.Forbidden: print('Index error for {}'.format(server.name))
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 

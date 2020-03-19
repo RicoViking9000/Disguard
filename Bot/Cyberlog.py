@@ -877,7 +877,7 @@ class Cyberlog(commands.Cog):
                 b4 = {} #Before perms
                 af = {} #After perms
                 temp=[]
-                english = {True: '✔', None: str(self.whiteMinus), False: '✖'} #Symbols becuase True, False, None is confusing
+                english = {True: '✔', None: '➖', False: '✖'} #Symbols becuase True, False, None is confusing
                 for k,v in before.overwrites.items(): b4.update({k: dict(iter(v))})
                 for k,v in after.overwrites.items(): af.update({k: dict(iter(v))})
                 for k,v in af.items():
