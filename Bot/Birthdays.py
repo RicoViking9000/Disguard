@@ -138,7 +138,7 @@ class Birthdays(commands.Cog):
         ages = calculateAge(message)
         ages = [a for a in ages if await verifyAge(message, a)]
         try: currentAge = Cyberlog.lightningUsers.get(message.author.id).get('age')
-        except: currentAge = database.GetMemberBirthday(message.author) #Use database if local variables aren't available
+        except: currentAge = await database.GetMemberBirthday(message.author) #Use database if local variables aren't available
         try: ages.remove(currentAge) #Remove the user's current age if it's in there
         except ValueError: pass
         if len(ages) > 0:
