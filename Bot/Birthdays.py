@@ -194,10 +194,10 @@ class Birthdays(commands.Cog):
             weekBirthday.sort(key = lambda m: m.get('bday'))
             disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members]), reverse=True) #Servers the author and target share
             embed.description = '''**{7:–^70}**\n🍰: Send a birthday message to someone\n📆: Update your birthday\n🕯: Update your age\n📝: Edit your wish list\n👮‍♂️: Switch to Member Details view\n**{8:–^70}**\n{3}\n\n__{0}__\n{4}\n\n__{1}__\n{5}\n\n__{2}__\n{6}
-                '''.format('THIS SERVER', 'DISGUARD SUGGESTIONS', 'OTHER', 'To send a message to someone, use reactions or type `{}birthday <recipient>`'.format(ctx.prefix),
-                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').name, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in currentServer[:5]]),
-                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').name, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in disguardSuggest[:5]]),
-                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').name, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in weekBirthday[:5]]),
+                '''.format('THIS SERVER', 'DISGUARD SUGGESTIONS', 'OTHER', 'To send a message to someone, react 🍰 or type `{}birthday <recipient>`'.format(ctx.prefix),
+                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').mention, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in currentServer[:5]]),
+                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').mention, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in disguardSuggest[:5]]),
+                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').mention, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in weekBirthday[:5]]),
                 'AVAILABLE OPTIONS', 'UPCOMING BIRTHDAYS')
             await message.edit(embed=embed)
             for r in ['🍰', '📆', '🕯', '📝', '👮‍♂️']: await message.add_reaction(r)
