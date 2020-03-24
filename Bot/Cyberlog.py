@@ -15,6 +15,9 @@ serverPurge = {}
 loading = None
 summarizeOn=False
 indexes = 'Indexes'
+tempDir = 'Attachments/Temp' #Path to save images for profile picture changes and other images in logs
+try: os.makedirs(tempDir)
+except FileExistsError: pass
 
 invites = {}
 edits = {}
@@ -94,6 +97,7 @@ class Cyberlog(commands.Cog):
         self.whiteMinus = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteMinus')
         self.whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
         self.hashtag = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='hashtag')
+        self.pins = {}
         self.summarize.start()
         self.DeleteAttachments.start()
     
@@ -108,6 +112,8 @@ class Cyberlog(commands.Cog):
             for u in self.bot.users: lightningUsers[u.id] = await database.GetUser(u)
             for m in self.bot.get_all_members():
                 if m.status != discord.Status.offline: await updateLastOnline(m, datetime.datetime.now())
+            for server in self.bot.guilds:
+                for c in server.text_channels: self.pins[c.id] = [m.id for m in await c.pins()]
         except Exception as e: print('Summarize error: {}'.format(e))
         if summarizeOn:
             try:
@@ -166,8 +172,7 @@ class Cyberlog(commands.Cog):
                         path='Attachments/{}/{}'.format(server.id, channel.id)
                         for fl in os.listdir(path):
                             with open('{}/{}/{}/{}.txt'.format(indexes,server.id, channel.id, fl)) as f:
-                                for line, content in enumerate(f):
-                                    if line==0: timestamp=datetime.datetime.strptime(content, '%b %d, %Y - %I:%M %p')
+                                timestamp = datetime.strptime(list(enumerate(f))[0][1], '%b %d, %Y - %I:%M %p')
                             if (datetime.datetime.utcnow() - timestamp).days > 7:
                                 removal.append(path+fl)
                     except: pass
@@ -179,8 +184,9 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
-        await updateLastActive(message.author, datetime.datetime.now(), 'Sent a message')
+        await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
         if type(message.channel) is discord.DMChannel: return
+        if message.type is discord.MessageType.pins_add: await self.pinAddLogging(message)
         self.bot.loop.create_task(self.saveMessage(message))
 
     async def saveMessage(self, message: discord.Message):
@@ -202,6 +208,17 @@ class Cyberlog(commands.Cog):
                     try: await a.save(path2+'/'+a.filename)
                     except discord.HTTPException: pass
 
+    async def pinAddLogging(self, message: discord.Message):
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(message.guild.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        destination = logChannel(message.guild, 'message')
+        if destination is None: return
+        pinned = (await message.channel.pins())[0]
+        embed=discord.Embed(title='📌Message was pinned',description='Pinned by: {} ({})\nAuthored by: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {}'.format(message.author.mention, message.author.name, pinned.author.mention, pinned.author.name, pinned.channel.mention, pinned.jump_url, received),color=blue,timestamp=datetime.datetime.utcnow())
+        embed.add_field(name='Message', value=pinned.content)
+        embed.set_footer(text='Pinned message ID: {}'.format(pinned.id))
+        await destination.send(embed=embed)
+        self.pins[pinned.channel.id].append(pinned.id)
+
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         ej = payload.emoji
@@ -214,7 +231,7 @@ class Cyberlog(commands.Cog):
         try: message = await channel.fetch_message(payload.message_id)
         except: return
         user = bot.get_guild(channel.guild.id).get_member(payload.user_id)
-        await updateLastActive(user, datetime.datetime.now(), 'Added a reaction')
+        await updateLastActive(user, datetime.datetime.now(), 'added a reaction')
         if user.bot: return
         if len(message.embeds) == 0: return
         if message.author.id != bot.get_guild(channel.guild.id).me.id: return
@@ -528,144 +545,180 @@ class Cyberlog(commands.Cog):
         if str(reaction) in reactions or str(reaction) == '🗒':
             await reaction.message.edit(content=loading)
 
+    def parseEdits(self, beforeWordList, afterWordList, findChanges=False):
+        '''Returns truncated version of differences given before/after list of words
+        -if findChanges is True, then one of the lists merely contains an additional word compared to the other one'''
+        beforeC = "" #String that will be displayed in the embed - old content
+        afterC = "" #String that will be displayed in the embed - new content
+        beforeBooleans = [b in afterWordList for b in beforeWordList] #Used for determining placement when one list has more elements than the other; Falses will decrease the iterator
+        afterBooleans = [a in beforeWordList for a in afterWordList]
+        i = 0 #Iterator variable
+        #The following code parses through both the old and new message in order to trim out what hasn't changed, which makes it much easier to see what's changed in long messages, and what makes Disguard edit logs so special
+        while i < len(beforeWordList): #Loop through each word in the old message
+            iteratorAtStart = i #This holds the value of the iterator at the start, and is used later
+            if beforeWordList[i] not in afterWordList: #If the old word is not in the list of words in the new message...
+                offset = len([b for b in beforeBooleans[:i] if not b]) #How many words aren't in the after list, up to the current iterator index i; used to determine offset
+                if i > 2: 
+                    beforeC += '...{} **{}**'.format(' '.join(beforeWordList[i - 2 : i]), beforeWordList[i]) #If it's the 3rd word or later, append three dots first
+                    if findChanges: afterC += '...{}'.format(' '.join(afterWordList[i - 2 - offset : i - offset])) #If findChanges, add this context to the after String
+                else: 
+                    beforeC += '{} **{}**'.format(' '.join(beforeWordList[:i]), beforeWordList[i]) #Otherwise, add everything in the old message up to what's at the current iterator i
+                    if findChanges: afterC += ' '.join(afterWordList[:i - offset]) #If applicable, add all words up to i to the after content string
+                matchScanner = i + 1 #Set this value to one number above i; it will go through the rest of the old message to scan for more words that aren't in the new message
+                altScanner = i - 1 #This is for the findChanges variable; for tracking through the new words list
+                matchCount = 0 #How many words **are** in the new message
+                matches=[] #Array of T/F depending on if word matches - if word matches, don't bold it
+                #When this is done, there will be a list formed of booleans for each remaining word in the old words list, set based on if that word is in the new message
+                while matchScanner < len(beforeWordList) and matchCount < 2: #Loop through the rest of the before words list as long as there are under two matches
+                    matched = beforeWordList[matchScanner] in afterWordList #True if the current word in the old message is in the new message
+                    if matched: matchCount += 1 #Append match count if a match is found
+                    else: matchCount = 0 #Otherwise reset this because the parser checks for two identical words, then it breaks to trim the rest of the message until another difference is found
+                    matches.append(matched)
+                    matchScanner += 1
+                confirmCount = 0 #Keeps track of how many matches have been found (this will always be <= the number of True in matches)
+                for match in range(len(matches)): #Iterate through the generated list of booleans
+                    if matches[match]: #If True (current word *is* in new message)...
+                        confirmCount += 1
+                        beforeC += ' {}'.format(beforeWordList[match + i + 1]) #Add this word (without bolding) to the result string
+                    else: 
+                        beforeC += ' **{}**'.format(beforeWordList[match + i + 1]) #Otherwise, add this word (with bolding) to the result string
+                        altScanner += 1 #If a word has been removed then append this by 1
+                    if findChanges:
+                        try: afterC += ' {}'.format(afterWordList[match + altScanner + 1]) #Attempt to add the equivalent word (without bolding) to the result string
+                        except IndexError:
+                            if match + altScanner > i: afterC += ' {}'.format(' '.join(afterWordList[match + altScanner - 1:])) #If out of bounds occurs due to the end of the message, simply add the rest of the message
+                    if confirmCount == len([m for m in matches if m]) and not findChanges: break #If all same word matches have been found, and findChanges is False, break out of this and move on to the next iteration of the **while** loop
+                if matchScanner < len(beforeWordList): beforeC+= '... ' #If we aren't at the end of the word list, then add triple periods because the tail of the message will be truncated
+                if altScanner < len(afterWordList) - 1 and findChanges: afterC += '... ' #Append triple periods if the remaining content is truncated
+                i = matchScanner + 1 #Jump i ahead to the number after matchScanner because everything up to matchScanner has been parsed for differences already
+            if i == iteratorAtStart: i += 1 #If no difference was found (i would equal iteratorAtStart), then simply iterate i by 1
+        i=0 #Reset the iterator
+        #The following code does the exact same thing as above, just to the new message content
+        while i < len(afterWordList):
+            iteratorAtStart = i
+            if afterWordList[i] not in beforeWordList:
+                offset = len([a for a in afterBooleans[:i] if not a])
+                if i > 2: 
+                    afterC += '...{} **{}**'.format(' '.join(afterWordList[i - 2 : i]), afterWordList[i])
+                    if findChanges: beforeC += '...{}'.format(' '.join(beforeWordList[i - 2 - offset: i - offset]))
+                else: 
+                    afterC += '{} **{}**'.format(' '.join(afterWordList[:i]), afterWordList[i])
+                    if findChanges: beforeC += ' '.join(beforeWordList[:i - offset])
+                matchScanner = i + 1
+                altScanner = i - 1
+                matchCount = 0
+                matches=[]
+                while matchScanner < len(afterWordList) and matchCount < 2:
+                    matched = afterWordList[matchScanner] in beforeWordList
+                    if matched: matchCount += 1
+                    else: matchCount = 0
+                    matches.append(matched)
+                    matchScanner += 1
+                confirmCount = 0
+                for match in range(len(matches)):
+                    if matches[match]:
+                        confirmCount += 1 
+                        afterC += ' {}'.format(afterWordList[match + i + 1]) 
+                    else: 
+                        afterC += ' **{}**'.format(afterWordList[match + i + 1])
+                        altScanner += 1
+                    if findChanges: 
+                        try: beforeC += ' {}'.format(beforeWordList[match + altScanner + 1])
+                        except IndexError: 
+                            if match + altScanner > i: beforeC += ' {}'.format(' '.join(beforeWordList[match + altScanner - 1:]))
+                    if confirmCount == len([m for m in matches if m]) and not findChanges: break
+                if matchScanner < len(afterWordList): afterC+='... '
+                if altScanner < len(beforeWordList) - 1 and findChanges: beforeC += '... '
+                i = matchScanner + 1
+            if i == iteratorAtStart: i += 1
+        return beforeC, afterC
+
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
         '''[DISCORD API METHOD] Called when raw message is edited'''
-        global bot
+        self.rawMessages[payload.message_id] = payload.data #Save message data to dict for later use
+        # if payload.cached_message: return #We will handle this in the regular on_message_edit method to deal with data more accurately
+        g = self.bot.get_guild(int(payload.data.get('guild_id'))) #Get the server of the edited message, return if not found (DMs; we don't track DM edits)
+        if g is None: return
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
         global edits
-        global loading #We have to get the previous content from indexed message and current from guild.get_message  
-        c = bot.get_channel(int(payload.data.get('channel_id')))     
-        try: after = await c.fetch_message(payload.message_id)
+        channel = self.bot.get_channel(int(payload.data.get('channel_id'))) #Get the channel of the edited message
+        try: after = await channel.fetch_message(payload.message_id) #Get the message object, and return if not found
         except discord.NotFound: return
         except discord.Forbidden: print('{} lacks permissions for message edit for some reason'.format(bot.get_guild(int(payload.data.get('guild_id'))).name))
         await updateLastActive(after.author, datetime.datetime.now(), 'edited a message')
-        g = bot.get_guild(int(payload.data.get('guild_id')))
-        if g is None: return
-        author = g.get_member(after.author.id)
-        if not logEnabled(g, 'message'): return
-        if not logExclusions(after.channel, author) or author.bot: return
-        load=discord.Embed(title="📜✏ Message was edited (React with ℹ to see details)",description=str(loading),color=0x0000FF)
+        author = g.get_member(after.author.id) #Get the member of the edited message, and if not found, return (this should always work, and if not, then it isn't a server and we don't need to proceed)
+        if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
+        if not logExclusions(after.channel, author): return #Check the exclusion settings
+        load=discord.Embed(title="📜✏ Message was edited (ℹ to expand details)",description=str(loading),color=0x0000FF,timestamp=datetime.datetime.utcnow())
+        load.set_footer(text='Message ID: {}'.format(payload.message_id))
         embed = load.copy()
         c = logChannel(g, 'message')
-        if c is None: return
-        #msg = await c.send(embed=embed)
-        before = ""
+        if c is None: return #Return if the log channel is invalid
         try:
             path = '{}/{}/{}'.format(indexes, payload.data.get('guild_id'), payload.data.get('channel_id'))
             for fl in os.listdir(path):
                 if fl == '{}_{}.txt'.format(payload.message_id, author.id):
-                    f = open(path+'/'+fl, 'r+')
-                    for line, l in enumerate(f): #Line is line number, l is line content
-                        if line == 2:
-                            before = l
-                            try: f.write('\n{}\n{}\n{}'.format(after.created_at.strftime('%b %d, %Y - %I:%M %p'), author.name, after.content))
-                            except UnicodeEncodeError: pass
-                            break
-                    f.close()
-        except FileNotFoundError:
-            embed.description=None 
-            return await c.send(content='Currently unable to locate message details in filesystem',embed=embed)
-        if before == after.content:
-            return #await msg.delete()
+                    with open(path+'/'+fl, 'r+') as f:
+                    #f = open(path+'/'+fl, 'r+')
+                        before = list(enumerate(f))[-1][1] #The last line in the file, and the content of the file, not the line number
+                        try: f.write('\n{}\n{}\n{}'.format(after.created_at.strftime('%b %d, %Y - %I:%M %p'), author.name, after.content)) #Write the message edits to the end of the file; original message will be in the file still
+                        except UnicodeEncodeError: pass #Sometimes we can't write emojis and stuff
+        except FileNotFoundError: #If we can't find the file, then we say this
+            if after.author.bot: return
+            embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, c.mention, after.jump_url, received, nameZone(g))
+            embed.add_field(name='New message content',value='[{}]({})'.format(payload.data.get('content'), after.jump_url))
+            m = await c.send(content='This message is old and I was unable to locate more details in my filesystem, so information is limited',embed=embed)
+            return await m.add_reaction('ℹ')
+        except IndexError: before = after.content #Author is bot, and indexes aren't kept for bots; keep this for pins only
+        try:
+            if before.strip() == after.content.strip():
+                if after.id in self.pins.get(after.channel.id) and not after.pinned: #Message was unpinned
+                    eventMessage = [m for m in await after.channel.history(limit=2).flatten() if m.type is discord.MessageType.pins_add][0]
+                    embed=discord.Embed(title='🚫📌Message was unpinned',description='Unpinned by: {} ({})\nAuthored by: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {}'.format(eventMessage.author.mention, eventMessage.author.name, after.author.mention, after.author.name, after.channel.mention, after.jump_url, received),color=blue,timestamp=datetime.datetime.utcnow())
+                    embed.add_field(name='Message', value=after.content)
+                    embed.set_footer(text='Unpinned message ID: {}'.format(after.id))
+                    await c.send(embed=embed)
+                    self.pins[after.channel.id].remove(after.id)
+                return #If the text before/after is the same, and after unpinned message log if applicable
+        except NameError: #If before doesn't exist
+            if after.author.bot: return
+            embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, c.mention, after.jump_url, received, nameZone(g))
+            embed.add_field(name='New message content',value=payload.data.get('content'))
+            m = await c.send(content='This message is old and I was unable to locate more details in my filesystem, so information is limited',embed=embed)
+            return await m.add_reaction('ℹ')
+        if after.author.bot: return #Three statements because if this were earlier, it would return before catching unpinned messages
         timestamp = datetime.datetime.utcnow()
+        #The following few lines have to do with the current message edit history module, I plan on moving this to filedata however
         if edits.get(str(payload.message_id)) is None:
             edits[str(payload.message_id)] = MessageEditObject(before, after, timestamp)
         else:
             edits.get(str(payload.message_id)).add(before, after.content, timestamp)
             edits.get(str(payload.message_id)).update(after)
-        beforeWordList = before.split(" ")
-        afterWordList = after.content.split(" ")
-        beforeC = ""
-        afterC = ""
-        b=0
-        while b < len(beforeWordList):
-            start=b
-            if beforeWordList[b] not in afterWordList:
-                if b>2: beforeC+='...'
-                for m in reversed(range(1, 3)):
-                    if b-m>=0: beforeC+=beforeWordList[b-m]+" "
-                beforeC += "**"+beforeWordList[b]+"** "
-                m=b+1
-                matchCount=0
-                matches=[] #Array of T/F depending on if word matches - if word matches, don't bold it
-                trueCount=0
-                while m < len(beforeWordList):
-                    if beforeWordList[m] in afterWordList: 
-                        matchCount+=1
-                        trueCount+=1
-                        matches.append(True)
-                    else:
-                        matchCount=0
-                        matches.append(False)
-                    if matchCount == 2:
-                        break
-                    m+=1
-                confirmCount=0
-                for match in range(len(matches)):
-                    if matches[match]:
-                        confirmCount+=1
-                        beforeC+=beforeWordList[match+b+1]+" "
-                        if confirmCount==trueCount: break
-                    else: beforeC+='**'+beforeWordList[match+b+1]+'** '
-                if m < len(beforeWordList) - 1:
-                    beforeC+='... '
-                b=m+1
-            if b==start:b+=1
-        b=0
-        while b < len(afterWordList):
-            start=b
-            if afterWordList[b] not in beforeWordList:
-                if b>2: afterC+='...'
-                for m in reversed(range(1, 3)):
-                    if b-m>=0: afterC+=afterWordList[b-m]+" "
-                afterC += "**"+afterWordList[b]+"** "
-                m=b+1
-                matchCount=0
-                matches=[] #Array of T/F depending on if word matches - if word matches, don't bold it
-                trueCount=0
-                while m < len(afterWordList):
-                    if afterWordList[m] in beforeWordList: 
-                        matchCount+=1
-                        trueCount+=1
-                        matches.append(True)
-                    else:
-                        matchCount=0
-                        matches.append(False)
-                    if matchCount == 2:
-                        break
-                    m+=1
-                confirmCount=0
-                for match in range(len(matches)):
-                    if matches[match]:
-                        confirmCount+=1
-                        afterC+=afterWordList[match+b+1]+" "
-                        if confirmCount==trueCount: break
-                    else: afterC+='**'+afterWordList[match+b+1]+'** '
-                if m < len(afterWordList) - 1:
-                    afterC+='... '
-                b=m+1
-            if b==start:b+=1
-        if len(beforeC) >= 1024: beforeC = 'Message content too long to display here'
-        if len(afterC) >= 1024: afterC = 'Message content too long to display here'
-        embed.description="Author: "+author.mention+" ("+author.name+")"
+        beforeWordList = before.split(" ") #A list of words in the old message
+        afterWordList = after.content.split(" ") #A list of words in the new message
+        beforeC, afterC = self.parseEdits(beforeWordList, afterWordList)
+        if any([len(m) == 0 for m in [beforeC, afterC]]): beforeC, afterC = self.parseEdits(beforeWordList, afterWordList, True)
+        if len(beforeC) >= 1024: beforeC = 'Message content too long to display in embed field'
+        if len(afterC) >= 1024: afterC = 'Message content too long to display in embed field'
+        embed.description="Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}".format(author.mention, author.name, after.channel.mention, after.jump_url, received, nameZone(g))
         embed.timestamp=timestamp
-        embed.add_field(name="Previously: ", value='[{}]({} \'Jump to message ;)\')'.format(beforeC if len(beforeC) > 0 else '(No new content)', after.jump_url),inline=False)
-        embed.add_field(name="Now: ", value='[{}]({} \'Jump to message ;)\')'.format(afterC if len(afterC) > 0 else '(No new content)', after.jump_url),inline=False)
-        embed.add_field(name="Channel: ", value=str(after.channel.mention))
-        embed.set_footer(text="Message ID: " + str(after.id))
-        embed.set_thumbnail(url=author.avatar_url)
-        #data = {'author': after.author.id, 'name': after.author.name, 'server': after.guild.id, 'message': after.id}
-        #if await database.SummarizeEnabled(g, 'message'):
-        #   global summaries
-        #   summaries.get(str(g.id)).add('message', 0, datetime.datetime.now(), data, embed, reactions=['ℹ'])
-            #await msg.delete()
-        #else:
+        embed.add_field(name="Before", value=beforeC if len(beforeC) > 0 else '(No new content, react ℹ to see full changes)',inline=False)
+        embed.add_field(name="After", value=afterC if len(afterC) > 0 else '(No new content, react ℹ to see full changes)',inline=False)
+        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
+        try: await author.avatar_url_as().save(savePath)
+        except discord.HTTPException: pass
+        f = discord.File(savePath)
+        embed.set_thumbnail(url='attachment://{}'.format(f.filename))
         try: 
-            msg = await c.send(embed=embed)
+            msg = await c.send(file=f,embed=embed)
             await msg.add_reaction('ℹ')
         except discord.HTTPException:
-            msg = await c.send(embed=discord.Embed(title="📜 Message was edited",description='Message content is too long to post here',color=0x0000FF,timestamp=datetime.datetime.utcnow()))
+            embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, c.mention, after.jump_url, received, nameZone(g))
+            embed.add_field(name='New message content',value=payload.data.get('content'))
+            msg = await c.send(content='There was an error sending the original embed with the message edits, so available information is limited', file=f, embed=embed)
         await VerifyLightningLogs(msg, 'message')
+        if os.path.exists(savePath): os.remove(savePath)
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
@@ -705,7 +758,7 @@ class Cyberlog(commands.Cog):
                 if not logExclusions(message.channel, message.author) or message.author.bot: return
             except: pass
             embed.description='Author: {} ({}){}\nChannel: {}\nSent at: {} {}'.format(message.author.mention,message.author.name,' (no longer here)' if author is None else '',message.channel.mention,(message.created_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild))
-            embed.set_thumbnail(url=message.author.avatar_url)
+            embed.set_thumbnail(url=message.author.avatar_url)            
             if len(embed.image.url) < 1:
                 for ext in ['.png', '.jpg', '.gif', '.webp']:
                     if ext in message.content:

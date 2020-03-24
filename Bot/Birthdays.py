@@ -128,13 +128,14 @@ class Birthdays(commands.Cog):
                 bdays[member.id] = Cyberlog.lightningUsers.get(member.id).get('birthday')
                 if bdays.get(member.id) is not None:
                     if bdays.get(member.id).strftime('%B %d') == birthday.strftime('%B %d'): target.remove(member)
-            draft=discord.Embed(title='🍰 Birthdays / 👮‍ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(target[0].name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation')), color=yellow, timestamp=datetime.datetime.utcnow())
-            draft.description='{}, would you like to set your birthday as **{}**?'.format(', '.join([a.name for a in target]), birthday.strftime('%A, %B %d, %Y'))
-            for member in target:
-                if bdays.get(member.id) is not None: draft.description+='\n\n{}I currently have {} as your birthday; reacting with the check will overwrite this.'.format('{}, '.format(member.name) if len(target) > 1 else '', bdays.get(member.id).strftime('%A, %B %d, %Y'))
-            mess = await message.channel.send(embed=draft)
-            await mess.add_reaction('✅')
-            await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple 'threads' for anyone to react to if necessary
+            if len(target) > 0:
+                draft=discord.Embed(title='🍰 Birthdays / 👮‍ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(target[0].name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation')), color=yellow, timestamp=datetime.datetime.utcnow())
+                draft.description='{}, would you like to set your birthday as **{}**?'.format(', '.join([a.name for a in target]), birthday.strftime('%A, %B %d, %Y'))
+                for member in target:
+                    if bdays.get(member.id) is not None: draft.description+='\n\n{}I currently have {} as your birthday; reacting with the check will overwrite this.'.format('{}, '.format(member.name) if len(target) > 1 else '', bdays.get(member.id).strftime('%A, %B %d, %Y'))
+                mess = await message.channel.send(embed=draft)
+                await mess.add_reaction('✅')
+                await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple processes for anyone to react to if necessary
         ages = calculateAge(message)
         ages = [a for a in ages if await verifyAge(message, a)]
         try: currentAge = Cyberlog.lightningUsers.get(message.author.id).get('age')
