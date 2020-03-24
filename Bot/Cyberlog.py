@@ -35,6 +35,27 @@ green=0x008000
 red=0xff0000
 blue=0x0000FF
 
+permissionKeys = {'create_instant_invite': 'Create Invite', 'kick_members': 'Kick Members', 'ban_members': 'Ban Members', 'administrator': 'Administrator',
+'manage_channels': 'Manage Channels', 'manage_guild': 'Manage Server', 'add_reactions': 'Add Reactions', 'view_audit_log': 'View Audit Log',
+'priority_speaker': 'Priority Speaker', 'stream': 'Go Live', 'read_messages': 'Read Messages', 'send_messages': 'Send messages', 
+'send_tts_messages': 'Send TTS Messages', 'manage_messages': 'Manage Messages', 'embed_links': 'Embed Links', 'attach_files': 'Attach Files',
+'read_message_history': 'Read Message History', 'mention_everyone': 'Mention @everyone, @here, and All Roles', 'external_emojis': 'Use External Emojis', 'view_guild_insights': 'View Server Insights',
+'connect': 'Connect', 'speak': 'Speak', 'mute_members': 'Mute Members', 'deafen_members': 'Deafen Members', 'move_members': 'Move members',
+'use_voice_activation': 'Use Voice Activity', 'change_nickname': 'Change Nickname', 'manage_nicknames': 'Manage Nicknames', 'manage_roles': 'Manage Roles', 'manage_webhooks': 'Manage Webhooks', 'manage_emojis': 'Manage Emojis'}
+
+permissionDescriptions = {'create_instant_invite': '', 'kick_members': '', 'ban_members': '', 'administrator': 'Members with this permission have every permission and also bypass channel specific permissions',
+'manage_channels': 'Members with this permission can create, edit, and delete channels', 'manage_guild': 'Members with this permission can change the server\'s name, region, icon, and other settings',
+'add_reactions': 'Members with this permission can add **new** reactions to a message (this permission is not needed for members to add to an existing reaction)',
+'view_audit_log': 'Members with this permission have access to view the server audit logs',
+'priority_speaker': 'Members with this permission have the ability to be more easily heard when talking. When activated, the volume of others without this permission will be automatically lowered. This power is activated using the push to talk keybind.',
+'stream': 'Members with this permission can stream applications or screenshare in voice channels', 'read_messages': '', 'send_messages': '', 'send_tts_messages': 'Members with this permission can send text-to-speech messages by starting a message with /tts. These messages can be heard by everyone focused on the channel',
+'manage_messages': 'Members with this permission can delete messages authored by other members and can pin/unpin any message', 'embed_links': '', 'attach_files': '',
+'read_message_history': '', 'mention_everyone': 'Members with this permission can use @everyone or @here to ping all members **in this channel**. They can also @mention all roles, even if that role is not normally mentionable',
+'external_emojis': 'Use External Emojis', 'view_guild_insights': 'View Server Insights', 'connect': '', 'speak': '', 'mute_members': '', 'deafen_members': '', 'move_members': 'Members with this permission can drag members into and out of voice channels',
+'use_voice_activation': 'Members must use Push-To-Talk if this permission is disabled', 'change_nickname': 'Members with this permission can change their own nickname', 'manage_nicknames': 'Manage Nicknames',
+'manage_roles': 'Members with this permission can create new roles and edit/delete roles below their highest role granting this permission', 'manage_webhooks': 'Members with this permission can create, edit, and delete webhooks',
+'manage_emojis': 'Members with this permission can use custom emojis from other servers in this server'}
+
 class MessageEditObject(object):
     def __init__(self, content, message, time):
         self.history = [MessageEditEntry(content, message.content, time)]
@@ -98,6 +119,7 @@ class Cyberlog(commands.Cog):
         self.whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
         self.hashtag = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='hashtag')
         self.pins = {}
+        self.rawMessages = {}
         self.summarize.start()
         self.DeleteAttachments.start()
     
@@ -1042,7 +1064,7 @@ class Cyberlog(commands.Cog):
             content=None
             count=len(member.guild.members)
             acctAge = (datetime.datetime.utcnow() - member.created_at).days
-            embed=discord.Embed(title="👮{}New member (React with ℹ to see member info)".format(self.whitePlus),description='{} ({})\n{}{} member\nAccount age: {} days old'.format(member.name, member.mention, count,suffix(count), acctAge),timestamp=datetime.datetime.utcnow(),color=0x008000)
+            embed=discord.Embed(title="👮‍♂️{}New member (React with ℹ to see member info)".format(self.whitePlus),description='{} ({})\n{}{} member\nAccount age: {} days old'.format(member.name, member.mention, count,suffix(count), acctAge),timestamp=datetime.datetime.utcnow(),color=0x008000)
             embed.set_thumbnail(url=member.avatar_url)
             data = {'name': member.name, 'id': member.id, 'server': member.guild.id}
             embed.set_footer(text='Member ID: {}'.format(member.id))
@@ -1108,20 +1130,20 @@ class Cyberlog(commands.Cog):
             content=None
             embed=None #Custom embeds later
             if embed is None: 
-                embed=discord.Embed(title="👮❌Member left",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
+                embed=discord.Embed(title="👮‍♂️❌Member left",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
                 data = {'id': member.id, 'name': member.name, 'type': 'Leave', 'server': member.guild.id}
                 if readPerms(member.guild, 'doorguard'):
                     try:
                         async for log in member.guild.audit_logs(limit=2):
                             if log.target.id == member.id:
                                 if log.action == discord.AuditLogAction.kick:
-                                    embed.title = '👮👢{} was kicked'.format(member.name)
+                                    embed.title = '👮‍♂️👢{} was kicked'.format(member.name)
                                     embed.description="Kicked by: "+log.user.mention+" ("+log.user.name+")"
                                     data['type'] = 'Kick'
                                     embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
                                 elif log.action == discord.AuditLogAction.ban:
                                     embed.title = member.name+" was banned"
-                                    embed.title = '👮🔨{} was banned'.format(member.name)
+                                    embed.title = '👮‍♂️🔨{} was banned'.format(member.name)
                                     embed.description="Banned by: "+log.user.mention+" ("+log.user.name+")"
                                     data['type'] = 'Ban'
                                     embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
@@ -1197,7 +1219,7 @@ class Cyberlog(commands.Cog):
         if (before.nick != after.nick or before.roles != after.roles) and logEnabled(before.guild, "member") and memberGlobal(before.guild) != 1:
             content=None
             data = {'member': before.id, 'name': before.name, 'server': before.guild.id}
-            embed=discord.Embed(title="👮✏Member's server attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+            embed=discord.Embed(title="👮‍♂️✏Member's server attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
             if before.roles != after.roles:
                 try:
                     async for log in before.guild.audit_logs(limit=1):
@@ -1276,7 +1298,7 @@ class Cyberlog(commands.Cog):
                     servers.append(server)
                     membObj = member
                     break
-        embed=discord.Embed(title="👮🌐✏User's global attributes updated",description=after.mention+"("+after.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
+        embed=discord.Embed(title="👮‍♂️🌐✏User's global attributes updated",description=after.mention+"("+after.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
         data = {'member': before.id, 'oldName': before.name, 'newName': after.name}
         if before.avatar_url != after.avatar_url:
             data['pfp'] = True
@@ -1780,7 +1802,7 @@ class Cyberlog(commands.Cog):
         relevance = []
         indiv=None
         for m in members:
-            mainKeys.append('👮{}'.format(m[0].name))
+            mainKeys.append('👮‍♂️{}'.format(m[0].name))
             embeds.append(m[0])
             relevance.append(m[1])
         for r in roles:
@@ -1858,7 +1880,7 @@ class Cyberlog(commands.Cog):
         members, roles, channels, inv, emojis = tuple(await asyncio.gather(*[self.FindMoreMembers(ctx.guild.members, arg), self.FindMoreRoles(ctx.guild, arg), self.FindMoreChannels(ctx.guild, arg), self.FindMoreInvites(ctx.guild, arg), self.FindMoreEmojis(ctx.guild, arg)]))
         every=[]
         types = {discord.TextChannel: str(self.hashtag), discord.VoiceChannel: '🎙', discord.CategoryChannel: '📂'}
-        for m in members: every.append(InfoResult(m.get('member'), '👮{} - {} ({}% match)'.format(m.get('member').name, m.get('check')[0], m.get('check')[1]), m.get('check')[1]))
+        for m in members: every.append(InfoResult(m.get('member'), '👮‍♂️{} - {} ({}% match)'.format(m.get('member').name, m.get('check')[0], m.get('check')[1]), m.get('check')[1]))
         for r in roles: every.append(InfoResult(r.get('role'), '🚩{} - {} ({}% match)'.format(r.get('role').name, r.get('check')[0], r.get('check')[1]), r.get('check')[1]))
         for c in channels: every.append(InfoResult(c.get('channel'), '{}{} - {} ({}% match)'.format(types.get(type(c.get('channel'))), c.get('channel').name, c.get('check')[0], c.get('check')[1]), c.get('check')[1]))
         for i in inv: every.append(InfoResult(i.get('invite'), '💌discord.gg/{} - {} ({}% match)'.format(i.get('invite').code.replace(arg, '**{}**'.format(arg)), i.get('check')[0], i.get('check')[1]), i.get('check')[1]))
@@ -2153,7 +2175,7 @@ class Cyberlog(commands.Cog):
                     if act.type is discord.ActivityType.playing: current.append('playing {}: {}, {}'.format(act.name, act.details, act.state))
                     elif act.type is discord.ActivityType.custom: current.append('{}{}'.format(act.emoji if act.emoji is not None else '', act.name if act.name is not None else ''))
                     elif act.type is discord.ActivityType.streaming: current.append('streaming {}'.format(act.name))
-                    elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append('Listening to Spotify\n{}'.format('\n'.join(['🎵{}'.format(act.title), '👮{}'.format(', '.join(act.artists)), '💿{}'.format(act.album)])))
+                    elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append('Listening to Spotify\n{}'.format('\n'.join(['🎵{}'.format(act.title), '👮‍♂️{}'.format(', '.join(act.artists)), '💿{}'.format(act.album)])))
                     elif act.type is discord.ActivityType.watching: current.append('watching {}'.format(act.name))
                 except:
                     current.append('Error parsing activity')
@@ -2270,7 +2292,7 @@ class Cyberlog(commands.Cog):
         idle=bot.get_emoji(606534231610490907)
         dnd=bot.get_emoji(606534231576805386)
         offline=bot.get_emoji(606534231492919312)
-        humans='👮Humans: {}'.format(len([m for m in members if not m.bot]))
+        humans='👮‍♂️Humans: {}'.format(len([m for m in members if not m.bot]))
         bots='🤖Bots: {}\n'.format(len([m for m in members if m.bot]))
         online='{}Online: {}'.format(online, len([m for m in members if m.status == discord.Status.online]))
         idle='{}Idle: {}'.format(idle, len([m for m in members if m.status == discord.Status.idle]))

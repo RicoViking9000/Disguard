@@ -88,7 +88,9 @@ async def indexMessages(server, channel, full=False):
             if not message.author.bot:
                 if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): 
                     if not full: break
-                    else: continue #Skip the code below as to not overwrite message edit history, plus to skip saving message indexes we already have (program will keep running, however, this is intentional)
+                    else: 
+                        await asyncio.sleep(3)
+                        continue #Skip the code below as to not overwrite message edit history, plus to skip saving message indexes we already have (program will keep running, however, this is intentional)
                 try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                 except FileNotFoundError: pass
                 try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
@@ -103,7 +105,7 @@ async def indexMessages(server, channel, full=False):
                         if attachment.size / 1000000 < 8:
                             try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                             except discord.HTTPException: pass
-                if full: await asyncio.sleep(3)
+                if full: await asyncio.sleep(5)
     except discord.Forbidden: print('Index error for {}'.format(server.name))
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 

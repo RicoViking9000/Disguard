@@ -329,9 +329,9 @@ async def messageManagement(self, ctx, message, user, groups):
         message.embeds[0].description = '{} Please wait...'.format(self.loading)
         await message.edit(embed=message.embeds[0])
         letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-        d = d[d.find('list') + 4:] #Take only the birthday management part of the current embed
+        d = d[d.find('view') + 4:] #Take only the birthday management part of the current embed
         d = d.replace('To send a message to someone, use reactions or type `{}birthday <recipient>`'.format(ctx.prefix), '')
-        temp = d[d.find('list')+4:d.find('__THIS SERVER__')].strip()
+        temp = d[d.find('view')+4:d.find('__THIS SERVER__')].strip()
         d = '\n**{}\nYou will be taken to DMs to write your message\n\n{}'.format(temp, d[d.find('__THIS SERVER__'):])
         indexes = [d.index('•'), d.index('•', d.index('•') + 1)] #Set of indexes for searching for bullet points
         newDesc = d[:indexes[0]]
