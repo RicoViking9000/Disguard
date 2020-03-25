@@ -135,7 +135,9 @@ class Cyberlog(commands.Cog):
             for m in self.bot.get_all_members():
                 if m.status != discord.Status.offline: await updateLastOnline(m, datetime.datetime.now())
             for server in self.bot.guilds:
-                for c in server.text_channels: self.pins[c.id] = [m.id for m in await c.pins()]
+                for c in server.text_channels: 
+                    try: self.pins[c.id] = [m.id for m in await c.pins()]
+                    except discord.Forbidden: pass
         except Exception as e: print('Summarize error: {}'.format(e))
         if summarizeOn:
             try:
@@ -728,7 +730,7 @@ class Cyberlog(commands.Cog):
         embed.add_field(name="Before", value=beforeC if len(beforeC) > 0 else '(No new content, react ℹ to see full changes)',inline=False)
         embed.add_field(name="After", value=afterC if len(afterC) > 0 else '(No new content, react ℹ to see full changes)',inline=False)
         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
-        try: await author.avatar_url_as().save(savePath)
+        try: await author.avatar_url_as(size=1024).save(savePath)
         except discord.HTTPException: pass
         f = discord.File(savePath)
         embed.set_thumbnail(url='attachment://{}'.format(f.filename))

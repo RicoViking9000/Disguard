@@ -426,6 +426,8 @@ async def messageManagement(self, ctx, message, user, groups):
     if not auto: await m.add_reaction('🍰')
     bday = await database.GetMemberBirthday(target)
     await writePersonalMessage(self, bday, [target], m, autoTrigger=auto, u=user)
+    await message.delete()
+    await self.birthday(ctx)
         
 async def guestBirthdayViewer(self, ctx, target, cake=False):
     '''Displays information about somebody else's profile'''
