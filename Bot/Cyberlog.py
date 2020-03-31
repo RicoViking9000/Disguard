@@ -761,7 +761,6 @@ class Cyberlog(commands.Cog):
         except AttributeError:
             message = None
         c = logChannel(g, 'message')
-            return
         embed=discord.Embed(title="📜❌ Message was deleted",timestamp=datetime.datetime.utcnow(),color=0xff0000)
         if payload.message_id in self.pauseDelete: return self.pauseDelete.remove(payload.message_id)
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
