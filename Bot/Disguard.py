@@ -21,6 +21,7 @@ booted = False
 cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays']
 print("Booting...")
 prefixes = {}
+variables = {}
 
 """ logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
@@ -163,9 +164,24 @@ async def ping(ctx):
     m = await ctx.send('Pong!')
     await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
 
+@commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
+@bot.command()
+async def say(ctx, m: discord.Member = None, c: discord.TextChannel = None, *t):
+    '''Uses webhook to say something. T is text to say, m is member. Author if none provided. C is channel, ctx.channel if none provided'''
+    Cyberlog.AvoidDeletionLogging(ctx.message)
+    await ctx.message.delete()
+    if c is None: c = ctx.channel
+    if m is None: m = ctx.author
+    if len(t) == 0: t = 'Hello World'
+    else: t = ' '.join(t)
+    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar_url_as().read())
+    await w.send(t, username=m.name)
+    await w.delete()
+
 @commands.is_owner()
 @bot.command(name='eval')
 async def evaluate(ctx, *args):
+    global variables
     args = ' '.join(args)
     result = eval(args)
     if inspect.iscoroutine(result): await ctx.send(await eval(args))
