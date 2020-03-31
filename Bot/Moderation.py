@@ -77,7 +77,7 @@ class Moderation(commands.Cog):
             if 'a' in post.content.lower(): channels = ctx.guild.text_channels
             if 'cancel' in post.content.lower(): return await message.edit(embed=cancel)
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             counts = [len(os.listdir(path.format(channel.guild.id, channel.id))) for channel in channels]
@@ -113,7 +113,7 @@ class Moderation(commands.Cog):
             embed.set_author(name='Waiting for input')
             embed.set_footer(text='Type cancel to cancel the command. Timeout is 120s')
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             if (datetime.datetime.utcnow() - now).seconds / 60 > 5: await ctx.channel.send('{}, I\'m done indexing'.format(ctx.author.mention),delete_after=10)
@@ -128,13 +128,13 @@ class Moderation(commands.Cog):
             if 'cancel' in post.content.lower(): return await message.edit(embed=cancel)
             if 'n' in post.content.lower():
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 embed.add_field(name='Messages to be purged',value=0)
             if 'y' in post.content.lower():
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 embed.description='Would you like to purge only messages containing certain text? Type the text to check for or `skip` to skip this step.'
@@ -149,7 +149,7 @@ class Moderation(commands.Cog):
                 if messages: embed.add_field(name='Messages to be purged',value=len([m for m in messages if PurgeFilter(m)]))
                 embed.set_author(name='Waiting for input')
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 if current.contains is not None: 
@@ -165,12 +165,12 @@ class Moderation(commands.Cog):
                     if 'y' in post.content.lower(): current.caseSensitive = True
                     if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
                     try:
-                        Cyberlog.AvoidDeletionLogging(post) 
+                        self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                         await post.delete()
                     except: pass
                 embed.description='Would you like to purge only messages that *start with* a certain text sequence? (Type a text sequence or `skip`)'
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
@@ -185,7 +185,7 @@ class Moderation(commands.Cog):
                 if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
                 embed.description='Would you like to purge only messages that *end with* a certain text sequence? (Type a text sequence or `skip`)'
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
@@ -200,7 +200,7 @@ class Moderation(commands.Cog):
                 if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
                 embed.set_author(name='Waiting for input')
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
             embed.description='Would you like to purge only messages belonging to bots/humans? Type `bots` to purge only bot messages, `humans` to purge only human messages, and `both` to purge any messages'
@@ -216,7 +216,7 @@ class Moderation(commands.Cog):
             elif 'h' in post.content.lower(): current.bots=1
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -242,13 +242,13 @@ class Moderation(commands.Cog):
                 current.author = mem
                 embed.description='I matched these message authors: {}.\n'.format(', '.join([m.name for m in mem]))
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description+='Would you like to purge only messages that contains URLs? Type yes/no'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -263,7 +263,7 @@ class Moderation(commands.Cog):
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description='Would you like to purge only messages that contain discord.gg invites? (yes/no)'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -278,7 +278,7 @@ class Moderation(commands.Cog):
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description='Would you like to purge only messages that contain attachments? Type `image` to purge messages with *image* attachments, `file` to purge messages with *non image* attachments, `both` to purge messages with any external attachments, or `skip` to skip this step'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -299,7 +299,7 @@ class Moderation(commands.Cog):
             embed.description='Would you like to purge only messages that contain embeds? This only applies to messages sent by bots. (Yes/no)'
             embed.set_author(name='Waiting for input')
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             await message.edit(embed=embed)
@@ -313,7 +313,7 @@ class Moderation(commands.Cog):
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description='Would you like to purge only messages that contain member mentions e.g. @person? (Yes/no)'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -328,7 +328,7 @@ class Moderation(commands.Cog):
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description='Would you like to purge only messages that have reactions on them?'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -343,7 +343,7 @@ class Moderation(commands.Cog):
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description='Would you like to purge only messages that contain activity messages (Spotify invites, Game invites, etc)?'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -358,7 +358,7 @@ class Moderation(commands.Cog):
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description='Are you interested in purging messages that were posted before, during, or after a certain date? Type `yes` to enter setup for these options or `no` to skip this part'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input')
@@ -372,7 +372,7 @@ class Moderation(commands.Cog):
             if 'y' in post.content.lower():
                 embed.description='Would you like to purge only messages were posted *after* a certain date? Type `skip` or a date in a format matching `Feb 1, 2019` or `2/1/19`'
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
@@ -387,7 +387,7 @@ class Moderation(commands.Cog):
                 if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
                 embed.description='Would you like to purge only messages posted *before* a certain date? Type `skip` or a date in a format matching `Feb 1, 2019` or `2/1/19`. If you want to target a single day for the purge, set this to the day before what you used in the previous step'
                 try:
-                    Cyberlog.AvoidDeletionLogging(post) 
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                     await post.delete()
                 except: pass
                 embed.set_author(name='Waiting for input',icon_url=url)
@@ -402,7 +402,7 @@ class Moderation(commands.Cog):
                 if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             embed.description='Finally, how many messages would you like me to purge? Type `skip` to purge all messages matching the filter'
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             embed.set_author(name='Waiting for input',icon_url=url)
@@ -424,7 +424,7 @@ class Moderation(commands.Cog):
             embed.description=''
             embed.set_author(name='One sec...',icon_url=url)
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             await message.edit(embed=embed)
@@ -440,7 +440,7 @@ class Moderation(commands.Cog):
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             if 'cancel' in post.content.lower(): return await message.edit(embed=cancel)
             try:
-                Cyberlog.AvoidDeletionLogging(post) 
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
             limit = current.limit
@@ -608,7 +608,7 @@ def PurgeFilter(m: discord.Message):
 async def SuperPurge(m: discord.Message):
     if not PurgeFilter(m): return 0
     try:
-        Cyberlog.AvoidDeletionLogging(m) 
+        self.bot.get_cog('Cyberlog').AvoidDeletionLogging(m) 
         await m.delete()
     except: return 1
     return 2

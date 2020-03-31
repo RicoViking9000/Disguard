@@ -15,6 +15,7 @@ import traceback
 import random
 import logging
 import inspect
+import typing
 
 
 booted = False
@@ -166,14 +167,12 @@ async def ping(ctx):
 
 @commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
 @bot.command()
-async def say(ctx, m: discord.Member = None, c: discord.TextChannel = None, *t):
+async def say(ctx, m: typing.Optional[discord.Member] = None, c: typing.Optional[discord.TextChannel] = None, *, t='Hello World'):
     '''Uses webhook to say something. T is text to say, m is member. Author if none provided. C is channel, ctx.channel if none provided'''
-    Cyberlog.AvoidDeletionLogging(ctx.message)
+    bot.get_cog('Cyberlog').AvoidDeletionLogging(ctx.message)
     await ctx.message.delete()
     if c is None: c = ctx.channel
     if m is None: m = ctx.author
-    if len(t) == 0: t = 'Hello World'
-    else: t = ' '.join(t)
     w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar_url_as().read())
     await w.send(t, username=m.name)
     await w.delete()

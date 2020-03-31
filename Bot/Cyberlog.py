@@ -120,6 +120,7 @@ class Cyberlog(commands.Cog):
         self.hashtag = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='hashtag')
         self.pins = {}
         self.rawMessages = {}
+        self.pauseDelete = []
         self.summarize.start()
         self.DeleteAttachments.start()
     
@@ -190,7 +191,7 @@ class Cyberlog(commands.Cog):
         time = datetime.datetime.now()
         try:
             removal=[]
-            for server in bot.guilds:
+            for server in self.bot.guilds:
                 for channel in server.text_channels:
                     try:
                         path='Attachments/{}/{}'.format(server.id, channel.id)
@@ -760,10 +761,9 @@ class Cyberlog(commands.Cog):
         except AttributeError:
             message = None
         c = logChannel(g, 'message')
-        if payload.message_id in pauseDelete:
-            pauseDelete.remove(payload.message_id)
             return
         embed=discord.Embed(title="📜❌ Message was deleted",timestamp=datetime.datetime.utcnow(),color=0xff0000)
+        if payload.message_id in self.pauseDelete: return self.pauseDelete.remove(payload.message_id)
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
         author = message.author if message is not None else None
         attachments = []
@@ -1966,7 +1966,7 @@ class Cyberlog(commands.Cog):
                     except: pass
                     loadContent.title = loadContent.title.format(loading, str(every[int(stuff.content) - 1].obj))
                     await message.edit(content=None, embed=loadContent)
-                    AvoidDeletionLogging(stuff)
+                    self.AvoidDeletionLogging(stuff)
                     try: await stuff.delete()
                     except: pass
                     await message.edit(content=None,embed=(await self.evalInfo(every[int(stuff.content)-1].obj, ctx.guild)))
@@ -2581,6 +2581,11 @@ class Cyberlog(commands.Cog):
         if type(obj) is discord.Invite: return await self.InviteInfo(obj, g)
         if type(obj) is discord.PartialEmoji: return await self.PartialEmojiInfo(obj)
 
+    def AvoidDeletionLogging(self, messages):
+        '''Don't log the deletion of passed messages'''
+        if type(messages) is list: self.pauseDelete += [m.id for m in messages]
+        else: self.pauseDelete.append(messages.id)
+
 def compareMatch(arg, search):
     return round(len(arg) / len(search) * 100)
 
@@ -2592,12 +2597,6 @@ async def VerifyLightningLogs(m: discord.Message, mod):
         for reac in m.reactions: await new.add_reaction(str(reac))
         return await m.delete()
 
-
-def AvoidDeletionLogging(messages):
-    '''Don't log the deletion of passed messages'''
-    global pauseDelete
-    if type(messages) is list: pauseDelete += [m.id for m in messages]
-    else: pauseDelete.append(messages.id)
 
 def ConfigureSummaries(b):
     global summaries

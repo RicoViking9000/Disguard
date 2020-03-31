@@ -259,7 +259,7 @@ class Antispam(commands.Cog):
             return await message.channel.send("I flagged user `" + str(message.author) + "`, but need Manage Role permissions for the current consequence to be given. There are two solutions:\n  •Add the Manage Role permissions to me\n  •Enter your server's web dashboard and change the punishment for being flagged")
         if spam.get("delete"):
             try:
-                Cyberlog.AvoidDeletionLogging(message)
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(message)
                 await message.delete()
             except:
                 await message.channel.send("I require Manage Message permissions to carry out deleting messages upon members being flagged")

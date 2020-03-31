@@ -291,7 +291,7 @@ class Birthdays(commands.Cog):
             if type(r) is discord.Message: 
                 index = alphabet.index(r.content)
                 try:
-                    await Cyberlog.AvoidDeletionLogging(r)
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(r)
                     await r.delete()
                 except: pass
             else: index = letters.index(str(r[0]))
@@ -367,7 +367,7 @@ async def messageManagement(self, ctx, message, user, groups):
                 for f in p: f.cancel()
                 if type(result) is discord.Message: 
                     message.embeds[0].description='{} Searching...'.format(self.loading)
-                    Cyberlog.AvoidDeletionLogging(result)
+                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
                     await result.delete()
                     await message.edit(embed=message.embeds[0])
                     results = await self.bot.get_cog('Cyberlog').FindMoreMembers(self.bot.users, result.content)
@@ -487,7 +487,7 @@ async def modifyWishlistItems(self, ctx, m, new, wishlist, add=True): #If add is
         for future in p: future.cancel()
         if type(stuff) is discord.Message:
             try:
-                Cyberlog.AvoidDeletionLogging(stuff)
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
                 await stuff.delete()
             except discord.Forbidden: pass
             toModify += stuff.content.split(', ')
@@ -533,7 +533,7 @@ async def firstAgeContinuation(self, ctx, author, message):
         if type(stuff) is discord.Message: #User typed an age, so we must parse it
             result = calculateAge(stuff)[0]
             try:
-                Cyberlog.AvoidDeletionLogging(stuff)
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
                 await stuff.delete()
             except: pass
             if result:
@@ -606,7 +606,7 @@ async def firstBirthdayContinuation(self, ctx, author, message):
         if type(stuff) is discord.Message: #If the user typed a date
             result = calculateDate(stuff, adjusted)
             try:
-                Cyberlog.AvoidDeletionLogging(stuff)
+                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
                 await stuff.delete()
             except: pass
             if result:
