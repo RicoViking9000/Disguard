@@ -370,23 +370,18 @@ class Cyberlog(commands.Cog):
         if DMchannel is None:
             await u.create_dm()
             DMchannel = u.dm_channel
-        print(DMchannel.recipient.name)
         if DMchannel.id == payload.channel_id:
-            print('inside')
             if str(ej) == 'ℹ':
                 message = await DMchannel.fetch_message(payload.message_id)
                 firstBold = message.content.find('**')
                 server = message.content[firstBold + 2:message.content.find('**', firstBold + 2)]
-                print(server)
                 g = discord.utils.get(self.bot.guilds, name=server)
-                print(g.name)
                 m = await g.owner.send('Please confirm opt out for {} by reacting to this message with ✅'.format(g.name))
                 await m.add_reaction('✅')
                 def confirmOptCheck(r,u): return str(r) == '✅' and g.owner == u and r.message.id == m.id
                 await self.bot.wait_for('reaction_add',check=confirmOptCheck)
                 self.optOut.append(g.id)
                 await g.owner.send('Successfully added {} to the blacklist for april fools day event 2020'.format(g.name))
-                print(self.optOut)
             return
         channel = self.bot.get_channel(payload.channel_id)
         try: message = await channel.fetch_message(payload.message_id)
