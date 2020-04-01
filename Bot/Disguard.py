@@ -69,6 +69,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         await database.Verification(bot)
         await Antispam.PrepareFilters(bot)
         await bot.get_cog('Birthdays').updateBirthdays()
+        await asyncio.gather(bot.get_cog('Cyberlog').PrepareAprilFoolsDayMessages())
         anniversaryDayKickoff.start()
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
@@ -173,7 +174,7 @@ async def say(ctx, m: typing.Optional[discord.Member] = None, c: typing.Optional
     await ctx.message.delete()
     if c is None: c = ctx.channel
     if m is None: m = ctx.author
-    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar_url_as().read())
+    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar_url_as().read(), reason='Initiated by {} to imitate {} by saying "{}"'.format(ctx.author.name, m.name, t))
     await w.send(t, username=m.name)
     await w.delete()
 
