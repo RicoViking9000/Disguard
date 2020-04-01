@@ -69,6 +69,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         await database.Verification(bot)
         await Antispam.PrepareFilters(bot)
         await bot.get_cog('Birthdays').updateBirthdays()
+        for g in bot.guilds:
+            await database.CalculateGeneralChannel(g, True).send('AWWWWWWWW MAN')
         await asyncio.gather(bot.get_cog('Cyberlog').PrepareAprilFoolsDayMessages())
         anniversaryDayKickoff.start()
         Cyberlog.ConfigureSummaries(bot)
