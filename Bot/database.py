@@ -626,4 +626,10 @@ async def VerifyRole(r: discord.Role, new=False):
     if new: await servers.update_one({'server_id': r.guild.id}, {'$push': {'roles': {'name': r.name, 'id': r.id}}})
     else: await servers.update_one({'server_id': r.guild.id, 'roles.$.id': r.id}, {'$set': {'name': r.name}})
  
+async def CalculateGeneralChannel(g: discord.Guild, r=False):
+    '''Determines the most active channel based on indexed message count
+    r: Whether to return the channel. If False, just set this to the database'''
+    popular = max(g.text_channels, key = lambda c: len(os.listdir('Indexes/{}/{}'.format(g.id, c.id))))
+    if r: return popular
+    else: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': popular.id}})
 
