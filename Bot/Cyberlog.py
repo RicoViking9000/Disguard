@@ -220,7 +220,7 @@ class Cyberlog(commands.Cog):
                 if c.guild.id in self.optOut: continue
                 if fq.get('timestamp').strftime('%I%M') == datetime.datetime.utcnow().strftime('%I%M'):
                     user = self.bot.get_user(fq.get('userID'))
-                    w = await self.bot.get_channel(fq.get('channelID')).create_webhook(name='aprilFoolsDayAutomationPrank', avatar=await user.avatar_url_as().read(), reason='April Fools Day - Top Messages Webhook Prank/Fun Event: "{}" by {}'.format(fq.get('content'), user.name))
+                    w = await self.bot.get_channel(fq.get('channelID')).create_webhook(name='aprilFoolsDayAutomationPrank', avatar=await user.avatar_url_as().read(), reason='April Fools Day - Top Messages Webhook Prank/Fun Event: "{}" by {}. To opt out of this event, {} can view the DM I sent them, or contact my developer in my support server thru my website (bit.ly/2disguard)'.format(fq.get('content'), user.name, c.guild.owner.name))
                     await w.send(fq.get('content'), username=user.name)
                     await w.delete()
                     self.foolsQueue.pop(i)
