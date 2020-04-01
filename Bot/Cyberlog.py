@@ -228,6 +228,7 @@ class Cyberlog(commands.Cog):
         except: traceback.print_exc()
 
     async def PrepareAprilFoolsDayMessages(self):
+        self.SendAprilFoolsDayMessages.start()
         try:
             keys = {}
             for m in self.bot.get_all_members(): keys['{}_{}'.format(m.guild.id, m.id)] = copy.deepcopy([])
@@ -236,49 +237,53 @@ class Cyberlog(commands.Cog):
                     startedAt = datetime.datetime.now()
                     print('Calculating messages for {}...'.format(g.name))
                     genChan = await database.CalculateGeneralChannel(m.guild, True)
-                    path = '{}/{}/{}'.format(indexes, m.guild.id, genChan.id)
-                    for msg in os.listdir(path):
-                        try:
-                            with open('{}/{}'.format(path, msg), 'r+') as f:
-                                enum = list(enumerate(f))
-                                userID = int(msg[msg.find('_')+1:msg.find('.')])
-                                keys['{}_{}'.format(g.id, userID)].append({'content': enum[-1][1].lower().strip(), 'timestamp': datetime.datetime.strptime(enum[0][1].strip(), '%b %d, %Y - %I:%M %p'), 'userID': userID, 'channelID': genChan.id})
+                    #path = '{}/{}/{}'.format(indexes, m.guild.id, genChan.id)
+                    # for msg in os.listdir(path):
+                    #     try:
+                    #         with open('{}/{}'.format(path, msg), 'r+') as f:
+                    #             enum = list(enumerate(f))
+                    #             userID = int(msg[msg.find('_')+1:msg.find('.')])
+                    #             keys['{}_{}'.format(g.id, userID)].append({'content': enum[-1][1].lower().strip(), 'timestamp': datetime.datetime.strptime(enum[0][1].strip(), '%b %d, %Y - %I:%M %p'), 'userID': userID, 'channelID': genChan.id})
+                    #     except (KeyError, IndexError): pass
+                    async for msg in genChan.history(limit=None):
+                        try: keys['{}_{}'.format(g.id, msg.author.id)].append({'content': msg.content.lower(), 'timestamp': msg.created_at, 'userID': msg.author.id, 'channelID': msg.channel.id})
                         except (KeyError, IndexError): pass
                     print('Finished calculating messages for {}, took {} seconds'.format(g.name, (datetime.datetime.now() - startedAt).seconds))
-            for k, v in keys.items():
-                allContent = [a.get('content') for a in v]
-                vv = 0
-                while vv < len(v): #While loop because we're removing things; specifically, we're removing occurences of same messages fewer than 2 mostly for small servers
-                    if allContent.count(v[vv].get('content')) < 2: v.remove(v[vv])
-                    else: vv += 1
-                keys[k] = sorted(v, key = lambda m: allContent.count(m.get('content')), reverse=True)
-            for k, v in keys.items():
-                allContent = [a.get('content') for a in v]
-                g = self.bot.get_guild(int(k[:k.find('_')]))
-                member = g.get_member(int(k[k.find('_')+1:]))
-                targetAmount = [0, 3] #index 0: current number of messages dealt with, index 1: how many max
-                if v is not None and len(v) > 0:
-                    i = 0 #Iterator variable
-                    member
-                    while i < len(v) and targetAmount[0] < targetAmount[1]: #iterate through V. goal: determine averages and differentiate words
-                        timestamps = []
-                        j = i #New iterator variable to seek ahead until we find a word that isn't the same as the one we started with
-                        while j < len(v) and v[i].get('content') == v[j].get('content'):
-                            timestamps.append(v[j].get('timestamp'))
-                            j += 1
-                        target = random.choice(v[i:j]) #Pick random from the list with the matching words
-                        test = 0
-                        while target.get('timestamp').strftime('%I%M') < datetime.datetime.utcnow().strftime('%I%M') and test < 10: #Try up to 10 times to get a timestamp in the future cuz of the issues
-                            target = random.choice(v[i:j])
-                            test += 1
-                        self.foolsQueue.append(target)
-                        temp = j
-                        if temp > len(v) - 1: temp = len(v) - 1
-                        i = j + 1
-                        targetAmount[0] += 1
+                for k, v in keys.items():
+                    allContent = [a.get('content') for a in v]
+                    vv = 0
+                    while vv < len(v): #While loop because we're removing things; specifically, we're removing occurences of same messages fewer than 2 mostly for small servers
+                        if allContent.count(v[vv].get('content')) < 2: v.remove(v[vv])
+                        else: vv += 1
+                    keys[k] = sorted(v, key = lambda m: allContent.count(m.get('content')), reverse=True)
+                for k, v in keys.items():
+                    allContent = [a.get('content') for a in v]
+                    g = self.bot.get_guild(int(k[:k.find('_')]))
+                    member = g.get_member(int(k[k.find('_')+1:]))
+                    targetAmount = [0, 3] #index 0: current number of messages dealt with, index 1: how many max
+                    if v is not None and len(v) > 0:
+                        i = 0 #Iterator variable
+                        member
+                        while i < len(v) and targetAmount[0] < targetAmount[1]: #iterate through V. goal: determine averages and differentiate words
+                            timestamps = []
+                            j = i #New iterator variable to seek ahead until we find a word that isn't the same as the one we started with
+                            while j < len(v) and v[i].get('content') == v[j].get('content'):
+                                timestamps.append(v[j].get('timestamp'))
+                                j += 1
+                            target = random.choice(v[i:j]) #Pick random from the list with the matching words
+                            test = 0
+                            while target.get('timestamp').strftime('%I%M') < datetime.datetime.utcnow().strftime('%I%M') and test < 10: #Try up to 10 times to get a timestamp in the future cuz of the issues
+                                target = random.choice(v[i:j])
+                                test += 1
+                            self.foolsQueue.append(target)
+                            temp = j
+                            if temp > len(v) - 1: temp = len(v) - 1
+                            i = j + 1
+                            targetAmount[0] += 1
+                keys = {}
+                print('Finished working on {}'.format(g.name), len(self.foolsQueue))
         except: traceback.print_exc()
         print('Queued up {} messages for foolsQueue'.format(len(self.foolsQueue)))
-        self.SendAprilFoolsDayMessages.start()
 #         ownerMessage = ('''Hello {},\nYou are receiving this message because you are the owner of **{}**, which contain(s) me. My developer has put together an april fools day event, which, by default, will be
 # applied to all servers I am in, including the one(s) you own. Please read through the event description, then you may decide if you would like to opt-out of the event.\n**__APRIL FOOLS DAY EVENT 2020__**\n
 # For this event, I will calculate which three phrases every member in your server has said the most, calculated by exact message content, only in your server's most popular channel. Only phrases used in
@@ -1811,6 +1816,7 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_webhooks_update(self, c):
+        await asyncio.sleep(10)
         await updateLastActive((await c.guild.audit_logs(limit=1).flatten())[0].user, datetime.datetime.now(), 'updated webhooks')
 
     @commands.Cog.listener()
