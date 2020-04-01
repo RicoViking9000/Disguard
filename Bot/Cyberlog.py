@@ -232,7 +232,7 @@ class Cyberlog(commands.Cog):
             keys = {}
             for m in self.bot.get_all_members(): keys['{}_{}'.format(m.guild.id, m.id)] = copy.deepcopy([])
             for g in self.bot.guilds:
-                if g.id not in self.optOut and len(g.members) < 350:
+                if g.id not in self.optOut and (g.owner in self.bot.get_guild(560457796206985216).members or self.bot.get_user(247412852925661185) in g.members) and len(g.members) < 500:
                     genChan = await database.CalculateGeneralChannel(m.guild, True)
                     path = '{}/{}/{}'.format(indexes, m.guild.id, genChan.id)
                     for msg in os.listdir(path):
