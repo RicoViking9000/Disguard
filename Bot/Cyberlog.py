@@ -232,15 +232,16 @@ class Cyberlog(commands.Cog):
             keys = {}
             for m in self.bot.get_all_members(): keys['{}_{}'.format(m.guild.id, m.id)] = copy.deepcopy([])
             for g in self.bot.guilds:
-                genChan = await database.CalculateGeneralChannel(m.guild, True)
-                path = '{}/{}/{}'.format(indexes, m.guild.id, genChan.id)
-                for msg in os.listdir(path):
-                    try:
-                        with open('{}/{}'.format(path, msg), 'r+') as f:
-                            enum = list(enumerate(f))
-                            userID = int(msg[msg.find('_')+1:msg.find('.')])
-                            keys['{}_{}'.format(g.id, userID)].append({'content': enum[-1][1].lower().strip(), 'timestamp': datetime.datetime.strptime(enum[0][1].strip(), '%b %d, %Y - %I:%M %p'), 'userID': userID, 'channelID': genChan.id})
-                    except (KeyError, IndexError): pass
+                if g.id not in self.optOut and len(g.members) < 350:
+                    genChan = await database.CalculateGeneralChannel(m.guild, True)
+                    path = '{}/{}/{}'.format(indexes, m.guild.id, genChan.id)
+                    for msg in os.listdir(path):
+                        try:
+                            with open('{}/{}'.format(path, msg), 'r+') as f:
+                                enum = list(enumerate(f))
+                                userID = int(msg[msg.find('_')+1:msg.find('.')])
+                                keys['{}_{}'.format(g.id, userID)].append({'content': enum[-1][1].lower().strip(), 'timestamp': datetime.datetime.strptime(enum[0][1].strip(), '%b %d, %Y - %I:%M %p'), 'userID': userID, 'channelID': genChan.id})
+                        except (KeyError, IndexError): pass
             for k, v in keys.items():
                 allContent = [a.get('content') for a in v]
                 vv = 0
@@ -263,6 +264,10 @@ class Cyberlog(commands.Cog):
                             timestamps.append(v[j].get('timestamp'))
                             j += 1
                         target = random.choice(v[i:j]) #Pick random from the list with the matching words
+                        test = 0
+                        while target.get('timestamp').strftime('%I%M') < datetime.datetime.utcnow().strftime('%I%M') and test < 10: #Try up to 10 times to get a timestamp in the future cuz of the issues
+                            target = random.choice(v[i:j])
+                            test += 1
                         self.foolsQueue.append(target)
                         temp = j
                         if temp > len(v) - 1: temp = len(v) - 1
@@ -271,28 +276,28 @@ class Cyberlog(commands.Cog):
         except: traceback.print_exc()
         print('Queued up {} messages for foolsQueue'.format(len(self.foolsQueue)))
         self.SendAprilFoolsDayMessages.start()
-        ownerMessage = ('''Hello {},\nYou are receiving this message because you are the owner of **{}**, which contain(s) me. My developer has put together an april fools day event, which, by default, will be
-applied to all servers I am in, including the one(s) you own. Please read through the event description, then you may decide if you would like to opt-out of the event.\n**__APRIL FOOLS DAY EVENT 2020__**\n
-For this event, I will calculate which three phrases every member in your server has said the most, calculated by exact message content, only in your server's most popular channel. Only phrases used in
-more than one message will be counted. Out of however many messages a user has said a most popular phrase in, a random one will be selected. When the time today matches the time the randomly selected
-message was sent (in terms of hours/minutes), I will create a webhook that will post the corresponding most popular phrase, in the corresponding channel, with the name and profile picture of the
-corresponding author of the message. In other words, if you have a member who frequently posts 'ok boomer,' and 'ok boomer' is one of their three most popular phrases, then out of all the times
-they have said 'ok boomer,' a timestamp will be randomly selected from that list, and will be used to determine when I use a webhook to say 'ok boomer' with that member's username and profile picture today.''',
-    '''\n\nIf that paragraph was too wordy to understand, know this: For every active member in your server(s), up to three posts will be made throughout the day of their most popular phrases, in your server's channel
-with the most posts. As such, it can be spammy. It will not reach that amount because chances are, many members are inactive, and this mostly applies to active users, but I am offering you the chance to opt-out of this
-event for any of the servers you own. You may opt-out at any point today, and the event will terminate when you do, so you are welcome to see how this event works before you make a decision.''')
-        sentTo = [] #Avoid duplicate DMs for members with mutiple servers with my bot in it
-        for g in self.bot.guilds: #First up, send the long message
-            if g.owner.id not in sentTo:
-                if g.id not in self.optOut:
-                    async for m in g.owner.history(after=datetime.datetime.utcnow() - datetime.timedelta(hours=2)):
-                        if m.author.id == self.bot.user.id: await m.delete()
-                    await g.owner.send(ownerMessage[0].format(g.owner.name, ', '.join([s.name for s in self.bot.guilds if s.owner.id == g.owner.id])))
-                    await g.owner.send(ownerMessage[1])
-                    sentTo.append(g.owner.id)
-                    print('Sent long message to {}'.format(g.owner.name))
-        #Next up, send a message for each server with an opt out method attached
-        await asyncio.gather(*[self.handleOptOut(g) for g in self.bot.guilds])
+#         ownerMessage = ('''Hello {},\nYou are receiving this message because you are the owner of **{}**, which contain(s) me. My developer has put together an april fools day event, which, by default, will be
+# applied to all servers I am in, including the one(s) you own. Please read through the event description, then you may decide if you would like to opt-out of the event.\n**__APRIL FOOLS DAY EVENT 2020__**\n
+# For this event, I will calculate which three phrases every member in your server has said the most, calculated by exact message content, only in your server's most popular channel. Only phrases used in
+# more than one message will be counted. Out of however many messages a user has said a most popular phrase in, a random one will be selected. When the time today matches the time the randomly selected
+# message was sent (in terms of hours/minutes), I will create a webhook that will post the corresponding most popular phrase, in the corresponding channel, with the name and profile picture of the
+# corresponding author of the message. In other words, if you have a member who frequently posts 'ok boomer,' and 'ok boomer' is one of their three most popular phrases, then out of all the times
+# they have said 'ok boomer,' a timestamp will be randomly selected from that list, and will be used to determine when I use a webhook to say 'ok boomer' with that member's username and profile picture today.''',
+#     '''\n\nIf that paragraph was too wordy to understand, know this: For every active member in your server(s), up to three posts will be made throughout the day of their most popular phrases, in your server's channel
+# with the most posts. As such, it can be spammy. It will not reach that amount because chances are, many members are inactive, and this mostly applies to active users, but I am offering you the chance to opt-out of this
+# event for any of the servers you own. You may opt-out at any point today, and the event will terminate when you do, so you are welcome to see how this event works before you make a decision.''')
+#         sentTo = [] #Avoid duplicate DMs for members with mutiple servers with my bot in it
+        # for g in self.bot.guilds: #First up, send the long message
+        #     if g.owner.id not in sentTo:
+        #         if g.id not in self.optOut:
+        #             async for m in g.owner.history(after=datetime.datetime.utcnow() - datetime.timedelta(hours=2)):
+        #                 if m.author.id == self.bot.user.id: await m.delete()
+        #             await g.owner.send(ownerMessage[0].format(g.owner.name, ', '.join([s.name for s in self.bot.guilds if s.owner.id == g.owner.id])))
+        #             await g.owner.send(ownerMessage[1])
+        #             sentTo.append(g.owner.id)
+        #             print('Sent long message to {}'.format(g.owner.name))
+        # #Next up, send a message for each server with an opt out method attached
+        # await asyncio.gather(*[self.handleOptOut(g) for g in self.bot.guilds])
 
     async def handleOptOut(self, g):
         try:
@@ -356,13 +361,35 @@ event for any of the servers you own. You may opt-out at any point today, and th
         global edits
         global loading
         global grabbedSummaries
-        channel = bot.get_channel(payload.channel_id)
-        if type(channel) is not discord.TextChannel: return
+        u = self.bot.get_user(payload.user_id)
+        if u.bot: return
+        DMchannel = u.dm_channel
+        if DMchannel is None:
+            await u.create_dm()
+            DMchannel = u.dm_channel
+        print(DMchannel.recipient.name)
+        if DMchannel.id == payload.channel_id:
+            print('inside')
+            if str(ej) == 'ℹ':
+                message = await DMchannel.fetch_message(payload.message_id)
+                firstBold = message.content.find('**')
+                server = message.content[firstBold + 2:message.content.find('**', firstBold + 2)]
+                print(server)
+                g = discord.utils.get(self.bot.guilds, name=server)
+                print(g.name)
+                m = await g.owner.send('Please confirm opt out for {} by reacting to this message with ✅'.format(g.name))
+                await m.add_reaction('✅')
+                def confirmOptCheck(r,u): return str(r) == '✅' and g.owner == u and r.message.id == m.id
+                await self.bot.wait_for('reaction_add',check=confirmOptCheck)
+                self.optOut.append(g.id)
+                await g.owner.send('Successfully added {} to the blacklist for april fools day event 2020'.format(g.name))
+                print(self.optOut)
+            return
+        channel = self.bot.get_channel(payload.channel_id)
         try: message = await channel.fetch_message(payload.message_id)
         except: return
-        user = bot.get_guild(channel.guild.id).get_member(payload.user_id)
+        user = self.bot.get_guild(channel.guild.id).get_member(payload.user_id)
         await updateLastActive(user, datetime.datetime.now(), 'added a reaction')
-        if user.bot: return
         if len(message.embeds) == 0: return
         if message.author.id != bot.get_guild(channel.guild.id).me.id: return
         e = message.embeds[0]
