@@ -246,9 +246,9 @@ class Cyberlog(commands.Cog):
                     #             keys['{}_{}'.format(g.id, userID)].append({'content': enum[-1][1].lower().strip(), 'timestamp': datetime.datetime.strptime(enum[0][1].strip(), '%b %d, %Y - %I:%M %p'), 'userID': userID, 'channelID': genChan.id})
                     #     except (KeyError, IndexError): pass
                     async for msg in genChan.history(limit=None):
-                        try: keys['{}_{}'.format(g.id, msg.author.id)].append({'content': msg.content.lower(), 'timestamp': msg.created_at, 'userID': msg.author.id, 'channelID': msg.channel.id})
+                        try: keys['{}_{}'.format(g.id, msg.author.id)].append({'content': msg.content.lower().strip(), 'timestamp': msg.created_at, 'userID': msg.author.id, 'channelID': msg.channel.id})
                         except (KeyError, IndexError): pass
-                    print('Finished calculating messages for {}, took {} seconds'.format(g.name, (datetime.datetime.now() - startedAt).seconds))
+                    print('Finished calculating messages for {}, took {} seconds and got {} keys'.format(g.name, (datetime.datetime.now() - startedAt).seconds, len(keys.values())))
                 for k, v in keys.items():
                     allContent = [a.get('content') for a in v]
                     vv = 0
@@ -261,7 +261,6 @@ class Cyberlog(commands.Cog):
                     g = self.bot.get_guild(int(k[:k.find('_')]))
                     member = g.get_member(int(k[k.find('_')+1:]))
                     targetAmount = [0, 3] #index 0: current number of messages dealt with, index 1: how many max
-                    print('Iterating {} - length {}'.format(g.name, len(v) if v is not None else 'None'))
                     if v is not None and len(v) > 0:
                         i = 0 #Iterator variable
                         member
