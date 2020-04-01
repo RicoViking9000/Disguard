@@ -124,7 +124,7 @@ class Cyberlog(commands.Cog):
         self.pins = {}
         self.rawMessages = {}
         self.foolsQueue = []
-        self.optOut = []
+        self.optOut = [544639971223666738, 644685166136262656, 671793837462519831, 563914776833687552, 593671744972128277]
         self.pauseDelete = []
         self.summarize.start()
         self.DeleteAttachments.start()
@@ -284,10 +284,13 @@ event for any of the servers you own. You may opt-out at any point today, and th
         sentTo = [] #Avoid duplicate DMs for members with mutiple servers with my bot in it
         for g in self.bot.guilds: #First up, send the long message
             if g.owner.id not in sentTo:
-                await g.owner.send(ownerMessage[0].format(g.owner.name, ', '.join([s.name for s in self.bot.guilds if s.owner.id == g.owner.id])))
-                await g.owner.send(ownerMessage[1])
-                sentTo.append(g.owner.id)
-                print('Sent long message to {}'.format(g.owner.name))
+                if g.id not in self.optOut:
+                    async for m in g.owner.history(after=datetime.datetime.utcnow() - datetime.timedelta(hours=2)):
+                        if m.author.id == self.bot.user.id: await m.delete()
+                    await g.owner.send(ownerMessage[0].format(g.owner.name, ', '.join([s.name for s in self.bot.guilds if s.owner.id == g.owner.id])))
+                    await g.owner.send(ownerMessage[1])
+                    sentTo.append(g.owner.id)
+                    print('Sent long message to {}'.format(g.owner.name))
         #Next up, send a message for each server with an opt out method attached
         await asyncio.gather(*[self.handleOptOut(g) for g in self.bot.guilds])
 

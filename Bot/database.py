@@ -9,6 +9,7 @@ import profanityfilter
 import datetime
 import asyncio
 import faulthandler
+import os
 from discord.ext import commands
 
 #mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
