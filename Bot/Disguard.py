@@ -68,10 +68,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 pass
         await database.Verification(bot)
         await Antispam.PrepareFilters(bot)
-        await bot.get_cog('Birthdays').updateBirthdays()
-        for g in bot.guilds:
-            await (await database.CalculateGeneralChannel(g, True)).send('AWWWWWWWW MAN')
-        await asyncio.gather(bot.get_cog('Cyberlog').PrepareAprilFoolsDayMessages())
         anniversaryDayKickoff.start()
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
