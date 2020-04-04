@@ -724,9 +724,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
                 mutual = [s for s in self.bot.guilds if all(m in s.members for m in [u, recipient])]
                 letters = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
                 m = await u.send('{} Retrieving server birthday information from database, please wait...'.format(self.loading))
-                await m.edit(content='''Select which servers you would like your personal message to be sent to by reacting with the corresponding letters, then react ➡️ when you're done. \n🍰 = server with birthday announcements
-                    channel configured (in other words, selecting servers without this icon means that your birthday will only be announced there if they configure their birthday accouncements channel in the meantime)
-                    \n\n{}'''.format('\n'.join(['{}: {}{}'.format(letters[a], mutual[a].name, ' 🍰' if await database.GetBirthday(mutual[a]) > 0 else '' ) for a in range(len(mutual))])))
+                await m.edit(content='Select which servers you would like your personal message to be sent to by reacting with the corresponding letters, then react ➡️ when you\'re done. \n🍰 = server with birthday announcements channel configured (in other words, selecting servers without this icon means that your birthday will only be announced there if they configure their birthday accouncements channel in the meantime)\n\n{}'.format('\n'.join(['{}: {}{}'.format(letters[a], mutual[a].name, ' 🍰' if await database.GetBirthday(mutual[a]) > 0 else '' ) for a in range(len(mutual))])))
                 for a in range(len(mutual)):
                     await m.add_reaction(letters[a])
                 await m.add_reaction('➡️')

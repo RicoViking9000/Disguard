@@ -13,10 +13,9 @@ import random
 bot = None
 globalLogChannel = discord.TextChannel
 imageLogChannel = discord.TextChannel
-pauseDelete = []
 serverPurge = {}
-loading = None
 summarizeOn=False
+secondsInADay = 3600 * 24
 indexes = 'Indexes'
 tempDir = 'Attachments/Temp' #Path to save images for profile picture changes and other images in logs
 try: os.makedirs(tempDir)
@@ -121,6 +120,12 @@ class Cyberlog(commands.Cog):
         self.whiteMinus = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteMinus')
         self.whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
         self.hashtag = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='hashtag')
+        self.online= discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online')
+        self.idle = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='idle')
+        self.dnd = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='dnd')
+        self.offline = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='offline')
+        self.imageLogChannel = bot.get_channel(534439214289256478)
+        self.globalLogChannel = bot.get_channel(566728691292438538)
         self.pins = {}
         self.rawMessages = {}
         self.pauseDelete = []
@@ -146,7 +151,6 @@ class Cyberlog(commands.Cog):
         if summarizeOn:
             try:
                 global summaries
-                global loading
                 for server in self.bot.guilds:
                     if await database.GeneralSummarizeEnabled(server):
                         s = summaries.get(str(server.id))
@@ -252,7 +256,6 @@ class Cyberlog(commands.Cog):
         ej = payload.emoji
         global bot
         global edits
-        global loading
         global grabbedSummaries
         u = self.bot.get_user(payload.user_id)
         if u.bot: return
@@ -569,10 +572,9 @@ class Cyberlog(commands.Cog):
         if reaction.message.guild is None: return
         if user.bot or len(reaction.message.embeds) == 0 or reaction.message.author.id != reaction.message.guild.me.id:
             return
-        global loading
         reactions = ['ℹ', '📜', '🗓', '📁', '📓']
         if str(reaction) in reactions or str(reaction) == '🗒':
-            await reaction.message.edit(content=loading)
+            await reaction.message.edit(content=self.loading)
 
     def parseEdits(self, beforeWordList, afterWordList, findChanges=False):
         '''Returns truncated version of differences given before/after list of words
@@ -679,7 +681,7 @@ class Cyberlog(commands.Cog):
         author = g.get_member(after.author.id) #Get the member of the edited message, and if not found, return (this should always work, and if not, then it isn't a server and we don't need to proceed)
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
         if not logExclusions(after.channel, author): return #Check the exclusion settings
-        load=discord.Embed(title="📜✏ Message was edited (ℹ to expand details)",description=str(loading),color=0x0000FF,timestamp=datetime.datetime.utcnow())
+        load=discord.Embed(title="📜✏ Message was edited (ℹ to expand details)",description='',color=0x0000FF,timestamp=datetime.datetime.utcnow())
         load.set_footer(text='Message ID: {}'.format(payload.message_id))
         embed = load.copy()
         c = logChannel(g, 'message')
@@ -752,116 +754,91 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
         '''[DISCORD API METHOD] Called when message is deleted (RAW CONTENT)'''
-        global pauseDelete
-        global loading
-        global bot
-        global imageLogChannel
-        if serverPurge.get(payload.guild_id): return
         g = bot.get_guild(payload.guild_id)
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        if serverPurge.get(payload.guild_id): return
         if not logEnabled(g, 'message'): return
-        try: 
-            message = payload.cached_message
-            data = {'author': message.author.id, 'name': message.author.name, 'server': payload.guild_id}
-        except AttributeError:
-            message = None
+        try: message = payload.cached_message
+        except AttributeError: message = None
         c = logChannel(g, 'message')
-        embed=discord.Embed(title="📜❌ Message was deleted",timestamp=datetime.datetime.utcnow(),color=0xff0000)
         if payload.message_id in self.pauseDelete: return self.pauseDelete.remove(payload.message_id)
+        embed=discord.Embed(title="📜❌ Message was deleted",description='',timestamp=datetime.datetime.utcnow(),color=red)
         embed.set_footer(text="Message ID: {}".format(payload.message_id))
-        author = message.author if message is not None else None
-        attachments = []
-        path = 'Attachments/{}/{}/{}'.format(payload.guild_id,payload.channel_id, payload.message_id)
+        attachments = [] #List of files sent with this message
+        path = 'Attachments/{}/{}/{}'.format(payload.guild_id,payload.channel_id, payload.message_id) #Where to retrieve message attachments from
         try:
-            for fil in os.listdir(path):
-                if '.png' in fil or '.jpg' in fil or '.gif' in fil or '.webp' in fil:
-                    t = await imageLogChannel.send(file=discord.File(path+'/'+fil, fil))
-                    embed.set_image(url=t.attachments[0].url)
-                else:
-                    attachments.append(discord.File(path+'/'+fil, fil))
-        except OSError: attachments = None
-        msg = None
+            for directory in os.listdir(path):
+                f = discord.File('{}/{}'.format(path, directory))
+                attachments.append(f)
+                if any([ext in directory for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]): embed.set_image(url='attachment://{}'.format(f.filename))
+        except OSError: pass
         if message is not None:
-            try:
-                if not logExclusions(message.channel, message.author) or message.author.bot: return
-            except: pass
-            embed.description='Author: {} ({}){}\nChannel: {}\nSent at: {} {}'.format(message.author.mention,message.author.name,' (no longer here)' if author is None else '',message.channel.mention,(message.created_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))).strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild))
-            embed.set_thumbnail(url=message.author.avatar_url)            
-            if len(embed.image.url) < 1:
-                for ext in ['.png', '.jpg', '.gif', '.webp']:
-                    if ext in message.content:
-                        if '://' in message.content:
-                            url = message.content[message.content.find('http'):message.content.find(ext)+len(ext)+1]
-                            embed.set_image(url=url)
-            embed.add_field(name="Content",value="(No content)" if message.content is None or len(message.content)<1 else message.content)
+            author = self.bot.get_user(message.author.id)
+            channel, created, content = message.channel, message.created_at, message.content
         else:
-            embed.description='{}Searching filesystem for data...'.format(loading) #Now we have to search the file system
-            msg = await c.send(embed=embed)
-            f=None
             try:
-                directory = "{}/{}/{}".format(indexes, payload.guild_id,payload.channel_id)
+                directory = "{}/{}/{}".format(indexes, payload.guild_id, payload.channel_id)
                 for fl in os.listdir(directory):
                     if str(payload.message_id) in fl:
-                        f = open(directory+"/"+fl, "r")
-                        authorID = int(fl[fl.find('_')+1:fl.find('.')])
-                        for line, l in enumerate(f): #like before, line is line number, l is line content
-                            if line == 0:
-                                created = datetime.datetime.strptime(l.strip(), '%b %d, %Y - %I:%M %p') + datetime.timedelta(hours=await database.GetTimezone(bot.get_guild(payload.guild_id)))
-                            elif line == 1:
-                                authorName = l
-                            elif line == 2:
-                                messageContent = l
-                        f.close()
-                        os.remove(directory+"/"+fl)
-                        author = bot.get_guild(payload.guild_id).get_member(authorID)
-                        #data = {'author': authorID, 'name': authorName, 'server': payload.guild_id, message: payload.message_id}
-                        if author is None or author.bot or author not in g.members or not logExclusions(bot.get_channel(payload.channel_id), author):
-                            return await msg.delete()
-                        embed.description=""
-                        if author is not None: 
-                            embed.description+="Author: "+author.mention+" ("+author.name+")\n"
-                            embed.set_thumbnail(url=author.avatar_url)
-                        else: embed.description+="Author: "+authorName+"\n"
-                        embed.description+="Channel: "+bot.get_channel(payload.channel_id).mention+"\n"
-                        embed.description+='Sent: {} {}\n'.format(created.strftime("%b %d, %Y - %I:%M %p"), nameZone(bot.get_guild(payload.guild_id)))
-                        embed.add_field(name="Content",value="(No content)" if messageContent == "" or len(messageContent) < 1 else messageContent)
-                        for ext in ['.png', '.jpg', '.gif', '.webp']:
-                            if ext in messageContent:
-                                if '://' in messageContent:
-                                    url = messageContent[message.content.find('http'):messageContent.find(ext)+len(ext)+1]
-                                    embed.set_image(url=url)
+                        with open('{}/{}'.format(directory, fl), 'r') as f:
+                            authorID = int(fl[fl.find('_')+1:fl.find('.')])
+                            e = list(enumerate(f))
+                            channel, created, content = self.bot.get_channel(payload.channel_id), datetime.datetime.strptime(e[0][1].strip(), '%b %d, %Y - %I:%M %p'), e[-1][1]
+                        os.remove('{}/{}'.format(directory, fl))
+                        author = self.bot.get_user(authorID)
                         break #the for loop
-            except FileNotFoundError:
-                embed.description='Currently unable to locate message data in filesystem'
-                return await msg.edit(embed=embed)
-            if f is None:
-                return await msg.edit(embed=discord.Embed(title="Message was deleted",description='Unable to provide more information: Message was created before my last restart and I am unable to locate the indexed file locally',timestamp=datetime.datetime.utcnow(),color=0xff0000))
-        content=None
+            except (FileNotFoundError, IndexError):
+                embed.description='Channel: {}\nUnable to provide information beyond what is here; this message was sent before my last restart, and I am unable to locate the indexed file locally to retrieve more information'
+                return await c.send(embed=embed)      
+        if datetime.datetime.utcnow() > created: #This makes negative time rather than posting some super weird timestamps. No, negative time doesn't exist but it makes more sense than what this would do otherwise
+            mult = 1
+            deletedAfter = datetime.datetime.utcnow() - created
+        else:
+            mult = -1
+            deletedAfter = created - datetime.datetime.utcnow()
+        hours, minutes, seconds = deletedAfter.seconds // 3600, (deletedAfter.seconds // 60) % 60, deletedAfter.seconds - (deletedAfter.seconds // 3600) * 3600 - ((deletedAfter.seconds // 60) % 60)*60
+        times = [seconds*mult, minutes*mult, hours*mult, deletedAfter.days*mult] #This is the list of units for the deletedAfter
+        units = ['second', 'minute', 'hour', 'day'] #Full words, but we'll only be using the first letter in the final result
+        display = [] #This will be joined in the embed to combine the units and values
+        for i in range(len(times)):
+            if times[i] != 0: display.append('{}{}'.format(times[i], units[i][0])) #The if statement will not append units if everything to the right is 0 (such as 5 seconds later, where m/h/d would all be 0)
+        try: memberObject = g.get_member(author.id)
+        except AttributeError: return
+        try: 
+            if author.bot or not logExclusions(channel, memberObject): return
+        except: pass
+        try: messageAfter = (await channel.history(limit=1, after=created, oldest_first=True).flatten())[0] #The message directly after the deleted one, if this is N/A the embed will have no hyperlink for this
+        except IndexError: messageAfter = ''
+        try: messageBefore = (await channel.history(limit=1, before=created).flatten())[0] #The message directly before the deleted one
+        except IndexError: messageBefore = ''
+        created += datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))
+        embed.description='Author: {0} ({1})\nChannel: {2} • Jump to message [before]({3} \'{4}\') or [after]({5} \'{6}\') this one\nPosted: {7} {8}\nDeleted: {9} {8} ({10} later)'.format(author.mention if memberObject is not None else author.name, author.name if memberObject is not None else 'No longer in this server', channel.mention, messageBefore.jump_url if messageBefore != '' else '', messageBefore.content if messageBefore != '' else '', messageAfter.jump_url if messageAfter != '' else '', messageAfter.content if messageAfter != '' else '', created.strftime("%b %d, %Y - %I:%M:%S %p"), nameZone(bot.get_guild(payload.guild_id)), received, ' '.join(reversed(display)))
+        embed.add_field(name="Content",value="(No content)" if content == "" or len(content) < 1 else content)
+        for ext in ['.png', '.jpg', '.gif', '.webp']:
+            if ext in content:
+                if '://' in content:
+                    url = content[message.content.find('http'):content.find(ext)+len(ext)+1]
+                    embed.set_image(url=url)
+        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
+        try: await author.avatar_url_as(size=1024).save(savePath)
+        except discord.HTTPException: pass
+        f = discord.File(savePath)
+        attachments.append(f)
+        embed.set_thumbnail(url='attachment://{}'.format(f.filename))
+        sendContent=None
         if readPerms(g, "message"):
             try:
                 async for log in g.audit_logs(limit=1):
                     if log.action == discord.AuditLogAction.message_delete and log.target.id == author.id and (datetime.datetime.utcnow() - log.created_at).seconds < 10:
                         embed.description+="\nDeleted by: "+log.user.mention+" ("+log.user.name+")"
                         await updateLastActive(log.user, datetime.datetime.now(), 'deleted a message')
+                    else: await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
             except discord.Forbidden:
-                content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
-        #global summaries
-        #if s is not None:
-        #    if database.SummarizeEnabled(g, 'message'):  
-        #        summaries.get(str(g.id)).add('message', 1, datetime.datetime.now(), data, embed,content=content)
-        #        await s.delete()
-        #    else:
-        #        await s.edit(content=content,embed=embed,files=attachments)
-        #else:
-        #if await database.SummarizeEnabled(g, 'message'):
-        #    summaries.get(str(g.id)).add('message', 1, datetime.datetime.now(), data, embed,content=content)
-        #else:
-        if author is not None: await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
-        try: await msg.edit(content=content,embed=embed,files=attachments)
-        except: 
-            if msg is None: 
-                try: msg = await c.send(content=content,embed=embed,files=attachments)
-                except: msg = await c.send(content='An attachment to this message is too big to send',embed=embed)
-            else: msg = await c.send(content='An attachment to this message is too big to send',embed=embed)
+                sendContent="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
+        if sendContent is None: 
+            if random.randint(1, 20) == 1: sendContent='ℹProtip: Hover over the **before** or **after** message hyperlink to preview the content of the linked message' #5% chance of the protip popping up
+        try: msg = await c.send(content=sendContent,embed=embed,files=attachments)
+        except: msg = await c.send(content='An attachment to this message is too big to send',embed=embed)
         await VerifyLightningLogs(msg, 'message')
 
     @commands.Cog.listener()
@@ -1341,15 +1318,13 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot joins a server'''
-        global bot
-        global globalLogChannel
-        await globalLogChannel.send(embed=discord.Embed(title="{}Joined server".format(self.whitePlus),description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0x008000))
+        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="{} servers".format(len(self.bot.guilds)), type=discord.ActivityType.watching))
+        await self.globalLogChannel.send(embed=discord.Embed(title="{}Joined server".format(self.whitePlus),description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0x008000))
         await database.VerifyServer(guild, bot)
         for member in guild.members:
             await database.VerifyUser(member, bot)
         post=None
-        global loading
-        content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: <https://disguard.herokuapp.com>\n{}Please wait while I index your server's messages...".format(loading)
+        content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: <https://disguard.herokuapp.com>\n{}Please wait while I index your server's messages...".format(self.loading)
         if guild.system_channel is not None:
             try: post = await guild.system_channel.send(content) #Update later to provide more helpful information
             except discord.Forbidden: pass
@@ -1445,9 +1420,8 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot leaves a server'''
-        global bot
-        global globalLogChannel
-        await globalLogChannel.send(embed=discord.Embed(title="❌Left server",description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0xff0000))
+        await self.globalLogChannel.send(embed=discord.Embed(title="❌Left server",description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0xff0000))
+        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="{} servers".format(len(self.bot.guilds)), type=discord.ActivityType.watching))
         await database.VerifyServer(guild, bot)
         for member in guild.members:
             await database.VerifyUser(member, bot)
@@ -1699,7 +1673,7 @@ class Cyberlog(commands.Cog):
             await self.bot.wait_for('reaction_add', check=infoCheck)
             try: await m.clear_reactions()
             except: pass
-            await m.edit(content=loading)
+            await m.edit(content=self.loading)
             embed=discord.Embed(title='⚠An error has occured⚠',description='{}\n\n⬆: Collapse information\n{}: Send this to my developer via my official server\n\n{}'.format(str(error),
                 self.disguard, ''.join(traceback.format_exception(type(error), error, error.__traceback__, 3))),timestamp=datetime.datetime.utcnow(),color=red)
             embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
@@ -1721,7 +1695,7 @@ class Cyberlog(commands.Cog):
                 await m.add_reaction('❌')
                 def check2(r, u): return str(r) == '❌' and u.id == ctx.author.id and r.message.id == m.id
                 await bot.wait_for('reaction_add', check=check2)
-                await m.edit(content=loading)
+                await m.edit(content=self.loading)
                 try: await m.clear_reactions()
                 except: pass
                 await log.delete()
@@ -1733,8 +1707,7 @@ class Cyberlog(commands.Cog):
     @commands.command()
     async def pause(self, ctx, *args):
         '''Pause logging or antispam for a duration'''
-        global loading
-        status = await ctx.send(str(loading) + "Please wait...")
+        status = await ctx.send(str(self.loading) + "Please wait...")
         classify = ''
         duration = 0
         args = [a.lower() for a in args]
@@ -1785,26 +1758,29 @@ class Cyberlog(commands.Cog):
     @commands.command()
     async def info(self, ctx, *args): #queue system: message, embed, every 3 secs, check if embed is different, edit message to new embed
         import emoji
-        global bot
         arg = ' '.join([a.lower() for a in args])
-        message = await ctx.send('{}Searching'.format(loading))
+        message = await ctx.send('{}Searching'.format(self.loading))
         mainKeys=[]
         main=discord.Embed(title='Info results viewer',color=yellow,timestamp=datetime.datetime.utcnow())
         embeds=[]
         PartialEmojiConverter = commands.PartialEmojiConverter()
         if len(arg) > 0:
+            startedSearching = datetime.datetime.now()
             members, roles, channels, emojis = tuple(await asyncio.gather(*[self.FindMembers(ctx.guild, arg), self.FindRoles(ctx.guild, arg), self.FindChannels(ctx.guild, arg), self.FindEmojis(ctx.guild, arg)]))
+            print('Info command: Search complete in {} seconds'.format((datetime.datetime.now() - startedSearching).seconds))
         else:
             members = []
             roles = []
             channels = []
             emojis = []
+        startedGather = datetime.datetime.now()
         try: logs = await ctx.guild.audit_logs(limit=None).flatten()
         except: logs = None
         try: invites = await ctx.guild.invites()
         except: invites = None
         try: bans = await ctx.guild.bans()
         except: bans = None
+        print('Info command: Gather complete in {} seconds'.format((datetime.datetime.now() - startedGather).seconds))
         relevance = []
         indiv=None
         for m in members:
@@ -1848,21 +1824,21 @@ class Cyberlog(commands.Cog):
             mainKeys.append('ℹBans information')
             indiv = await self.BansListInfo(bans, logs, ctx.guild)
         if len(arg) == 0:
-            await message.edit(content='{}Loading content'.format(loading)) 
+            await message.edit(content='{}Loading content'.format(self.loading)) 
             mainKeys.append('ℹInformation about you :)')
             indiv = await self.MemberInfo(ctx.author)
         if 'me' == arg:
-            await message.edit(content='{}Loading content'.format(loading))
+            await message.edit(content='{}Loading content'.format(self.loading))
             mainKeys.append('ℹInformation about you :)')
             indiv = await self.MemberInfo(ctx.author)
         if any(s == arg for s in ['him', 'her', 'them', 'it']):
-            await message.edit(content='{}Loading content'.format(loading))
+            await message.edit(content='{}Loading content'.format(self.loading))
             def pred(m): return m.author != ctx.guild.me and m.author != ctx.author
             author = (await ctx.channel.history(limit=200).filter(pred).flatten())[-1].author
             mainKeys.append('ℹInformation about the person above you ({})'.format(author.name))
             indiv = await self.MemberInfo(author)
         #Calculate relevance
-        await message.edit(content='{}Loading content'.format(loading))
+        await message.edit(content='{}Loading content'.format(self.loading))
         reactions = ['⬅']
         if len(embeds) > 0 and indiv is None: 
             priority = embeds[relevance.index(max(relevance))]
@@ -1871,7 +1847,7 @@ class Cyberlog(commands.Cog):
         else:
             if indiv is not None: indiv.set_author(name='⭐Best match: {}'.format(mainKeys[0]))
             if len(embeds) == 0 and indiv is None: 
-                main.description='{}0 results for *{}*, but I\'m still searching advanced results'.format(loading, arg)
+                main.description='{}0 results for *{}*, but I\'m still searching advanced results'.format(self.loading, arg)
                 reactions = []
                 indiv = main.copy()
         if len(arg) == 0: 
@@ -1882,7 +1858,7 @@ class Cyberlog(commands.Cog):
             try: await message.delete()
             except: pass
             return await self.bot.get_cog('Birthdays').birthday(ctx, str(ctx.author.id))
-        if len(embeds) > 1 or indiv is not None: await message.edit(content='{}Still searching in the background'.format(loading),embed=indiv)
+        if len(embeds) > 1 or indiv is not None: await message.edit(content='{}Still searching in the background'.format(self.loading),embed=indiv)
         members, roles, channels, inv, emojis = tuple(await asyncio.gather(*[self.FindMoreMembers(ctx.guild.members, arg), self.FindMoreRoles(ctx.guild, arg), self.FindMoreChannels(ctx.guild, arg), self.FindMoreInvites(ctx.guild, arg), self.FindMoreEmojis(ctx.guild, arg)]))
         every=[]
         types = {discord.TextChannel: str(self.hashtag), discord.VoiceChannel: '🎙', discord.CategoryChannel: '📂'}
@@ -1968,7 +1944,7 @@ class Cyberlog(commands.Cog):
                     past = True
                     try: await message.clear_reactions()
                     except: pass
-                    loadContent.title = loadContent.title.format(loading, str(every[int(stuff.content) - 1].obj))
+                    loadContent.title = loadContent.title.format(self.loading, str(every[int(stuff.content) - 1].obj))
                     await message.edit(content=None, embed=loadContent)
                     self.AvoidDeletionLogging(stuff)
                     try: await stuff.delete()
@@ -1999,10 +1975,6 @@ class Cyberlog(commands.Cog):
     async def ServerInfo(self, s: discord.Guild, logs, bans, hooks, invites):
         '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
         embed=discord.Embed(title=s.name,description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description),timestamp=datetime.datetime.utcnow(),color=yellow)
-        online=bot.get_emoji(606534231631462421)
-        idle=bot.get_emoji(606534231610490907)
-        dnd=bot.get_emoji(606534231576805386)
-        offline=bot.get_emoji(606534231492919312)
         mfa = {0: 'No', 1: 'Yes'}
         veri = {'none': 'None', 'low': 'Email', 'medium': 'Email, account age > 5 mins', 'high': 'Email, account 5 mins old, server member for 10 mins', 'extreme': 'Phone number'}
         perks0=['None yet']
@@ -2014,20 +1986,19 @@ class Cyberlog(commands.Cog):
         elif s.premium_tier==2: perks=[perks2[0],perks2[1],perks1[1]]
         elif s.premium_tier==1: perks = perks1
         else: perks = perks0
-        messages = 0
-        for chan in s.text_channels:
-            path = "{}/{}/{}".format(indexes, s.id, chan.id)
-            messages+=len(os.listdir(path))
+        messages = sum([len(os.listdir('{}/{}/{}'.format(indexes, s.id, chan.id))) for chan in s.text_channels])
         created = s.created_at
         txt='{}Text Channels: {}'.format(self.hashtag, len(s.text_channels))
         vc='{}Voice Channels: {}'.format('🎙', len(s.voice_channels))
         cat='{}Category Channels: {}'.format('📂', len(s.categories))
         embed.description+=('**Channel count:** {}\n{}\n{}\n{}'.format(len(s.channels),cat, txt, vc))
-        online='{}Online: {}'.format(online, len([m for m in s.members if m.status == discord.Status.online]))
-        idle='{}Idle: {}'.format(idle, len([m for m in s.members if m.status == discord.Status.idle]))
-        dnd='{}Do not disturb: {}'.format(dnd, len([m for m in s.members if m.status == discord.Status.dnd]))
-        offline='{}Offline/invisible: {}'.format(offline, len([m for m in s.members if m.status == discord.Status.offline]))
-        embed.description+='\n\n**Member count:** {}{}\n{}'.format(len(s.members),'' if s.max_members is None else '/{}'.format(s.max_members),'\n'.join([online, idle, dnd, offline]))
+        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in s.members if m.status != discord.Status.online]), len(s.members), round(len([m for m in s.members if m.status != discord.Status.online]) / len(s.members) * 100))
+        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in s.members if m.status == discord.Status.online]), len(s.members), round(len([m for m in s.members if m.status == discord.Status.online]) / len(s.members) * 100))
+        online='{}Online: {}'.format(self.online, len([m for m in s.members if m.status == discord.Status.online]))
+        idle='{}Idle: {}'.format(self.idle, len([m for m in s.members if m.status == discord.Status.idle]))
+        dnd='{}Do not disturb: {}'.format(self.dnd, len([m for m in s.members if m.status == discord.Status.dnd]))
+        offline='{}Offline/invisible: {}'.format(self.offline, len([m for m in s.members if m.status == discord.Status.offline]))
+        embed.description+='\n\n**Member count:** {}{}\n{}'.format(len(s.members),'' if s.max_members is None else '/{}'.format(s.max_members),'\n'.join([onlineGeneral, offlineGeneral, online, idle, dnd, offline]))
         embed.description+='\n\n**Features:** {}'.format(', '.join(s.features) if len(s.features) > 0 else 'None')
         embed.description+='\n\n**Nitro boosters:** {}/{}, **perks:** {}'.format(s.premium_subscription_count,perkDict.get(s.premium_tier),', '.join(perks))
         #embed.set_thumbnail(url=s.icon_url)
@@ -2096,7 +2067,7 @@ class Cyberlog(commands.Cog):
         if type(channel) is discord.TextChannel:
             details.add_field(name='Topic',value='{}{}'.format('<No topic>' if channel.topic is None or len(channel.topic) < 1 else channel.topic[:100], '' if channel.topic is None or len(channel.topic)<=100 else '...'),inline=False)
             details.add_field(name='Slowmode',value='{}s'.format(channel.slowmode_delay))
-            details.add_field(name='Message count',value=str(loading))
+            details.add_field(name='Message count',value=str(self.loading))
             details.add_field(name='NSFW',value=channel.is_nsfw())
             details.add_field(name='News channel?',value=channel.is_news())
             details.add_field(name='Pins count',value=len(pins))
@@ -2139,41 +2110,23 @@ class Cyberlog(commands.Cog):
         tz = timeZone(m.guild)
         nz = nameZone(m.guild)
         embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=yellow)
-        mA = lastActive(m)
-        membOnline = (datetime.datetime.now() - lastOnline(m)).days * (3600 * 24) + (datetime.datetime.now() - lastOnline(m)).seconds
-        membActive = mA.get('timestamp')
-        '''Clean up this code next time lol'''
-        lastSeen = datetime.datetime.now() - membActive
-        lastSeen = lastSeen.days * (3600 * 24) + lastSeen.seconds
-        tail = 'seconds'
-        if lastSeen > 60:
-            lastSeen /= 60
-            tail = 'minutes'
-            if lastSeen > 60:
-                lastSeen /= 60
-                tail = 'hours'
-                if lastSeen > 24:
-                    lastSeen /= 24
-                    tail = 'days'
-        tail2 = 'seconds'
-        if membOnline > 60:
-            membOnline /= 60
-            tail2 = 'minutes'
-            if membOnline > 60:
-                membOnline /= 60
-                tail2 = 'hours'
-                if membOnline > 24:
-                    membOnline /= 24
-                    tail2 = 'days'
-        membOnline = round(membOnline)
-        lastSeen = round(lastSeen)
-        online=bot.get_emoji(606534231631462421)
-        idle=bot.get_emoji(606534231610490907)
-        dnd=bot.get_emoji(606534231576805386)
-        offline=bot.get_emoji(606534231492919312)
-        activities = {discord.Status.online: online, discord.Status.idle: idle, discord.Status.dnd: dnd, discord.Status.offline: offline}
-        embed.description='{}{} {}\n\n{}Last active {}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
-            'Last online {} {} ago\n'.format(membOnline, tail2) if m.status == discord.Status.offline else '', '{} {} ago ({})'.format(lastSeen, tail, mA.get('reason')))
+        mA = lastActive(m) #The dict (timestamp and reason) when a member was last active
+        membOnline = datetime.datetime.now() - lastOnline(m) #the timedelta between now and member's last online appearance
+        membActive = mA.get('timestamp') #The timestamp value when a member was last active
+        units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
+        membActive = datetime.datetime.now() - membActive #The timedelta between now and when a member was last active
+        hours, minutes, seconds = membActive.seconds // 3600, (membActive.seconds // 60) % 60, membActive.seconds - (membActive.seconds // 3600) * 3600 - ((membActive.seconds // 60) % 60)*60
+        activeTimes = [seconds, minutes, hours, membActive.days] #List of self explanatory values
+        hours, minutes, seconds = membOnline.seconds // 3600, (membOnline.seconds // 60) % 60, membOnline.seconds - (membOnline.seconds // 3600) * 3600 - ((membOnline.seconds // 60) % 60)*60
+        onlineTimes = [seconds, minutes, hours, membOnline.days]
+        activeDisplay = []
+        onlineDisplay = []
+        for i in range(len(activeTimes)):
+            if activeTimes[i] != 0: activeDisplay.append('{}{}'.format(activeTimes[i], units[i][0]))
+            if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
+        activities = {discord.Status.online: self.online, discord.Status.idle: self.idle, discord.Status.dnd: self.dnd, discord.Status.offline: self.offline}
+        embed.description='{}{} {}\n\n{}Last active {} - {} ago ({}){}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
+            'Last online {} - {} ago\n'.format(lastOnline(m).strftime('%b %d, %Y - %I:%M %p'), ' '.join(reversed(onlineDisplay))) if m.status == discord.Status.offline else '', mA.get('timestamp').strftime('%b %d, %Y - %I:%M %p'), ' '.join(reversed(activeDisplay)), mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
@@ -2225,12 +2178,13 @@ class Cyberlog(commands.Cog):
     async def InviteInfo(self, i: discord.Invite, s): #s: server
         embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow)
         embed.set_thumbnail(url=i.guild.icon_url)
-        expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age)
+        expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
         created = i.created_at + datetime.timedelta(hours=timeZone(s))
         embed.add_field(name='📆Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nameZone(s), (datetime.datetime.utcnow()-created).days))
-        embed.add_field(name='⏰Expires',value='{} {}'.format((expires+timeZone).strftime("%b %d, %Y - %I:%M %p"), nameZone(s)))
+        embed.add_field(name='⏰Expires',value='{} {}'.format(expires.strftime("%b %d, %Y - %I:%M %p"), nameZone(s)))
         embed.add_field(name='Server',value=i.guild.name)
         embed.add_field(name='Channel',value=i.guild.name)
+        embed.add_field(name='Author',value='{} ({})'.format(i.inviter.mention, i.inviter.name))
         embed.add_field(name='Used',value='{}/{} times'.format(i.uses, '∞' if i.max_uses == 0 else i.max_uses))
         embed.set_footer(text='Invite server ID: {}'.format(i.guild.id))
         #In the future, once bot is more popular, integrate server stats from other servers
@@ -2300,11 +2254,13 @@ class Cyberlog(commands.Cog):
         offline=bot.get_emoji(606534231492919312)
         humans='👮‍♂️Humans: {}'.format(len([m for m in members if not m.bot]))
         bots='🤖Bots: {}\n'.format(len([m for m in members if m.bot]))
+        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in members if m.status != discord.Status.online]), len(members), round(len([m for m in members if m.status != discord.Status.online]) / len(members) * 100))
+        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in members if m.status == discord.Status.online]), len(members), round(len([m for m in members if m.status == discord.Status.online]) / len(members) * 100))
         online='{}Online: {}'.format(online, len([m for m in members if m.status == discord.Status.online]))
         idle='{}Idle: {}'.format(idle, len([m for m in members if m.status == discord.Status.idle]))
         dnd='{}Do not disturb: {}'.format(dnd, len([m for m in members if m.status == discord.Status.dnd]))
         offline='{}Offline/invisible: {}'.format(offline, len([m for m in members if m.status == discord.Status.offline]))
-        embed.description+='\n\n**Member count:** {}{}\n{}'.format(len(members),'' if members[0].guild.max_members is None else '/{}'.format(members[0].guild.max_members),'\n'.join([humans, bots, online, idle, dnd, offline]))
+        embed.description+='\n\n**Member count:** {}{}\n{}'.format(len(members),'' if members[0].guild.max_members is None else '/{}'.format(members[0].guild.max_members),'\n'.join([humans, bots, onlineGeneral, offlineGeneral, online, idle, dnd, offline]))
         embed.add_field(name='Playing/Listening/Streaming',value=len([m for m in members if len(m.activities) > 0]))
         embed.add_field(name='Members with nickname',value=len([m for m in members if m.nick is not None]))
         embed.add_field(name='On mobile',value=len([m for m in members if m.is_on_mobile()]))
@@ -2438,9 +2394,7 @@ class Cyberlog(commands.Cog):
         return embeds
 
     async def MemberPosts(self, m: discord.Member):
-        messageCount=0
-        for channel in m.guild.text_channels: messageCount += await self.bot.loop.create_task(self.calculateMemberPosts(m, "{}/{}/{}".format(indexes, m.guild.id, channel.id)))
-        return messageCount
+        return sum([await self.bot.loop.create_task(self.calculateMemberPosts(m, "{}/{}/{}".format(indexes, m.guild.id, channel.id))) for channel in m.guild.text_channels])
 
     async def calculateMemberPosts(self, m: discord.Member, p):
         return len([f for f in os.listdir(p) if str(m.id) in f])
@@ -2681,11 +2635,5 @@ def suffix(count: int):
 
 def setup(Bot):
     global bot
-    global globalLogChannel
-    global loading
-    global imageLogChannel
     Bot.add_cog(Cyberlog(Bot))
     bot = Bot
-    imageLogChannel = bot.get_channel(534439214289256478)
-    globalLogChannel = bot.get_channel(566728691292438538)
-    loading = bot.get_emoji(573298271775227914)
