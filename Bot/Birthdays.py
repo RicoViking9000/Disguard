@@ -44,9 +44,13 @@ class Birthdays(commands.Cog):
                             age += 1
                             await database.SetAge(member, age)
                         messages = await database.GetBirthdayMessages(member)
+                        try: dummyMessage = (await member.history(limit=1).flatten())[0]
+                        except: dummyMessage = await member.send('🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name))
                         embed=discord.Embed(title='🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name), timestamp=datetime.datetime.utcnow(), color=yellow)
-                        embed.description='You have {} personal messages\n{:-^34s}\n{}'.format(len(messages), 'Messages', '\n'.join(['• {}: {} (sent @ {})'.format(m.get('authName') if self.bot.get_user(m.get('author')) is None else self.bot.get_user(m.get('author')).mention,
-                        m.get('message'), 'N/A' if m.get('created') is None else (m.get('created') + datetime.timedelta(hours=await database.GetTimezone(server))).strftime("%b %d, %Y - %I:%M %p")) for m in messages]))
+                        if len(messages) > 0: 
+                            embed.description='You have {} personal messages. All messages will be fit into this embed, so if any messages are truncated due to space constraints, hover over the hyperlink to see the entire message.\n{:–^70}\n{}'.format(len(messages), 'Messages', '\n'.join(['• {}: {} (sent @ {})'.format(m.get('authName') if self.bot.get_user(m.get('author')) is None else self.bot.get_user(m.get('author')).mention,
+                            f"[{m.get('message')[:1800 // len(messages)]}]({dummyMessage.jump_url} '{m.get('message')}')", 'N/A' if m.get('created') is None else (m.get('created') + datetime.timedelta(hours=-4)).strftime("%b %d, %Y - %I:%M %p EDT")) for m in messages]))
+                        else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
                         try: await member.send(embed=embed)
                         except: pass
                         await database.ResetBirthdayMessages(member)
@@ -71,7 +75,7 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def configureDailyBirthdayAnnouncements(self):
-        if datetime.datetime.utcnow().strftime('%H:%M') == '12:45': 
+        if datetime.datetime.utcnow().strftime('%H:%M') == '11:45': 
             self.dailyBirthdayAnnouncements.start()
             self.configureDailyBirthdayAnnouncements.cancel()
 
@@ -252,18 +256,19 @@ class Birthdays(commands.Cog):
                     await message.add_reaction('🍰')
                     if actionList[0] == ctx.author: await message.add_reaction('ℹ')
                     await message.add_reaction('👮‍♂️')
-                    d, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, Cyberlog.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)], return_when=asyncio.FIRST_COMPLETED)
-                    try: r = d.pop().result()
-                    except: pass
-                    for f in p: f.cancel()
-                    if type(r) is tuple:
-                        if str(r[0]) == 'ℹ':
-                            try: await message.delete()
-                            except discord.Forbidden: pass
-                            return await self.birthday(ctx)
-                        else:
-                            await message.delete()
-                            return await self.bot.get_cog('Cyberlog').info(ctx)
+                    while True:
+                        d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, Cyberlog.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
+                        try: r = d.pop().result()
+                        except: pass
+                        for f in p: f.cancel()
+                        if type(r) is tuple:
+                            if str(r[0]) == 'ℹ':
+                                try: await message.delete()
+                                except discord.Forbidden: pass
+                                return await self.birthday(ctx)
+                            else:
+                                await message.delete()
+                                return await self.bot.get_cog('Cyberlog').info(ctx)
             if len(actionList) == 0:
                 if len(addLater) == 1: return await ageContinuation(self, addLater[0], ctx.author, message, embed, partial=True)
                 elif len(addLater) > 1: actionList += addLater
@@ -303,14 +308,15 @@ class Birthdays(commands.Cog):
                 await message.add_reaction('🍰')
                 if actionList[0] == ctx.author: await message.add_reaction('ℹ')
                 await message.add_reaction('👮‍♂️')
-                d, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, Cyberlog.lightningUsers.get(actionList[index].id).get('birthday'), [actionList[index]], message)], return_when=asyncio.FIRST_COMPLETED)
-                try: r = d.pop().result()
-                except: pass
-                for f in p: f.cancel()
-                if type(r) is tuple: 
-                    await message.delete()
-                    if str(r[0]) == 'ℹ': return await self.birthday(ctx)
-                    else: return await self.bot.get_cog('Cyberlog').info(ctx)
+                while True:
+                    r = await asyncio.wait([self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, Cyberlog.lightningUsers.get(actionList[index].id).get('birthday'), [actionList[index]], message)], return_when=asyncio.FIRST_COMPLETED)
+                    try: r = d.pop().result()
+                    except: pass
+                    for f in p: f.cancel()
+                    if type(r) is tuple: 
+                        await message.delete()
+                        if str(r[0]) == 'ℹ': return await self.birthday(ctx)
+                        else: return await self.bot.get_cog('Cyberlog').info(ctx)
                         
 
 async def messageManagement(self, ctx, message, user, groups):
@@ -710,7 +716,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
             else: await verifying.delete()
             passInspection=False
             while not passInspection:
-                await u.send('What would you like your personal message to **{}** say? (You will be able to choose if this message is displayed publicly)'.format(recipient.name))
+                await u.send('What would you like your personal message to **{0}** say? (Note that you *will* be able to choose whether this message is displayed publicly in servers or just to {0}\'s DMs.)'.format(recipient.name))
                 def awaitMessage(m):
                     return type(m.channel) is discord.DMChannel and m.author == u
                 script = await self.bot.wait_for('message', check=awaitMessage, timeout=300)
@@ -720,11 +726,11 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
             def messageLocation(m):
                 return type(m.channel) is discord.DMChannel and m.author == u
             m = await self.bot.wait_for('message', check=messageLocation, timeout=180)
-            if '2' in m.content:
+            if '2' in m.content or 'w' in m.content:
                 mutual = [s for s in self.bot.guilds if all(m in s.members for m in [u, recipient])]
                 letters = ['🇦', '🇧', '🇨', '🇩', '🇪', '🇫', '🇬', '🇭', '🇮', '🇯']
                 m = await u.send('{} Retrieving server birthday information from database, please wait...'.format(self.loading))
-                await m.edit(content='Select which servers you would like your personal message to be sent to by reacting with the corresponding letters, then react ➡️ when you\'re done. \n🍰 = server with birthday announcements channel configured (in other words, selecting servers without this icon means that your birthday will only be announced there if they configure their birthday accouncements channel in the meantime)\n\n{}'.format('\n'.join(['{}: {}{}'.format(letters[a], mutual[a].name, ' 🍰' if await database.GetBirthday(mutual[a]) > 0 else '' ) for a in range(len(mutual))])))
+                await m.edit(content='Select which servers you would like your personal message to be sent to by reacting with the corresponding letters, then react ➡️ when you\'re done. \n🍰 = server with birthday announcements channel configured (in other words, selecting servers without this icon means that your birthday message will only be delivered there if that server configures its birthday accouncements channel in the meantime)\n\n{}'.format('\n'.join(['{}: {}{}'.format(letters[a], mutual[a].name, ' 🍰' if await database.GetBirthday(mutual[a]) > 0 else '' ) for a in range(len(mutual))])))
                 for a in range(len(mutual)):
                     await m.add_reaction(letters[a])
                 await m.add_reaction('➡️')
@@ -736,14 +742,17 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
                 for r in m.reactions: 
                     if str(r) != '➡️' and r.count > 1: selected.append(mutual[letters.index(str(r))])
             else: selected = [recipient]
-            m = await u.send('Your message to **{}** says "{}". Ready to save it? The message will be sent on {}; their birthday.'.format(', '.join(a.name for a in selected),
-                script.clean_content, birthday.strftime('%B %d')))
-            await m.add_reaction('✅')
+            m = await u.send('Your personal birthday message says `{}`. \n\nIt will be delivered to {} on {}\'s birthday ({}). If you are satisfied with this, react ✅, otherwise react 🔁 to restart or ❌ to cancel without saving.'.format(script.clean_content,
+                ' • '.join(a.name for a in selected), recipient.name, birthday.strftime('%B %d')))
+            for r in ['✅', '🔁', '❌']: await m.add_reaction(r)
             def finalConfirm(r, user):
-                return u == user and str(r) == '✅' and r.message.id == m.id
-            await self.bot.wait_for('reaction_add', check=finalConfirm, timeout=180)
-            await database.SetBirthdayMessage(recipient, script, u, [a for a in selected if type(a) is discord.Guild])
-            await u.send('Your personal message for {} has been successfully set. To write personal messages, set your birthday, age, wishlist, or view your Birthday Profile, you may use the `birthday` command.'.format(recipient))
+                return u == user and str(r) in ['✅', '🔁', '❌'] and r.message.id == m.id
+            r = await self.bot.wait_for('reaction_add', check=finalConfirm, timeout=180)
+            if str(r[0]) == '✅':
+                await database.SetBirthdayMessage(recipient, script, u, [a for a in selected if type(a) is discord.Guild])
+                await u.send('Your personal message for {} has been successfully set. To write personal messages, set your birthday, age, wishlist, or view your Birthday Profile, you may use the `birthday` command.'.format(recipient))
+            elif str(r[0]) == '🔁': await writePersonalMessage(self, birthday, target, mess, True, u)
+            else: return await u.send('Cancelled birthday message configuration')
         except asyncio.TimeoutError:
             await u.send('Birthday management timed out')
             break

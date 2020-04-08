@@ -38,6 +38,7 @@ bot.remove_command('help')
 
 indexes = 'Indexes'
 urMom = 'G:/My Drive/Other/ur mom'
+campMax = 'G:/My Drive/Other/M A X'
 
 @tasks.loop(minutes=1)
 async def updatePrefixes():
@@ -192,7 +193,7 @@ async def lexy(ctx):
         lex = bot.get_emoji(674389988363993116)
         image = False
         while not image:
-            resultingPic = random.randint(0, len(os.listdir(urMom)))
+            resultingPic = random.randint(0, len(os.listdir(urMom)) - 1)
             if not any(n in os.listdir(urMom)[resultingPic] for n in ['.ini', 'VID_20191031_190028_2']): image = True
         e = discord.Embed(title='❤ Lexy ❤',description='**{0:-^83s}\n{2}**\n**{1:-^80s}**\n{3}'.format('OPTIONS', 'INFORMATION', '{}: Send to Lex\n➡: Send to <#619549837578338306>'.format(lex),
             'Image {} of {}'.format(resultingPic + 1, len([f for f in os.listdir(urMom) if '.ini' not in f]))), color=0xffff00, timestamp=datetime.datetime.utcnow())
@@ -203,8 +204,23 @@ async def lexy(ctx):
             m = await ctx.author.send(embed=e)
         for r in [lex, '➡']: await m.add_reaction(r)
 
+@bot.command(aliases=['max'])
+async def _max(ctx):
+    if ctx.author not in bot.get_guild(611301150129651763).members: return
+    maxCamp = bot.get_emoji(696796941408927765)
+    image = False
+    directory = os.listdir(campMax)
+    while not image:
+        result = random.randint(0, len(directory) - 1)
+        if '.ini' not in directory[result]: image = True
+    path = f'{campMax}/{directory[result]}'
+    f = discord.File(path)
+    e = discord.Embed(title=f'{maxCamp} Max {maxCamp}',description=f'{f.filename} • Image {result + 1} of {len(directory) - 1}',color=0xffff00)
+    e.set_image(url=f'attachment://{f.filename}')
+    await ctx.send(embed=e,file=f)
 
-database.Initialize(secure.token())
+
+database.Initialize(secure.token())}
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
 #database.Initialize(secure.beta())
 #bot.run(secure.beta())

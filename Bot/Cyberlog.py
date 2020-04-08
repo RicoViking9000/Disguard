@@ -788,7 +788,9 @@ class Cyberlog(commands.Cog):
                         author = self.bot.get_user(authorID)
                         break #the for loop
             except (FileNotFoundError, IndexError):
-                embed.description='Channel: {}\nUnable to provide information beyond what is here; this message was sent before my last restart, and I am unable to locate the indexed file locally to retrieve more information'
+                try: channel = channel.mention
+                except: channel = payload.channel_id
+                embed.description='Channel: {}\nUnable to provide information beyond what is here; this message was sent before my last restart, and I am unable to locate the indexed file locally to retrieve more information'.format(channel)
                 return await c.send(embed=embed)      
         if datetime.datetime.utcnow() > created: #This makes negative time rather than posting some super weird timestamps. No, negative time doesn't exist but it makes more sense than what this would do otherwise
             mult = 1
@@ -2126,7 +2128,7 @@ class Cyberlog(commands.Cog):
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         activities = {discord.Status.online: self.online, discord.Status.idle: self.idle, discord.Status.dnd: self.dnd, discord.Status.offline: self.offline}
         embed.description='{}{} {}\n\n{}Last active {} - {} ago ({}){}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
-            'Last online {} - {} ago\n'.format(lastOnline(m).strftime('%b %d, %Y - %I:%M %p'), ' '.join(reversed(onlineDisplay))) if m.status == discord.Status.offline else '', mA.get('timestamp').strftime('%b %d, %Y - %I:%M %p'), ' '.join(reversed(activeDisplay)), mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
+            'Last online {} - {} ago\n'.format(lastOnline(m).strftime('%b %d, %Y - %I:%M %p'), reversed(onlineDisplay)[0]) if m.status == discord.Status.offline else '', mA.get('timestamp').strftime('%b %d, %Y - %I:%M %p'), reversed(activeDisplay)[0], mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
@@ -2394,7 +2396,9 @@ class Cyberlog(commands.Cog):
         return embeds
 
     async def MemberPosts(self, m: discord.Member):
-        return sum([await self.bot.loop.create_task(self.calculateMemberPosts(m, "{}/{}/{}".format(indexes, m.guild.id, channel.id))) for channel in m.guild.text_channels])
+        messageCount=0
+        for channel in m.guild.text_channels: messageCount += await self.bot.loop.create_task(self.calculateMemberPosts(m, "{}/{}/{}".format(indexes, m.guild.id, channel.id)))
+        return messageCount
 
     async def calculateMemberPosts(self, m: discord.Member, p):
         return len([f for f in os.listdir(p) if str(m.id) in f])
