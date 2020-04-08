@@ -207,7 +207,7 @@ async def lexy(ctx):
 @bot.command(aliases=['max'])
 async def _max(ctx):
     if ctx.author not in bot.get_guild(611301150129651763).members: return
-    maxCamp = bot.get_emoji(696796941408927765)
+    maxCamp = bot.get_emoji(696789467901591683)
     image = False
     directory = os.listdir(campMax)
     while not image:
