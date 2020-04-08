@@ -220,7 +220,7 @@ async def _max(ctx):
     await ctx.send(embed=e,file=f)
 
 
-database.Initialize(secure.token())}
+database.Initialize(secure.token())
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
 #database.Initialize(secure.beta())
 #bot.run(secure.beta())
