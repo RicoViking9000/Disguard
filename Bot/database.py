@@ -634,3 +634,9 @@ async def CalculateGeneralChannel(g: discord.Guild, r=False):
     if r: return popular
     else: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': popular.id}})
 
+async def CalculateAnnouncementsChannel(g: discord.Guild, r=False):
+    '''Determines the announcement channel based on channel name and permissions
+    r: Whether to return the channel. If False, just set this to the database'''
+    s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcements'), reverse=True)[0]
+    if r: return s
+    else: await servers.update_one({'server_id': g.id}, {'$set': {'announcementChannel': s.id}})

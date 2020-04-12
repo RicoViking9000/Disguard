@@ -37,22 +37,24 @@ class Birthdays(commands.Cog):
     async def dailyBirthdayAnnouncements(self):
         try:
             for member in self.bot.get_all_members():
-                if await database.GetMemberBirthday(member) is not None:
-                    if (await database.GetMemberBirthday(member)).strftime('%m%d') == datetime.datetime.now().strftime('%m%d'):
+                bday = await database.GetMemberBirthday(member)
+                if bday is not None:
+                    if bday.strftime('%m%d') == datetime.datetime.utcnow().strftime('%m%d'):
                         age = await database.GetAge(member)
                         if age is not None:
                             age += 1
                             await database.SetAge(member, age)
+                        new = datetime.datetime(bday.year + 1, bday.month, bday.day)
+                        await database.SetBirthday(member, new)
                         messages = await database.GetBirthdayMessages(member)
-                        try: dummyMessage = (await member.history(limit=1).flatten())[0]
-                        except: dummyMessage = await member.send('🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name))
+                        try: dummyMessage = await member.send('🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name))
+                        except: continue
                         embed=discord.Embed(title='🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name), timestamp=datetime.datetime.utcnow(), color=yellow)
                         if len(messages) > 0: 
                             embed.description='You have {} personal messages. All messages will be fit into this embed, so if any messages are truncated due to space constraints, hover over the hyperlink to see the entire message.\n{:–^70}\n{}'.format(len(messages), 'Messages', '\n'.join(['• {}: {} (sent @ {})'.format(m.get('authName') if self.bot.get_user(m.get('author')) is None else self.bot.get_user(m.get('author')).mention,
                             f"[{m.get('message')[:1800 // len(messages)]}]({dummyMessage.jump_url} '{m.get('message')}')", 'N/A' if m.get('created') is None else (m.get('created') + datetime.timedelta(hours=-4)).strftime("%b %d, %Y - %I:%M %p EDT")) for m in messages]))
                         else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
-                        try: await member.send(embed=embed)
-                        except: pass
+                        await dummyMessage.edit(content=None, embed=embed)
                         await database.ResetBirthdayMessages(member)
         except: traceback.print_exc()
 
@@ -64,8 +66,9 @@ class Birthdays(commands.Cog):
                 if channel > 0:
                     if (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%H:%M') == (await database.GetBirthdate(server)).strftime('%H:%M'):
                         for member in server.members:
-                            if await database.GetMemberBirthday(member) is not None:
-                                if (await database.GetMemberBirthday(member)).strftime('%m%d') == (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%m%d'):
+                            bday = await database.GetMemberBirthday(member)
+                            if bday is not None:
+                                if bday.strftime('%m%d') == (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%m%d'):
                                     messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
                                     toSend = '🍰 Hey hey, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
                                     '\n'.join(['• {}: {}'.format(server.get_member(m.get('author')).name, m.get('message')) for m in messages])))
@@ -75,7 +78,7 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def configureDailyBirthdayAnnouncements(self):
-        if datetime.datetime.utcnow().strftime('%H:%M') == '11:45': 
+        if datetime.datetime.utcnow().strftime('%H:%M') == '19:45': 
             self.dailyBirthdayAnnouncements.start()
             self.configureDailyBirthdayAnnouncements.cancel()
 
@@ -85,14 +88,13 @@ class Birthdays(commands.Cog):
             self.serverBirthdayAnnouncements.start()
             self.configureServerBirthdayAnnouncements.cancel()
 
-    @commands.Cog.listener()
     async def updateBirthdays(self):
         print('Updating birthdays')
         updated = []
         for member in self.bot.get_all_members():
             bday = await database.GetMemberBirthday(member)
             if bday is not None:
-                if bday.strftime('%Y%m%d') < datetime.datetime.now().strftime('%Y%m%d'):
+                if bday < datetime.datetime.now():
                     new = datetime.datetime(bday.year + 1, bday.month, bday.day)
                     await database.SetBirthday(member, new)
                     updated.append(member)
@@ -858,7 +860,7 @@ async def verifyAge(message, age):
         if 'i am' in message.content.lower(): finder = 'am'
         else: finder = 'im'
         try: number = int(s[1 + s.index(finder)])
-        except: number = None
+        except: return False
         if abs(s.index(str(number)) - s.index(finder)) > 1: return False #I'm or I am is too far from the actual number so it's irrelevant
         if number:
             try: tail = s[s.index(str(number)):] #If there is content after the number, try to deal with it

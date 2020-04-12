@@ -44,13 +44,20 @@ campMax = 'G:/My Drive/Other/M A X'
 async def updatePrefixes():
     for server in bot.guilds: prefixes[server.id] = await database.GetPrefix(server)
 
+# @tasks.loop(minutes=1)
+# async def anniversaryDayKickoff():
+#     if datetime.datetime.now().strftime('%m %d %y %H:%M') == '03 18 20 10:55':
+#         embed=discord.Embed(title=datetime.datetime.now().strftime('%B %d, %Y %H:%M %p'),description=secure.anniversary(),color=0xffff00, timestamp=datetime.datetime.utcnow())
+#         embed.set_image(url=secure.embedImage())
+#         await bot.get_user(596381991151337482).send(content=secure.anniversaryMessage(), embed=embed)
+#         anniversaryDayKickoff.cancel()
+
 @tasks.loop(minutes=1)
-async def anniversaryDayKickoff():
-    if datetime.datetime.now().strftime('%m %d %y %H:%M') == '03 18 20 10:55':
-        embed=discord.Embed(title=datetime.datetime.now().strftime('%B %d, %Y %H:%M %p'),description=secure.anniversary(),color=0xffff00, timestamp=datetime.datetime.utcnow())
-        embed.set_image(url=secure.embedImage())
-        await bot.get_user(596381991151337482).send(content=secure.anniversaryMessage(), embed=embed)
-        anniversaryDayKickoff.cancel()
+async def easterAnnouncement():
+    if datetime.datetime.now().strftime('%m %d %y %H:%M') == '04 12 20 06:00':
+        for server in bot.guilds:
+            try: await (await database.CalculateAnnouncementsChannel(server, True)).send('🐰🥚✝ Happy Easter! ✝🥚🐰\n\nWishing every one of you a happy and blessed day filled with new life no matter what the state of the world may be right now,\nRicoViking9000, the developer of Disguard')
+            except: pass
 
 @bot.listen()
 async def on_ready(): #Method is called whenever bot is ready after connection/reconnection. Mostly deals with database verification and creation
@@ -69,7 +76,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 pass
         await database.Verification(bot)
         await Antispam.PrepareFilters(bot)
-        anniversaryDayKickoff.start()
+        await bot.get_cog('Birthdays').updateBirthdays()
+        easterAnnouncement.start()
         Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         print('Starting indexing...')

@@ -2097,7 +2097,7 @@ class Cyberlog(commands.Cog):
                     updated = log.created_at + datetime.timedelta(hours=timeZone(r.guild))
                     break
         if updated is None: updated = created
-        embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ', '.join([p[0] for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
+        embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([permissionKeys.get(p[0]) for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
         #embed.description+='\n**Position**:\n{}'.format('\n'.join(['{0}{1}{0}'.format('**' if sortedRoles[role] == r else '', sortedRoles[role].name) for role in range(start, start+6)]))
         embed.add_field(name='Displayed separately',value=r.hoist)
         embed.add_field(name='Externally managed',value=r.managed)
@@ -2115,6 +2115,8 @@ class Cyberlog(commands.Cog):
         mA = lastActive(m) #The dict (timestamp and reason) when a member was last active
         membOnline = datetime.datetime.now() - lastOnline(m) #the timedelta between now and member's last online appearance
         membActive = mA.get('timestamp') #The timestamp value when a member was last active
+        membOnline = datetime.datetime.now() - (lastOnline(m) + datetime.timedelta(hours=timeZone(m.guild) + 4)) #the timedelta between now and member's last online appearance, with adjustments for timezones
+        membActive = mA.get('timestamp') + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
         units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
         membActive = datetime.datetime.now() - membActive #The timedelta between now and when a member was last active
         hours, minutes, seconds = membActive.seconds // 3600, (membActive.seconds // 60) % 60, membActive.seconds - (membActive.seconds // 3600) * 3600 - ((membActive.seconds // 60) % 60)*60
@@ -2127,8 +2129,8 @@ class Cyberlog(commands.Cog):
             if activeTimes[i] != 0: activeDisplay.append('{}{}'.format(activeTimes[i], units[i][0]))
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         activities = {discord.Status.online: self.online, discord.Status.idle: self.idle, discord.Status.dnd: self.dnd, discord.Status.offline: self.offline}
-        embed.description='{}{} {}\n\n{}Last active {} - {} ago ({}){}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
-            'Last online {} - {} ago\n'.format(lastOnline(m).strftime('%b %d, %Y - %I:%M %p'), list(reversed(onlineDisplay))[0]) if m.status == discord.Status.offline else '', mA.get('timestamp').strftime('%b %d, %Y - %I:%M %p'), list(reversed(activeDisplay))[0], mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
+        embed.description='{}{} {}\n\n{}Last active {} {} - {} ago ({}){}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
+            'Last online {} {} - {} ago\n'.format(lastOnline(m).strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(onlineDisplay))[0]) if m.status == discord.Status.offline else '', mA.get('timestamp').strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(activeDisplay))[0], mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
@@ -2141,7 +2143,7 @@ class Cyberlog(commands.Cog):
                 except:
                     current.append('Error parsing activity')
             embed.description+='\n\n • {}'.format('\n • '.join(current))
-        embed.description+='\n\nRoles: {}\n\nPermissions: {}\n\nReact 🍰 to switch to Birthday Information view'.format(' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ', '.join([p[0] for p in iter(m.guild_permissions) if p[1]]))
+        embed.description+='\n\n**Roles:** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([permissionKeys.get(p[0]) for p in iter(m.guild_permissions) if p[1]]))
         boosting = m.premium_since
         joined = m.joined_at + datetime.timedelta(hours=tz)
         created = m.created_at + datetime.timedelta(hours=tz)
