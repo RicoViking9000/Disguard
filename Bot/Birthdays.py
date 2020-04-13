@@ -28,6 +28,7 @@ class Birthdays(commands.Cog):
         self.whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
         self.configureDailyBirthdayAnnouncements.start()
         self.configureServerBirthdayAnnouncements.start()
+        self.configureDeleteBirthdayMessages.start()
     
     def cog_unload(self):
         self.configureDailyBirthdayAnnouncements.cancel()
@@ -36,10 +37,10 @@ class Birthdays(commands.Cog):
     @tasks.loop(hours=24)
     async def dailyBirthdayAnnouncements(self):
         try:
-            for member in self.bot.get_all_members():
+            for member in self.bot.users():
                 bday = await database.GetMemberBirthday(member)
                 if bday is not None:
-                    if bday.strftime('%m%d') == datetime.datetime.utcnow().strftime('%m%d'):
+                    if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
                         age = await database.GetAge(member)
                         if age is not None:
                             age += 1
@@ -55,7 +56,6 @@ class Birthdays(commands.Cog):
                             f"[{m.get('message')[:1800 // len(messages)]}]({dummyMessage.jump_url} '{m.get('message')}')", 'N/A' if m.get('created') is None else (m.get('created') + datetime.timedelta(hours=-4)).strftime("%b %d, %Y - %I:%M %p EDT")) for m in messages]))
                         else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
                         await dummyMessage.edit(content=None, embed=embed)
-                        await database.ResetBirthdayMessages(member)
         except: traceback.print_exc()
 
     @tasks.loop(minutes=5)
@@ -72,13 +72,24 @@ class Birthdays(commands.Cog):
                                     messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
                                     toSend = '🍰 Hey hey, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
                                     '\n'.join(['• {}: {}'.format(server.get_member(m.get('author')).name, m.get('message')) for m in messages])))
-                                    try: await self.bot.get_channel(channel).send(toSend)
+                                    try: 
+                                        m = await self.bot.get_channel(channel).send(toSend)
+                                        await m.add_reaction('🍰')
                                     except discord.Forbidden: pass
+        except: traceback.print_exc()
+
+    @tasks.loop(hours=24)
+    async def deleteBirthdayMessages(self):
+        try:
+            for member in self.bot.users():
+                bday = await database.GetMemberBirthday(member)
+                if bday is not None:
+                    if bday.strftime('%m%d%y') == datetime.datetime.now().strftime('%m%d%y'): await database.ResetBirthdayMessages(member)
         except: traceback.print_exc()
 
     @tasks.loop(minutes=1)
     async def configureDailyBirthdayAnnouncements(self):
-        if datetime.datetime.utcnow().strftime('%H:%M') == '19:45': 
+        if datetime.datetime.utcnow().strftime('%H:%M') == '11:45': 
             self.dailyBirthdayAnnouncements.start()
             self.configureDailyBirthdayAnnouncements.cancel()
 
@@ -87,6 +98,12 @@ class Birthdays(commands.Cog):
         if int(datetime.datetime.utcnow().strftime('%M')) % 5 == 0:
             self.serverBirthdayAnnouncements.start()
             self.configureServerBirthdayAnnouncements.cancel()
+
+    @tasks.loop(minutes=1)
+    async def configureDeleteBirthdayMessages(self):
+        if datetime.datetime.now().strftime('%H:%M') == '23:50':
+            self.deleteBirthdayMessages.start()
+            self.configureDeleteBirthdayMessages.cancel()
 
     async def updateBirthdays(self):
         print('Updating birthdays')
@@ -763,7 +780,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
 
 def calculateDate(message, adjusted):
     '''Returns a datetime.datetime parsed from a message'''
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now()
     shortDays = collections.deque(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
     longDays = collections.deque(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
     shortMonths = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -795,7 +812,7 @@ def calculateDate(message, adjusted):
                 except: pass
             else:
                 if before != word:
-                    try: birthday = datetime.datetime(now.year, datetime.datetime.now().month, int(word))
+                    try: birthday = datetime.datetime(now.year, now.month, int(word))
                     except: pass
     #Check if day of the week is in message
     elif any(c in message.content.lower().split(' ') for c in days):

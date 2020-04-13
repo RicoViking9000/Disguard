@@ -838,7 +838,7 @@ class Cyberlog(commands.Cog):
             except discord.Forbidden:
                 sendContent="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
         if sendContent is None: 
-            if random.randint(1, 20) == 1: sendContent='ℹProtip: Hover over the **before** or **after** message hyperlink to preview the content of the linked message' #5% chance of the protip popping up
+            if random.randint(1, 50) == 1: sendContent='ℹProtip: Hover over the **before** or **after** message hyperlink to preview the content of the linked message' #5% chance of the protip popping up
         try: msg = await c.send(content=sendContent,embed=embed,files=attachments)
         except: msg = await c.send(content='An attachment to this message is too big to send',embed=embed)
         await VerifyLightningLogs(msg, 'message')
@@ -956,10 +956,10 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name="Prev name",value=before.name)
                 embed.add_field(name="New name",value=after.name)
             if type(before) is discord.TextChannel:
-                if before.topic != after.topic:
-                    beforeTopic = before.topic if before.topic is not None and len(before.topic) > 0 else "<No topic>"
-                    afterTopic = after.topic if after.topic is not None and len(after.topic) > 0 else "<No topic>"
-                    embed.add_field(name="Prev topic",value=beforeTopic)
+                beforeTopic = before.topic if before.topic is not None and len(before.topic) > 0 else "<No topic>"
+                afterTopic = after.topic if after.topic is not None and len(after.topic) > 0 else "<No topic>"
+                if beforeTopic != afterTopic:
+                    embed.add_field(name="Old topic",value=beforeTopic)
                     embed.add_field(name="New topic",value=afterTopic)
                     data['oldTopic'] = beforeTopic
                     data['newTopic'] = afterTopic
@@ -1988,14 +1988,15 @@ class Cyberlog(commands.Cog):
         elif s.premium_tier==2: perks=[perks2[0],perks2[1],perks1[1]]
         elif s.premium_tier==1: perks = perks1
         else: perks = perks0
-        messages = sum([len(os.listdir('{}/{}/{}'.format(indexes, s.id, chan.id))) for chan in s.text_channels])
+        messages = 0
+        for c in s.text_channels: messages += await self.bot.loop.create_task(self.calculateChannelPosts(c))
         created = s.created_at
         txt='{}Text Channels: {}'.format(self.hashtag, len(s.text_channels))
         vc='{}Voice Channels: {}'.format('🎙', len(s.voice_channels))
         cat='{}Category Channels: {}'.format('📂', len(s.categories))
         embed.description+=('**Channel count:** {}\n{}\n{}\n{}'.format(len(s.channels),cat, txt, vc))
-        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in s.members if m.status != discord.Status.online]), len(s.members), round(len([m for m in s.members if m.status != discord.Status.online]) / len(s.members) * 100))
-        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in s.members if m.status == discord.Status.online]), len(s.members), round(len([m for m in s.members if m.status == discord.Status.online]) / len(s.members) * 100))
+        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in s.members if m.status != discord.Status.offline]), len(s.members), round(len([m for m in s.members if m.status != discord.Status.offline]) / len(s.members) * 100))
+        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in s.members if m.status == discord.Status.offline]), len(s.members), round(len([m for m in s.members if m.status == discord.Status.offline]) / len(s.members) * 100))
         online='{}Online: {}'.format(self.online, len([m for m in s.members if m.status == discord.Status.online]))
         idle='{}Idle: {}'.format(self.idle, len([m for m in s.members if m.status == discord.Status.idle]))
         dnd='{}Do not disturb: {}'.format(self.dnd, len([m for m in s.members if m.status == discord.Status.dnd]))
@@ -2069,7 +2070,7 @@ class Cyberlog(commands.Cog):
         if type(channel) is discord.TextChannel:
             details.add_field(name='Topic',value='{}{}'.format('<No topic>' if channel.topic is None or len(channel.topic) < 1 else channel.topic[:100], '' if channel.topic is None or len(channel.topic)<=100 else '...'),inline=False)
             details.add_field(name='Slowmode',value='{}s'.format(channel.slowmode_delay))
-            details.add_field(name='Message count',value=str(self.loading))
+            details.add_field(name='Message count',value=len(os.listdir(f'{indexes}/{channel.guild.id}/{channel.id}')))
             details.add_field(name='NSFW',value=channel.is_nsfw())
             details.add_field(name='News channel?',value=channel.is_news())
             details.add_field(name='Pins count',value=len(pins))
@@ -2079,10 +2080,6 @@ class Cyberlog(commands.Cog):
             details.add_field(name='Members currently in here',value='None' if len(channel.members)==0 else ', '.join([member.mention for member in channel.members]))
         if type(channel) is discord.CategoryChannel:
             details.add_field(name='NSFW',value=channel.is_nsfw())
-        if type(channel) is discord.TextChannel:
-            path = "{}/{}/{}".format(indexes, channel.guild.id, channel.id)
-            count = len(os.listdir(path))
-            details.set_field_at(5, name='Message count',value='about {}'.format(count))
         return [permString, details]
 
     async def RoleInfo(self, r: discord.Role, logs):
@@ -2113,12 +2110,10 @@ class Cyberlog(commands.Cog):
         nz = nameZone(m.guild)
         embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=yellow)
         mA = lastActive(m) #The dict (timestamp and reason) when a member was last active
-        membOnline = datetime.datetime.now() - lastOnline(m) #the timedelta between now and member's last online appearance
-        membActive = mA.get('timestamp') #The timestamp value when a member was last active
         membOnline = datetime.datetime.now() - (lastOnline(m) + datetime.timedelta(hours=timeZone(m.guild) + 4)) #the timedelta between now and member's last online appearance, with adjustments for timezones
-        membActive = mA.get('timestamp') + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
+        membActive = mA.get('timestamp') #The timestamp value when a member was last active, with adjustments for timezones
         units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
-        membActive = datetime.datetime.now() - membActive #The timedelta between now and when a member was last active
+        membActive = datetime.datetime.now() - (membActive + datetime.timedelta(hours=timeZone(m.guild) + 4)) #The timedelta between now and when a member was last active
         hours, minutes, seconds = membActive.seconds // 3600, (membActive.seconds // 60) % 60, membActive.seconds - (membActive.seconds // 3600) * 3600 - ((membActive.seconds // 60) % 60)*60
         activeTimes = [seconds, minutes, hours, membActive.days] #List of self explanatory values
         hours, minutes, seconds = membOnline.seconds // 3600, (membOnline.seconds // 60) % 60, membOnline.seconds - (membOnline.seconds // 3600) * 3600 - ((membOnline.seconds // 60) % 60)*60
@@ -2258,8 +2253,8 @@ class Cyberlog(commands.Cog):
         offline=bot.get_emoji(606534231492919312)
         humans='👮‍♂️Humans: {}'.format(len([m for m in members if not m.bot]))
         bots='🤖Bots: {}\n'.format(len([m for m in members if m.bot]))
-        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in members if m.status != discord.Status.online]), len(members), round(len([m for m in members if m.status != discord.Status.online]) / len(members) * 100))
-        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in members if m.status == discord.Status.online]), len(members), round(len([m for m in members if m.status == discord.Status.online]) / len(members) * 100))
+        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in members if m.status != discord.Status.offline]), len(members), round(len([m for m in members if m.status != discord.Status.offline]) / len(members) * 100))
+        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in members if m.status == discord.Status.offline]), len(members), round(len([m for m in members if m.status == discord.Status.offline]) / len(members) * 100))
         online='{}Online: {}'.format(online, len([m for m in members if m.status == discord.Status.online]))
         idle='{}Idle: {}'.format(idle, len([m for m in members if m.status == discord.Status.idle]))
         dnd='{}Do not disturb: {}'.format(dnd, len([m for m in members if m.status == discord.Status.dnd]))
@@ -2309,94 +2304,6 @@ class Cyberlog(commands.Cog):
         if logs is not None: embed.add_field(name='Banned previously',value='\n\n'.join([' • {}'.format(o) for o in other])[:1023])
         return embed
 
-    async def Summarize(self, queue, keycounts):
-        '''Returns a nice summary of what's happened in a server. Parses through before/after, etc'''
-        global bot
-        categories = {} #Dict of queue list index : category elements to prevent indexing over queue multiple times
-        counts = {} #Dict of keycount range index : queue indexes of this category to prevent indexing over queue multiple times. Places in queue where this happens
-        embeds = []
-        embed = discord.Embed()
-        for q in range(len(queue)): categories[q] = queue[q].get('category')
-        for q in range(16): counts[q] = [a for a, b in categories.items() if b == q]
-        #Vars - a: 0-15; b: number of occurences, c: indexing through list of indexes to the queue for this occurence to prevent indexing through queue every time
-        for a, b in keycounts.items(): #Iterate through category/count in keycounts, similar to the main summarize task
-            if b > 0:
-                t1 = [] #Various target variables, declared here to save space. Used for author/content, etc in embed formatting. Temp variables
-                t2, t3, t4, t5, t6, t7, t8, s = [], [], [], [], [], [], [], []
-                if len(embed.fields) > 6:
-                    embeds.append(embed.to_dict())
-                    embed = discord.Embed()
-                if a in [0, 1]: #Very similar format between message edits and message deletions. Commentation will be for edits, but it's the same thing
-                    for c in counts[a]: #t1: Author names, t2: Author IDs, t3: Used author IDs
-                        t1.append(queue[c].get('data').get('name')) #Appends name
-                        t2.append(queue[c].get('data').get('author')) #Appends ID
-                    for c in range(len(t1)): #Iterates through all names; every message edit occurence
-                        if t2[c] not in t3: #If this person's ID isn't already in the list of authors of edited message, then add an occurence
-                            s.append('{} by {}'.format(t2.count(t2[c]), t1[c])) #Example: 5 by RicoViking9000#2395
-                            t3.append(t2[c]) #Add ID to list to avoid duplicates
-                    if len(t1) > 7: string = '{} and {} more by {} more people'.format(', '.join(s[:7]), len(t1) - 7, len(collections.Counter(t2[7:]).values()))
-                    else: string = ', '.join(s) #If fewer than 8 occurences, simply join them with a comma
-                    embed.add_field(name='Message {}'.format('Edits' if a == 0 else 'Deletions'),value=string)
-                if a == 2:
-                    for c in counts[a]: #t1: Channel IDs, t2: Channel types, t3: Channel names, t4: used IDs
-                        t1.append(queue[c].get('data').get('channel'))
-                        t2.append(queue[c].get('data').get('type'))
-                        t3.append(queue[c].get('data').get('name'))
-                    for c in range(len(t1)):
-                        s.append('{}{}{}{}'.format(t2[c], '~~' if bot.get_channel(t1[c]) is None else '', bot.get_channel(t1[c]).mention if t2[c] == str(self.hashtag) and bot.get_channel(t1[c]) is not None else t3[c], '~~' if bot.get_channel(t1[c]) is None else '')) #Mention channel if it's text, strikethru if deleted since
-                        t4.append(t1[c])
-                    string = ', '.join(s)
-                    if len(t1) > 7: 
-                        string += ' & {} more'.format(len(t1) - len(t4))
-                        if [bot.get_channel(c) for c in t1].count(None) > 0: #If channels were deleted since creation... count of indexes where bot can't find channel
-                            string+=', incl. {} deleted since creation'.format([bot.get_channel(c) for c in t1].count(None))
-                    embed.add_field(name='Channel Creations',value=string)
-                if a == 3:
-                    v = {True: 'on', False: 'off'} #Used for NSFW, on/off is better than True/False
-                    for c in counts[a]:  #t1: channel ID, t2: channel type, t3: old channel name, t4: changes, t5: used quickkey channel IDs
-                        t1.append(queue[c].get('data').get('channel'))
-                        t2.append(queue[c].get('data').get('type'))
-                        t3.append(queue[c].get('data').get('oldName'))
-                        t4.append({'name': queue[c].get('data').get('oldName') != queue[c].get('data').get('newName'),
-                        'topic': queue[c].get('data').get('oldTopic') != queue[c].get('data').get('newTopic'),
-                        'slowmode': queue[c].get('data').get('oldSlowmode') != queue[c].get('data').get('newSlowmode'),
-                        'nsfw': queue[c].get('data').get('oldNsfw') != queue[c].get('data').get('newNsfw'),
-                        'bitrate': queue[c].get('data').get('oldBitrate') != queue[c].get('data').get('newBitrate'),
-                        'userLimit': queue[c].get('data').get('oldLimit') != queue[c].get('data').get('newLimit'),
-                        'category': queue[c].get('data').get('oldCategory') != queue[c].get('data').get('newCategory')})
-                    for c in range(len(t1)):
-                        temp = [t2[c], t3[c], ': ']
-                        if t4[c].get('name'): temp.append('Name changed to **{}**'.format(queue[c].get('data').get('newName')))
-                        if t4[c].get('topic'): temp.append('Description updated')
-                        if t4[c].get('slowmode'): temp.append('Slowmoded changed from {}s to {}s'.format(queue[c].get('data').get('oldSlowmode'), queue[c].get('data').get('newSlowmode')))
-                        if t4[c].get('nsfw'): temp.append('NSFW turned **{}**'.format(v.get(queue[c].get('data').get('newNsfw'))))
-                        if t4[c].get('bitrate'): temp.append('Bitrate adjusted from **{} to **{}**'.format(queue[c].get('data').get('oldBitrate'), queue[c].get('data').get('newBitrate')))
-                        if t4[c].get('userLimit'): temp.append('User limit changed from **{}** to **{}**'.format(queue[c].get('data').get('oldLimit'), queue[c].get('data').get('newLimit')))
-                        if t4[c].get('category'): temp.append('Moved from category **{}** to **{}**'.format(queue[c].get('data').get('oldCategory'), queue[c].get('data').get('newCategory')))
-                        s.append(temp)
-                    temp2 = []
-                    for c in s[:5]: temp2.append('{}{}'.format(''.join(c[:3]), ', '.join(c[3:])))
-                    if sum([len(c) for c in temp2]) > 128:
-                        temp2 = []
-                        #Shortener formatting stuff here
-                        combos = {}
-                        sketch = [''.join('{}'.format(list(k.items()))) for k in t4]
-                        greater = [d for d, e in collections.Counter(sketch).items() if e > 1] #Dict combinations that are greater than 1, if any
-                        for d in greater: combos[d] = [e for e in range(len(t4)) if ''.join('{}'.format(str(list(t4[e].items())))) == d]
-                        total = []
-                        for d, e in combos.items():
-                            total.extend(e)
-                            if len(temp2) < 5:
-                                temp2.append('{}: {} updated'.format(', '.join(['{}**{}**'.format(t2[f], t3[f]) for f in e]), ', '.join([k for k,v in list(t4[e[0]].items()) if v])))
-                        for d in range(len(t1)):
-                            if d not in total and len(temp2) < 5:
-                                temp2.append('{}**{}**: {} updated'.format(t2[d], t3[d], ', '.join([k for k,v in list(t4[d[0]].items()) if v])))
-                    string = '▫'.join(temp2)
-                    if len(t1) > 5: string += ' ▫ and {} more channels'.format(len(t1) - 5)
-                    embed.add_field(name='Channel updates',value=string)
-        embeds.append(embed.to_dict())
-        return embeds
-
     async def MemberPosts(self, m: discord.Member):
         messageCount=0
         for channel in m.guild.text_channels: messageCount += await self.bot.loop.create_task(self.calculateMemberPosts(m, "{}/{}/{}".format(indexes, m.guild.id, channel.id)))
@@ -2404,6 +2311,17 @@ class Cyberlog(commands.Cog):
 
     async def calculateMemberPosts(self, m: discord.Member, p):
         return len([f for f in os.listdir(p) if str(m.id) in f])
+
+    async def MostMemberPosts(self, g: discord.Guild):
+        posts=[]
+        for channel in g.text_channels: posts += await self.bot.loop.create_task(self.calculateMostMemberPosts(f'{indexes}/{g.id}/{channel.id}'))
+        return ['{} with {}'.format(bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
+
+    async def calculateMostMemberPosts(self, p):
+        return [int(f[f.find('_')+1:f.find('.')]) for f in os.listdir(p)]
+
+    async def calculateChannelPosts(self, c):
+        return len(os.listdir(f'{indexes}/{c.guild.id}/{c.id}'))
 
     def FindMember(self, g: discord.Guild, arg):
         def check(m): return any([arg.lower() == m.nick,
