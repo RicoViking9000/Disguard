@@ -93,6 +93,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     "thumbnail": str(s.icon_url),
     'offset': -5 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
     'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
+    'jumpContext': True if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
     'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
     'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
     'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
@@ -120,6 +121,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "hereTags": 2 if serv is None or spam.get('hereTags') is None else spam.get('hereTags'), #Max number of @here, if it doesn't actually tag; 0=anything tolerated
         "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
         "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
+        'consecutiveMessages': [10, 120] if serv is None or spam.get('consecutiveMessages') is None else spam.get('consecutiveMessages'), #If this many messages in a row are sent by the same person, flag them
         "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
         "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
         "channelExclusions": await DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
@@ -130,6 +132,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter"), #Profanity filter list
         'ageKick': None if serv is None or spam.get('ageKick') is None else spam.get('ageKick'), #NEED TO REDO DATABASE ALGORITHM SO ON DEMAND VARIABLES ARENT OVERWRITTEN
         'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
+        'ageKickOwner': False if serv is None or spam.get('ageKickOwner') is None else spam.get('ageKickOwner'),
         'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist')},
     "cyberlog": {
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
@@ -539,6 +542,10 @@ async def AppendWhitelistEntry(s: discord.Guild, entry):
     '''Appends to the ageKick whitelist of a server'''
     await servers.update_one({'server_id': s.id}, {'$push': {'antispam.ageKickWhitelist': entry}}, True)
 
+async def ResetWhitelist(s: discord.Guild):
+    '''Resets (empties) the ageKick whitelist of a server'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKickWhitelist': []}}, True)
+
 async def GetAgeKickDM(s: discord.Guild):
     '''Returns the custom DM message of the ageKick module for a server'''
     return (await servers.find_one({'server_id': s.id})).get('antispam').get('ageKickDM')
@@ -546,6 +553,14 @@ async def GetAgeKickDM(s: discord.Guild):
 async def SetAgeKickDM(s: discord.Guild, message):
     '''Sets the custom DM message of the ageKick module for a server'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKickDM': message}}, True)
+
+async def GetAgeKickOwner(s: discord.Guild):
+    '''Returns whether the ageKick configuration for the specified server can only be modified by the server owner'''
+    return (await servers.find_one({'server_id': s.id})).get('antispam').get('ageKickOwner')
+
+async def SetAgeKickOwner(s: discord.Guild, new: bool):
+    '''Sets whether the ageKick configuration for the specified server can only be modified by the server owner'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKickOwner': new}}, True)
 
 async def SetLastActive(u: discord.User, timestamp, reason):
     '''Updates the last active attribute'''

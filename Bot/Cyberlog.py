@@ -219,7 +219,7 @@ class Cyberlog(commands.Cog):
         await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
         if type(message.channel) is discord.DMChannel: return
         if message.type is discord.MessageType.pins_add: await self.pinAddLogging(message)
-        self.bot.loop.create_task(self.saveMessage(message))
+        await asyncio.gather(*[self.saveMessage(message), self.jumpLinkQuoteContext(message)])
 
     async def saveMessage(self, message: discord.Message):
         path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
@@ -239,6 +239,19 @@ class Cyberlog(commands.Cog):
                 if a.size / 1000000 < 8:
                     try: await a.save(path2+'/'+a.filename)
                     except discord.HTTPException: pass
+
+    async def jumpLinkQuoteContext(self, message: discord.Message):
+        if lightningLogging.get(message.guild.id).get('jumpContext'):
+            words = message.content.split(' ')
+            for w in words:
+                if 'https://discordapp.com/channels/' in w: #This word is a hyperlink to a message
+                    context = await self.bot.get_context(message)
+                    messageConverter = commands.MessageConverter()
+                    result = await messageConverter.convert(context, w)
+                    if result is None: return
+                    embed=discord.Embed(description=result.content)
+                    embed.set_author(name=result.author.name,icon_url=result.author.avatar_url)
+                    return await message.channel.send(embed=embed)
 
     async def pinAddLogging(self, message: discord.Message):
         received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(message.guild.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
@@ -680,7 +693,9 @@ class Cyberlog(commands.Cog):
         await updateLastActive(after.author, datetime.datetime.now(), 'edited a message')
         author = g.get_member(after.author.id) #Get the member of the edited message, and if not found, return (this should always work, and if not, then it isn't a server and we don't need to proceed)
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
-        if not logExclusions(after.channel, author): return #Check the exclusion settings
+        try:
+            if not logExclusions(after.channel, author): return #Check the exclusion settings
+        except: return
         load=discord.Embed(title="📜✏ Message was edited (ℹ to expand details)",description='',color=0x0000FF,timestamp=datetime.datetime.utcnow())
         load.set_footer(text='Message ID: {}'.format(payload.message_id))
         embed = load.copy()
@@ -1132,8 +1147,8 @@ class Cyberlog(commands.Cog):
                                     data['type'] = 'Ban'
                                     embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
                                 break
-                    except discord.Forbidden:
-                        content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
+                    except discord.Forbidden: content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
+                    except AttributeError: pass
             span = datetime.datetime.utcnow() - member.joined_at
             hours = span.seconds//3600
             minutes = (span.seconds//60)%60

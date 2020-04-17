@@ -112,15 +112,21 @@ class Antispam(commands.Cog):
                     short.append("Repeated messages")
                     lastMessages = []
                     await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
-            if 0 not in spam.get("quickMessages"):
+            if 0 not in spam.get("quickMessages") and len(quickMessages) > 0:
                 timeOne = quickMessages[0].get("created")
                 timeLast = quickMessages[-1].get("created")
                 if (timeLast - timeOne).seconds < spam.get("quickMessages")[1] and len(quickMessages) >= spam.get("quickMessages")[0]:
                     flag = True
-                    reason.append("Sending too many messages in too little time\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
+                    reason.append("Sending too many messages too quickly\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
                     short.append("Spamming messages too fast")
                     quickMessages = []
                     await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+        if spam.get('consecutiveMessages')[0] != 0:
+            messages = await message.channel.history(limit=spam.get('consecutiveMessages')[0]).flatten()
+            if all([m.author.id == message.author.id for m in messages]) and (messages[0].created_at - messages[-1].created_at).seconds < spam.get('consecutiveMessages')[1]:
+                flag = True
+                reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} consecutively over {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages in under {spam.get("consecutiveMessages")[1]} seconds)')
+                short.append('Sending too many consecutive messages')
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available
             changes = 0
@@ -401,6 +407,7 @@ class Antispam(commands.Cog):
             e=discord.Embed(title='Age Kick Information: {}'.format(ctx.guild.name),description='**{0:–^70}**\n{2}\n**{1:–^70}**\n{3}'.format('WHITELIST IDs', 'RECIPIENT DM MESSAGE',
             ' • '.join(str(w) for w in wl) if wl is not None and len(wl) > 0 else '(Whitelist is empty)', await database.GetAgeKickDM(ctx.guild)),color=yellow,timestamp=datetime.datetime.utcnow())
             e.add_field(name='Kick Accounts',value='Under {} days old'.format(await database.GetAgeKick(ctx.guild)))
+            e.add_field(name=f'Manageable by {ctx.guild.owner.name} only',value=await database.GetAgeKickOwner(ctx.guild))
             await m.edit(embed=e)
         else:
             arg = args[0]
@@ -416,13 +423,23 @@ class Antispam(commands.Cog):
                         await database.SetAgeKick(ctx.guild,arg)
                         e.description='Now accounts under {} days old that join will be automatically kicked'.format(arg)
                 except:
-                    await database.SetAgeKickDM(ctx.guild,arg)
-                    e.description='Updated DM members receive upon being kicked to say `{}`'.format(arg)
+                    if 'clear' == arg.lower():
+                        entries = len(await database.GetWhitelist(ctx.guild))
+                        await database.ResetWhitelist(ctx.guild)
+                        e.description=f'Successfully cleared the agekick whitelist for {ctx.guild.name}. {entries} entries were removed.'
+                    elif 'owner' == arg.lower():
+                        if ctx.author.id != ctx.guild.owner.id: return await m.edit(content='You need to be the server owner in order to edit this', embed=None)
+                        ownerStatus = await database.GetAgeKickOwner(ctx.guild)
+                        if not ownerStatus: e.description=f'Successfully updated server ageKick configuration: Now, **only the server owner ({ctx.guild.owner.name})** can edit the ageKick configuration for this server. Type this command again to disable.'
+                        else: e.description='Successfully updated server ageKick configuration: Now, **any manager** (person with `manager server` or higher) can edit the ageKick configuration for this server. Type this command again to restrict to owner only again.'
+                        await database.SetAgeKickOwner(ctx.guild, not ownerStatus)
+                    else:
+                        await database.SetAgeKickDM(ctx.guild,arg)
+                        e.description='Updated DM members receive upon being kicked to say `{}`'.format(arg)
             else:
                 arg = ' '.join(args)
                 e.set_author(name='Please wait....')
-                e.description=('Because of the flexibility with customizing the custom DM message, my developer must approve of this message to make sure there are no security flaws. This message will be updated when'
-                    ' that happens. My developer will not know any identifying information; all that will be sent is the following text:\n\n{}').format(arg)
+                e.description=('Because of the flexibility with customizing the custom DM message, my developer must approve of this message to make sure there are no security flaws. This message will be updated when that happens. My developer will not know any identifying information; all that will be sent is the following text:\n\n{}').format(arg)
                 await m.edit(embed=e)
                 mm = await self.bot.get_channel(681949259192336406).send(embed=discord.Embed(title='Approve or Deny',description=arg))
                 for r in ['✅', '❌']: await mm.add_reaction(r)
@@ -433,8 +450,8 @@ class Antispam(commands.Cog):
                     e.description='My developer has approved your request\n\nUpdated DM members receive upon being kicked to say `{}`'.format(arg)
                 else: e.description='My developer has denied your request on the grounds of security, please try another custom message or join my support server for assistance'
             e.set_author(name='Success')
-            await m.edit(embed=e,delete_after=10)
-            await asyncio.sleep(10)
+            await m.edit(embed=e,delete_after=15)
+            await asyncio.sleep(15)
             return await ctx.command.invoke(ctx)
         
 async def CheckRoleExclusions(member: discord.Member):

@@ -17,3 +17,4 @@ fieldset {border-color: blue}
 #antispam:hover *, #moderation:hover *, #cyberlog:hover *{background-color: blue}
 #genServer:hover *{background-color: red}
 
+legend {text-align: center; font-size: 40px; color: red;}

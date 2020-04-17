@@ -37,7 +37,7 @@ class Birthdays(commands.Cog):
     @tasks.loop(hours=24)
     async def dailyBirthdayAnnouncements(self):
         try:
-            for member in self.bot.users():
+            for member in self.bot.users:
                 bday = await database.GetMemberBirthday(member)
                 if bday is not None:
                     if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
@@ -81,7 +81,7 @@ class Birthdays(commands.Cog):
     @tasks.loop(hours=24)
     async def deleteBirthdayMessages(self):
         try:
-            for member in self.bot.users():
+            for member in self.bot.users:
                 bday = await database.GetMemberBirthday(member)
                 if bday is not None:
                     if bday.strftime('%m%d%y') == datetime.datetime.now().strftime('%m%d%y'): await database.ResetBirthdayMessages(member)

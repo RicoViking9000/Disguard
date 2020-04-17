@@ -33,7 +33,7 @@ logger.addHandler(handler) """
 def prefix(bot, message):
     return '.' if type(message.channel) is not discord.TextChannel else prefixes.get(message.guild.id)
 
-bot = commands.Bot(command_prefix=prefix)
+bot = commands.Bot(command_prefix=prefix, case_insensitive=True)
 bot.remove_command('help')
 
 indexes = 'Indexes'

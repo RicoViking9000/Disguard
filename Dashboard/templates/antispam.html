@@ -76,6 +76,7 @@
                         If a message contains >=<input type="number" name=hereTags value={{automod.hereTags}}> @here mentions, and doesn't mention <i>here</i>, flag the message<br>
                         If a message contains >=<input type="number" name=roleTags value={{automod.roleTags}}> @role mentions, flag the message<br>
                         If a member spams <input type="number" name=quickMessages0 value={{automod.quickMessages[0]}}> messages in <input type="number" name=quickMessages1 value={{automod.quickMessages[1]}}> seconds, flag them<br>
+                        If a member sends <input type="number" name=consecutiveMessages0 value={{automod.consecutiveMessages[0]}}> consecutive messages in <input type="number" name=consecutiveMessages1 value={{automod.consecutiveMessages[1]}}> seconds, flag them<br>
                         If a member has at least one role, ignore their offenses<select name=ignoreRoled><option value=True {%if automod.ignoreRoled%}selected{%endif%}>Enabled</option><option value=False {%if not automod.ignoreRoled%}selected{%endif%}>Disabled</option></select><br>
                 </fieldset>
                 <fieldset>
