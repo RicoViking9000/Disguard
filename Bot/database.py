@@ -86,7 +86,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     if serv is not None:
         spam = serv.get("antispam") #antispam object from database
         log = serv.get("cyberlog") #cyberlog object from database
-    membIDs = [memb.id for memb in s.members]
+    #membIDs = [memb.id for memb in s.members]
     await servers.update_one({"server_id": s.id}, {"$set": { #update database
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
@@ -158,26 +158,28 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     for m in s.members: #Create dict 
         membDict[str(m.id)] = m.name
         membDict[m.name] = m.id
+    databaseMembIDs = [m.get('id') for m in members]
+    serverMembIDs = [m.id for m in s.members]
     if (await servers.find_one({'server_id': s.id})).get('members') is None or (await servers.find_one({'server_id': s.id})) is None or len((await servers.find_one({'server_id': s.id})).get('members')) < 1: 
         await servers.update_one({'server_id': s.id}, {'$set': {'members': []}}, True)
-        for id in membIDs:
-            await servers.update_one({"server_id": s.id}, {"$push": { 'members': {
+        for id in serverMembIDs:
+            await servers.update_one({"server_id": s.id}, {"$push": {'members': {
                 'id': id,
                 'name': membDict.get(str(id)),
                 'warnings': spam.get('warn'),
                 'quickMessages': [],
                 'lastMessages': []}}}, True)
-    if any(m.get('id') not in membIDs for m in members):
-        toUpdate = [m.get('id') for m in members if m.get('id') not in membIDs]
+    if any([m not in databaseMembIDs for m in serverMembIDs]):
+        toUpdate = [m for m in serverMembIDs if m not in databaseMembIDs]
         for person in toUpdate:
-            await servers.update_one({"server_id": s.id}, {"$push": { 'members': {
+            await servers.update_one({"server_id": s.id}, {"$push": {'members': {
                 'id': person,
                 'name': membDict.get(str(person)),
                 'warnings': spam.get('warn'),
                 'quickMessages': [],
                 'lastMessages': []}}}, True)
     for member in members:
-        if member.get('id') in membIDs:
+        if member.get('id') in serverMembIDs:
             try:
                 await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
                     "members.$.id": member.get('id'),

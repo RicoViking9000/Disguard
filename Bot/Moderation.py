@@ -65,7 +65,7 @@ class Moderation(commands.Cog):
             current.botMessage = message
             current.mentions = ctx.message
             messages = []
-            def channels(m): return m.channel == ctx.channel and m.author==ctx.author and len(m.channel_mentions) > 0 or any(s in m.content.lower() for s in ['a', 'h', 'cancel'])
+            def channels(m): return m.channel == ctx.channel and m.author==ctx.author and (len(m.channel_mentions) > 0 or any(s in m.content.lower() for s in ['a', 'h', 'cancel']))
             try: post = await self.bot.wait_for('message',check=channels, timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
             embed.set_author(name='Please wait')
