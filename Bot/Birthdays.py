@@ -262,15 +262,16 @@ class Birthdays(commands.Cog):
             actionList += age
             memberList = await self.bot.get_cog('Cyberlog').FindMoreMembers(self.bot.users, arg)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
-            memberList = [m.get('member') for m in memberList]
+            memberList = [m.get('member') for m in memberList] #Only take member results with at least 50% relevance to avoid ID searches when people only want to get their age
             memberList = [m for m in memberList if len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members])]
             actionList += memberList
             def infoCheck(r,u): return str(r) == 'ℹ' and u == ctx.author and r.message.id == message.id
             date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=Cyberlog.lightningLogging.get(ctx.guild.id).get('offset')))
             if date is not None: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
-            if len(actionList) == 1:
+            if len(actionList) >= 1:
                 if type(actionList[0]) is int and actionList[0] < 10000: return await ageContinuation(self, actionList[0], ctx.author, message, embed, partial=True)
-                elif type(actionList[0]) in [discord.User, discord.ClientUser]:
+            if len(actionList) == 1:
+                if type(actionList[0]) in [discord.User, discord.ClientUser]:
                     await message.edit(embed=await guestBirthdayViewer(self, ctx, actionList[0]))
                     await message.add_reaction('🍰')
                     if actionList[0] == ctx.author: await message.add_reaction('ℹ')
@@ -636,7 +637,7 @@ async def firstBirthdayContinuation(self, ctx, author, message):
             except: pass
             if result:
                 embed.title = '🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(author.name, self.whiteCheck, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation'))
-                if result.day != bday.day:
+                if bday is None or result.day != bday.day:
                     embed.description='**{}**\n\nIs this correct? Ready to save it? React with ✅, otherwise type another date or wait 3 minutes for timeout'.format(result.strftime('%A, %b %d, %Y'))
                     await new.add_reaction('✅')
                 else:
