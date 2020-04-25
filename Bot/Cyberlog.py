@@ -139,6 +139,8 @@ class Cyberlog(commands.Cog):
     @tasks.loop(minutes=3)
     async def summarize(self):
         try:
+            global lightningLogging
+            global lightningUsers
             for s in self.bot.guilds: lightningLogging[s.id] = await database.GetServer(s)
             for u in self.bot.users: lightningUsers[u.id] = await database.GetUser(u)
             for m in self.bot.get_all_members():
@@ -216,6 +218,7 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent
         Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
+        await self.bot.wait_until_ready()
         await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
         if type(message.channel) is discord.DMChannel: return
         if message.type is discord.MessageType.pins_add: await self.pinAddLogging(message)
@@ -251,6 +254,9 @@ class Cyberlog(commands.Cog):
                     if result is None: return
                     embed=discord.Embed(description=result.content)
                     embed.set_author(name=result.author.name,icon_url=result.author.avatar_url)
+                    if len(result.attachments) > 0 and result.attachments[0].height is not None:
+                        try: embed.set_image(url=result.attachments[0].url)
+                        except: pass
                     return await message.channel.send(embed=embed)
 
     async def pinAddLogging(self, message: discord.Message):
@@ -856,6 +862,7 @@ class Cyberlog(commands.Cog):
             if random.randint(1, 50) == 1: sendContent='ℹProtip: Hover over the **before** or **after** message hyperlink to preview the content of the linked message' #5% chance of the protip popping up
         try: msg = await c.send(content=sendContent,embed=embed,files=attachments)
         except: msg = await c.send(content='An attachment to this message is too big to send',embed=embed)
+        if os.path.exists(savePath): os.remove(savePath)
         await VerifyLightningLogs(msg, 'message')
 
     @commands.Cog.listener()
