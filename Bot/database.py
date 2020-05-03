@@ -65,13 +65,7 @@ async def Verification(b: commands.Bot):
 async def VerifyServers(b: commands.Bot):
     '''Ensures all servers have database entries; adding and removing as necessary'''
     '''First: Index all bot servers, and verify them'''
-    for s in b.guilds: await VerifyServer(s, b)
-
-#def VerifyServer(s: discord.Guild, b: commands.Bot):
-#    asyncio.get_event_loop().run_until_complete(__VerifyServer(s, b))
-
-def run(method, *args):
-    asyncio.get_event_loop().run_until_complete(method(*args))
+    await asyncio.gather(*[VerifyServer(s, b) for s in b.guilds])
 
 async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
@@ -198,7 +192,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
 async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
     '''First: Go through all members, verifying they have entries and variables'''
-    for user in b.get_all_members(): await VerifyUser(user, b)
+    await asyncio.gather(*[VerifyUser(m, b) for m in b.users])
     
 async def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''

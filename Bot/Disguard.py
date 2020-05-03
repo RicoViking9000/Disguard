@@ -2,7 +2,6 @@
 
 import discord
 from discord.ext import commands, tasks
-import dns
 import secure
 import database
 import Antispam
@@ -24,11 +23,11 @@ print("Booting...")
 prefixes = {}
 variables = {}
 
-logger = logging.getLogger('discord')
-logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
+# logger = logging.getLogger('discord')
+# logger.setLevel(logging.DEBUG)
+# handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+# handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+# logger.addHandler(handler)
 
 def prefix(bot, message):
     return '.' if type(message.channel) is not discord.TextChannel else prefixes.get(message.guild.id)
@@ -93,13 +92,14 @@ async def indexMessages(server, channel, full=False):
     start = datetime.datetime.now()
     try: os.makedirs(path)
     except FileExistsError: pass
+    p = os.listdir(path)
+    saveImages = await database.GetImageLogPerms(server)
     try: 
         async for message in channel.history(limit=None, oldest_first=full):
             if not message.author.bot:
-                if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): 
+                if '{}_{}.txt'.format(message.id, message.author.id) in p: 
                     if not full: break
                     else: 
-                        await asyncio.sleep(3)
                         continue #Skip the code below as to not overwrite message edit history, plus to skip saving message indexes we already have (program will keep running, however, this is intentional)
                 try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                 except FileNotFoundError: pass
@@ -107,7 +107,7 @@ async def indexMessages(server, channel, full=False):
                 except UnicodeEncodeError: pass
                 try: f.close()
                 except: pass
-                if (datetime.datetime.utcnow() - message.created_at).days < 7 and await database.GetImageLogPerms(server):
+                if (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
                     attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
                     try: os.makedirs(attach)
                     except FileExistsError: pass
@@ -115,7 +115,7 @@ async def indexMessages(server, channel, full=False):
                         if attachment.size / 1000000 < 8:
                             try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                             except discord.HTTPException: pass
-                if full: await asyncio.sleep(5)
+                if full: await asyncio.sleep(1)
     except discord.Forbidden: print('Index error for {}'.format(server.name))
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 
