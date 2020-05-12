@@ -224,7 +224,7 @@ async def _max(ctx):
 @bot.command(aliases=['davey'])
 async def david(ctx):
     if ctx.author not in bot.get_guild(611301150129651763).members: return
-    r = fileAbstraction(bot.get_emoji(708847959642603580), 'D A V I D', 'Babey')
+    r = fileAbstraction(bot.get_emoji(708847959642603580), 'D A V I D', 'David')
     await ctx.send(embed=r[0],file=r[1])
 
 

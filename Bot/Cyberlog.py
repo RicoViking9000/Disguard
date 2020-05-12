@@ -220,7 +220,9 @@ class Cyberlog(commands.Cog):
                     except discord.HTTPException: pass
 
     async def jumpLinkQuoteContext(self, message: discord.Message):
-        if lightningLogging.get(message.guild.id).get('jumpContext'):
+        try: enabled = ightningLogging.get(message.guild.id).get('jumpContext')
+        except AttributeError: return
+        if enabled:
             words = message.content.split(' ')
             for w in words:
                 if 'https://discordapp.com/channels/' in w: #This word is a hyperlink to a message
@@ -793,7 +795,7 @@ class Cyberlog(commands.Cog):
         except IndexError: messageBefore = ''
         created += datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))
         embed.description='Author: {0} ({1})\nChannel: {2} • Jump to message [before]({3} \'{4}\') or [after]({5} \'{6}\') this one\nPosted: {7} {8}\nDeleted: {9} {8} ({10} later)'.format(author.mention if memberObject is not None else author.name, author.name if memberObject is not None else 'No longer in this server', channel.mention, messageBefore.jump_url if messageBefore != '' else '', messageBefore.content if messageBefore != '' else '', messageAfter.jump_url if messageAfter != '' else '', messageAfter.content if messageAfter != '' else '', created.strftime("%b %d, %Y - %I:%M:%S %p"), nameZone(bot.get_guild(payload.guild_id)), received, ' '.join(reversed(display)))
-        if message: embed.add_field(name="**Content**",value=f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else m.content if len(message.content) > 0 else "<Error retrieving content>")
+        if message: embed.add_field(name="**Content**",value=f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else message.content if len(message.content) > 0 else "<Error retrieving content>")
         else: embed.add_field(name='**Content**',value='<No content>' if len(content) < 1 else content)
         for ext in ['.png', '.jpg', '.gif', '.webp']:
             if ext in content.lower():
