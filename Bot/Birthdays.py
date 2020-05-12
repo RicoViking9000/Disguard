@@ -363,7 +363,6 @@ async def messageManagement(self, ctx, message, user, groups):
         indexes = [d.index('▪️'), d.index('▪️', d.index('▪️') + 1)] #Set of indexes for searching for bullet points
         newDesc = d[:indexes[0]]
         for bullet in range(bulletCount):
-            newDesc += letters[bullet] + d[indexes[bullet] + 1:d.find('•', indexes[-1])] #Basically, replace the bullet point with a letter by combining all before the bullet, the letter and all after the bullet
             newDesc += letters[bullet] + d[indexes[bullet] + 1:d.find('▪', indexes[-1])] #Basically, replace the bullet point with a letter by combining all before the bullet, the letter and all after the bullet
             indexes.append(d.find('▪️', indexes[-1] + 1)) #Step this up so that the algorithm finds the **next** bullet point
         allGroups = groups[0] + groups[1] + groups[2]
@@ -850,7 +849,9 @@ def calculateDate(message, adjusted):
                 except:
                     try: birthday = datetime.datetime.strptime(word, "%m %d %y")
                     except: birthday = None
-    if 'half' in message.content.lower().split(' ') and birthday: birthday = birthday + datetime.timedelta(days= sum(a[1] for a in list(ref)[:6])) #Deal with half birthdays; jump 6 months ahead
+    if 'half' in message.content.lower().split(' ') and birthday: 
+        ref.rotate(6)
+        birthday = birthday + datetime.timedelta(days= sum(a[1] for a in list(ref)[:6])) #Deal with half birthdays; jump 6 months ahead
     return birthday
 
 async def verifyBirthday(message, adjusted, birthday=None):
@@ -858,7 +859,7 @@ async def verifyBirthday(message, adjusted, birthday=None):
     if birthday is None: birthday = calculateDate(message, adjusted)
     #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
     #User most likely talking about their own birthday
-    if any(word in message.content.lower() for word in ['my birthday', 'my bday', 'mine is']): return [message.author]
+    if any(word in message.content.lower() for word in ['my birthday', 'my bday', 'mine is', 'my half birthday', 'my half bday']): return [message.author]
     #User most likely talking about someone else's birthday
     elif any(word in message.content.lower().split(' ') for word in ['is', 'are']) and not any(word in message.content.lower().split(' ') for word in ['my', 'mine']) and len(message.mentions) > 0 and any(word in message.content.lower() for word in ['birthday', 'bday']): return message.mentions
     #User most likely answered a question asked by a user
