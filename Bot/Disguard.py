@@ -23,19 +23,21 @@ print("Booting...")
 prefixes = {}
 variables = {}
 
-# logger = logging.getLogger('discord')
-# logger.setLevel(logging.DEBUG)
-# handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-# handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-# logger.addHandler(handler)
+logger = logging.getLogger('discord')
+logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
 
 def prefix(bot, message):
-    return '.' if type(message.channel) is not discord.TextChannel else prefixes.get(message.guild.id)
+    p = prefixes.get(message.guild.id)
+    return p if p is not None else '.'
 
-bot = commands.Bot(command_prefix=prefix, case_insensitive=True)
+bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=300)
 bot.remove_command('help')
 
 indexes = 'Indexes'
+oPath = 'G:/My Drive/Other'
 urMom = 'G:/My Drive/Other/ur mom'
 campMax = 'G:/My Drive/Other/M A X'
 
@@ -103,7 +105,7 @@ async def indexMessages(server, channel, full=False):
                         continue #Skip the code below as to not overwrite message edit history, plus to skip saving message indexes we already have (program will keep running, however, this is intentional)
                 try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                 except FileNotFoundError: pass
-                try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M %p'), message.author.name, message.content))
+                try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M:%S %p'), message.author.name, f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else message.content if len(message.content) > 0 else "<No content>"))
                 except UnicodeEncodeError: pass
                 try: f.close()
                 except: pass
@@ -115,38 +117,16 @@ async def indexMessages(server, channel, full=False):
                         if attachment.size / 1000000 < 8:
                             try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                             except discord.HTTPException: pass
-                if full: await asyncio.sleep(1)
+                if full: await asyncio.sleep(0.5)
     except discord.Forbidden: print('Index error for {}'.format(server.name))
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 
-@bot.listen()
-async def on_reaction_add(r, u):
-    if type(r.message.channel) is not discord.DMChannel: return
-    if str(r) != '➡' or type(r.emoji) is discord.Emoji and r.emoji.id == 674389988363993116: return
-    if u.id not in [247412852925661185, 596381991151337482, 524391119564570664, 282671063530209283]: return
-    d = r.message.embeds[0].description
-    resultingPic = int(d[d.find('Image') + 6:d.find('of')].strip()) - 1
-    if str(r) == '➡': destination = '<#619549837578338306>'
-    else: destination = '<@524391119564570664>'
-    m2 = await u.send('Type a message to go along with the image, or react with a check to send it to {} without a message'.format(destination))
-    await m2.add_reaction('✅')
-    def messageCheck(m): return m.author == u and type(m.channel) is discord.DMChannel
-    def checkCheck(r, u): return str(r) == '✅' and r.message.id == m2.id
-    done, pending = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=checkCheck)], return_when=asyncio.FIRST_COMPLETED)
-    stuff = done.pop().result()
-    for future in pending: future.cancel()
-    if type(stuff) is discord.Message: customMessage = '{}: {}'.format(stuff.author.name, stuff.content)
-    else: customMessage = None
-    if type(r.emoji) is discord.Emoji: await bot.get_user(524391119564570664).send(content=customMessage, file=discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic]))
-    else: await bot.get_channel(619549837578338306).send(content=customMessage, file=discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic]))
-    await u.send('Successfully sent image to {}'.format(destination))
-
+@commands.is_owner()
 @bot.command()
 async def verify(ctx):
-    if ctx.author.id == 247412852925661185:
-        status = await ctx.send("Verifying...")
-        await database.Verification(bot)
-        await status.delete()
+    status = await ctx.send("Verifying...")
+    await database.Verification(bot)
+    await status.delete()
 
 @commands.is_owner()
 @bot.command()
@@ -166,12 +146,16 @@ async def index(ctx, t: int):
 
 @bot.command()
 async def help(ctx):
-    await ctx.send(embed=discord.Embed(description="[View help here](https://disguard.netlify.com/commands)"))
+    e=discord.Embed(description=f"[Click to view help on my website • Hover for quick help](https://disguard.netlify.com/commands 'This server\'s prefix is {prefixes.get(ctx.guild.id)}\n\n— ping: Bot response time\n— Say [user] [text]: Requires manage server. Imitate [user] with webhooks by saying [text]. Omit [user] to use yourself, [user] can be ID, name, name#discrim, nickname, or mention.\n")
+    e.description+='— agekick [value]: Requires manage server. Configure ageKick antispam module, which kicks accounts that are under a number of days old, type a number for value to set up\n— purge [value]: Requires manage messages. Purge [value] messages. Omit [value] to enter interactive purge.\n'
+    e.description+='— pause [value] [duration]: Value is either \'antispam\' or \'logging\', pauses that active module for specified duration, or indefinitely if duration is omitted\n— info [search term]: Searches through members, roles, channels, invites, emoji, etc to pull up information that matches your search term, or yourself if search term is omitted\n'
+    e.description+='— birthday [value]: Value can be an action (date or age to set for your birthday module) or search term (to bring up birthday information for someone else). Omit value to show your own birthday, along with upcoming birthdays for people you know.\')'
+    await ctx.send(embed=e)
 
 @bot.command()
 async def ping(ctx):
-    m = await ctx.send('Pong!')
-    await m.edit(content='Pong! {}ms'.format(round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)))
+    if datetime.datetime.utcnow() > ctx.message.created_at: await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms\nMessage latency: {round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)}ms')
+    else: await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms\nMessage latency: -{round((ctx.message.created_at - datetime.datetime.utcnow()).microseconds / 1000)}ms')
 
 @commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
 @bot.command()
@@ -194,38 +178,54 @@ async def evaluate(ctx, *args):
     if inspect.iscoroutine(result): await ctx.send(await eval(args))
     else: await ctx.send(result)
 
-@commands.cooldown(2, 15, commands.BucketType.member)
 @bot.command()
+async def setLogging(ctx, channel: discord.TextChannel):
+    await database.SetLogChannel(ctx.guild, channel)
+    await ctx.send('Yes')
+
+@commands.is_owner()
+@bot.command()
+async def nameVerify(ctx):
+    await database.NameVerify(ctx.guild)
+    await ctx.send('Successful')
+
+def fileAbstraction(e, p, n):
+    '''
+    e: Emoji to use surrounding the embed title
+    p: Path relative to the directory Other in my Google Drive
+    n: Name between the emojis in the embed title'''
+    image = False
+    newDir = f'{oPath}/{p}'
+    directory = os.listdir(newDir)
+    while not image:
+        result = random.randint(0, len(directory) - 1)
+        if '.ini' not in directory[result]: image = True
+    path = f'{newDir}/{directory[result]}'
+    f = discord.File(path)
+    embed = discord.Embed(title=f'{e} {n} {e}',description=f'{f.filename} • Image {result + 1} of {len(directory) - 1}',color=0xffff00)
+    if any([ext in directory[result].lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]): embed.set_image(url=f'attachment://{f.filename}')
+    else: embed.description=f'<Attachment: {f.filename}> • File {result + 1} of {len(directory) - 1}'
+    if ' ' in directory[result]: embed.set_footer(text='Discord does not allow direct image attachments with spaces in the filename to embeds')
+    return (embed, f)
+
+@commands.cooldown(2, 15, commands.BucketType.member)
+@bot.command(aliases=['lex'])
 async def lexy(ctx):
-    if ctx.author.id in [247412852925661185, 596381991151337482, 524391119564570664, 282671063530209283]:
-        lex = bot.get_emoji(674389988363993116)
-        image = False
-        while not image:
-            resultingPic = random.randint(0, len(os.listdir(urMom)) - 1)
-            if not any(n in os.listdir(urMom)[resultingPic] for n in ['.ini', 'VID_20191031_190028_2']): image = True
-        e = discord.Embed(title='❤ Lexy ❤',description='**{0:-^83s}\n{2}**\n**{1:-^80s}**\n{3}'.format('OPTIONS', 'INFORMATION', '{}: Send to Lex\n➡: Send to <#619549837578338306>'.format(lex),
-            'Image {} of {}'.format(resultingPic + 1, len([f for f in os.listdir(urMom) if '.ini' not in f]))), color=0xffff00, timestamp=datetime.datetime.utcnow())
-        f = discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic])
-        if '.mp4' in f.filename: m = await ctx.author.send(embed=e,file=discord.File('{}/{}'.format(urMom,os.listdir(urMom)[resultingPic]), os.listdir(urMom)[resultingPic]))
-        else: 
-            e.set_image(url=(await bot.get_user(322059776710410241).send(file=f)).attachments[0].url)
-            m = await ctx.author.send(embed=e)
-        for r in [lex, '➡']: await m.add_reaction(r)
+    if ctx.author.id not in [247412852925661185, 596381991151337482, 524391119564570664]: return
+    r = fileAbstraction(bot.get_emoji(674389988363993116), 'ur mom', 'Lex')
+    await ctx.send(embed=r[0],file=r[1])  
 
 @bot.command(aliases=['max'])
 async def _max(ctx):
     if ctx.author not in bot.get_guild(611301150129651763).members: return
-    maxCamp = bot.get_emoji(696789467901591683)
-    image = False
-    directory = os.listdir(campMax)
-    while not image:
-        result = random.randint(0, len(directory) - 1)
-        if '.ini' not in directory[result]: image = True
-    path = f'{campMax}/{directory[result]}'
-    f = discord.File(path)
-    e = discord.Embed(title=f'{maxCamp} Max {maxCamp}',description=f'{f.filename} • Image {result + 1} of {len(directory) - 1}',color=0xffff00)
-    e.set_image(url=f'attachment://{f.filename}')
-    await ctx.send(embed=e,file=f)
+    r = fileAbstraction(bot.get_emoji(696789467901591683), 'M A X', 'Max')
+    await ctx.send(embed=r[0],file=r[1])
+
+@bot.command(aliases=['davey'])
+async def david(ctx):
+    if ctx.author not in bot.get_guild(611301150129651763).members: return
+    r = fileAbstraction(bot.get_emoji(708847959642603580), 'D A V I D', 'Babey')
+    await ctx.send(embed=r[0],file=r[1])
 
 
 database.Initialize(secure.token())

@@ -123,7 +123,7 @@ class Antispam(commands.Cog):
                     await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         if spam.get('consecutiveMessages')[0] != 0:
             messages = await message.channel.history(limit=spam.get('consecutiveMessages')[0]).flatten()
-            if all([m.author.id == message.author.id for m in messages]) and (messages[0].created_at - messages[-1].created_at).seconds < spam.get('consecutiveMessages')[1]:
+            if len(messages) >= spam.get('consecutiveMessages')[0] and all([m.author.id == message.author.id for m in messages]) and (messages[0].created_at - messages[-1].created_at).seconds < spam.get('consecutiveMessages')[1]:
                 flag = True
                 reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} consecutively over {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages in under {spam.get("consecutiveMessages")[1]} seconds)')
                 short.append('Sending too many consecutive messages')

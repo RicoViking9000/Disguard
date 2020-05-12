@@ -1,6 +1,5 @@
 '''This file creates, verifies, and manages database entries as necessary during Disguard's operation
    This file also houses various useful methods that can be used across multiple files'''
-import pymongo
 import motor.motor_asyncio
 import dns
 import secure
@@ -116,6 +115,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
         "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
         'consecutiveMessages': [10, 120] if serv is None or spam.get('consecutiveMessages') is None else spam.get('consecutiveMessages'), #If this many messages in a row are sent by the same person, flag them
+        'repeatedJoins': [3, 300, 86400] if serv is None or spam.get('repeatedJoins') is None else spam.get('repeatedJoins'), #If user joins [0] times in [1] seconds, ban them for [2] seconds
         "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
         "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
         "channelExclusions": await DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
@@ -147,7 +147,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(await GetCyberMod(s, 'server'))),
         "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(await GetCyberMod(s, 'voice')))}}},upsert=True)
     membDict = {}
-    if serv is None: serv = await servers.find_one({"server_id": s.id})
+    if serv is None: serv = await servers.find_one({'server_id': s.id})
     if serv is not None:
         spam = serv.get("antispam") #antispam object from database
         log = serv.get("cyberlog") #cyberlog object from database
@@ -161,7 +161,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     if (await servers.find_one({'server_id': s.id})).get('members') is None or (await servers.find_one({'server_id': s.id})) is None or len((await servers.find_one({'server_id': s.id})).get('members')) < 1: 
         await servers.update_one({'server_id': s.id}, {'$set': {'members': []}}, True)
         for id in serverMembIDs:
-            await servers.update_one({"server_id": s.id}, {"$push": {'members': {
+            await servers.update_one({'server_id': s.id}, {"$push": {'members': {
                 'id': id,
                 'name': membDict.get(str(id)),
                 'warnings': spam.get('warn'),
@@ -170,7 +170,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     if any([m not in databaseMembIDs for m in serverMembIDs]):
         toUpdate = [m for m in serverMembIDs if m not in databaseMembIDs]
         for person in toUpdate:
-            await servers.update_one({"server_id": s.id}, {"$push": {'members': {
+            await servers.update_one({'server_id': s.id}, {"$push": {'members': {
                 'id': person,
                 'name': membDict.get(str(person)),
                 'warnings': spam.get('warn'),
@@ -179,7 +179,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     for member in members:
         if member.get('id') in serverMembIDs:
             try:
-                await servers.update_one({"server_id": s.id, "members.id": id}, {"$set": {
+                await servers.update_one({'server_id': s.id, 'members.id': member.get('id')}, {"$set": {
                     "members.$.id": member.get('id'),
                     "members.$.name": membDict.get(str(member.get('id'))),
                     "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
@@ -188,6 +188,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                 }}, upsert=True)
             except: pass
         else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': member.get('id')}}})
+    return (serv.get('name'), serv.get('server_id'))
 
 async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
@@ -528,6 +529,7 @@ async def GetAgeKick(s: discord.Guild):
 async def SetAgeKick(s: discord.Guild, ageKick):
     '''Sets the ageKick of a server'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKick': ageKick}}, True)
+    print(f'Updated ageKick for {s.name} to {ageKick} at {datetime.datetime.now():%B %d %I:%M %p}')
 
 async def GetWhitelist(s: discord.Guild):
     '''Gets the whitelist for the ageKick of a server [list of int-IDs]'''
@@ -564,6 +566,14 @@ async def SetLastActive(u: discord.User, timestamp, reason):
 async def SetLastOnline(u: discord.User, timestamp):
     '''Updates the last online attribute'''
     await users.update_one({'user_id': u.id}, {'$set': {'lastOnline': timestamp}}, True)
+
+async def SetLogChannel(s: discord.Guild, channel):
+    '''Sets whether the ageKick configuration for the specified server can only be modified by the server owner'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.defaultChannel': channel.id}}, True)
+
+async def NameVerify(s: discord.Guild):
+    '''Verifies a server by name to counter the database code error'''
+    await servers.update_one({'name': s.name}, {'$set': {'server_id': s.id}}, True)
 
 async def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''

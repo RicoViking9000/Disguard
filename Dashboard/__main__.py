@@ -52,42 +52,53 @@ def make_session(token=None, state=None, scope=None):
 
 
 @app.route('/')
-def index():
+def index(redir=None):
     scope = request.args.get(
         'scope',
         'identify')
     #discord = make_session(scope=scope.split(' '))
     #authorization_url = discord.authorization_url(AUTHORIZATION_BASE_URL)
     #session['oauth2_state'] = state
+    if redir: session['redirect'] = redir
     if 'user_id' not in session:
         return redirect('https://discordapp.com/api/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope={}'.format(OAUTH2_CLIENT_ID, OAUTH2_REDIRECT_URI, scope))
     else:
         return redirect(url_for('manage'))
 
 @app.route('/callback')
-def callback():
-    if request.values.get('error'):
-        return request.values['error']
-    discord = make_session()
-    token = discord.fetch_token(
-        TOKEN_URL,
-        client_secret=OAUTH2_CLIENT_SECRET,
-        authorization_response=request.url)
-    session['oauth2_token'] = token
-    discord = make_session(token=session.get('oauth2_token'))
-    user = discord.get(API_BASE_URL + '/users/@me').json()
-    session['user_id'] = user.get('id')
-    session.permanent = True
-    return redirect(url_for('.manage'))
+def callback(redir=None):
+    if session.get('redirect'):
+        redir = session.get('redirect')
+        session['redirect'] = None
+    if 'user_id' not in session:
+        if request.values.get('error'):
+            return request.values['error']
+        discord = make_session()
+        token = discord.fetch_token(
+            TOKEN_URL,
+            client_secret=OAUTH2_CLIENT_SECRET,
+            authorization_response=request.url)
+        session['oauth2_token'] = token
+        discord = make_session(token=session.get('oauth2_token'))
+        user = discord.get(API_BASE_URL + '/users/@me').json()
+        session['user_id'] = user.get('id')
+        session.permanent = True
+        if redir is None: return callback(request.url)
+        else: return callback(redir)
+    if redir is None: redir = request.url
+    if request.path == '/': return redirect(url_for('.manage'))
+    else: return redirect(redir)
 
 def EnsureVerification(id):
     '''Check if the user is authorized to proceed to editing a server'''
     discord = make_session(token=session.get('oauth2_token'))
+    if 'user_id' not in session: return False
     return id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))] and discord.get(API_BASE_URL + '/users/@me').json().get('id') is not None or int(session['user_id']) == 247412852925661185
 
-def ReRoute():
+def ReRoute(redir=None):
     '''If a user isn't authorized to edit a server, determine what to do: send back to login to Discord or send to homepage'''
     if 'user_id' not in session:
+        if redir: session['redirect'] = redir
         return url_for('index')
     else:
         return url_for('manage')
@@ -106,14 +117,15 @@ def manage():
 @app.route('/manage/<int:id>')
 def manageServer(id):
     if EnsureVerification(id):
-        return render_template('trio.html', server=servers.find_one({"server_id":id}).get("server_id"))
+        session['server_id'] = id
+        return render_template('trio.html', server=id)
     else:
-        return redirect(ReRoute())
+        return redirect(ReRoute(request.url))
 
 @app.route('/manage/<int:id>/server', methods=['GET', 'POST'])
 def server(id):
     if not EnsureVerification(id):
-        return redirect(ReRoute())
+        return redirect(ReRoute(request.url))
     serv = servers.find_one({"server_id": id})
     d = (datetime.datetime.utcnow() + datetime.timedelta(hours=serv.get('offset'))).strftime('%Y-%m-%dT%H:%M')
     d2 = serv.get('birthdate').strftime('%H:%M')
@@ -130,14 +142,14 @@ def server(id):
         dt2 = datetime.datetime(2020, 1, 1, int(bdt[:bdt.find(':')]), decrement)
         if dt > d: difference = round((dt - d).seconds/3600)
         else: difference = round((dt - d).seconds/3600) - 24
-        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz, 'jumpContext': r.get('jumpContext'), 'birthday': int(bd), 'birthdate': dt2, 'birthdayMode': int(r.get('birthdayMode'))}})
+        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz, 'jumpContext': r.get('jumpContext').lower() == 'true', 'birthday': int(bd), 'birthdate': dt2, 'birthdayMode': int(r.get('birthdayMode'))}})
         return redirect(url_for('server', id=id)) 
     return render_template('general.html', servObj=serv, date=d, date2=d2, id=id)
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
 def antispam(id):
     if not EnsureVerification(id):
-        return redirect(ReRoute())
+        return redirect(ReRoute(request.url))
     if request.method == 'POST':
         r = request.form
         database.UpdateMemberWarnings(id, int(r.get('warn')))
@@ -174,6 +186,8 @@ def antispam(id):
             "roleTags": int(r.get('roleTags')),
             "quickMessages": [int(r.get("quickMessages0")), int(r.get("quickMessages1"))],
             'consecutiveMessages': [int(r.get('consecutiveMessages0')), int(r.get('consecutiveMessages1'))],
+            'repeatedJoins': [int(r.get('repeatedJoinsCountValue')), int(r.get('repeatedJoinsThresholdValue')) * int(r.get('repeatedJoinsThresholdDividend')), int(r.get('repeatedJoinsBanValue')) * int(r.get('repeatedJoinsBanDividend'))] if r.get('repeatedJoinsEnabled') else [0, 0, 0],
+            'ageKick': int(r.get('ageKickValue')) if r.get('ageKickEnabled') else None,
             "ignoreRoled": r.get("ignoreRoled").lower() == 'true',
             "exclusionMode": int(r.get('exclusionMode')),
             "channelExclusions": cex,
@@ -194,7 +208,7 @@ def moderation(id):
 @app.route('/manage/<int:id>/cyberlog', methods=['GET', 'POST'])
 def cyberlog(id):
     if not EnsureVerification(id):
-        return redirect(ReRoute())
+        return redirect(ReRoute(request.url))
     servObj = servers.find_one({"server_id": id})
     if request.method == 'POST':
         r = request.form
@@ -292,7 +306,7 @@ def cyberlog(id):
             "color": c.get('voice').get('color'),
             "advanced": c.get('voice').get('advanced')}}}})
         return redirect(url_for('cyberlog', id=id))
-    return render_template('cyberlog.html', servid=id, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
+    return render_template('cyberlog.html', servid=id, server=servObj, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
 
 if __name__ == '__main__':
     app.run()

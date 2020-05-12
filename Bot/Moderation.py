@@ -5,6 +5,7 @@ import datetime
 import Cyberlog #Used to prevent delete logs upon purging
 import asyncio
 import os
+import traceback
 
 filters = {}
 loading = None
@@ -213,7 +214,7 @@ class Moderation(commands.Cog):
             if 'cancel' in post.content.lower(): return await message.edit(embed=cancel)
             elif 'bots' in post.content.lower(): current.bots=0
             elif 'both' in post.content.lower(): current.bots=2
-            elif 'h' in post.content.lower(): current.bots=1
+            elif 'human' in post.content.lower(): current.bots=1
             if messages: embed.set_field_at(0, name='Messages to be purged', value=len([m for m in messages if PurgeFilter(m)]))
             try:
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
@@ -459,7 +460,7 @@ class Moderation(commands.Cog):
                         embed.description='Scanned {}/{}\nPurged {}/{}'.format(counter, len(messages), current.purgeStat.get(2), limit)
                         await message.edit(embed=embed)
                         lastUpdate = datetime.datetime.now()
-                    result = await SuperPurge(post)
+                    result = await self.SuperPurge(post)
                     if result == 0: current.purgeStat[0]+=1 #Didn't pass the filter
                     elif result==1: current.purgeStat[1]+=1 #Can't delete for whatever reason
                     else: 
@@ -477,7 +478,7 @@ class Moderation(commands.Cog):
                             else: embed.description+='\nTime taken: {} minutes'.format(round(elapsed.seconds / 60))
                             await message.edit(embed=embed)
                             lastUpdate = datetime.datetime.now()
-                        result = await SuperPurge(post)
+                        result = await self.SuperPurge(post)
                         if result == 0: current.purgeStat[0]+=1 #Didn't pass the filter
                         elif result==1: current.purgeStat[1]+=1 #Can't delete for whatever reason
                         else: 
@@ -493,11 +494,6 @@ class Moderation(commands.Cog):
             embed.set_footer(text='If you have feedback, head to bit.ly/2disguard to find more information')
             if len(embed.fields) > 0: embed.remove_field(0)
             return await message.edit(content='This message will self destruct in T-minus 60 seconds',embed=embed,delete_after=60)
-
-
-            
-
-
         current.botMessage = await ctx.send(str(loading)+"Parsing filters...")
         actuallyPurge = False
         current.channel.append(ctx.channel)
@@ -550,6 +546,14 @@ class Moderation(commands.Cog):
             current = None
         except Exception as e:
             await ctx.send("Error - send this to my dev to decode:\n"+str(e))
+
+    async def SuperPurge(self, m: discord.Message):
+        if not PurgeFilter(m): return 0
+        try:
+            self.bot.get_cog('Cyberlog').AvoidDeletionLogging(m) 
+            await m.delete()
+        except: return 1
+        return 2
 
 def PurgeFilter(m: discord.Message):
     '''Used to determine if a message should be purged'''
@@ -605,14 +609,7 @@ def PurgeFilter(m: discord.Message):
     if current.endDate is not None and m.created_at > current.endDate: return False
     return True
 
-async def SuperPurge(m: discord.Message):
-    if not PurgeFilter(m): return 0
-    try:
-        self.bot.get_cog('Cyberlog').AvoidDeletionLogging(m) 
-        await m.delete()
-    except: return 1
-    return 2
-    
+
 def PreDesc(g: discord.Guild):
     current = filters.get(g.id)
     desc=''
@@ -628,7 +625,8 @@ def PreDesc(g: discord.Guild):
     if current.images is True: desc += "Contains Images\n"
     if current.embeds is True: desc += "Contains URLs\n"
     if current.mentions is True: desc += "Contains @mentions\n"
-    if current.bots is True: desc += "Authored by bots\n"
+    if current.bots == 0: desc += "Authored by bots\n"
+    elif current.bots == 1: desc += "Authored by humans\n"
     if current.files is True: desc += "Contains files\n"
     if current.reactions is True: desc += "Contains reactions\n"
     if current.appMessages is True: desc += "Contains external invites (e.g. Spotify)\n"

@@ -69,13 +69,14 @@ class Birthdays(commands.Cog):
                             bday = await database.GetMemberBirthday(member)
                             if bday is not None:
                                 if bday.strftime('%m%d') == (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%m%d'):
+                                    print(f'Announcing birthday for {member.name}')
                                     messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
                                     toSend = '🍰 Hey hey, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
                                     '\n'.join(['• {}: {}'.format(server.get_member(m.get('author')).name, m.get('message')) for m in messages])))
                                     try: 
                                         m = await self.bot.get_channel(channel).send(toSend)
                                         await m.add_reaction('🍰')
-                                    except discord.Forbidden: pass
+                                    except discord.Forbidden as e: print(f'Birthdays error - server: {e}')
         except: traceback.print_exc()
 
     @tasks.loop(hours=24)
@@ -219,9 +220,9 @@ class Birthdays(commands.Cog):
             disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members]), reverse=True) #Servers the author and target share
             embed.description = '''**{7:–^70}**\n🍰: Send a birthday message to someone\n📆: Update your birthday\n🕯: Update your age\n📝: Edit your wish list\n👮‍♂️: Switch to Member Details view\n**{8:–^70}**\n{3}\n\n__{0}__\n{4}\n\n__{1}__\n{5}\n\n__{2}__\n{6}
                 '''.format('THIS SERVER', 'DISGUARD SUGGESTIONS', 'OTHER', 'To send a message to someone, react 🍰 or type `{}birthday <recipient>`'.format(ctx.prefix),
-                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').mention, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in currentServer[:5]]),
-                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').mention, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in disguardSuggest[:5]]),
-                '\n'.join([' • {}: {}, {} day{} from now'.format(m.get('data').mention, m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in weekBirthday[:5]]),
+                '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in currentServer[:5]]),
+                '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in disguardSuggest[:5]]),
+                '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in weekBirthday[:5]]),
                 'AVAILABLE OPTIONS', 'UPCOMING BIRTHDAYS')
             await message.edit(embed=embed)
             for r in ['🍰', '📆', '🕯', '📝', '👮‍♂️']: await message.add_reaction(r)
@@ -349,9 +350,9 @@ async def messageManagement(self, ctx, message, user, groups):
     target = ctx.author
     if ctx.author == user: #The person who reacted with the cake (desiring to send a message) is the one who initiated the command, so we want quick actions/suggestions
         oldEmbed = copy.deepcopy(message.embeds[0])
-        for f in range(len(oldEmbed.fields)): message.embeds[0].remove_field(0) #Clear all fields
+        message.embeds[0].clear_fields() #Clear all fields
         d = oldEmbed.description
-        bulletCount = d.count('•') #Count bullets (corresponding to number of birthday suggestion entries) from embed description
+        bulletCount = d.count('▪️') #Count bullets (corresponding to number of birthday suggestion entries) from embed description
         message.embeds[0].description = '{} Please wait...'.format(self.loading)
         await message.edit(embed=message.embeds[0])
         letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
@@ -359,11 +360,14 @@ async def messageManagement(self, ctx, message, user, groups):
         d = d.replace('To send a message to someone, use reactions or type `{}birthday <recipient>`'.format(ctx.prefix), '')
         temp = d[d.find('view')+4:d.find('__THIS SERVER__')].strip()
         d = '\n**{}\nYou will be taken to DMs to write your message\n\n{}'.format(temp, d[d.find('__THIS SERVER__'):])
-        indexes = [d.index('•'), d.index('•', d.index('•') + 1)] #Set of indexes for searching for bullet points
+        indexes = [d.index('▪️'), d.index('▪️', d.index('▪️') + 1)] #Set of indexes for searching for bullet points
         newDesc = d[:indexes[0]]
         for bullet in range(bulletCount):
             newDesc += letters[bullet] + d[indexes[bullet] + 1:d.find('•', indexes[-1])] #Basically, replace the bullet point with a letter by combining all before the bullet, the letter and all after the bullet
-            indexes.append(d.find('•', indexes[-1] + 1)) #Step this up so that the algorithm finds the **next** bullet point
+            newDesc += letters[bullet] + d[indexes[bullet] + 1:d.find('▪', indexes[-1])] #Basically, replace the bullet point with a letter by combining all before the bullet, the letter and all after the bullet
+            indexes.append(d.find('▪️', indexes[-1] + 1)) #Step this up so that the algorithm finds the **next** bullet point
+        allGroups = groups[0] + groups[1] + groups[2]
+        for m in allGroups: newDesc = newDesc.replace(str(m.get('data')), m.get('data').mention)
         d = '**{0:–^70}**\n⬅: Back to Birthdays Home\n🇦 - {1}: Send a message to a person listed here\n🔎: Search to send a message to anybody you share a server with'.format('OPTIONS',
             letters[bulletCount - 1]) + newDesc + '_' #Append head (instructions)
         message.embeds[0].description = d
@@ -374,7 +378,6 @@ async def messageManagement(self, ctx, message, user, groups):
         def sendCheck(r, u): return u == ctx.author and r.message.id == message.id and str(r) in ['⬅️'] + letters[:bulletCount] + ['🔎']
         try: stuff = await self.bot.wait_for('reaction_add', check=sendCheck, timeout=180)
         except asyncio.TimeoutError: return await messageManagementTimeout(message, oldEmbed)
-        allGroups = groups[0] + groups[1] + groups[2]
         await message.remove_reaction(stuff[0], stuff[1])
         if str(stuff[0]) != '🔎': 
             if str(stuff[0]) == '⬅️': return await messageManagementTimeout(message, oldEmbed)
@@ -780,7 +783,8 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
 
 
 def calculateDate(message, adjusted):
-    '''Returns a datetime.datetime parsed from a message'''
+    '''Returns a datetime.datetime parsed from a message
+    adjusted: Current time; with applicable timezone taken into consideration'''
     now = datetime.datetime.now()
     shortDays = collections.deque(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
     longDays = collections.deque(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
@@ -796,6 +800,7 @@ def calculateDate(message, adjusted):
     #Check if name of month is in message. Before days because some ppl may specify a day and month
     birthday = None
     if any(c in message.content.lower().split(' ') for c in months) or 'the' in message.content.lower().split(' '):
+        #Check if month short or long (depending on context) name or the word "the" are in the list of words in the input string (message)
         words = message.content.split(' ')
         for word in words:
             before = word
