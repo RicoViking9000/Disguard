@@ -220,7 +220,7 @@ class Cyberlog(commands.Cog):
                     except discord.HTTPException: pass
 
     async def jumpLinkQuoteContext(self, message: discord.Message):
-        try: enabled = ightningLogging.get(message.guild.id).get('jumpContext')
+        try: enabled = lightningLogging.get(message.guild.id).get('jumpContext')
         except AttributeError: return
         if enabled:
             words = message.content.split(' ')
