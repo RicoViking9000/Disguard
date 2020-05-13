@@ -202,6 +202,8 @@ class Cyberlog(commands.Cog):
 
     async def saveMessage(self, message: discord.Message):
         path = "{}/{}/{}".format(indexes, message.guild.id, message.channel.id)
+        try: os.makedirs(path)
+        except FileExistsError: pass
         try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
         except FileNotFoundError: return
         try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M:%S %p'), message.author.name, f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f' :{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else message.content if len(message.content) > 0 else "<No content>"))
