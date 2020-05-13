@@ -206,7 +206,7 @@ class Cyberlog(commands.Cog):
         except FileExistsError: pass
         try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
         except FileNotFoundError: return
-        try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M:%S %p'), message.author.name, f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f' :{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else message.content if len(message.content) > 0 else "<No content>"))
+        try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M:%S %p'), message.author.name, message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"))
         except UnicodeEncodeError: pass
         try: f.close()
         except: pass
@@ -255,7 +255,8 @@ class Cyberlog(commands.Cog):
         embed.add_field(name='Message', value=pinned.content)
         embed.set_footer(text='Pinned message ID: {}'.format(pinned.id))
         await destination.send(embed=embed)
-        self.pins[pinned.channel.id].append(pinned.id)
+        try: self.pins[pinned.channel.id].append(pinned.id)
+        except KeyError: self.pins[pinned.channel.id] = [pinned.id]
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -883,10 +884,13 @@ class Cyberlog(commands.Cog):
             await msg.edit(embed=embed)
             await VerifyLightningLogs(msg, 'channel')
             if os.path.exists(savePath): os.remove(savePath)
+        if channel.category is not None: self.categories[channel.category.id].append(channel)
+        else: self.categories[channel.guild.id].append(channel)
         if type(channel) is discord.TextChannel:
             path = "{}/{}/{}".format(indexes, channel.guild.id, channel.id)
             try: os.makedirs(path)
             except FileExistsError: pass
+            self.pins[channel.id] = []
             await database.VerifyServer(channel.guild, bot)
 
     @commands.Cog.listener()
@@ -981,7 +985,7 @@ class Cyberlog(commands.Cog):
                                 temp.append('     {0:<50} |{1:>8}{2:>{diff}}{3:>10}'.format(f'{permissionKeys.get(kk)}:', string2, '|', english.get(b4.get(k).get(kk)), diff=4 if str(self.whiteMinus) in string2 else 5))
                     self.permissionStrings[message.id] = '```{0:<56}|{1:^13}|{2:^20}\n{3}```'.format('Permission overwrites updated', 'Now', 'Previously', '\n'.join(temp))
                     for f in range(len(embed.fields)):
-                        if 'Permission overwrites' in embed.fields[f].name: embed.set_field_at(f, name='**Permission overwrites updated**', value=f'''[Press 🇵 to toggle details • Hover for preview]({message.jump_url} '{self.permissionStrings.get(message.id)}')''')
+                        if 'Permission overwrites' in embed.fields[f].name: embed.set_field_at(f, name='**Permission overwrites updated**', value=f'''[Use 🇵 to toggle details • Hover for preview]({message.jump_url} '{self.permissionStrings.get(message.id)}')''' if len(self.permissionStrings.get(message.id)) < 900 else 'Use 🇵 to toggle details')
                     reactions.append('🇵')
                 members = {}
                 removedKeys = {}
@@ -1075,9 +1079,12 @@ class Cyberlog(commands.Cog):
                 channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)                
                 startEnd = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList) - 1)
                 embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:startEnd[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:startEnd[0]])}'){newline}" if startEnd[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{newline}[Hover to view {len(channelList[startEnd[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] + 5 < len(channelList) else ""}''')
+                if channel.category is not None: self.categories[channel.id].pop(channel, None)
+                else: self.categories[channel.guild.id].pop(channel, None)
             if channel.type[0] == 'text': 
                 try: embed.add_field(name='**Message count**',value=len(os.listdir(f'{indexes}/{channel.guild.id}/{channel.id}')))
                 except: embed.add_field(name='**Message count**',value=0)
+                self.pins.pop(channel.id, None)
             await msg.edit(embed=embed)
             if os.path.exists(savePath): os.remove(savePath)
             await VerifyLightningLogs(msg, 'channel')
@@ -1427,7 +1434,7 @@ class Cyberlog(commands.Cog):
                 if '{}_{}.txt'.format(message.id, message.author.id) in os.listdir(path): break
                 try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
                 except FileNotFoundError: pass
-                try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M:%S %p'), message.author.name, message.content))
+                try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M:%S %p'), message.author.name, message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"))
                 except UnicodeEncodeError: pass
                 try: f.close()
                 except: pass
@@ -1839,22 +1846,19 @@ class Cyberlog(commands.Cog):
         embeds=[]
         PartialEmojiConverter = commands.PartialEmojiConverter()
         if len(arg) > 0:
-            startedSearching = datetime.datetime.now()
             members, roles, channels, emojis = tuple(await asyncio.gather(*[self.FindMembers(ctx.guild, arg), self.FindRoles(ctx.guild, arg), self.FindChannels(ctx.guild, arg), self.FindEmojis(ctx.guild, arg)]))
-            print('Info command: Search complete in {} seconds'.format((datetime.datetime.now() - startedSearching).seconds))
+            try: logs = await ctx.guild.audit_logs(limit=None).flatten()
+            except: logs = None
+            try: invites = await ctx.guild.invites()
+            except: invites = None
+            try: bans = await ctx.guild.bans()
+            except: bans = None
         else:
+            await message.edit(content=f'{self.loading}Loading content')
             members = []
             roles = []
             channels = []
             emojis = []
-        startedGather = datetime.datetime.now()
-        try: logs = await ctx.guild.audit_logs(limit=None).flatten()
-        except: logs = None
-        try: invites = await ctx.guild.invites()
-        except: invites = None
-        try: bans = await ctx.guild.bans()
-        except: bans = None
-        print('Info command: Gather complete in {} seconds'.format((datetime.datetime.now() - startedGather).seconds))
         relevance = []
         indiv=None
         for m in members:
@@ -1920,7 +1924,7 @@ class Cyberlog(commands.Cog):
         if len(embeds) > 0 and indiv is None: 
             priority = embeds[relevance.index(max(relevance))]
             indiv=await self.evalInfo(priority, ctx.guild)
-            indiv.set_author(name='⭐Best match ({}% relevant)'.format(relevance[embeds.index(priority)]))
+            indiv.set_author(name='⭐Best match ({}% relevant)\n(React ⬅ to see all results)'.format(relevance[embeds.index(priority)]))
         else:
             if indiv is not None: indiv.set_author(name='⭐Best match: {}'.format(mainKeys[0]))
             if len(embeds) == 0 and indiv is None: 

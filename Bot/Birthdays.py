@@ -36,11 +36,13 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(hours=24)
     async def dailyBirthdayAnnouncements(self):
+        print('Checking daily birthday announcements')
         try:
             for member in self.bot.users:
                 bday = await database.GetMemberBirthday(member)
                 if bday is not None:
                     if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
+                        print(f'DMing {member.name} because it is their birthday')
                         age = await database.GetAge(member)
                         if age is not None:
                             age += 1
@@ -60,15 +62,18 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def serverBirthdayAnnouncements(self):
+        started = datetime.datetime.utcnow()
         try:
             for server in self.bot.guilds:
+                tz = Cyberlog.timeZone(server)
+                initial = started + datetime.timedelta(hours=tz)
                 channel = await database.GetBirthday(server)
                 if channel > 0:
-                    if (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%H:%M') == (await database.GetBirthdate(server)).strftime('%H:%M'):
+                    if (initial.strftime('%H:%M') == (await database.GetBirthdate(server)).strftime('%H:%M')):
                         for member in server.members:
                             bday = await database.GetMemberBirthday(member)
                             if bday is not None:
-                                if bday.strftime('%m%d') == (datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(server))).strftime('%m%d'):
+                                if bday.strftime('%m%d') == initial.strftime('%m%d'):
                                     print(f'Announcing birthday for {member.name}')
                                     messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
                                     toSend = '🍰 Hey hey, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
@@ -90,6 +95,7 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def configureDailyBirthdayAnnouncements(self):
+        print(datetime.datetime.utcnow().strftime('%H:%M'))
         if datetime.datetime.utcnow().strftime('%H:%M') == '11:45': 
             self.dailyBirthdayAnnouncements.start()
             self.configureDailyBirthdayAnnouncements.cancel()
@@ -130,7 +136,9 @@ class Birthdays(commands.Cog):
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             if any([message.content.startswith(w) for w in [ctx.prefix + 'bday', ctx.prefix + 'birthday']]): return #Don't auto detect birthday information is the user is using a command
-        if Cyberlog.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
+        try: 
+            if Cyberlog.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
+        except KeyError: pass
         self.bot.loop.create_task(self.messagehandler(message))
 
     async def messagehandler(self, message):
