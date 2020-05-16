@@ -264,11 +264,11 @@ async def GetServerCollection():
 
 async def GetAllServers():
     '''Return all servers...'''
-    return await servers.find()
+    return servers.find()
 
 async def GetAllUsers():
     '''Return all users...'''
-    return await users.find()
+    return users.find()
 
 async def GetUser(u: discord.User):
     '''Returns a global user'''

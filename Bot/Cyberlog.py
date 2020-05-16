@@ -145,11 +145,20 @@ class Cyberlog(commands.Cog):
 
     @tasks.loop(minutes=3)
     async def summarize(self):
+        print('Summarizing')
+        started = datetime.datetime.now()
         try:
+            print('Inside summarizing')
             global lightningLogging
             global lightningUsers
-            for s in self.bot.guilds: lightningLogging[s.id] = await database.GetServer(s)
-            for u in self.bot.users: lightningUsers[u.id] = await database.GetUser(u)
+            rawServers = await database.GetAllServers()
+            rawUsers = await database.GetAllUsers()
+            servers = {}
+            users = {}
+            async for s in rawServers: servers[s.get('server_id')] = s
+            async for u in rawUsers: users[u.get('user_id')] = u
+            for s in self.bot.guilds: lightningLogging[s.id] = servers.get(s.id)
+            for u in self.bot.users: lightningUsers[u.id] = users.get(u.id)
             for m in self.bot.get_all_members():
                 if m.status != discord.Status.offline: await updateLastOnline(m, datetime.datetime.now())
             for server in self.bot.guilds:
@@ -169,6 +178,7 @@ class Cyberlog(commands.Cog):
                 except Exception as e:
                     print('Invite management error: Server {}\n{}'.format(server.name, e))
         except Exception as e: print('Summarize error: {}'.format(e))
+        print(f'Done summarizing: {(datetime.datetime.now() - started).seconds}s')
 
     @tasks.loop(hours=24)
     async def DeleteAttachments(self):
@@ -590,7 +600,7 @@ class Cyberlog(commands.Cog):
         g = self.bot.get_guild(int(payload.data.get('guild_id'))) #Get the server of the edited message, return if not found (DMs; we don't track DM edits)
         if g is None: return
         rawReceived = datetime.datetime.utcnow()
-        received = (rawReceived + datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        received = (rawReceived + datetime.timedelta(hours=timeZone(g))).strftime('%b %d, %Y - %I:%M:%S %p')
         global edits
         channel = self.bot.get_channel(int(payload.data.get('channel_id'))) #Get the channel of the edited message
         try: after = await channel.fetch_message(payload.message_id) #Get the message object, and return if not found
@@ -668,6 +678,8 @@ class Cyberlog(commands.Cog):
             msg = await c.send(content='There was an error sending the original embed with the message edits, so available information is limited', file=f, embed=embed)
         embed.add_field(name="**Before** (Hover to view full content)", value=f"[{beforeC if len(beforeC) > 0 else '<Quick parser found no new content; ℹ to see full changes>'}]({msg.jump_url} '{before.strip()}')",inline=False)
         embed.add_field(name="**After** (Hover to view full content)", value=f"[{afterC if len(afterC) > 0 else '<Quick parser found no new content; ℹ to see full changes>'}]({msg.jump_url} '{after.content.strip()}')",inline=False)
+        if len(embed.fields[0].value) > 1024: embed.set_field_at(0, name='**Before**',value=beforeC if len(beforeC) in range(0, 1024) else '<Content is too long to be displayed>', inline=False)
+        if len(embed.fields[1].value) > 1024: embed.set_field_at(1, name='**After**',value=afterC if len(afterC) in range(0, 1024) else '<Content is too long to be displayed>', inline=False)
         await msg.edit(embed=embed)
         await VerifyLightningLogs(msg, 'message')
         if os.path.exists(savePath): os.remove(savePath)
@@ -798,9 +810,9 @@ class Cyberlog(commands.Cog):
         except IndexError: messageBefore = ''
         created += datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))
         embed.description='Author: {0} ({1})\nChannel: {2} • Jump to message [before]({3} \'{4}\') or [after]({5} \'{6}\') this one\nPosted: {7} {8}\nDeleted: {9} {8} ({10} later)'.format(author.mention if memberObject is not None else author.name, author.name if memberObject is not None else 'No longer in this server', channel.mention, messageBefore.jump_url if messageBefore != '' else '', messageBefore.content if messageBefore != '' else '', messageAfter.jump_url if messageAfter != '' else '', messageAfter.content if messageAfter != '' else '', created.strftime("%b %d, %Y - %I:%M:%S %p"), nameZone(bot.get_guild(payload.guild_id)), received, ' '.join(reversed(display)))
-        if message: embed.add_field(name="**Content**",value=f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else message.content if len(message.content) > 0 else "<Error retrieving content>")
-        else: embed.add_field(name='**Content**',value='<No content>' if len(content) < 1 else content)
-        for ext in ['.png', '.jpg', '.gif', '.webp']:
+        if message: embed.add_field(name="**Content**",value=message.content[:1024] if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<Error retrieving content>")
+        else: embed.add_field(name='**Content**',value='<No content>' if len(content) < 1 else content[:1024])
+        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
             if ext in content.lower():
                 if '://' in content:
                     url = content[message.content.find('http'):content.find(ext)+len(ext)+1]
@@ -832,6 +844,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when server channel is created'''
         content=None
+        savePath = None
         received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(channel.guild.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
         f=None
         if logEnabled(channel.guild, "channel"):
@@ -879,13 +892,15 @@ class Cyberlog(commands.Cog):
             embed.description+=f'\nPrecise timestamp: {received}'
             if channel.type[0] != 'category':
                 channelList = channel.category.channels if channel.category is not None else [c for c in channel.guild.channels if c.category is None]
-                indexes = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList) - 1)
-                embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:indexes[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:indexes[0]])}'){newline}" if indexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[indexes[0]:indexes[1]]])}{f"{newline}[Hover to view {len(channelList[indexes[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[indexes[1]:])}')" if indexes[1] + 5 < len(channelList) else ""}''')
+                cIndexes = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList) - 1)
+                embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:cIndexes[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:cIndexes[0]])}'){newline}" if cIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{newline}[Hover to view {len(channelList[cIndexes[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] + 5 < len(channelList) else ""}''')
             await msg.edit(embed=embed)
             await VerifyLightningLogs(msg, 'channel')
             if os.path.exists(savePath): os.remove(savePath)
-        if channel.category is not None: self.categories[channel.category.id].append(channel)
-        else: self.categories[channel.guild.id].append(channel)
+        try:
+            if channel.category is not None: self.categories[channel.category.id] = channel.category.channels
+            else: self.categories[channel.guild.id] = [c[1] for c in channel.guild.by_category() if c[0] is None]
+        except discord.Forbidden: pass
         if type(channel) is discord.TextChannel:
             path = "{}/{}/{}".format(indexes, channel.guild.id, channel.id)
             try: os.makedirs(path)
@@ -900,6 +915,7 @@ class Cyberlog(commands.Cog):
         f = None
         if logEnabled(before.guild, "channel"):
             content=None
+            savePath = None
             embed=discord.Embed(title=f'{self.channelKeys.get(after.type[0])}✏{after.type[0][0].upper() + after.type[0][1:]} Channel was updated', description=before.mention if before.type[0] == 'text' else before.name,color=blue,timestamp=datetime.datetime.utcnow())
             embed.description+=f' (Press ℹ to view channel details)'
             reactions = ['ℹ']
@@ -924,7 +940,7 @@ class Cyberlog(commands.Cog):
                     indexes = [] #Channel, before index, after index
                     for i in range(len(before.category.channels)): indexes.append({'before': bc.index(before.category.channels[i]), 'after': after.category.channels.index(before.category.channels[i]), 'channel': after.category.channels[i]})
                     embed.add_field(name='Channel position changed [BETA]',value=f'''📁{before.category.name}\n{newline.join([f'{self.channelKeys.get(indexes[c].get("channel").type[0])}' + ('__**' if indexes[c].get('channel').id == before.id else '') + f'{indexes[c].get("channel").name} ' + ('**__' if indexes[c].get('channel').id == before.id else '') + ('↩' if abs(indexes[c].get('before') - indexes[c].get('after')) > 1 else '⬆' if indexes[c].get('before') > indexes[c].get('after') else '⬇' if indexes[c].get('before') < indexes[c].get('after') else '') + (f'{newline}~~{self.channelKeys.get(before.type[0])}{before.name}~~❌' if bc.index(before) == c else '') for c in range(len(indexes))])}''')
-                    self.categories[before.category.id] = before.category.channels
+                    self.categories[before.category.id] = after.category.channels
             if before.overwrites != after.overwrites:
                 embed.add_field(name='**Permission overwrites updated**',value='Manually react 🇵 to show/hide') #The rest of this code is later because we need a message link to the current message
             if before.name != after.name: 
@@ -1027,8 +1043,8 @@ class Cyberlog(commands.Cog):
         if type(before) is discord.TextChannel and before.name != after.name: await asyncio.gather(database.VerifyServer(after.guild, bot))
         if logEnabled(before.guild, 'channel'):
             final = copy.deepcopy(embed)
-            try:
-                while True:
+            while True:
+                try:
                     def reactionCheck(r, u): return str(r) in ('🇵', 'ℹ') and r.message.id == message.id and not u.bot
                     r = await self.bot.wait_for('reaction_add', check=reactionCheck)
                     if str(r[0]) == '🇵':
@@ -1050,7 +1066,7 @@ class Cyberlog(commands.Cog):
                         await message.edit(content=content,embed=final)
                         await message.clear_reactions()
                         for r in reactions: await message.add_reaction(r)
-            except: pass
+                except: pass
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
@@ -1059,6 +1075,7 @@ class Cyberlog(commands.Cog):
         if logEnabled(channel.guild, "channel"):
             content=None
             f = None
+            savePath = None
             embed=discord.Embed(title=f'{self.channelKeys.get(channel.type[0])}❌{channel.type[0][0].upper() + channel.type[0][1:]} Channel was deleted', description=channel.name,color=0xff0000,timestamp=datetime.datetime.utcnow())
             if readPerms(channel.guild, "channel"):
                 try:
@@ -1079,8 +1096,8 @@ class Cyberlog(commands.Cog):
                 channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)                
                 startEnd = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList) - 1)
                 embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:startEnd[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:startEnd[0]])}'){newline}" if startEnd[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{newline}[Hover to view {len(channelList[startEnd[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] + 5 < len(channelList) else ""}''')
-                if channel.category is not None: self.categories[channel.id].pop(channel, None)
-                else: self.categories[channel.guild.id].pop(channel, None)
+                if channel.category is not None: self.categories[channel.category.id].remove(channel)
+                else: self.categories[channel.guild.id].remove(channel)
             if channel.type[0] == 'text': 
                 try: embed.add_field(name='**Message count**',value=len(os.listdir(f'{indexes}/{channel.guild.id}/{channel.id}')))
                 except: embed.add_field(name='**Message count**',value=0)
@@ -2190,14 +2207,15 @@ class Cyberlog(commands.Cog):
         nz = nameZone(m.guild)
         embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=m.color)
         mA = lastActive(m) #The dict (timestamp and reason) when a member was last active
-        membOnline = datetime.datetime.now() - (lastOnline(m) + datetime.timedelta(hours=timeZone(m.guild) + 4)) #the timedelta between now and member's last online appearance, with adjustments for timezones
-        membActive = mA.get('timestamp') #The timestamp value when a member was last active, with adjustments for timezones
+        activeTimestamp = mA.get('timestamp') + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
+        onlineTimestamp = lastOnline(m) + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
+        onlineDelta = (datetime.datetime.now() - lastOnline(m)) #the timedelta between now and member's last online appearance
+        activeDelta = (datetime.datetime.now() - mA.get('timestamp')) #The timedelta between now and when a member was last active
         units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
-        membActive = datetime.datetime.now() - (membActive + datetime.timedelta(hours=timeZone(m.guild) + 4)) #The timedelta between now and when a member was last active
-        hours, minutes, seconds = membActive.seconds // 3600, (membActive.seconds // 60) % 60, membActive.seconds - (membActive.seconds // 3600) * 3600 - ((membActive.seconds // 60) % 60)*60
-        activeTimes = [seconds, minutes, hours, membActive.days] #List of self explanatory values
-        hours, minutes, seconds = membOnline.seconds // 3600, (membOnline.seconds // 60) % 60, membOnline.seconds - (membOnline.seconds // 3600) * 3600 - ((membOnline.seconds // 60) % 60)*60
-        onlineTimes = [seconds, minutes, hours, membOnline.days]
+        hours, minutes, seconds = activeDelta.seconds // 3600, (activeDelta.seconds // 60) % 60, activeDelta.seconds - (activeDelta.seconds // 3600) * 3600 - ((activeDelta.seconds // 60) % 60)*60
+        activeTimes = [seconds, minutes, hours, activeDelta.days] #List of self explanatory values
+        hours, minutes, seconds = onlineDelta.seconds // 3600, (onlineDelta.seconds // 60) % 60, onlineDelta.seconds - (onlineDelta.seconds // 3600) * 3600 - ((onlineDelta.seconds // 60) % 60)*60
+        onlineTimes = [seconds, minutes, hours, onlineDelta.days]
         activeDisplay = []
         onlineDisplay = []
         for i in range(len(activeTimes)):
@@ -2205,8 +2223,8 @@ class Cyberlog(commands.Cog):
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         if len(activeDisplay) == 0: activeDisplay = ['0s']
         activities = {discord.Status.online: self.online, discord.Status.idle: self.idle, discord.Status.dnd: self.dnd, discord.Status.offline: self.offline}
-        embed.description='{}{} {}\n\n{}Last active {} {} - {} ago ({}){}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
-            'Last online {} {} - {} ago\n'.format(lastOnline(m).strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(onlineDisplay))[0]) if m.status == discord.Status.offline else '', mA.get('timestamp').strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(activeDisplay))[0], mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
+        embed.description='{}{} {}\n\n{}Last active {} {} • {} ago ({}){}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
+            'Last online {} {} • {} ago\n'.format(onlineTimestamp.strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(onlineDisplay))[0]) if m.status == discord.Status.offline else '', activeTimestamp.strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(activeDisplay))[0], mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:

@@ -95,7 +95,6 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def configureDailyBirthdayAnnouncements(self):
-        print(datetime.datetime.utcnow().strftime('%H:%M'))
         if datetime.datetime.utcnow().strftime('%H:%M') == '11:45': 
             self.dailyBirthdayAnnouncements.start()
             self.configureDailyBirthdayAnnouncements.cancel()
@@ -138,7 +137,7 @@ class Birthdays(commands.Cog):
             if any([message.content.startswith(w) for w in [ctx.prefix + 'bday', ctx.prefix + 'birthday']]): return #Don't auto detect birthday information is the user is using a command
         try: 
             if Cyberlog.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
-        except KeyError: pass
+        except AttributeError: pass
         self.bot.loop.create_task(self.messagehandler(message))
 
     async def messagehandler(self, message):
