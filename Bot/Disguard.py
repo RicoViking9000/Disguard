@@ -217,13 +217,13 @@ async def lexy(ctx):
 
 @bot.command(aliases=['max'])
 async def _max(ctx):
-    if ctx.author not in bot.get_guild(611301150129651763).members: return
+    if not any([ctx.author in bot.get_guild(g).members for g in [611301150129651763, 709588078779695115]]): return
     r = fileAbstraction(bot.get_emoji(696789467901591683), 'M A X', 'Max')
     await ctx.send(embed=r[0],file=r[1])
 
 @bot.command(aliases=['davey'])
 async def david(ctx):
-    if ctx.author not in bot.get_guild(611301150129651763).members: return
+    if not any([ctx.author in bot.get_guild(g).members for g in [611301150129651763, 709588078779695115]]): return
     r = fileAbstraction(bot.get_emoji(708847959642603580), 'D A V I D', 'David')
     await ctx.send(embed=r[0],file=r[1])
 

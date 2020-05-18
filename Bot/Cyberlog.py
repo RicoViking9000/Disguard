@@ -151,12 +151,12 @@ class Cyberlog(commands.Cog):
             print('Inside summarizing')
             global lightningLogging
             global lightningUsers
-            rawServers = await database.GetAllServers()
-            rawUsers = await database.GetAllUsers()
+            rawServers = await (await database.GetAllServers()).to_list(None)
+            rawUsers = await (await database.GetAllUsers()).to_list(None)
             servers = {}
             users = {}
-            async for s in rawServers: servers[s.get('server_id')] = s
-            async for u in rawUsers: users[u.get('user_id')] = u
+            for s in rawServers: servers[s.get('server_id')] = s
+            for u in rawUsers: users[u.get('user_id')] = u
             for s in self.bot.guilds: lightningLogging[s.id] = servers.get(s.id)
             for u in self.bot.users: lightningUsers[u.id] = users.get(u.id)
             for m in self.bot.get_all_members():
@@ -262,7 +262,7 @@ class Cyberlog(commands.Cog):
         if destination is None: return
         pinned = (await message.channel.pins())[0]
         embed=discord.Embed(title='📌Message was pinned',description='Pinned by: {} ({})\nAuthored by: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {}'.format(message.author.mention, message.author.name, pinned.author.mention, pinned.author.name, pinned.channel.mention, pinned.jump_url, received),color=blue,timestamp=datetime.datetime.utcnow())
-        embed.add_field(name='Message', value=pinned.content)
+        embed.add_field(name='**Message**', value=pinned.content)
         embed.set_footer(text='Pinned message ID: {}'.format(pinned.id))
         await destination.send(embed=embed)
         try: self.pins[pinned.channel.id].append(pinned.id)
@@ -638,7 +638,7 @@ class Cyberlog(commands.Cog):
             if after.id in self.pins.get(after.channel.id) and not after.pinned: #Message was unpinned
                 eventMessage = [m for m in await after.channel.history(limit=2).flatten() if m.type is discord.MessageType.pins_add][0]
                 embed=discord.Embed(title='🚫📌Message was unpinned',description='Unpinned by: {} ({})\nAuthored by: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {}'.format(eventMessage.author.mention, eventMessage.author.name, after.author.mention, after.author.name, after.channel.mention, after.jump_url, received),color=blue,timestamp=datetime.datetime.utcnow())
-                embed.add_field(name='Message', value=after.content)
+                embed.add_field(name='**Message**', value=after.content)
                 embed.set_footer(text='Unpinned message ID: {}'.format(after.id))
                 await c.send(embed=embed)
                 self.pins[after.channel.id].remove(after.id)
@@ -882,18 +882,26 @@ class Cyberlog(commands.Cog):
             roleUnaccessibleNewline = ' ' if len(unaccessibleRoles) > 20 else newline
             accessibleTail = f'ROLES\n{roleAccessibleNewline.join([f"🚩 {r.name}" for r in accessibleRoles])}\n\nMEMBERS\n{memberAccessibleNewline.join([f"👮 {m.name}" for m in accessibleMembers])}'
             unaccessibleTail = f'ROLES\n{roleUnaccessibleNewline.join([f"🚩 {r.name}" for r in unaccessibleRoles])}\n\nMEMBERS\n{memberUnaccessibleNewline.join([f"👮 {m.name}" for m in unaccessibleMembers])}'
-            if channel.overwrites_for(channel.guild.default_role).read_messages is not False: embed.description+=f'''\n[Accessible to: **Everyone by default**]({msg.jump_url} '{accessibleTail}')'''
+            if channel.overwrites_for(channel.guild.default_role).read_messages is not False: tempAccessibleString = f'''\n[Accessible to: **Everyone by default**]({msg.jump_url} '{accessibleTail}')'''
             else:
-                if sum(len(obj.name) for obj in accessible) > 32 or len(accessible) == 0: embed.description+=f'''\n[Accessible to: {len(accessibleRoles)} roles ({len(accessibleMembers)} members)]({msg.jump_url} '{accessibleTail}')'''
-                else: embed.description+=f'''\n[Accessible to: {" • ".join([f'{keytypes.get(type(o))}{o.name}' for o in accessible])}]({msg.jump_url} '{accessibleTail}')'''
+                if sum(len(obj.name) for obj in accessible) > 32 or len(accessible) == 0: tempAccessibleString = f'''\n[Accessible to: {len(accessibleRoles)} roles ({len(accessibleMembers)} members)]({msg.jump_url} '{accessibleTail}')'''
+                else: tempAccessibleString = f'''\n[Accessible to: {" • ".join([f'{keytypes.get(type(o))}{o.name}' for o in accessible])}]({msg.jump_url} '{accessibleTail}')'''
             if len(unaccessible) > 0: #At least one member or role can't access this channel by default
-                if sum(len(obj.name) for obj in unaccessible) > 28: embed.description+=f'''\n[Not accessible to: {len(unaccessibleRoles)} roles ({len(unaccessibleMembers)} members)]({msg.jump_url} '{unaccessibleTail}')'''
-                else: embed.description+=f'''\n[Not accessible to: {" • ".join([f'{keytypes.get(type(o))}{o.name}' for o in unaccessible])}]({msg.jump_url} '{unaccessibleTail}')'''
+                if sum(len(obj.name) for obj in unaccessible) > 28: tempUnaccessibleString = f'''\n[Not accessible to: {len(unaccessibleRoles)} roles ({len(unaccessibleMembers)} members)]({msg.jump_url} '{unaccessibleTail}')'''
+                else: tempUnaccessibleString = f'''\n[Not accessible to: {" • ".join([f'{keytypes.get(type(o))}{o.name}' for o in unaccessible])}]({msg.jump_url} '{unaccessibleTail}')'''
+            else: tempUnaccessibleString = ''
+            if len(tempAccessibleString) + len(tempUnaccessibleString) > 1900:
+                trimmedAccessibleString = tempAccessibleString[tempAccessibleString.find('[')+1:tempAccessibleString.find(']')]
+                trimmedUnaccessibleString = f"\n{tempUnaccessibleString[tempUnaccessibleString.find('[')+1:tempUnaccessibleString.find(']')]}"
+                if len(tempAccessibleString) + len(trimmedUnaccessibleString) < 1900: embed.description+=f'{tempAccessibleString}{trimmedUnaccessibleString}'
+                elif len(trimmedAccessibleString) + len(tempUnaccessibleString) < 1900: embed.description+=f'{trimmedAccessibleString}{tempUnaccessibleString}'
+                elif len(trimmedAccessibleString) + len(trimmedUnaccessibleString) < 1900: embed.description+=f'{trimmedAccessibleString}{trimmedUnaccessibleString}'
+            else: embed.description+=f'{tempAccessibleString}{tempUnaccessibleString}'
             embed.description+=f'\nPrecise timestamp: {received}'
             if channel.type[0] != 'category':
                 channelList = channel.category.channels if channel.category is not None else [c for c in channel.guild.channels if c.category is None]
-                cIndexes = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList) - 1)
-                embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:cIndexes[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:cIndexes[0]])}'){newline}" if cIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{newline}[Hover to view {len(channelList[cIndexes[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] + 5 < len(channelList) else ""}''')
+                cIndexes = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList))
+                embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:cIndexes[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:cIndexes[0]])}'){newline}" if cIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{newline}[Hover to view {len(channelList[cIndexes[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}''')
             await msg.edit(embed=embed)
             await VerifyLightningLogs(msg, 'channel')
             if os.path.exists(savePath): os.remove(savePath)
@@ -978,10 +986,10 @@ class Cyberlog(commands.Cog):
                 if type(before) is not discord.CategoryChannel and before.category != after.category:
                     oldChannelList = self.categories.get(before.category.id) if before.category is not None else self.categories.get(before.guild.id)
                     newChannelList = after.category.channels if after.category is not None else [c[1] for c in after.guild.by_category() if c[0] is None]
-                    oldIndexes = (oldChannelList.index(after) - 3 if oldChannelList.index(after) >= 3 else 0, oldChannelList.index(after) + 4 if oldChannelList.index(after) + 4 < len(oldChannelList) else len(oldChannelList) - 1)
-                    newIndexes = (newChannelList.index(after) - 3 if newChannelList.index(after) >= 3 else 0, newChannelList.index(after) + 4 if newChannelList.index(after) + 4 < len(newChannelList) else len(newChannelList) - 1)
-                    embed.add_field(name="**Old Category**",value=f'''📁{before.category}\n{f"[...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channels]({message.jump_url} '{newline.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){newline}" if oldIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{newline}[Hover to view {len(oldChannelList[oldIndexes[1]:])} more channels...]({message.jump_url} '{newline.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] + 5 < len(oldChannelList) else ""}''')
-                    embed.add_field(name="**New Category**",value=f'''📁{after.category}\n{f"[...Hover to view {len(newChannelList[:newIndexes[0]])} more channels]({message.jump_url} '{newline.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){newline}" if newIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{newline}[Hover to view {len(newChannelList[newIndexes[1]:])} more channels...]({message.jump_url} '{newline.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] + 5 < len(newChannelList) else ""}''')
+                    oldIndexes = (oldChannelList.index(after) - 3 if oldChannelList.index(after) >= 3 else 0, oldChannelList.index(after) + 4 if oldChannelList.index(after) + 4 < len(oldChannelList) else len(oldChannelList))
+                    newIndexes = (newChannelList.index(after) - 3 if newChannelList.index(after) >= 3 else 0, newChannelList.index(after) + 4 if newChannelList.index(after) + 4 < len(newChannelList) else len(newChannelList))
+                    embed.add_field(name="**Old Category**",value=f'''📁{before.category}\n{f"[...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channels]({message.jump_url} '{newline.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){newline}" if oldIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{newline}[Hover to view {len(oldChannelList[oldIndexes[1]:])} more channels...]({message.jump_url} '{newline.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] < len(oldChannelList) else ""}''')
+                    embed.add_field(name="**New Category**",value=f'''📁{after.category}\n{f"[...Hover to view {len(newChannelList[:newIndexes[0]])} more channels]({message.jump_url} '{newline.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){newline}" if newIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{newline}[Hover to view {len(newChannelList[newIndexes[1]:])} more channels...]({message.jump_url} '{newline.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] < len(newChannelList) else ""}''')
                 if before.overwrites != after.overwrites:
                     b4 = {} #Before permissions
                     af = {} #After permissions
@@ -1094,8 +1102,8 @@ class Cyberlog(commands.Cog):
             msg = await logChannel(channel.guild, "channel").send(content=content,embed=embed,file=f)
             if channel.type[0] != 'category':
                 channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)                
-                startEnd = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList) - 1)
-                embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:startEnd[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:startEnd[0]])}'){newline}" if startEnd[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{newline}[Hover to view {len(channelList[startEnd[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] + 5 < len(channelList) else ""}''')
+                startEnd = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList))
+                embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:startEnd[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:startEnd[0]])}'){newline}" if startEnd[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{newline}[Hover to view {len(channelList[startEnd[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}''')
                 if channel.category is not None: self.categories[channel.category.id].remove(channel)
                 else: self.categories[channel.guild.id].remove(channel)
             if channel.type[0] == 'text': 
@@ -1776,7 +1784,7 @@ class Cyberlog(commands.Cog):
             try: await m.clear_reactions()
             except: pass
             await m.edit(content=self.loading)
-            embed=discord.Embed(title='⚠An error has occured⚠',description=f"{error}\n\n⬆: Collapse information\n{self.disguard}: Send this to my developer via my official server\n\n[Hover for traceback]({m.jump_url} '{''.join(traceback.format_exception(type(error), error, error.__traceback__, 4))}')",timestamp=datetime.datetime.utcnow(),color=red)
+            embed=discord.Embed(title='⚠An error has occured⚠',description=f'''{error}\n\n⬆: Collapse information\n{self.disguard}: Send this to my developer via my official server\n\n[Hover for traceback]({m.jump_url} '{''.join(traceback.format_exception(type(error), error, error.__traceback__, 4))}')''',timestamp=datetime.datetime.utcnow(),color=red)
             embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
             embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id) if ctx.guild is not None else 'N/A')
             embed.add_field(name='Channel',value='{} ({}){}'.format(ctx.channel.name, ctx.channel.id, '(NSFW)' if ctx.channel.is_nsfw() else '') if type(ctx.channel) is discord.TextChannel else 'DMs')
