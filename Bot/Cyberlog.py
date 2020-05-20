@@ -151,16 +151,19 @@ class Cyberlog(commands.Cog):
             print('Inside summarizing')
             global lightningLogging
             global lightningUsers
+            started = datetime.datetime.now()
             rawServers = await (await database.GetAllServers()).to_list(None)
             rawUsers = await (await database.GetAllUsers()).to_list(None)
+            print(f'Listed in {(datetime.datetime.now() - started).seconds}s')
             servers = {}
             users = {}
             for s in rawServers: servers[s.get('server_id')] = s
             for u in rawUsers: users[u.get('user_id')] = u
             for s in self.bot.guilds: lightningLogging[s.id] = servers.get(s.id)
             for u in self.bot.users: lightningUsers[u.id] = users.get(u.id)
-            for m in self.bot.get_all_members():
-                if m.status != discord.Status.offline: await updateLastOnline(m, datetime.datetime.now())
+            await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in self.bot.get_all_members() if m.status != discord.Status.offline])
+            #for m in self.bot.get_all_members():
+            #    if m.status != discord.Status.offline: await updateLastOnline(m, datetime.datetime.now())
             for server in self.bot.guilds:
                 for c in server.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]

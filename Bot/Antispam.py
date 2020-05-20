@@ -38,7 +38,7 @@ class Antispam(commands.Cog):
             return
         server = Cyberlog.lightningLogging.get(message.guild.id)
         spam = server.get('antispam')
-        if not spam.get('enabled'): return #return if antispam isn't enabled
+        if not spam or not spam.get('enabled'): return #return if antispam isn't enabled
         self.bot.loop.create_task(self.filterAntispam(message, spam))
 
 
