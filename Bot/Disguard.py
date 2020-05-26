@@ -227,6 +227,13 @@ async def david(ctx):
     r = fileAbstraction(bot.get_emoji(708847959642603580), 'D A V I D', 'David')
     await ctx.send(embed=r[0],file=r[1])
 
+@commands.is_owner()
+@bot.command()
+async def zeroServers(ctx):
+    status = await ctx.send('Ok')
+    for g in bot.guilds: await database.ZeroRepeatedJoins(g)
+    await status.edit(content='Done')
+
 
 database.Initialize(secure.token())
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot

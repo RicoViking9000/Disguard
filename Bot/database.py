@@ -575,6 +575,13 @@ async def NameVerify(s: discord.Guild):
     '''Verifies a server by name to counter the database code error'''
     await servers.update_one({'name': s.name}, {'$set': {'server_id': s.id}}, True)
 
+async def ZeroRepeatedJoins(s: discord.Guild):
+    await servers.update_one({'server_id': s.id}, {'$set': {'antispam.repeatedJoins': [0, 0, 0]}}, True)
+
+async def AppendMemberJoinEvent(s: discord.Guild, m: discord.Member):
+    '''Appends a member join event to a server's log, uses for member join logs'''
+    await servers.update_one({'server_id': s.id}, {'$push': {'cyberlog.joinLogHistory': {'id': m.id, 'timestamp': datetime.datetime.utcnow()}}})
+
 async def GetNamezone(s: discord.Guild):
     '''Return the custom timezone name for a given server'''
     return (await servers.find_one({"server_id": s.id})).get('tzname')
