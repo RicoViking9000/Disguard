@@ -50,14 +50,11 @@ class Birthdays(commands.Cog):
                         new = datetime.datetime(bday.year + 1, bday.month, bday.day)
                         await database.SetBirthday(member, new)
                         messages = await database.GetBirthdayMessages(member)
-                        try: dummyMessage = await member.send('🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name))
-                        except: continue
                         embed=discord.Embed(title='🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name), timestamp=datetime.datetime.utcnow(), color=yellow)
-                        if len(messages) > 0: 
-                            embed.description='You have {} personal messages. All messages will be fit into this embed, so if any messages are truncated due to space constraints, hover over the hyperlink to see the entire message.\n{:–^70}\n{}'.format(len(messages), 'Messages', '\n'.join(['• {}: {} (sent @ {})'.format(m.get('authName') if self.bot.get_user(m.get('author')) is None else self.bot.get_user(m.get('author')).mention,
-                            f"[{m.get('message')[:1800 // len(messages)]}]({dummyMessage.jump_url} '{m.get('message')}')", 'N/A' if m.get('created') is None else (m.get('created') + datetime.timedelta(hours=-4)).strftime("%b %d, %Y - %I:%M %p EDT")) for m in messages]))
+                        if len(messages) > 0: embed.description=f'You have {len(messages)} personal messages that will be sent below this message.'
                         else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
-                        await dummyMessage.edit(content=None, embed=embed)
+                        await member.send(embed=embed)
+                        for m in messages: await member.send(discord.Embed(title=f'Personal Birthday Message from {m.get("authName")}', description=m.get('message'), timestamp=m.get('created'), color=yellow))
         except: traceback.print_exc()
 
     @tasks.loop(minutes=5)
@@ -76,7 +73,7 @@ class Birthdays(commands.Cog):
                                 if bday.strftime('%m%d') == initial.strftime('%m%d'):
                                     print(f'Announcing birthday for {member.name}')
                                     messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
-                                    toSend = '🍰 Hey hey, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
+                                    toSend = '🍰 Greetings {}, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(server.name, member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
                                     '\n'.join(['• {}: {}'.format(server.get_member(m.get('author')).name, m.get('message')) for m in messages])))
                                     try: 
                                         m = await self.bot.get_channel(channel).send(toSend)
@@ -197,7 +194,6 @@ class Birthdays(commands.Cog):
             await mess.add_reaction('✅')
             await ageContinuation(self, age, message.author, mess, draft)
 
-    
     @commands.guild_only()
     @commands.command(aliases=['bday'])
     async def birthday(self, ctx, *args):
@@ -380,21 +376,22 @@ async def messageManagement(self, ctx, message, user, groups):
         message.embeds[0].title = '🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📜 Messages / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 📜 Messages / 🏠 Home'))
         await message.edit(embed=message.embeds[0])
         await message.clear_reactions()
-        for r in (['⬅️'] + letters[:bulletCount] + ['🔎']): await message.add_reaction(r)
+        for r in (['⬅'] + letters[:bulletCount] + ['🔎']): await message.add_reaction(r)
         def sendCheck(r, u): return u == ctx.author and r.message.id == message.id and str(r) in ['⬅️'] + letters[:bulletCount] + ['🔎']
         try: stuff = await self.bot.wait_for('reaction_add', check=sendCheck, timeout=180)
         except asyncio.TimeoutError: return await messageManagementTimeout(message, oldEmbed)
         await message.remove_reaction(stuff[0], stuff[1])
         if str(stuff[0]) != '🔎': 
-            if str(stuff[0]) == '⬅️': return await messageManagementTimeout(message, oldEmbed)
+            if str(stuff[0]) == '⬅': return await messageManagementTimeout(message, oldEmbed)
             target = allGroups[letters.index(str(stuff[0]))].get('data')
         else: #Let user search for who they want their message to go to
             message.embeds[0].title = '🍰 Birthdays / 📜 Messages / 🔎 Search'
             message.embeds[0].description = 'Type a search term for your desired member. The search will match members\'s uernames, nicknames, IDs, discriminators, and many more criteria'
             await message.clear_reactions()
             await message.edit(embed=message.embeds[0])
+            await message.add_reaction('⬅')
             def queryCheck(m): return m.author == ctx.author and m.channel.id == ctx.channel.id
-            def paginationCheck(r, u): return str(r) in letters + ['◀', '▶'] and u == ctx.author and r.message.id == message.id
+            def paginationCheck(r, u): return str(r) in letters + ['◀', '▶', '⬅'] and u == ctx.author and r.message.id == message.id
             while True:
                 d, p = await asyncio.wait([self.bot.wait_for('message', check=queryCheck, timeout=180), self.bot.wait_for('reaction_add', check=paginationCheck, timeout=180)], return_when=asyncio.FIRST_COMPLETED)
                 try: result = d.pop().result()
@@ -419,7 +416,7 @@ async def messageManagement(self, ctx, message, user, groups):
                     else: 
                         for r in ['◀', '▶']: await message.remove_reaction(r, self.bot.user)
                 else:
-                    #reactions = len([m for m in await ctx.channel.history(limit=5).flatten() if m.id == message.id][0].reactions)
+                    if str(result[0]) == '⬅': return await messageManagementTimeout(message, oldEmbed)
                     reactions = len((await ctx.channel.fetch_message(message.id)).reactions)
                     if len(pages) > 1 and str(result[0]) in ['◀', '▶']:
                         if str(result[0]) == '◀' and pageData[2] > 0:

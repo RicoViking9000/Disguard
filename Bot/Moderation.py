@@ -42,11 +42,19 @@ class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.has_guild_permissions(manage_channels=True)
+    @commands.command()
+    async def unlock(self, ctx, member: discord.Member):
+        status = await ctx.send(f'{loading}Unlocking...')
+        for c in ctx.guild.text_channels: await c.set_permissions(m, overwrite=None)
+        await status.edit(content=f'{m.name} is now unlocked and can access channels again.')
+
     @commands.command()
     async def purge(self, ctx, *args):
         '''Purge messages'''
         global current
         global loading
+        global filters
         filters[ctx.guild.id] = PurgeObject()
         current = filters.get(ctx.guild.id)
         if not (GetManageMessagePermissions(ctx.author) and GetManageMessagePermissions(ctx.guild.me)) and ('purge:true' in args or len(args) == 1):
@@ -493,7 +501,7 @@ class Moderation(commands.Cog):
             else: embed.description+='Time taken: {} minutes'.format(round(timeTaken.seconds / 60))
             embed.set_footer(text='If you have feedback, head to bit.ly/2disguard to find more information')
             if len(embed.fields) > 0: embed.remove_field(0)
-            return await message.edit(content='This message will self destruct in T-minus 60 seconds',embed=embed,delete_after=60)
+            return await message.edit(embed=embed)
         current.botMessage = await ctx.send(str(loading)+"Parsing filters...")
         actuallyPurge = False
         current.channel.append(ctx.channel)

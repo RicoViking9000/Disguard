@@ -76,10 +76,10 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
             except:
                 pass
         await database.Verification(bot)
-        await Antispam.PrepareFilters(bot)
+        #await Antispam.PrepareMembers(bot)
         await bot.get_cog('Birthdays').updateBirthdays()
         # easterAnnouncement.start()
-        Cyberlog.ConfigureSummaries(bot)
+        #Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
         print('Starting indexing...')
         for server in bot.guilds:
@@ -229,10 +229,9 @@ async def david(ctx):
 
 @commands.is_owner()
 @bot.command()
-async def zeroServers(ctx):
-    status = await ctx.send('Ok')
-    for g in bot.guilds: await database.ZeroRepeatedJoins(g)
-    await status.edit(content='Done')
+async def test(ctx):
+    print((await bot.fetch_user(128617298301943808)).bot)
+    await ctx.send('Printed')
 
 
 database.Initialize(secure.token())

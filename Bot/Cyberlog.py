@@ -18,13 +18,12 @@ imageLogChannel = discord.TextChannel
 serverPurge = {}
 summarizeOn=False
 secondsInADay = 3600 * 24
+units = ['second', 'minute', 'hour', 'day']
 indexes = 'Indexes'
 tempDir = 'Attachments/Temp' #Path to save images for profile picture changes and other images in logs
 try: os.makedirs(tempDir)
 except FileExistsError: pass
 
-invites = {}
-edits = {}
 summaries = {}
 grabbedSummaries = {}
 indexed = {}
@@ -134,6 +133,7 @@ class Cyberlog(commands.Cog):
         self.repeatedJoins = {}
         self.pins = {}
         self.categories = {}
+        self.invites = {}
         self.rawMessages = {}
         self.pauseDelete = []
         self.summarize.start()
@@ -147,41 +147,46 @@ class Cyberlog(commands.Cog):
     async def summarize(self):
         print('Summarizing')
         started = datetime.datetime.now()
+        rawStarted = datetime.datetime.now()
         try:
             print('Inside summarizing')
             global lightningLogging
             global lightningUsers
+            global members
             started = datetime.datetime.now()
             rawServers = await (await database.GetAllServers()).to_list(None)
             rawUsers = await (await database.GetAllUsers()).to_list(None)
             print(f'Listed in {(datetime.datetime.now() - started).seconds}s')
             servers = {}
             users = {}
+            started = datetime.datetime.now()
             for s in rawServers: servers[s.get('server_id')] = s
             for u in rawUsers: users[u.get('user_id')] = u
-            for s in self.bot.guilds: lightningLogging[s.id] = servers.get(s.id)
-            for u in self.bot.users: lightningUsers[u.id] = users.get(u.id)
-            await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in self.bot.get_all_members() if m.status != discord.Status.offline])
-            #for m in self.bot.get_all_members():
-            #    if m.status != discord.Status.offline: await updateLastOnline(m, datetime.datetime.now())
-            for server in self.bot.guilds:
-                for c in server.text_channels: 
+            for s in self.bot.guilds: 
+                lightningLogging[s.id] = servers.get(s.id)
+                members[s.id] = s.members
+                for c in s.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
                     except discord.Forbidden: pass
-                for c in server.categories:
+                for c in s.categories:
                     try: self.categories[c.id] = c.channels
                     except discord.Forbidden: pass
-                try: self.categories[server.id] = [c[1] for c in server.by_category() if c[0] is None]
+                try: self.categories[s.id] = [c[1] for c in s.by_category() if c[0] is None]
                 except discord.Forbidden: pass
-            for server in bot.guilds:
                 try:
-                    invites[str(server.id)] = await server.invites()
-                    try: invites[str(server.id)+"_vanity"] = (await server.vanity_invite()).uses
+                    self.invites[str(s.id)] = await s.invites()
+                    try: self.invites[str(s.id)+"_vanity"] = (await s.vanity_invite())
                     except: pass
-                except Exception as e:
-                    print('Invite management error: Server {}\n{}'.format(server.name, e))
+                except discord.Forbidden: pass
+                except Exception as e: print('Invite management error: Server {}\n{}'.format(s.name, e))
+            for u in self.bot.users: lightningUsers[u.id] = users.get(u.id)
+            print(f'Populated in {(datetime.datetime.now() - started).seconds}s')
+            started = datetime.datetime.now()                
+            memberList = self.bot.get_all_members()
+            await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in memberList if m.status != discord.Status.offline])               
+            print(f'Status management done in {(datetime.datetime.now() - started).seconds}s')
         except Exception as e: print('Summarize error: {}'.format(e))
-        print(f'Done summarizing: {(datetime.datetime.now() - started).seconds}s')
+        print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
 
     @tasks.loop(hours=24)
     async def DeleteAttachments(self):
@@ -247,7 +252,7 @@ class Cyberlog(commands.Cog):
                     if result is None: return
                     if len(result.embeds) == 0:
                         embed=discord.Embed(description=result.content)
-                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y - %I:%M %p} {nameZone(message.guild)}')
+                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y • %I:%M %p} {nameZone(message.guild)}')
                         embed.set_author(name=result.author.name,icon_url=result.author.avatar_url)
                         if len(result.attachments) > 0 and result.attachments[0].height is not None:
                             try: embed.set_image(url=result.attachments[0].url)
@@ -260,7 +265,7 @@ class Cyberlog(commands.Cog):
                         return await message.channel.send(content=result.content,embed=result.embeds[0])
 
     async def pinAddLogging(self, message: discord.Message):
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(message.guild.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(message.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         destination = logChannel(message.guild, 'message')
         if destination is None: return
         pinned = (await message.channel.pins())[0]
@@ -275,7 +280,6 @@ class Cyberlog(commands.Cog):
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         ej = payload.emoji
         global bot
-        global edits
         global grabbedSummaries
         u = self.bot.get_user(payload.user_id)
         if u.bot: return
@@ -291,28 +295,8 @@ class Cyberlog(commands.Cog):
         f = e.footer.text
         try: fid = f[f.find(':')+2:]
         except: fid = str(message.id)
-        me = channel.guild.me
         oldReac = message.reactions
         if str(ej) == 'ℹ':
-            if 'New member' in e.title:
-                try: await message.remove_reaction(ej, user)
-                except discord.Forbidden: pass
-                if len(message.reactions) > 3:
-                    for a in ['🤐', '👢', '🔨']:
-                        try: await message.remove_reaction(a, me)
-                        except discord.Forbidden: pass
-                member = user.guild.get_member(int(fid))
-                if member is None:
-                    return await message.edit(content='Unable to provide statistics due to this member no longer being in this server')
-                details=discord.Embed(title="New member",description=member.mention+" ("+member.name+")\n\n__Viewing extra statistics__",timestamp=datetime.datetime.utcnow(),color=0x008000)
-                details.add_field(name='Servers I share',value=len([a for a in iter(bot.guilds) if member in a.members]))
-                details.add_field(name='Reputation',value='Coming soon')
-                details.add_field(name='Account created',value='{0.days} days ago'.format(datetime.datetime.utcnow() - member.created_at))
-                details.add_field(name='Navigation',value='ℹ - member statistics\n🔍 - member information\n🕹 - member quick actions')
-                details.set_footer(text=e.footer.text)
-                await message.edit(content=None,embed=details)
-                for a in ['🔍', '🕹']:
-                    await message.add_reaction(a)
             if 'Server updated' in e.title:
                 try: await message.clear_reactions()
                 except discord.Forbidden: pass
@@ -329,98 +313,6 @@ class Cyberlog(commands.Cog):
                     await message.edit(content=None,embed=e)
                     await message.clear_reactions()
                     for r in oldReac: await message.add_reaction(r)
-        if str(ej) == '🔍':
-            if 'New member' in e.title:
-                try: await message.remove_reaction(ej, user)
-                except discord.Forbidden: pass
-                if len(message.reactions) > 3:
-                    for a in ['🤐', '👢', '🔨']:
-                        try: await message.remove_reaction(a, me)
-                        except discord.Forbidden: pass
-                member = message.guild.get_member(int(fid))
-                details = discord.Embed(title=e.title, description=member.mention+" ("+member.name+")\n\n__Viewing member information__",timestamp=datetime.datetime.utcnow(),color=0x008000)
-                details.set_footer(text=e.footer.text)
-                joined=member.joined_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))
-                created=member.created_at + datetime.timedelta(hours=await database.GetTimezone(message.guild))
-                details.add_field(name='Joined',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild), (datetime.datetime.utcnow()-joined).days))
-                details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild), (datetime.datetime.utcnow()-created).days))
-                details.add_field(name='Currently',value='{}{}'.format('📱' if member.is_on_mobile() else '', member.status))
-                details.add_field(name='Top role',value=member.top_role)
-                details.add_field(name='Role count',value=len(member.roles))
-                details.description+='\n\n**Permissions:** {}'.format(', '.join(await database.StringifyPermissions(member.guild_permissions)))
-                details.add_field(name='Navigation',value='ℹ - member statistics\n🔍 - member information\n🕹 - member quick actions')
-                details.set_thumbnail(url=member.avatar_url)
-                await message.edit(content=None,embed=details)
-        if str(ej) == '🕹':
-            if 'New member' in e.title:
-                try: await message.remove_reaction(ej, user)
-                except discord.Forbidden: pass
-                member = user.guild.get_member(int(fid))
-                details = discord.Embed(title=e.title, description=member.mention+" ("+member.name+")\n\n__Viewing member quick actions__",timestamp=datetime.datetime.utcnow(),color=0x008000)
-                details.set_footer(text=e.footer.text)
-                details.description+='\n\nComing soon: Warn member\n🤐: Mute member\nComing soon: Lock out member\n👢: Kick member\n🔨: Ban member'
-                details.add_field(name='Navigation',value='ℹ - member statistics\n🔍 - member information\n🕹 - member quick actions')
-                await message.edit(content=None,embed=details)
-                for a in ['🤐', '👢', '🔨']:
-                    await message.add_reaction(a)
-        if str(ej) == '🤐':
-            if 'New member' in e.title:
-                member = user.guild.get_member(int(fid))
-                await message.edit(content='{}, are you sure you would like to mute {} for an indefinite period (until a mod removes it)? Type `yes` within 10s to confirm'.format(user.mention, member.name))
-                canManage = await database.ManageRoles(user)
-                def checkMute(m): return 'yes' in m.content.lower() and message.channel == m.channel and m.author.id == user.id and canManage
-                try: result = await bot.wait_for('message',check=checkMute,timeout=10)
-                except asyncio.TimeoutError: await message.edit(content=None)
-                else: 
-                    if result: 
-                        muted=False
-                        role=None
-                        for a in message.guild.roles:
-                            if a.name == "RicobotAutoMute": 
-                                role=a
-                                muted=True
-                        if not muted:
-                            try:
-                                role = await message.guild.create_role(name="RicobotAutoMute", reason="Quickmute")
-                                await role.edit(position=message.guild.me.top_role.position - 1)
-                                for a in message.guild.channels:
-                                    if type(a) is discord.TextChannel:
-                                        await a.set_permissions(role, send_messages=False)
-                            except discord.Forbidden:
-                                muted=False
-                        if not muted: 
-                            await message.edit(content='Unable to mute {}, please ensure I have manage role permissions'.format(member.name))
-                        await member.add_roles(role)
-                        await message.edit(content='Successfully muted {}'.format(member.name))
-                await message.remove_reaction(ej, user)
-        if str(ej) == '👢':
-            if 'New member' in e.title:
-                member = user.guild.get_member(int(fid))
-                await message.edit(content='{}, are you sure you would like to kick {}? Type a reason for the kick within 30s to confirm; to skip a reason, type `none`; to cancel, don\'t send a message'.format(user.mention, member.name))
-                canKick = await database.KickMembers(user)
-                def checkKick(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and canKick
-                try: result = await bot.wait_for('message',check=checkKick,timeout=30)
-                except asyncio.TimeoutError: await message.edit(content=None)
-                else:
-                    try: 
-                        await member.kick(reason='{}: {}'.format(result.author.name, result.content))
-                        await message.edit(content='Successfully kicked {}'.format(member.name))
-                    except discord.Forbidden: await message.edit(content='Unable to kick {}'.format(member.name))
-                await message.remove_reaction(ej, user)
-        if str(ej) == '🔨':
-            if 'New member' in e.title:
-                member = user.guild.get_member(int(fid))
-                await message.edit(content='{}, are you sure you would like to ban {}? Type a reason for the ban within 30s to confirm; to skip a reason, type `none`; to cancel, don\'t send a message'.format(user.mention, member.name))
-                canBan = await database.BanMembers(user)
-                def checkBan(m): return 'none' != m.content.lower() and message.channel == m.channel and m.author.id == user.id and canBan
-                try: result = await bot.wait_for('message',check=checkBan,timeout=30)
-                except asyncio.TimeoutError: await message.edit(content=None)
-                else:
-                    try: 
-                        await member.ban(reason='{}: {}'.format(result.author.name, result.content))
-                        await message.edit(content='Successfully banned {}'.format(member.name))
-                    except discord.Forbidden: await message.edit(content='Unable to ban {}'.format(member.name))
-                await message.remove_reaction(ej, user)
         if str(ej) in ['🗓', '📁', '⬅']:
             if 'events recap' in e.title or 'event recaps' in e.title:
                 grabbedSummaries[str(message.id)] = await database.GetSummary(message.guild, message.id)
@@ -439,7 +331,7 @@ class Cyberlog(commands.Cog):
                     grabbedSummaries[str(message.id)]['queue'] = sorted(grabbedSummaries.get(str(message.id)).get('queue'), key = lambda x: x.get('category'))
                     grabbedSummaries[str(message.id)]['sorted'] = 0
                     summ = grabbedSummaries.get(str(message.id))
-                    e.description='**{} total events**\nFrom {} {} to now\n\n'.format(len(summ.get('queue')), summ.get('lastUpdate').strftime("%b %d, %Y - %I:%M %p"), await database.GetNamezone(message.guild))
+                    e.description='**{} total events**\nFrom {} {} to now\n\n'.format(len(summ.get('queue')), summ.get('lastUpdate').strftime("%b %d, %Y • %I:%M %p"), await database.GetNamezone(message.guild))
                     keycodes = {0: 'Message edits', 1: 'Message deletions', 2: 'Channel creations', 3: 'Channel edits', 4: 'Channel deletions', 5: 'New members',
                     6: 'Members that left', 7: 'Member unbanned', 8: 'Member updates', 9: 'Username/pfp updates', 10: 'Server updates', 11: 'Role creations', 
                     12: 'Role edits', 13: 'Role deletions', 14: 'Emoji updates', 15: 'Voice Channel updates'}
@@ -603,7 +495,7 @@ class Cyberlog(commands.Cog):
         g = self.bot.get_guild(int(payload.data.get('guild_id'))) #Get the server of the edited message, return if not found (DMs; we don't track DM edits)
         if g is None: return
         rawReceived = datetime.datetime.utcnow()
-        received = (rawReceived + datetime.timedelta(hours=timeZone(g))).strftime('%b %d, %Y - %I:%M:%S %p')
+        received = (rawReceived + datetime.timedelta(hours=timeZone(g))).strftime('%b %d, %Y • %I:%M:%S %p')
         global edits
         channel = self.bot.get_channel(int(payload.data.get('channel_id'))) #Get the channel of the edited message
         try: after = await channel.fetch_message(payload.message_id) #Get the message object, and return if not found
@@ -632,7 +524,7 @@ class Cyberlog(commands.Cog):
                         if len(enum) > 3: embed.set_footer(text=f'ID: {payload.message_id} • React ℹ to view the edit history for this message')
         except FileNotFoundError: #If we can't find the file, then we say this
             if after.author.bot: return
-            embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, c.mention, after.jump_url, received, nameZone(g))
+            embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, channel.mention, after.jump_url, received, nameZone(g))
             embed.add_field(name='New message content',value='[{}]({})'.format(payload.data.get('content'), after.jump_url))
             m = await c.send(content='This message is old and I was unable to locate more details in my filesystem, so information is limited',embed=embed)
             return await m.add_reaction('ℹ')
@@ -646,6 +538,7 @@ class Cyberlog(commands.Cog):
                 await c.send(embed=embed)
                 self.pins[after.channel.id].remove(after.id)
             if after.content.strip() == before.strip(): return #If the text before/after is the same, and after unpinned message log if applicable
+            if any(w in before.strip for w in ['attachments>', '<1 attachment:', 'embed>']): return
         except NameError: #If before doesn't exist
             if after.author.bot: return
             embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, c.mention, after.jump_url, received, nameZone(g))
@@ -653,12 +546,6 @@ class Cyberlog(commands.Cog):
             return await c.send(content='This message is old and I was unable to locate more details in my filesystem, so information is limited',embed=embed)
         if after.author.bot: return #Three statements because if this were earlier, it would return before catching unpinned messages
         timestamp = datetime.datetime.utcnow()
-        #The following few lines have to do with the current message edit history module, I plan on moving this to filedata however
-        if edits.get(str(payload.message_id)) is None:
-            edits[str(payload.message_id)] = MessageEditObject(before, after, timestamp)
-        else:
-            edits.get(str(payload.message_id)).add(before, after.content, timestamp)
-            edits.get(str(payload.message_id)).update(after)
         beforeWordList = before.split(" ") #A list of words in the old message
         afterWordList = after.content.split(" ") #A list of words in the new message
         beforeC, afterC = self.parseEdits(beforeWordList, afterWordList)
@@ -717,7 +604,7 @@ class Cyberlog(commands.Cog):
                             def makeHistory(): #This will create groups of 3 from en; since 3 lines represent the file data for indexes
                                 for i in range(0, len(en), 3): yield en[i:i+3]
                             entries = list(makeHistory()) #This will always have a length of 2 or more
-                        for i in range(len(entries)): embed.add_field(name=f'{(datetime.datetime.strptime(entries[i][0][1].strip(), "%b %d, %Y - %I:%M:%S %p") + datetime.timedelta(hours=timeZone(g))):%b %d, %Y - %I:%M:%S %p} {nameZone(g)}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',value=entries[i][2][1].strip(), inline=False)
+                        for i in range(len(entries)): embed.add_field(name=f'{(datetime.datetime.strptime(entries[i][0][1].strip(), "%b %d, %Y - %I:%M:%S %p") + datetime.timedelta(hours=timeZone(g))):%b %d, %Y • %I:%M:%S %p} {nameZone(g)}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',value=entries[i][2][1].strip(), inline=False)
                         await msg.edit(embed=embed)
                         for r in ['⬅', 'ℹ', '🗒']: await msg.add_reaction(r)
                     except (discord.Forbidden, discord.HTTPException) as e:
@@ -753,7 +640,7 @@ class Cyberlog(commands.Cog):
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
         '''[DISCORD API METHOD] Called when message is deleted (RAW CONTENT)'''
         g = bot.get_guild(payload.guild_id)
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         if serverPurge.get(payload.guild_id): return
         if not logEnabled(g, 'message'): return
         try: message = payload.cached_message
@@ -812,7 +699,7 @@ class Cyberlog(commands.Cog):
         try: messageBefore = (await channel.history(limit=1, before=created).flatten())[0] #The message directly before the deleted one
         except IndexError: messageBefore = ''
         created += datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))
-        embed.description='Author: {0} ({1})\nChannel: {2} • Jump to message [before]({3} \'{4}\') or [after]({5} \'{6}\') this one\nPosted: {7} {8}\nDeleted: {9} {8} ({10} later)'.format(author.mention if memberObject is not None else author.name, author.name if memberObject is not None else 'No longer in this server', channel.mention, messageBefore.jump_url if messageBefore != '' else '', messageBefore.content if messageBefore != '' else '', messageAfter.jump_url if messageAfter != '' else '', messageAfter.content if messageAfter != '' else '', created.strftime("%b %d, %Y - %I:%M:%S %p"), nameZone(bot.get_guild(payload.guild_id)), received, ' '.join(reversed(display)))
+        embed.description='Author: {0} ({1})\nChannel: {2} • Jump to message [before]({3} \'{4}\') or [after]({5} \'{6}\') this one\nPosted: {7} {8}\nDeleted: {9} {8} ({10} later)'.format(author.mention if memberObject is not None else author.name, author.name if memberObject is not None else 'No longer in this server', channel.mention, messageBefore.jump_url if messageBefore != '' else '', messageBefore.content if messageBefore != '' else '', messageAfter.jump_url if messageAfter != '' else '', messageAfter.content if messageAfter != '' else '', created.strftime("%b %d, %Y • %I:%M:%S %p"), nameZone(bot.get_guild(payload.guild_id)), received, ' '.join(reversed(display)))
         if message: embed.add_field(name="**Content**",value=message.content[:1024] if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<Error retrieving content>")
         else: embed.add_field(name='**Content**',value='<No content>' if len(content) < 1 else content[:1024])
         for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
@@ -848,7 +735,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when server channel is created'''
         content=None
         savePath = None
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(channel.guild.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        received = (channel.created_at + datetime.timedelta(hours=lightningLogging.get(channel.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         f=None
         if logEnabled(channel.guild, "channel"):
             keytypes = {discord.Member: '👮', discord.Role: '🚩'}
@@ -922,7 +809,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when server channel is updated'''
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(before.guild.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(before.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         f = None
         if logEnabled(before.guild, "channel"):
             content=None
@@ -934,6 +821,7 @@ class Cyberlog(commands.Cog):
                 try:
                     log = (await before.guild.audit_logs(limit=1).flatten())[0]
                     if log.action == discord.AuditLogAction.channel_update:
+                        if log.user.id == self.bot.user.id: return
                         embed.description+=f'\nUpdated by: {log.user.mention} ({log.user.name})' + (f' because "{log.reason}"' if log.reason is not None else '')
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                         try: await log.user.avatar_url_as(size=1024).save(savePath)
@@ -1035,10 +923,11 @@ class Cyberlog(commands.Cog):
                     except AttributeError: gainedKeys[v.get('gained')] = [after.guild.get_member(k)]
                     except KeyError:
                         if v.get('gained') is not None: gainedKeys[v.get('gained')] = [after.guild.get_member(k)]
-                joinKeys = (' 👮‍♂️ ', ' • ')
+                joinKeys = (' 👮 ', ' • ')
                 gainDescription = (f'''{newline.join([f"[{len(v)} members gained {len(k.split(' '))} permissions • Hover for details]({message.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([permissionKeys.get(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([permissionKeys.get(p) for p in k.split(' ')])}')" for k, v in gainedKeys.items()])}{newline if len(removedKeys) > 0 and len(gainedKeys) > 0 else ''}''') if len(gainedKeys) > 0 else ''
                 removeDescription = f'''{newline.join([f"[{len(v)} members lost {len(k.split(' '))} permissions • Hover for details]({message.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([permissionKeys.get(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([permissionKeys.get(p) for p in k.split(' ')])}')" for k,v in removedKeys.items()])}''' if len(removedKeys) > 0 else ''
-                embed.description+=f'{newline if len(gainDescription) > 0 or len(removeDescription) > 0 else ""}{gainDescription}{removeDescription}\nPrecise timestamp: {received}'
+                if len(gainDescription) > 0 or len(removeDescription) > 0: embed.description+=f'{newline if len(gainDescription) > 0 or len(removeDescription) > 0 else ""}{gainDescription}{removeDescription}\nPrecise timestamp: {received}'
+                else: embed.description+=f'\nChannel permission overwrites were updated but no members gained or lost permissions\nPrecise timestamp: {received}'
                 await message.edit(embed=embed)
                 for reaction in reactions: await message.add_reaction(reaction)
                 try: 
@@ -1077,17 +966,17 @@ class Cyberlog(commands.Cog):
                         await message.edit(content=content,embed=final)
                         await message.clear_reactions()
                         for r in reactions: await message.add_reaction(r)
-                except: pass
+                except Exception as e: print(f'Channel update reaction error {e}')
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when channel is deleted'''
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(channel.guild.id).get('offset'))).strftime('%b %d, %Y - %I:%M:%S %p')
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(channel.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         if logEnabled(channel.guild, "channel"):
             content=None
             f = None
             savePath = None
-            embed=discord.Embed(title=f'{self.channelKeys.get(channel.type[0])}❌{channel.type[0][0].upper() + channel.type[0][1:]} Channel was deleted', description=channel.name,color=0xff0000,timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title=f'{self.channelKeys.get(channel.type[0])}❌{channel.type[0][0].upper() + channel.type[0][1:]} Channel was deleted', description=channel.name,color=green,timestamp=datetime.datetime.utcnow())
             if readPerms(channel.guild, "channel"):
                 try:
                     log = (await channel.guild.audit_logs(limit=1).flatten())[0]
@@ -1121,192 +1010,385 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member joins a server'''
-        global bot
-        global invites
+        received = (member.joined_at + datetime.timedelta(hours=lightningLogging.get(member.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         global members
-        await updateLastActive(member, datetime.datetime.now(), 'joined a server')
         if logEnabled(member.guild, "doorguard"):
+            asyncio.create_task(self.doorguardHandler(member))
             newInv = []
             content=None
-            count=len(member.guild.members)
-            acctAge = (datetime.datetime.utcnow() - member.created_at).days
-            embed=discord.Embed(title="👮‍♂️{}New member (React with ℹ to see member info)".format(self.whitePlus),description='{} ({})\n{}{} member\nAccount age: {} days old'.format(member.name, member.mention, count,suffix(count), acctAge),timestamp=datetime.datetime.utcnow(),color=0x008000)
-            embed.set_thumbnail(url=member.avatar_url)
-            data = {'name': member.name, 'id': member.id, 'server': member.guild.id}
+            savePath = None
+            f = None
+            targetInvite = None
+            count = len(member.guild.members)
+            ageDelta = datetime.datetime.utcnow() - member.created_at
+            units = ['second', 'minute', 'hour', 'day']
+            hours, minutes, seconds = ageDelta.seconds // 3600, (ageDelta.seconds // 60) % 60, ageDelta.seconds - (ageDelta.seconds // 3600) * 3600 - ((ageDelta.seconds // 60) % 60)*60
+            ageTimes = [seconds, minutes, hours, ageDelta.days]
+            ageDisplay = []
+            for i in range(len(ageTimes) - 1, -1, -1):
+                if ageTimes[i] != 0: ageDisplay.append(f'{ageTimes[i]} {units[i]}{"s" if ageTimes[i] != 1 else ""}')
+            if len(ageDisplay) == 0: ageDisplay = ['0 seconds']
+            embed=discord.Embed(title=f"👮‍♂️{self.greenPlus}New member {self.loading}",timestamp=datetime.datetime.utcnow(),color=0x008000)
+            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
+            try: await member.avatar_url_as(size=1024).save(savePath)
+            except discord.HTTPException: pass
+            f = discord.File(savePath)
+            embed.set_thumbnail(url=f'attachment://{f.filename}')
             embed.set_footer(text='Member ID: {}'.format(member.id))
             try:
                 newInv = await member.guild.invites()
+                oldInv = self.invites.get(str(member.guild.id))
             except discord.Forbidden:
                 content="Tip: I can determine who invited new members if I have the `Manage Server` permissions"
-                #if await database.SummarizeEnabled(member.guild, 'doorguard'):
-                #    return summaries.get(str(member.guild.id)).add('doorguard', 5, datetime.datetime.now(), member.id, data, embed,content=content,reactions=['ℹ'])
-                #else:
-                await logChannel(member.guild, 'doorguard').send(content=content,embed=embed)
-            #All this below it only works if the bot successfully works with invites
             try:
-                for invite in newInv:
-                    if invite in invites.get(str(member.guild.id)):
-                        for invite2 in invites.get(str(member.guild.id)):
-                            if invite2 == invite:
-                                if invite.uses > invite2.uses:
-                                    embed.add_field(name="Invited by",value=invite.inviter.mention+" ("+invite.inviter.name+")")
-                                    break
-                if len(embed.fields) == 0: #check vanity invite for popular servers
-                    for invite in newInv: #Check for new invites
-                        if invite not in invites.get(str(member.guild.id)):
-                            if invite.uses > 0:
-                                embed.add_field(name="Invited by",value=invite.inviter.mention+" ("+invite.inviter.name+")")
-                                break
+                for invite in oldInv:
+                    try:
+                        if newInv[newInv.index(oldInv)].uses > invite.uses:
+                            targetInvite = invite
+                            break
+                    except ValueError: #An invite that reached max uses will be missing from the new list
+                        targetInvite = invite
+                        break 
+                if not targetInvite: #Check the vanity invite (if applicable) if we don't have an invite
                     try:
                         invite = await member.guild.vanity_invite()
-                        if invite.uses > invites.get(str(member.guild.id)+"_vanity"):
-                            embed.add_field(name="Invited by",value=invite.inviter.mention+" ("+invite.inviter.name+")\n{VANITY INVITE}")
-                    except (discord.Forbidden, discord.HTTPException):
-                        pass
-            except (AttributeError, TypeError): embed.add_field(name='Invited by',value='N/A')
-            invites[str(member.guild.id)] = newInv
-            if await database.SummarizeEnabled(member.guild, 'doorguard'):
-                summaries.get(str(member.guild.id)).add('doorguard', 5, datetime.datetime.now(), data, embed,content=content,reactions=['ℹ'])
-            else:
-                msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed)
-                await msg.add_reaction('ℹ')
-                await VerifyLightningLogs(msg, 'doorguard')
-        await asyncio.gather(self.repeatedJoinsHandler(member), self.ageKickHandler(member))
+                        if invite.uses > self.invites.get(str(member.guild.id)+"_vanity").uses: targetInvite = invite
+                    except discord.HTTPException: pass
+            except Exception as e: embed.add_field(name='**Invite Details**',value=f'Error retrieving details: {e}')
+            self.invites[str(member.guild.id)] = newInv
+            msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed,file=f)
+            embed.description=f'''{member.mention} ({member.name})\n{count}{suffix(count)} member\nAccount age: {ageDisplay[0]} old\n[Hover for more details]({msg.jump_url} 'Precise timestamp of join: {received}\nAccount created: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\nAccount age: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old\nMutual Servers: {len([g for g in bot.guilds if member in g.members])}\n\nQUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')'''
+            if targetInvite: embed.add_field(name='**Invite Details**',value=f'''Invited by {targetInvite.inviter.name} ({targetInvite.inviter.mention})\n[Hover for more details]({msg.jump_url} '\nCode: discord.gg/{targetInvite.code}\nChannel: {targetInvite.channel.name}\nCreated: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\n{"Never expires" if targetInvite.max_age == 0 else f"Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}\nUsed: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')''')
+            await msg.edit(embed=embed)
+            await VerifyLightningLogs(msg, 'doorguard')
         members[member.guild.id] = member.guild.members
-        await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot)])
+        await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot), updateLastActive(member, datetime.datetime.now(), 'joined a server')])
+        if os.path.exists(savePath): os.remove(savePath)
+        if logEnabled(member.guild, "doorguard"):
+            if member in member.guild.members:
+                embed.title=f'👮‍♂️{self.greenPlus}New member (React ℹ for member info viewer)'
+                await msg.edit(embed=embed)
+                final = copy.deepcopy(embed)
+                memberInfoEmbed = None
+                while True:
+                    for r in ['ℹ', '🤐', '🔒', '👢', '🔨']: await msg.add_reaction(r)
+                    embed = copy.deepcopy(final)
+                    def navigationCheck(r, u): return str(r) in ['ℹ', '🤐', '🔒', '👢', '🔨'] and not u.bot and r.message.id == msg.id
+                    r = await self.bot.wait_for('reaction_add', check=navigationCheck)
+                    embed.clear_fields()
+                    await msg.clear_reactions()
+                    if str(r[0]) == 'ℹ':
+                        if not memberInfoEmbed:
+                            embed.description = f'{self.loading}Please wait for member information to load'
+                            await msg.edit(embed=embed)
+                            memberInfoEmbed = await self.MemberInfo(member, False)
+                            memberInfoEmbed.set_thumbnail(url=f'attachment://{f.filename}')
+                        await msg.edit(embed=memberInfoEmbed)
+                        await msg.add_reaction('⬅')
+                        def backCheck(rr, u): return str(rr) == '⬅' and u == r[1] and rr.message.id == msg.id
+                        try: await self.bot.wait_for('reaction_add', check=backCheck, timeout=300)
+                        except asyncio.TimeoutError: pass
+                    elif str(r[0]) == '🤐':
+                        if await database.ManageRoles(r[1]) and await database.ManageChannels(r[1]):
+                            embed.description = f'{r[1].name}, would you like me to mute **{member.name}**?\n\nThis member will remain muted until the role RicobotAutoMute is manually removed from them.\n\nTo confirm, react {self.whiteCheck} within 10 seconds'
+                            embed.set_image(url='https://i.postimg.cc/s2pZs1Cv/ten.gif')
+                            await msg.edit(embed=embed)
+                            for reaction in ['❌', '✔']: await msg.add_reaction(reaction)
+                            def confirmCheck(rr, u): return str(rr) in ['❌', '✔'] and u == r[1] and rr.message.id == msg.id
+                            try: rr = await self.bot.wait_for('reaction_add', check=confirmCheck, timeout=10)
+                            except asyncio.TimeoutError: rr = [0]
+                            if str(rr[0]) == '✔':
+                                muteRole = discord.utils.get(member.guild.roles, name='RicobotAutoMute')
+                                if muteRole is None: muteRole = await member.guild.create_role(name='RicobotAutoMute', reason='Quickmute')
+                                try: await muteRole.edit(position=member.guild.me.top_role.position - 1)
+                                except discord.Forbidden: embed.description+='\nUnable to move mute role below mine. Members with role above RicobotAutoMute will not be muted unless its position is moved further up.'
+                                for c in member.guild.text_channels: 
+                                    try: await c.set_permissions(muteRole, send_messages=False)
+                                    except discord.Forbidden as error: embed.description+=f'\nUnable to create permission overwrites for the channel {c.name} because `{error.text}`. Please set the permissions for this channel to [RicobotAutoMute: Send Messages = ❌] for the mute to work there.'
+                                try: 
+                                    await member.add_roles(muteRole)
+                                    embed.description=final.description+f'\n\n**Successfully muted {member.name}**'
+                                except discord.Forbidden as error: embed.description+=f'\n\n**Unable to mute {member.name} because `{error.text}`.**'
+                                await msg.edit(embed=embed)
+                                final.description = embed.description
+                        else:
+                            embed.description+=f'\n\n**{r[1].name}, you need `Manage Roles` and `Manage Channels` permissions to mute {member.name}.**'
+                            await msg.edit(embed=embed)
+                            await asyncio.sleep(10)
+                    elif str(r[0]) == '🔒':
+                        if await database.ManageChannels(r[1]):
+                            embed.description = f'{r[1].name}, would you like me to quarantine **{member.name}**?\n\nThis will prevent {member.name} from being able to access any of the channels in this server until the `unlock` command is run.\n\nTo confirm, react {self.whiteCheck} within 10 seconds'
+                            embed.set_image(url='https://i.postimg.cc/s2pZs1Cv/ten.gif')
+                            await msg.edit(embed=embed)
+                            for reaction in ['❌', '✔']: await msg.add_reaction(reaction)
+                            def confirmCheck(rr, u): return str(rr) in ['❌', '✔'] and u == r[1] and rr.message.id == msg.id
+                            try: rr = await self.bot.wait_for('reaction_add', check=confirmCheck, timeout=10)
+                            except asyncio.TimeoutError: rr = [0]
+                            if str(rr[0]) == '✔':
+                                for c in member.guild.text_channels: 
+                                    try: await c.set_permissions(member, read_messages=False)
+                                    except discord.Forbidden as error: embed.description+=f'\nUnable to create permission overwrites for the channel {c.name} because `{error.text}`. Please set the permissions for this channel to [{member.name}: Read Messages = ❌] for the quarantine to work there.'
+                                embed.description=final.description+f'\n\n**Successfully quarantined {member.name}.**\nUse `{prefix(member.guild)}unlock {member.id}` to unlock this user when desired.'
+                                await msg.edit(embed=embed)
+                                final.description = embed.description
+                        else:
+                            embed.description+=f'\n\n**{r[1].name}, you need `Manage Channels` permissions to quarantine {member.name}.**'
+                            await msg.edit(embed=embed)
+                            await asyncio.sleep(10)
+                    elif str(r[0]) == '👢':
+                        if await database.KickMembers(r[1]):
+                            embed.description = f'{r[1].name}, would you like me to kick **{member.name}**? Please react {self.whiteCheck} within 10 seconds to confirm. To provide a reason for the kick, react 📝 instead of check, and you will be able to provide a reason at the next step.'
+                            embed.set_image(url='https://i.postimg.cc/s2pZs1Cv/ten.gif')
+                            await msg.edit(embed=embed)
+                            for reaction in ['❌', '📝', '✔']: await msg.add_reaction(reaction)
+                            def confirmCheck(rr, u): return str(rr) in ['❌', '📝', '✔'] and u == r[1] and rr.message.id == msg.id
+                            try: rr = await self.bot.wait_for('reaction_add', check=confirmCheck, timeout=10)
+                            except asyncio.TimeoutError: rr = [0]
+                            if str(rr[0]) == '✔':
+                                try: 
+                                    await member.kick()
+                                    embed.description=final.description+f'\n\n**Successfully kicked {member.name}**'
+                                except discord.Forbidden as error: embed.description+=f'\n\n**Unable to kick {member.name} because `{error.text}`.**'
+                                await msg.edit(embed=embed)
+                                final.description = embed.description
+                            elif str(rr[0]) == '📝':
+                                def reasonCheck(m): return msg.channel == m.channel and m.author.id == r[1].id
+                                embed.description=f'Please type the reason you would like to kick {member.name}.\n\nType your reason within 60 seconds. The first message you type will be used, and {member.name} will be kicked.\n\nTo cancel, wait 60 seconds without sending anything.'
+                                embed.set_image(url='https://i.postimg.cc/kg2rttTh/sixty.gif')
+                                await msg.edit(embed=embed)
+                                try: reason = await self.bot.wait_for('message', check=reasonCheck, timeout=60)
+                                except: pass
+                                try:
+                                    await member.kick(reason=f'Kicked by {r[1].name} because {reason.content}')
+                                    embed.description=final.description+f'\n\nSuccessfully kicked {member.name}.'
+                                    final.description = embed.description
+                                except discord.Forbidden as error: embed.description+=f'\n\n**Unable to kick {member.name} because `{error.text}`.**'
+                                except UnboundLocalError: pass #Timeout
+                                await msg.edit(embed=embed)
+                        else:
+                            embed.description+=f'\n\n**{r[1].name}, you need `Kick Members` permissions to kick {member.name}.**'
+                            await msg.edit(embed=embed)
+                            await asyncio.sleep(10)
+                    elif str(r[0]) == '🔨':
+                        if await database.BanMembers(r[1]):
+                            embed.description = f'{r[1].name}, would you like me to ban **{member.name}** indefinitely? Please react {self.whiteCheck} within 10 seconds to confirm. To provide a reason for the ban, react 📝 instead of check, and you will be able to provide a reason at the next step.'
+                            embed.set_image(url='https://i.postimg.cc/s2pZs1Cv/ten.gif')
+                            await msg.edit(embed=embed)
+                            for reaction in ['❌', '📝', '✔']: await msg.add_reaction(reaction)
+                            def confirmCheck(rr, u): return str(rr) in ['❌', '📝', '✔'] and u == r[1] and rr.message.id == msg.id
+                            try: rr = await self.bot.wait_for('reaction_add', check=confirmCheck, timeout=10)
+                            except asyncio.TimeoutError: rr = [0]
+                            if str(rr[0]) == '✔':
+                                try: 
+                                    await member.ban()
+                                    embed.description=final.description+f'\n\n**Successfully banned {member.name}**'
+                                except discord.Forbidden as error: embed.description+=f'\n\n**Unable to ban {member.name} because `{error.text}`.**'
+                                await msg.edit(embed=embed)
+                                final.description = embed.description
+                            elif str(rr[0]) == '📝':
+                                def reasonCheck(m): return msg.channel == m.channel and m.author.id == r[1].id
+                                embed.description=f'Please type the reason you would like to ban {member.name}.\n\nType your reason within 60 seconds. The first message you type will be used, and {member.name} will be banned.\n\nTo cancel, wait 60 seconds without sending anything.'
+                                embed.set_image(url='https://i.postimg.cc/kg2rttTh/sixty.gif')
+                                await msg.edit(embed=embed)
+                                try: reason = await self.bot.wait_for('message', check=reasonCheck, timeout=60)
+                                except: pass
+                                try:
+                                    await member.ban(reason=f'Banned by {r[1].name} because {reason.content}')
+                                    embed.description=final.description+f'\n\nSuccessfully banned {member.name}.'
+                                    final.description = embed.description
+                                except discord.Forbidden as error: embed.description+=f'\n\n**Unable to ban {member.name} because `{error.text}`.**'
+                                except UnboundLocalError: pass #Timeout
+                                await msg.edit(embed=embed)
+                        else:
+                            embed.description+=f'\n\n**{r[1].name}, you need `Ban Members` permissions to ban {member.name}.**'
+                            await msg.edit(embed=embed)
+                            await asyncio.sleep(10)
+                    await msg.clear_reactions()
+                    await msg.edit(embed=final) 
+            else:
+                embed.title=f'👮‍♂️{self.greenPlus}New member (Left the server)'
+                await msg.edit(embed=embed)
 
-    async def ageKickHandler(self, member: discord.Member):
-        acctAge = (datetime.datetime.utcnow() - member.created_at).days
-        ageKick = await database.GetAgeKick(member.guild)
-        if ageKick is not None: #Check account age; requested feature
-            if acctAge < ageKick and member.id not in await database.GetWhitelist(member.guild):
-                memberCreated = member.created_at + datetime.timedelta(hours=await database.GetTimezone(member.guild))
-                canRejoin = memberCreated + datetime.timedelta(days=ageKick)
-                formatter = '%b %d, %Y - %I:%M %p'
-                timezone = await database.GetNamezone(member.guild)
-                dm = (await database.GetAgeKickDM(member.guild))
-                try: await member.send(eval(dm))
-                except discord.Forbidden: await logChannel(member.guild, "doorguard").send(content=f'I will kick {member.name}, but I can\'t DM them explaining why they were kicked because they disabled DMs from non-friends.')
-                await member.kick(reason=f'[Antispam: ageKick] Account must be {ageKick} days old')
-
-    async def repeatedJoinsHandler(self, member: discord.Member):
-        '''Handles the processing of repeated joins, due to the sleep nature of it'''
-        repeatedJoins = lightningLogging.get(member.guild.id).get('antispam').get('repeatedJoins')
-        if 0 not in repeatedJoins[:2]: #Make sure this module is enabled (remember, modules are set to 0 to mark them as disabled)
+    async def doorguardHandler(self, member: discord.Member):
+        '''REPEATED JOINS'''
+        rj = antispamObject(member.guild).get('repeatedJoins')
+        if 0 not in rj[:2]: #Make sure this module is enabled (remember, modules are set to 0 to mark them as disabled)
             try: self.repeatedJoins[f'{member.guild.id}_{member.id}'].append(member.joined_at)
             except (AttributeError, KeyError): self.repeatedJoins[f'{member.guild.id}_{member.id}'] = [member.joined_at]
             joinLogs = self.repeatedJoins.get(f'{member.guild.id}_{member.id}')
+            remainingDelta = ((joinLogs[0] + datetime.timedelta(seconds=rj[1])) - datetime.datetime.utcnow()) #Time remaining before oldest join log expires. If a member joins the server [threshold] times in this timespan, they're punished
+            durationDelta = datetime.timedelta(seconds=rj[2])
+            rH, rM, rS = remainingDelta.seconds // 3600, (remainingDelta.seconds // 60) % 60, remainingDelta.seconds - (remainingDelta.seconds // 3600) * 3600 - ((remainingDelta.seconds // 60) % 60) * 60 #remainingHours, remainingMinutes, remainingSeconds
+            dH, dM, dS = durationDelta.seconds // 3600, (durationDelta.seconds // 60) % 60, durationDelta.seconds - (durationDelta.seconds // 3600) * 3600 - ((durationDelta.seconds // 60) % 60) * 60 #ban duration Hours, Minutes, Seconds            
+            remainingTimes = [rS, rM, rH, remainingDelta.days]
+            durationTimes = [dH, dM, dS, durationDelta.days]
+            remainingDisplay = []
+            durationDisplay = []
+            for i in range(len(remainingTimes) - 1, -1, -1):
+                if remainingTimes[i] != 0: remainingDisplay.append(f'{remainingTimes[i]} {units[i]}{"s" if remainingTimes[i] != 1 else ""}')
+                if durationTimes[i] != 0: durationDisplay.append(f'{durationTimes[i]} {units[i]}{"s" if durationTimes[i] != 1 else ""}')
+            if len(remainingDisplay) == 0: remainingDisplay = ['0 seconds']
+            if len(durationDisplay) == 0: durationDisplay = ['0 seconds']
             if len(joinLogs) > 1:
-                sendString = f'''{member.mention}, `{member.guild.name}` has my Antispam [repeated joins] module enabled. If you join this server {repeatedJoins[0] - len(joinLogs)} more times in {((joinLogs[0] + datetime.timedelta(minutes=repeatedJoins[1])) - datetime.datetime.utcnow()).seconds // 60} minutes, you will be banned{"." if repeatedJoins[2] == 0 else f" for {repeatedJoins[2]} hours."}'''
+                #This is the warning segment: If this is at least the second time the member has joined the server recently, then we will warn them of the threshold and consequences if they continue to join.
+                sendString = f'''{member.mention}, `{member.guild.name}` has my Antispam [repeated joins] module enabled. If you join this server {rj[0] - len(joinLogs)} more time{'s' if rj[0] - len(joinLogs) != 1 else ''} in {f"{', '.join(remainingDisplay[:-1])} and {remainingDisplay[-1]}" if len(remainingDisplay) > 1 else remainingDisplay[0]}, you will be banned{'.' if rj[2] == 0 else f" for {', '.join(durationDisplay[:-1])} and {durationDisplay[-1]}" if len(durationDisplay) > 1 else f" for {durationDisplay[0]}"}.'''
                 try: await member.send(sendString)
                 except discord.Forbidden: #Can't DM member, try to let them know in the server (if ageKick is disabled)
                     if await database.GetAgeKick(member.guild) is None:
                         sendTo = await database.CalculateGeneralChannel(member.guild, True)
-                        if sendTo.permissions_for(member).read_messages: await sendTo.send(sendString)
-            if len(joinLogs) >= repeatedJoins[0]:
-                timeSpan = (joinLogs[-1] - joinLogs[0]).seconds
-                if timeSpan < repeatedJoins[1] * 60:
-                    try: await  member.send(f'You have been banned from `{member.guild.name}` until {(datetime.datetime.now() + datetime.timedelta(hours=repeatedJoins[2])):%b %d, %Y - %I:%M %p} for repeatedly joining and leaving the server.')
+                        if sendTo.permissions_for(member).read_messages: await sendTo.send(sendString) #If the member can read messages in the server's general channel, then we'll send it there
+            if len(joinLogs) >= rj[0]:
+                joinSpan = (joinLogs[-1] - joinLogs[0])
+                jH, jM, jS = joinSpan.seconds // 3600, (joinSpan.seconds // 60) % 60, joinSpan.seconds - (joinSpan.seconds // 3600) * 3600 - ((joinSpan.seconds // 60) % 60) * 60
+                joinSpanTimes = [jS, jM, jH, joinSpan.days]
+                joinSpanDisplay = []
+                for i in range(len(joinSpanTimes) - 1, -1, -1):
+                    if joinSpanTimes[i] != 0: joinSpanDisplay.append(f'{joinSpanTimes[i]} {units[i]}{"s" if joinSpanTimes[i] != 1 else ""}')
+                if len(joinSpanDisplay) == 0: joinSpanDisplay = ['0 seconds']
+                if joinSpan.seconds < rj[1]:
+                    unbanAt = datetime.datetime.utcnow() + datetime.timedelta(seconds=rj[2])
+                    timezoneUnbanAt = unbanAt + datetime.timedelta(hours=timeZone(member.guild))
+                    try: await member.send(f'You have been banned from `{member.guild.name}` until {timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)} for repeatedly joining and leaving the server.')
                     except: pass
-                    try: await member.ban(reason=f'[Antispam: repeatedJoins] Account joined the server {len(joinLogs)} times in {timeSpan // 60} minutes, will remain banned for {f"{repeatedJoins[2]} hours" if repeatedJoins[2] > 0 else "∞"}')
+                    try: await member.ban(reason=f'''[Antispam: repeatedJoins] {member.name} joined the server {len(joinLogs)} times in {f"{', '.join(joinSpanDisplay[:-1])} and {joinSpanDisplay[-1]}" if len(joinSpanDisplay) > 1 else joinSpanDisplay[0]}, and will remain banned until {f"{timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}" if rj[2] > 0 else "the ban is manually revoked"}.''')
                     except discord.Forbidden: await logChannel(member.guild, "doorguard").send(f'Unable to ban {member.name} for [ageKick: repeatedJoins] module')
-                    if repeatedJoins[2] > 0:
-                        await asyncio.sleep((repeatedJoins[2] * 60 * 60))
-                        try: await member.unban(reason='[Antispam: repeatedJoins] Ban time is up!')
-                        except discord.Forbidden: await logChannel(member.guild, "doorguard").send(f'Unable to unban {member.name} for [ageKick: repeatedJoins]; their ban time is up') 
-            await asyncio.sleep(60 * repeatedJoins[1])
+                    self.repeatedJoins[f'{member.guild.id}_{member.id}'].clear()
+                    banTimedEvent = {'type': 'ban', 'flavor': '[Antispam: repeatedJoins]', 'target': member.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=rj[2])}
+                    await database.AppendTimedEvent(member.guild, banTimedEvent)
+        '''AGEKICK ⬇'''
+        acctAge = (datetime.datetime.utcnow() - member.created_at).days
+        antispam = antispamObject(member.guild)
+        ageKick = antispam.get('ageKick')
+        if ageKick is not None: #Check account age; requested feature
+            if acctAge < ageKick and member.id not in antispam.get('ageKickWhitelist'): #If the account age is under the threshold and they're not whitelisted:
+                memberCreated = member.created_at + datetime.timedelta(hours=timeZone(member.guild))
+                canRejoin = memberCreated + datetime.timedelta(days=ageKick)
+                formatter = '%b %d, %Y • %I:%M %p'
+                timezone = nameZone(member.guild)
+                dm = antispam.get('ageKickDM')
+                try: await member.send(eval(dm))
+                except discord.Forbidden as e: await logChannel(member.guild, "doorguard").send(content=f'I will kick {member.name}, but I can\'t DM them explaining why they were kicked because {e.text}.')
+                await member.kick(reason=f'[Antispam: ageKick] Account must be {ageKick} days old')
+            elif member.id in antispam.get('ageKickWhitelist'): await database.RemoveWhitelistEntry(member.guild, member.id)
+        '''Repeated Joins: Sleeping'''
+        if 0 not in rj[:2]:
+            try:
+                if len(joinLogs) >= rj[0] and rj[2] > 0:
+                    await asyncio.sleep(rj[2])
+                    try: await member.unban(reason='[Antispam: repeatedJoins] Ban time is up!')
+                    except discord.Forbidden: await logChannel(member.guild, "doorguard").send(f'Unable to unban {member.name} for [ageKick: repeatedJoins]; their ban time is up')
+                    await database.RemoveTimedEvent(member.guild, banTimedEvent)
+                else: 
+                    await asyncio.sleep(rj[1])
+                    if len(joinLogs) > 0: self.repeatedJoins[f'{member.guild.id}_{member.id}'].pop(0) #Removes the oldest entry
+            except UnboundLocalError: pass
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member leaves a server'''
-        global bot
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(member.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         global members
-        await updateLastActive(member, datetime.datetime.now(), 'left a server')
+        asyncio.create_task(updateLastActive(member, datetime.datetime.now(), 'left a server'))
         if logEnabled(member.guild, "doorguard"):
             content=None
-            embed=None #Custom embeds later
-            if embed is None: 
-                embed=discord.Embed(title="👮‍♂️❌Member left",description=member.mention+" ("+member.name+")",timestamp=datetime.datetime.utcnow(),color=0xff0000)
-                data = {'id': member.id, 'name': member.name, 'type': 'Leave', 'server': member.guild.id}
-                if readPerms(member.guild, 'doorguard'):
-                    try:
-                        async for log in member.guild.audit_logs(limit=2):
-                            if log.target.id == member.id:
-                                if log.action == discord.AuditLogAction.kick:
-                                    embed.title = '👮‍♂️👢{} was kicked'.format(member.name)
-                                    embed.description="Kicked by: "+log.user.mention+" ("+log.user.name+")"
-                                    data['type'] = 'Kick'
-                                    embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
-                                elif log.action == discord.AuditLogAction.ban:
-                                    embed.title = member.name+" was banned"
-                                    embed.title = '👮‍♂️🔨{} was banned'.format(member.name)
-                                    embed.description="Banned by: "+log.user.mention+" ("+log.user.name+")"
-                                    data['type'] = 'Ban'
-                                    embed.add_field(name="Reason",value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
-                                break
-                    except discord.Forbidden: content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
-                    except AttributeError: pass
+            f = None
+            embed=discord.Embed(title=f'👮‍♂️❌Member left ({self.loading}Finalizing log)', description=f'{member.mention} ({member.name})', timestamp=datetime.datetime.utcnow(), color=red)
             span = datetime.datetime.utcnow() - member.joined_at
-            hours = span.seconds//3600
-            minutes = (span.seconds//60)%60
-            times = [span.seconds - hours*3600 - minutes*60, minutes, hours, span.days]
-            hereFor = ['{} seconds'.format(times[0])]
-            if sum(times[1:]) > 0:
-                hereFor.append('{} minutes'.format(times[1]))
-                if sum(times[2:]) > 0:
-                    hereFor.append('{} hours'.format(times[2]))
-                    if times[3] > 0: hereFor.append('{} days'.format(times[3]))
-            embed.add_field(name="Here for",value=', '.join(reversed(hereFor)))
+            hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
+            times = [seconds, minutes, hours, span.days]
+            hereForDisplay = []
+            for i in range(len(times) - 1, -1, -1):
+                if times[i] != 0: hereForDisplay.append(f'{times[i]} {units[i]}{"s" if times[i] != 1 else ""}')            
+            if len(hereForDisplay) == 0: hereForDisplay = ['0 seconds']
+            embed.add_field(name='**Post count**',value=self.loading)
+            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
+            try: await member.avatar_url_as(size=1024).save(savePath)
+            except discord.HTTPException: pass
+            f = discord.File(savePath)
+            embed.set_thumbnail(url=f'attachment://{f.filename}')
+            embed.set_footer(text=f'Member ID: {member.id}')
+            message = await logChannel(member.guild, 'doorguard').send(content=content,embed=embed,file=f)
+            if readPerms(member.guild, 'doorguard'):
+                try:
+                    log = (await member.guild.audit_logs(limit=1).flatten())[0]
+                    if (datetime.datetime.utcnow() - log.created_at).seconds < 3 and log.target.id == member.id:
+                        if log.action == discord.AuditLogAction.kick:
+                            embed.title = f'👮‍♂️👢{member.name} was kicked'
+                            embed.description=f'Kicked by: {log.user.mention} ({log.user.name})'
+                            embed.insert_field_at(0, name='**Reason**',value=log.reason if log.reason is not None else "None provided", inline=True if log.reason is not None and len(log.reason) < 25 else False)
+                        elif log.action == discord.AuditLogAction.ban:
+                            embed.title = f'👮‍♂️🔨{member.name} was banned'
+                            embed.description=f'Banned by: {log.user.mention} ({log.user.name})'
+                            embed.insert_field_at(0, name="**Reason**",value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
+                except discord.Forbidden: content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
+                except AttributeError: pass
             try:
-                sortedMembers = sorted(list(members.get(member.guild.id)), key=lambda x: x.joined_at)
-                embed.description+='\n(Was {}{} member; now we have {} members)'.format(sortedMembers.index(member)+1, suffix(sortedMembers.index(member)+1), len(sortedMembers)-1)
-            except: pass
-            embed.set_thumbnail(url=member.avatar_url)
-            embed.set_footer(text="User ID: "+str(member.id))
-            #if await database.SummarizeEnabled(member.guild, 'doorguard'):
-            #    summaries.get(str(member.guild.id)).add('doorguard', 6, datetime.datetime.now(), data, embed,content=content)
-            #else:
-            message = await logChannel(member.guild, 'doorguard').send(content=content,embed=embed)
+                embed.description+=f"\n[Hover for more details]({message.jump_url} 'Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}"
+                embed.description+=f'''\nLeft at: {received}\nHere for: {f"{', '.join(hereForDisplay[:-1])} and {hereForDisplay[-1]}" if len(hereForDisplay) > 1 else hereForDisplay[0]}'''
+                sortedMembers = sorted(members.get(member.guild.id), key=lambda x: x.joined_at)
+                memberJoinPlacement = sortedMembers.index(member) + 1
+                embed.description+=f'\nWas the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}'
+            except Exception as e: print(f'Member leave placement fail: {e}')
+            embed.description+="')"
+            if 'Finalizing' in embed.title: embed.title = '👮‍♂️❌Member left'
+            await message.edit(embed=embed)
+            embed.set_field_at(-1, name='**Post count**', value=await self.MemberPosts(member))
+            await message.edit(embed=embed)
             await VerifyLightningLogs(message, 'doorguard')
         members[member.guild.id] = member.guild.members
+        if os.path.exists(savePath): os.remove(savePath)
         await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot)])
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User):
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(member.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         if logEnabled(guild, 'doorguard'):
-            embed=discord.Embed(title='🚫🔨{} was unbanned'.format(user.name),description="",timestamp=datetime.datetime.utcnow(),color=0x008000)
+            embed=discord.Embed(title=f'🚫🔨{user.name} was unbanned',description="",timestamp=datetime.datetime.utcnow(),color=green)
             content=None
+            f = None
             #data = {'member': user.id, 'name': user.name, 'server': guild.id}
             if readPerms(guild, 'doorguard'):
                 try:
-                    async for log in guild.audit_logs(limit=1):
-                        if log.action == discord.AuditLogAction.unban:
-                            embed.description = "by "+log.user.mention+" ("+log.user.name+")"
-                            await updateLastActive(log.user, datetime.datetime.now(), 'unbanned a user')
-                    async for log in guild.audit_logs(limit=None):
+                    log = (await guild.audit_logs(limit=1).flatten())[0]
+                    if log.action == discord.AuditLogAction.unban:
+                        embed.description = f'by {log.user.mention} ({log.user.name})'
+                        await updateLastActive(log.user, datetime.datetime.now(), 'unbanned a user')
+                    async for log in guild.audit_logs(limit=None): #Attempt to find the ban audit log to pull ban details
                         if log.action == discord.AuditLogAction.ban:
                             if log.target.id == user.id:
                                 span = datetime.datetime.utcnow() - log.created_at
-                                hours = span.seconds//3600
-                                minutes = (span.seconds//60)%60
-                                times = [span.seconds - hours*3600 - minutes*60, minutes, hours, span.days]
-                                val = ['{} seconds'.format(times[0])]
-                                if sum(times[1:]) > 0:
-                                    val.append('{} minutes'.format(times[1]))
-                                    if sum(times[2:]) > 0:
-                                        val.append('{} hours'.format(times[2]))
-                                        if times[3] > 0: val.append('{} days'.format(times[3]))
-                                embed.add_field(name="Banned for",value=', '.join(reversed(val)))
+                                hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
+                                times = [seconds, minutes, hours, span.days]
+                                bannedForDisplay = []
+                                for i in range(len(times) - 1, -1, -1):
+                                    if times[i] != 0: bannedForDisplay.append(f'{times[i]} {units[i]}{"s" if times[i] != 1 else ""}')
+                                if len(bannedForDisplay) == 0: bannedForDisplay = ['0 seconds']                                
+                                embed.add_field(name="**Ban details**",value='React ℹ to expand', inline=False)
+                                longString = f'''Banned by: {log.user.name} ({log.user.mention})\nBanned because: {log.reason if log.reason is not None else '<No reason specified>'}\nBanned at: {(log.created_at + datetime.timedelta(hours=timeZone(guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(guild)}\nUnbanned at: {received}\nBanned for: {f"{', '.join(bannedForDisplay[:-1])} and {bannedForDisplay[-1]}" if len(bannedForDisplay) > 1 else bannedForDisplay[0]}'''
                                 break
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`\nI also need that permission to determine if a member was kicked/banned"
-            embed.set_thumbnail(url=user.avatar_url)
-            embed.set_footer(text="User ID: "+str(user.id))
+            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not user.is_avatar_animated() else 'gif'))
+            try: await user.avatar_url_as(size=1024).save(savePath)
+            except discord.HTTPException: pass
+            f = discord.File(savePath)
+            embed.set_thumbnail(url=f'attachment://{f.filename}')
+            embed.set_footer(text=f'User ID: {user.id}')
             #if await database.SummarizeEnabled(guild, 'doorguard'):
             #    summaries.get(str(guild.id)).add('doorguard', 7, datetime.datetime.now(), data, embed,content=content)
             #else:
-            msg = await logChannel(guild, 'doorguard').send(content=content,embed=embed)
+            msg = await logChannel(guild, 'doorguard').send(content=content,embed=embed,file=f)
             await VerifyLightningLogs(msg, 'doorguard')
+            if len(embed.fields) > 0:
+                await msg.add_reaction('ℹ')
+                while True:
+                    def toggleCheck(r, u): return str(r) == 'ℹ' and not u.bot and r.message.id == msg.id
+                    await self.bot.wait_for('reaction_add', check=toggleCheck)
+                    embed.set_field_at(-1, name='**Ban details**', value=longString)
+                    await msg.edit(embed=embed)
+                    await self.bot.wait_for('reaction_remove', check=toggleCheck)
+                    embed.set_field_at(-1, name='**Ban details**', value='React ℹ to expand')
+                    await msg.edit(embed=embed)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
@@ -1787,13 +1869,13 @@ class Cyberlog(commands.Cog):
             try: await m.clear_reactions()
             except: pass
             await m.edit(content=self.loading)
-            embed=discord.Embed(title='⚠An error has occured⚠',description=f'''{error}\n\n⬆: Collapse information\n{self.disguard}: Send this to my developer via my official server\n\n[Hover for traceback]({m.jump_url} '{''.join(traceback.format_exception(type(error), error, error.__traceback__, 4))}')''',timestamp=datetime.datetime.utcnow(),color=red)
+            embed=discord.Embed(title='⚠An error has occured⚠',description=f"""{error}\n\n⬆: Collapse information\n{self.disguard}: Send this to my developer via my official server\n\n[Hover for traceback]({m.jump_url} '{''.join(traceback.format_exception(type(error), error, error.__traceback__, 2))}')""",timestamp=datetime.datetime.utcnow(),color=red)
             embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
             embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id) if ctx.guild is not None else 'N/A')
             embed.add_field(name='Channel',value='{} ({}){}'.format(ctx.channel.name, ctx.channel.id, '(NSFW)' if ctx.channel.is_nsfw() else '') if type(ctx.channel) is discord.TextChannel else 'DMs')
             embed.add_field(name='Author',value='{} ({})'.format(ctx.author.name, ctx.author.id))
             embed.add_field(name='Message',value='{} ({})'.format(ctx.message.content, ctx.message.id))
-            embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y - %I:%M %p EST'))
+            embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y • %I:%M %p EST'))
             await m.edit(content=None,embed=embed)
             for r in ['⬆️', self.disguard]: await m.add_reaction(r)
             def navigCheck(r,u): return str(r) == '⬆️' or r.emoji == self.disguard and u.id == ctx.author.id and r.message.id == m.id
@@ -2016,7 +2098,7 @@ class Cyberlog(commands.Cog):
                 except: desired = None
                 def checkBday(r, u): return u == desired and not u.bot and r.message.id == message.id and str(r) == '🍰'
                 def checkBack(r, u): return u == ctx.author and r.message.id == message.id and str(r) == '⬅'
-                if 'member details' in message.embeds[0].title.lower(): await message.add_reaction('🍰')
+                if 'member details' in message.embeds[0].title.lower() and desired: await message.add_reaction('🍰')
                 d, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkBack), self.bot.wait_for('reaction_add', check=checkBday)], return_when=asyncio.FIRST_COMPLETED)
                 try: r = d.pop().result()
                 except: pass
@@ -2112,7 +2194,7 @@ class Cyberlog(commands.Cog):
         embed.description+='\n\n**Features:** {}'.format(', '.join(s.features) if len(s.features) > 0 else 'None')
         embed.description+='\n\n**Nitro boosters:** {}/{}, **perks:** {}'.format(s.premium_subscription_count,perkDict.get(s.premium_tier),', '.join(perks))
         #embed.set_thumbnail(url=s.icon_url)
-        embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nameZone(s), (datetime.datetime.utcnow()-created).days),inline=False)
+        embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nameZone(s), (datetime.datetime.utcnow()-created).days),inline=False)
         embed.add_field(name='Region',value=str(s.region))
         embed.add_field(name='AFK Timeout',value='{}s --> {}'.format(s.afk_timeout, s.afk_channel))
         if s.max_presences is not None: embed.add_field(name='Max Presences',value='{} (BETA)'.format(s.max_presences))
@@ -2169,8 +2251,8 @@ class Cyberlog(commands.Cog):
                         updated = log.created_at + datetime.timedelta(hours=await database.GetTimezone(channel.guild))
                         break
         if updated is None: updated = created
-        details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nameZone(channel.guild), (datetime.datetime.utcnow()-created).days))
-        details.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y - %I:%M %p"),nameZone(channel.guild), (datetime.datetime.utcnow()-updated).days)))
+        details.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nameZone(channel.guild), (datetime.datetime.utcnow()-created).days))
+        details.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y • %I:%M %p"),nameZone(channel.guild), (datetime.datetime.utcnow()-updated).days)))
         inviteCount = []
         for inv in iter(invites): inviteCount.append(inv.inviter)
         details.add_field(name='Invites to here',value='None' if len(inviteCount) == 0 else ', '.join(['{} by {}'.format(a[1], a[0].name) for a in iter(collections.Counter(inviteCount).most_common())]))
@@ -2206,13 +2288,13 @@ class Cyberlog(commands.Cog):
         embed.add_field(name='Displayed separately',value=r.hoist)
         embed.add_field(name='Externally managed',value=r.managed)
         embed.add_field(name='Mentionable',value=r.mentionable)
-        embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nameZone(r.guild), (datetime.datetime.utcnow()-created).days))
-        embed.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y - %I:%M %p"), nameZone(r.guild), (datetime.datetime.utcnow()-updated).days)))
+        embed.add_field(name='Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nameZone(r.guild), (datetime.datetime.utcnow()-created).days))
+        embed.add_field(name='Last updated',value='{}'.format('{} {} ({} days ago)'.format(updated.strftime("%b %d, %Y • %I:%M %p"), nameZone(r.guild), (datetime.datetime.utcnow()-updated).days)))
         embed.add_field(name='Belongs to',value='{} members'.format(len(r.members)))
         embed.set_footer(text='Role ID: {}'.format(r.id))
         return embed
 
-    async def MemberInfo(self, m: discord.Member):
+    async def MemberInfo(self, m: discord.Member, addThumbnail=True):
         postCount = await self.MemberPosts(m)
         tz = timeZone(m.guild)
         nz = nameZone(m.guild)
@@ -2235,7 +2317,7 @@ class Cyberlog(commands.Cog):
         if len(activeDisplay) == 0: activeDisplay = ['0s']
         activities = {discord.Status.online: self.online, discord.Status.idle: self.idle, discord.Status.dnd: self.dnd, discord.Status.offline: self.offline}
         embed.description='{}{} {}\n\n{}Last active {} {} • {} ago ({}){}'.format(activities.get(m.status), m.mention, '' if m.nick is None else 'aka {}'.format(m.nick),
-            'Last online {} {} • {} ago\n'.format(onlineTimestamp.strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(onlineDisplay))[0]) if m.status == discord.Status.offline else '', activeTimestamp.strftime('%b %d, %Y - %I:%M %p'), nameZone(m.guild), list(reversed(activeDisplay))[0], mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
+            'Last online {} {} • {} ago\n'.format(onlineTimestamp.strftime('%b %d, %Y • %I:%M %p'), nameZone(m.guild), list(reversed(onlineDisplay))[0]) if m.status == discord.Status.offline else '', activeTimestamp.strftime('%b %d, %Y • %I:%M %p'), nameZone(m.guild), list(reversed(activeDisplay))[0], mA.get('reason'), '\n•This member is likely {}invisible'.format(self.offline) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
@@ -2260,12 +2342,12 @@ class Cyberlog(commands.Cog):
         if boosting is None: embed.add_field(name='Boosting server',value='Nope')
         else:
             boosting += datetime.timedelta(hours=tz)
-            embed.add_field(name='Boosting server',value='{}'.format('Since {} {} ({} days ago)'.format(boosting.strftime("%b %d, %Y - %I:%M %p"), nz, (datetime.datetime.utcnow()-boosting).days)))
-        embed.add_field(name='📆Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nz, (datetime.datetime.utcnow()-created).days))
-        embed.add_field(name='📆Joined server',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y - %I:%M %p"), nz, (datetime.datetime.utcnow()-joined).days))
+            embed.add_field(name='Boosting server',value='{}'.format('Since {} {} ({} days ago)'.format(boosting.strftime("%b %d, %Y • %I:%M %p"), nz, (datetime.datetime.utcnow()-boosting).days)))
+        embed.add_field(name='📆Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nz, (datetime.datetime.utcnow()-created).days))
+        embed.add_field(name='📆Joined server',value='{} {} ({} days ago)'.format(joined.strftime("%b %d, %Y • %I:%M %p"), nz, (datetime.datetime.utcnow()-joined).days))
         embed.add_field(name='📜Posts',value=postCount)
         embed.add_field(name='🎙Voice Chat',value=voice)
-        embed.set_thumbnail(url=m.avatar_url)
+        if addThumbnail: embed.set_thumbnail(url=m.avatar_url)
         embed.set_footer(text='Member ID: {}'.format(m.id))
         return embed
         
@@ -2277,7 +2359,7 @@ class Cyberlog(commands.Cog):
         embed.add_field(name='Twitch emoji',value=e.managed)
         if owner is not None: embed.add_field(name='Uploaded by',value='{} ({})'.format(owner.mention, owner.name))
         embed.add_field(name='Server',value=e.guild.name)
-        embed.add_field(name='📆Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nameZone(e.guild), (datetime.datetime.utcnow()-created).days))
+        embed.add_field(name='📆Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nameZone(e.guild), (datetime.datetime.utcnow()-created).days))
         return embed
 
     async def PartialEmojiInfo(self, e: discord.PartialEmoji):
@@ -2291,10 +2373,10 @@ class Cyberlog(commands.Cog):
         embed.set_thumbnail(url=i.guild.icon_url)
         expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
         created = i.created_at + datetime.timedelta(hours=timeZone(s))
-        embed.add_field(name='📆Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y - %I:%M %p"), nameZone(s), (datetime.datetime.utcnow()-created).days))
-        embed.add_field(name='⏰Expires',value='{} {}'.format(expires.strftime("%b %d, %Y - %I:%M %p"), nameZone(s)))
+        embed.add_field(name='📆Created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nameZone(s), (datetime.datetime.utcnow()-created).days))
+        embed.add_field(name='⏰Expires',value='{} {}'.format(expires.strftime("%b %d, %Y • %I:%M %p"), nameZone(s)) if i.max_age > 0 else 'Never')
         embed.add_field(name='Server',value=i.guild.name)
-        embed.add_field(name='Channel',value=i.guild.name)
+        embed.add_field(name='Channel',value=i.channel.mention)
         embed.add_field(name='Author',value='{} ({})'.format(i.inviter.mention, i.inviter.name))
         embed.add_field(name='Used',value='{}/{} times'.format(i.uses, '∞' if i.max_uses == 0 else i.max_uses))
         embed.set_footer(text='Invite server ID: {}'.format(i.guild.id))
@@ -2595,6 +2677,9 @@ async def VerifyLightningLogs(m: discord.Message, mod):
         for reac in m.reactions: await new.add_reaction(str(reac))
         return await m.delete()
 
+async def updateServer(s: discord.Guild):
+    global lightningLogging
+    lightningLogging[s.id] = await database.GetServer(s)
 
 def ConfigureSummaries(b):
     global summaries
@@ -2637,8 +2722,12 @@ def nameZone(s: discord.Guild):
 def timeZone(s: discord.Guild):
     return lightningLogging.get(s.id).get('offset')
 
+def prefix(s: discord.Guild):
+    return lightningLogging.get(s.id).get('prefix')
+
 def lastActive(u: discord.User):
-    return lightningUsers.get(u.id).get('lastActive')
+    try: return lightningUsers.get(u.id).get('lastActive')
+    except AttributeError: return {'timestamp': datetime.datetime.min, 'reason': 'not tracked yet'}
 
 async def updateLastActive(u: discord.User, timestamp, reason):
     try: lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
@@ -2646,7 +2735,8 @@ async def updateLastActive(u: discord.User, timestamp, reason):
     await database.SetLastActive(u, timestamp, reason)
 
 def lastOnline(u: discord.User):
-    return lightningUsers.get(u.id).get('lastOnline')
+    try: return lightningUsers.get(u.id).get('lastOnline')
+    except AttributeError: return datetime.datetime.min
 
 async def updateLastOnline(u: discord.User, timestamp):
     try: lightningUsers[u.id]['lastOnline'] = timestamp

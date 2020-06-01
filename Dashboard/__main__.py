@@ -85,9 +85,10 @@ def callback(redir=None):
         session.permanent = True
         if redir is None: return callback(request.url)
         else: return callback(redir)
-    if redir is None: redir = request.url
-    if request.path == '/': return redirect(url_for('.manage'))
-    else: return redirect(redir)
+    #if redir is None: redir = request.url
+    #if request.path == '/' or request.path == '/callback': return redirect(url_for('.manage'))
+    if redir: return redirect(redir)
+    else: return redirect(url_for('.manage'))
 
 def EnsureVerification(id):
     '''Check if the user is authorized to proceed to editing a server'''

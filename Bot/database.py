@@ -115,7 +115,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
         "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
         'consecutiveMessages': [10, 120] if serv is None or spam.get('consecutiveMessages') is None else spam.get('consecutiveMessages'), #If this many messages in a row are sent by the same person, flag them
-        'repeatedJoins': [3, 300, 86400] if serv is None or spam.get('repeatedJoins') is None else spam.get('repeatedJoins'), #If user joins [0] times in [1] seconds, ban them for [2] seconds
+        'repeatedJoins': [0, 300, 86400] if serv is None or spam.get('repeatedJoins') is None else spam.get('repeatedJoins'), #If user joins [0] times in [1] seconds, ban them for [2] seconds
         "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
         "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
         "channelExclusions": await DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
@@ -127,7 +127,8 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         'ageKick': None if serv is None or spam.get('ageKick') is None else spam.get('ageKick'), #NEED TO REDO DATABASE ALGORITHM SO ON DEMAND VARIABLES ARENT OVERWRITTEN
         'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
         'ageKickOwner': False if serv is None or spam.get('ageKickOwner') is None else spam.get('ageKickOwner'),
-        'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist')},
+        'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist'),
+        'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents')}, #Bans, mutes, etc
     "cyberlog": {
         "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
         "image": False if log is None or log.get('image') is None else log.get('enabled'),
@@ -356,13 +357,23 @@ async def ManageServer(member: discord.Member): #Check if a member can manage se
 
 async def ManageRoles(member: discord.Member):
     '''Does this member have the Manage Roles permission'''
+    if member.id == member.guild.owner.id: return True
     for a in member.roles:
         if a.permissions.administrator or a.permissions.manage_roles:
             return True
     return False
 
+async def ManageChannels(member: discord.Member):
+    '''Does this member have the Manage Channels permission'''
+    if member.id == member.guild.owner.id: return True
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.manage_channels:
+            return True
+    return False
+
 async def KickMembers(member: discord.Member):
     '''Does this member have the Kick Members permission'''
+    if member.id == member.guild.owner.id: return True
     for a in member.roles:
         if a.permissions.administrator or a.permissions.kick_members:
             return True
@@ -370,6 +381,7 @@ async def KickMembers(member: discord.Member):
 
 async def BanMembers(member: discord.Member):
     '''Does this member have the Ban Members permission'''
+    if member.id == member.guild.owner.id: return True
     for a in member.roles:
         if a.permissions.administrator or a.permissions.ban_members:
             return True
@@ -539,6 +551,10 @@ async def AppendWhitelistEntry(s: discord.Guild, entry):
     '''Appends to the ageKick whitelist of a server'''
     await servers.update_one({'server_id': s.id}, {'$push': {'antispam.ageKickWhitelist': entry}}, True)
 
+async def RemoveWhitelistEntry(s: discord.Guild, entry):
+    '''Removes an entry from the ageKick whitelist of a server'''
+    await servers.update_one({'server_id': s.id}, {'$pull': {'antispam.ageKickWhitelist': entry}}, True)
+
 async def ResetWhitelist(s: discord.Guild):
     '''Resets (empties) the ageKick whitelist of a server'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKickWhitelist': []}}, True)
@@ -558,6 +574,18 @@ async def GetAgeKickOwner(s: discord.Guild):
 async def SetAgeKickOwner(s: discord.Guild, new: bool):
     '''Sets whether the ageKick configuration for the specified server can only be modified by the server owner'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKickOwner': new}}, True)
+
+async def AppendTimedEvent(s: discord.Guild, event):
+    '''Appends a timed ban/mute/etc event to a server, these are checked periodically'''
+    await servers.update_one({'server_id': s.id}, {'$push': {'antispam.timedEvents': event}}, True)
+
+async def RemoveTimedEvent(s: discord.Guild, event):
+    '''Removes a timed ban/mute/etc event from a server'''
+    await servers.update_one({'server_id': s.id}, {'$pull': {'antispam.timedEvents': event}}, True)
+
+async def AppendCustomStatus(m: discord.Member, emoji, status):
+    '''Appends a custom status event to a member's listing of them. To be implemented; this is just for data.'''
+    await users.update_one({'user_id': m.id}, {'$push': {'customStatuses': {'emoji': emoji, 'status': status, 'timestamp': datetime.datetime.utcnow()}}}, True)
 
 async def SetLastActive(u: discord.User, timestamp, reason):
     '''Updates the last active attribute'''

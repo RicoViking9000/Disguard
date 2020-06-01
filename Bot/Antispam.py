@@ -6,8 +6,11 @@ import profanityfilter
 import emoji
 import Cyberlog
 import asyncio
+import traceback
+import copy
 
 filters = {}
+members = {} #serverID_memberID: member
 
 yellow=0xffff00
 green=0x008000
@@ -24,12 +27,34 @@ class Antispam(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
-        self.updateFilters.start()
+        self.updateMembers.start()
+        self.checkTimedEvents.start()
 
-    @tasks.loop(minutes=1)
-    async def updateFilters(self):
-        await PrepareFilters(self.bot)
+    @tasks.loop(minutes=6)
+    async def updateMembers(self):
+        if self.updateMembers.current_loop == 0: await asyncio.sleep(60)
+        await PrepareMembers(self.bot)
 
+    @tasks.loop(minutes=15)
+    async def checkTimedEvents(self):
+        if self.checkTimedEvents.current_loop == 0: await asyncio.sleep(60)
+        try:
+            for g in self.bot.guilds:
+                events = Cyberlog.lightningLogging.get(g.id).get('antispam').get('timedEvents')
+                for e in events:
+                    if datetime.datetime.utcnow() > e.get('expires'):
+                        if e.get('type') == 'ban':
+                            try: await g.get_member(e.get('target')).unban(reason=f'{e.get("flavor")} Ban duration expired')
+                            except discord.Forbidden as e: print(f'Timed ban error: {e.text}')
+                        elif e.get('type') == 'mute':
+                            member = g.get_member(e.get('target'))
+                            try: 
+                                await member.remove_roles(g.get_role(e.get('role')))
+                                await member.add_roles(*[g.get_role(r) for r in e.get('roleList')])
+                                for p in e.get('permissionsTaken'): await g.get_channel(p.get('id')).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(p.get('overwrites')[0]), discord.Permissions(p.get('overwrites')[1])))
+                            except discord.Forbidden as e: print(f'Timed mute error: {e.text}')
+                        await database.RemoveTimedEvent(g, e)
+        except: traceback.print_exc()
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -43,8 +68,8 @@ class Antispam(commands.Cog):
 
 
     async def filterAntispam(self, message: discord.Message, spam):
-        try: person = await database.GetMember(message.author)
-        except: return
+        try: person = copy.deepcopy(members).get(f'{message.guild.id}_{message.author.id}')
+        except AttributeError: return
 
         '''IMPLEMENT QUICKMESSAGE/LASTMESSAGE MESSAGE ARRAYS'''
         #The following lines of code deal with a member's lastMessages and quickMessages:
@@ -56,11 +81,13 @@ class Antispam(commands.Cog):
 
         '''FEB 29: I realize the previous code dealt with *every server member* during every message...  yeah, that won't fly anymore, and never should have. Bot will be a *lot* faster and more responsive now :)'''
         
-        lastMessages = person.get("lastMessages")
-        quickMessages = person.get("quickMessages")
-        cRE = await CheckRoleExclusions(message.author)
+        try: lastMessages = person.get("lastMessages")
+        except AttributeError: lastMessages = []
+        try: quickMessages = person.get("quickMessages")
+        except AttributeError: quickMessages = []
+        cRE = CheckRoleExclusions(message.author)
         if message.content is not None and len(message.content) > 0: lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
-        if message.channel.id not in await database.GetChannelExclusions(message.guild) and not cRE and message.author.id not in await database.GetMemberExclusions(message.guild):
+        if message.channel.id not in GetChannelExclusions(message.guild) and not cRE and message.author.id not in GetMemberExclusions(message.guild):
             quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
             for msg in lastMessages:
                 try:
@@ -80,8 +107,9 @@ class Antispam(commands.Cog):
                 except:
                     quickMessages = []
                     print('Resetting quickmessages for {}, {}'.format(message.author.name, message.guild.name))
-            await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
-            await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+            #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+            #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+            members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
         if spam.get('exclusionMode') == 0:
             if not (message.channel.id in spam.get('channelExclusions') and cRE or message.author.id in spam.get('memberExclusions')): return
         else:
@@ -110,8 +138,9 @@ class Antispam(commands.Cog):
                     flag = True
                     reason.append("Repeated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
                     short.append("Repeated messages")
+                    members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': []})
                     lastMessages = []
-                    await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+                    #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
             if 0 not in spam.get("quickMessages") and len(quickMessages) > 0:
                 timeOne = quickMessages[0].get("created")
                 timeLast = quickMessages[-1].get("created")
@@ -119,13 +148,14 @@ class Antispam(commands.Cog):
                     flag = True
                     reason.append("Sending too many messages too quickly\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
                     short.append("Spamming messages too fast")
+                    members[f'{message.guild.id}_{message.author.id}'].update({'quickMessages': []})
                     quickMessages = []
-                    await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+                    #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         if spam.get('consecutiveMessages')[0] != 0:
             messages = await message.channel.history(limit=spam.get('consecutiveMessages')[0]).flatten()
             if len(messages) >= spam.get('consecutiveMessages')[0] and all([m.author.id == message.author.id for m in messages]) and (messages[0].created_at - messages[-1].created_at).seconds < spam.get('consecutiveMessages')[1]:
                 flag = True
-                reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} consecutively over {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages in under {spam.get("consecutiveMessages")[1]} seconds)')
+                reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} messages consecutively over {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages over {spam.get("consecutiveMessages")[1]} seconds)')
                 short.append('Sending too many consecutive messages')
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available
@@ -159,10 +189,10 @@ class Antispam(commands.Cog):
                 flag = True
                 reason.append("Appearing to selfbot: Sending an embed")
                 short.append("Selfbotting (embed)")
-            if "ping" in message.content.lower() and "ms" in message.content.lower():
+            if any([w.startswith('ping') for w in message.content.lower().split(' ')]) and any([w.endswith('ms') for w in message.content.lower().split(' ')]):
                 flag = True
                 reason.append("Appearing to selfbot: Latency ping message")
-                short.append("Selfbotting (ping)")
+                short.append("Selfbotting (ping message)")
         if int(spam.get("caps")) != 0:
             changes = 0
             spaces = 0
@@ -200,7 +230,7 @@ class Antispam(commands.Cog):
                     reason.append("Too many capital letters: " + parsed + "\n\n(" + str(round(changes / (len(message.content) - spaces) * 100)) + "% capital letters detected; " + str(spam.get("caps")) + "% tolerated)")
                     short.append("Too many caps")
         if not spam.get("links"):
-            if "http" in message.content and ":" in message.content:
+            if "http" in message.content and "://" in message.content:
                 flag = True
                 reason.append("Sending a web URL link: " + message.content)
                 short.append("Sending a URL")
@@ -240,7 +270,7 @@ class Antispam(commands.Cog):
                         if a == " ":
                             spaces += 1
                     currentFilter = profanityfilter.ProfanityFilter()
-                    currentFilter._censor_list = filters.get(str(message.guild.id))
+                    currentFilter._censor_list = spam.get('filter')
                     filtered = currentFilter.censor(message.content.lower())
                     arr = message.content.lower().split(" ")
                     prof = filtered.split(" ")
@@ -258,17 +288,21 @@ class Antispam(commands.Cog):
                             flag = True
                             reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
                             short.append("Profanity")
-            except TypeError: print(filters.get(str(message.guild.id)))
-        if not flag: 
+            except TypeError: pass
+        if not flag:
+            if person != members.get(f'{message.guild.id}_{message.author.id}'):
+                if person.get('lastMessages') != members.get(f'{message.guild.id}_{message.author.id}').get('lastMessages'): asyncio.create_task(database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages))
+                if person.get('quickMessages') != members.get(f'{message.guild.id}_{message.author.id}').get('quickMessages'): asyncio.create_task(database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages))
             return
+        await message.channel.trigger_typing()
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
             return await message.channel.send("I flagged user `" + str(message.author) + "`, but need Manage Role permissions for the current consequence to be given. There are two solutions:\n  •Add the Manage Role permissions to me\n  •Enter your server's web dashboard and change the punishment for being flagged")
         if spam.get("delete"):
             try:
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(message)
                 await message.delete()
-            except:
-                await message.channel.send("I require Manage Message permissions to carry out deleting messages upon members being flagged")
+            except discord.Forbidden as e:
+                await message.channel.send(f"Unable to delete flagged message by {message.author.name} because {e.text}.")
         successful = False #Was a member's consequence carried out successfully?
         desc = [] #List of error messages, if applicable
         warned = False #Was a member warned?
@@ -276,7 +310,8 @@ class Antispam(commands.Cog):
         role = None #The role to use if applicable
         if person.get("warnings") >= 1:
             try:
-                await database.UpdateMemberWarnings(message.guild, message.author, person.get("warnings") - 1)
+                #await database.UpdateMemberWarnings(message.guild, message.author, person.get("warnings") - 1)
+                members[f'{message.guild.id}_{message.author.id}'].update({'warnings': person.get('warnings') - 1})
                 successful = True
                 warned = True
             except:
@@ -287,6 +322,9 @@ class Antispam(commands.Cog):
                     for a in message.guild.roles:
                         if a.name == "RicobotAutoMute":
                             role = a
+                            for a in message.guild.text_channels:
+                                try: await a.set_permissions(role, send_messages=False)
+                                except discord.Forbidden: pass
                             successful = True
                             break
                     if role is None:
@@ -309,12 +347,24 @@ class Antispam(commands.Cog):
                 else:
                     role = message.guild.get_role(spam.get("customRole"))
                     successful = True
+                memberRolesTaken = [r for r in message.author.roles if r != message.guild.default_role]
+                permissionsTaken = []
+                #rawPermissionsTaken = []
                 try:
                     await message.author.add_roles(role)
+                    await message.author.remove_roles(*memberRolesTaken)
+                    for c in message.author.guild.text_channels:
+                        if message.author in c.overwrites.keys():
+                            before, after = c.overwrites.get(message.author).pair()
+                            #permissionsTaken.append({'id': c.id, 'overwrites': c.overwrites.get(message.author)})
+                            permissionsTaken.append({'id': c.id, 'overwrites': (before.value, after.value)})
+                            await c.set_permissions(message.author, overwrite=None, reason='Automute')
                     roled = True
                 except discord.Forbidden:
                     desc.append("Unable to add role " + role.name + " to member upon being flagged")
                     successful = False
+                muteTimedEvent = {'type': 'mute', 'target': message.author.id, 'flavor': '[Antispam: AutoMute]', 'role': role.id, 'roleList': [r.id for r in memberRolesTaken], 'permissionsTaken': permissionsTaken, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=spam.get('muteTime'))}
+                await database.AppendTimedEvent(message.guild, muteTimedEvent)
             if spam.get("action") == 2:
                 try:
                     await message.guild.kick(message.author)
@@ -333,7 +383,7 @@ class Antispam(commands.Cog):
         for a in short:
             shorter.description += "• " + a + "\n"
         if person.get("warnings") >= 0 and warned:
-            shorter.add_field(name="Your consequence",value="Warning (" + str(person.get("warnings")) + " left)")
+            shorter.add_field(name="Your consequence",value="Warning (" + str(person.get("warnings") - 1) + " left)")
         else:
             if spam.get("action") == 0:
                 shorter.add_field(name="Your consequence",value="Nothing :)")
@@ -346,20 +396,25 @@ class Antispam(commands.Cog):
             if spam.get("action") == 4:
                 shorter.add_field(name="Your consequence",value=message.guild.get_role(spam.get("customRole")).name + " role for " + str(spam.get("muteTime")) + " seconds")
         whispered = 0 #Status for if bot is able to DM a member, if applicable
-        if spam.get("whisper"):
+        if spam.get("whisper") or not message.channel.permissions_for(message.author).read_messages:
+            if not message.channel.permissions_for(message.author).read_messages: flavorText = f'The automute has temporarily prevented you from accessing the channel {message.channel.name}, so you would not have known you were muted otherwise. You will receive a DM update when your mute time is up.'
+            else: flavorText = f'{message.guild.name} has set their antispam notice to DM members upon being flagged.'
             try:
-                await message.author.send(embed=shorter)
+                directShorter = copy.deepcopy(shorter)
+                directShorter.description += f'\n\n*You are receiving this DM because {flavorText}**'
+                await message.author.send(embed=directShorter)
                 whispered = 2
             except discord.Forbidden:
                 whispered = 1
         if not spam.get("whisper") or whispered != 2:
             await message.channel.send(embed=shorter)
+        if person.get('warnings') != members.get(f'{message.guild.id}_{message.author.id}').get('warnings'): asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, person.get('warnings') - 1))
         if None not in spam.get("log"):
             longer = discord.Embed(title=message.author.name + " was flagged for spam",description=message.author.mention + " was flagged for **" + str(len(short)) + " reasons**, details below",timestamp=datetime.datetime.utcnow(),color=0xFF00FF)
             for a in range(len(reason)):
                 longer.add_field(name="Reason " + str(a + 1),value=reason[a],inline=False)
             if warned:
-                longer.add_field(name="Member's consequence",value="Warning (" + str(person.get("warnings")) + " / " + str(spam.get("warn")) + " left)")
+                longer.add_field(name="Member's consequence",value="Warning (" + str(person.get("warnings") - 1) + " / " + str(spam.get("warn")) + " left)")
             else:
                 if spam.get("action") == 0:
                     longer.add_field(name="Member's consequence",value="Nothing :)")
@@ -383,14 +438,23 @@ class Antispam(commands.Cog):
         if not roled:
             return
         await asyncio.sleep(spam.get("muteTime"))
+        if not message.channel.permissions_for(message.author).read_messages:
+            try: await message.author.send(f'You are now unmuted in {message.guild.name}')
+            except discord.Forbidden: pass
         lcEmbed = None
-        if role not in message.author.roles:
-            lcEmbed = discord.Embed(title="Mute time is up for "+message.author.name,description="It appears somebody else already removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=0x3fd8e9)
+        if role not in message.guild.get_member(message.author.id).roles:
+            lcEmbed = discord.Embed(title="Mute time is up for "+message.author.name,description="It appears somebody else already removed role **" + role.name + "** from __" + message.author.mention + "__, but I'll make sure the rest of the roles they had before were given back.",timestamp=datetime.datetime.utcnow(),color=0x3fd8e9)
         try:
             await message.author.remove_roles(role)
             lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Successfully removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=0x00FF00)
         except discord.Forbidden:
             lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Unable to remove role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=0x800000)
+        try: await message.author.add_roles(*memberRolesTaken)
+        except discord.Forbidden: lcEmbed.description+=f'Unable to add some roles back to {message.author.name}, make sure they have these roles: {" • ".join([r.name for r in memberRolesTaken])}'
+        try:
+            for p in permissionsTaken: await message.guild.get_channel(p.get('id')).set_permissions(message.author, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(p.get('overwrites')[0]), discord.Permissions(p.get('overwrites')[1])))
+        except discord.Forbidden: lcEmbed.description+=f'Unable to recreate channel permission overwrites for {message.author.name}'
+        await database.RemoveTimedEvent(message.guild, muteTimedEvent)
         if spam.get("log"):
             try:
                 await message.guild.get_channel(spam.get("log")[1]).send(embed=lcEmbed)
@@ -399,43 +463,47 @@ class Antispam(commands.Cog):
     
     @commands.command()
     async def ageKick(self, ctx, *args):
-        loading = discord.Embed(description='{} Loading...'.format(self.loading),color=yellow,timestamp=datetime.datetime.utcnow())
-        m = await ctx.send(embed=loading)
-        if not await database.ManageServer(ctx.author): return await m.edit(content='You need manage server, administrator, or owner permissions to use this', embed=None)
+        await ctx.trigger_typing()
+        newline = '\n'
+        if not await database.ManageServer(ctx.author): return await ctx.send('You need manage server, administrator, or server owner permissions to use this')
+        config = Cyberlog.lightningLogging.get(ctx.guild.id).get('antispam')
+        wl = config.get('ageKickWhitelist')
         if len(args) == 0:
-            wl = await database.GetWhitelist(ctx.guild)
-            e=discord.Embed(title='Age Kick Information: {}'.format(ctx.guild.name),description='**{0:–^70}**\n{2}\n**{1:–^70}**\n{3}'.format('WHITELIST IDs', 'RECIPIENT DM MESSAGE',
-            ' • '.join(str(w) for w in wl) if wl is not None and len(wl) > 0 else '(Whitelist is empty)', await database.GetAgeKickDM(ctx.guild)),color=yellow,timestamp=datetime.datetime.utcnow())
-            e.add_field(name='Kick Accounts',value='Under {} days old'.format(await database.GetAgeKick(ctx.guild)))
-            e.add_field(name=f'Manageable by {ctx.guild.owner.name} only',value=await database.GetAgeKickOwner(ctx.guild))
-            await m.edit(embed=e)
+            e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get("ageKickDM")}''', color=yellow, timestamp=datetime.datetime.utcnow())
+            e.add_field(name='Kick Accounts',value=f'Under {config.get("ageKick")} days old')
+            e.add_field(name=f'Manageable by {ctx.guild.owner.name} only',value=config.get('ageKickOwner'))
+            await ctx.send(embed=e)
         else:
+            if config.get('ageKickOwner') and ctx.author.id != ctx.guild.owner.id: return await ctx.send(f'Only the owner of this server ({ctx.guild.owner.name}) can edit the ageKick configuration.')
             arg = args[0]
             e = discord.Embed(title='Age Kick Configuration',description='{} Saving...'.format(self.loading),color=yellow,timestamp=datetime.datetime.utcnow())
-            await m.edit(embed=e)
+            m = await ctx.send(embed=e)
             if len(args) == 1:
                 try: 
                     arg = int(arg)
-                    if arg > 1000: 
-                        await database.AppendWhitelistEntry(ctx.guild,arg)
-                        e.description='ID {} added to age kick whitelist'.format(arg)
+                    if arg > 1000:
+                        try: user = await self.bot.fetch_user(arg)
+                        except discord.NotFound: return await m.edit(content=f'I was unable to find a valid user matching the ID of `{arg}`.')
+                        if user.id not in wl:
+                            await database.AppendWhitelistEntry(ctx.guild, user.id)
+                            e.description=f'**Successful addition to ageKick whitelist**\nName: {user.name}\nID: {user.id}\n\nTo remove this user from the whitelist, use the agekick command with their ID again. They will be automatically removed when they join this server.'
+                        else:
+                            await database.RemoveWhitelistEntry(ctx.guild, user.id)
+                            e.description=f'Successfully removed {user.name} ({user.id}) from the ageKick whitelist.'
                     else:
-                        await database.SetAgeKick(ctx.guild,arg)
-                        e.description='Now accounts under {} days old that join will be automatically kicked'.format(arg)
-                except:
+                        await database.SetAgeKick(ctx.guild, arg)
+                        e.description=f'Successfully updated ageKick configuration from kicking accounts under {config.get("ageKick")} days old to kicking accounts **under {arg} days old.**'
+                except ValueError:
                     if 'clear' == arg.lower():
-                        entries = len(await database.GetWhitelist(ctx.guild))
                         await database.ResetWhitelist(ctx.guild)
-                        e.description=f'Successfully cleared the agekick whitelist for {ctx.guild.name}. {entries} entries were removed.'
+                        e.description=f'Successfully cleared the agekick whitelist for {ctx.guild.name}. {len(wl)} entries were removed.'
                     elif 'owner' == arg.lower():
                         if ctx.author.id != ctx.guild.owner.id: return await m.edit(content='You need to be the server owner in order to edit this', embed=None)
-                        ownerStatus = await database.GetAgeKickOwner(ctx.guild)
-                        if not ownerStatus: e.description=f'Successfully updated server ageKick configuration: Now, **only the server owner ({ctx.guild.owner.name})** can edit the ageKick configuration for this server. Type this command again to disable.'
-                        else: e.description='Successfully updated server ageKick configuration: Now, **any manager** (person with `manager server` or higher) can edit the ageKick configuration for this server. Type this command again to restrict to owner only again.'
+                        ownerStatus = config.get('ageKickOwner')
+                        if not ownerStatus: e.description=f'Successfully updated server ageKick configuration: Now, **only the server owner ({ctx.guild.owner.name})** can edit the ageKick configuration for this server. Type this command again to allow any manager to edit the ageKick configuration.'
+                        else: e.description='Successfully updated server ageKick configuration: Now, **any manager** (person with `manager server` or higher) can edit the ageKick configuration for this server. Type this command again to restrict ageKick editability to yourself only.'
                         await database.SetAgeKickOwner(ctx.guild, not ownerStatus)
-                    else:
-                        await database.SetAgeKickDM(ctx.guild,arg)
-                        e.description='Updated DM members receive upon being kicked to say `{}`'.format(arg)
+                    else: return await m.edit(content=f'No actions found for `{arg}`. Acceptable single-word arguments are `owner` to toggle owner-only editability or `clear` to clear the whitelist. To view the ageKick configuration for this server, simpy type `agekick` with no arguments.', embed=None)
             else:
                 arg = ' '.join(args)
                 e.set_author(name='Please wait....')
@@ -448,20 +516,37 @@ class Antispam(commands.Cog):
                 if str(r[0]) == '✅':
                     await database.SetAgeKickDM(ctx.guild,arg)
                     e.description='My developer has approved your request\n\nUpdated DM members receive upon being kicked to say `{}`'.format(arg)
-                else: e.description='My developer has denied your request on the grounds of security, please try another custom message or join my support server for assistance'
+                    r[0].message.embeds[0].description+='\n\n**Successful approval'
+                    await r[0].message.edit(embed=r[0].message.embeds[0])
+                else: e.description='My developer has denied your request on the grounds of security, please try another custom message or join [my support server](https://discord.gg/xSGujjz) for assistance.'
             e.set_author(name='Success')
-            await m.edit(embed=e,delete_after=15)
-            await asyncio.sleep(15)
-            return await ctx.command.invoke(ctx)
+            e.set_footer(text='React 🔄 to view ageKick configuration')
+            await m.edit(embed=e)
+            await m.add_reaction('🔄')
+            await Cyberlog.updateServer(ctx.guild)
+            config = Cyberlog.lightningLogging.get(ctx.guild.id).get('antispam')
+            wl = config.get('ageKickWhitelist')
+            def configCheck(r, u): return str(r) == '🔄' and r.message.id == m.id and u.id == ctx.author.id
+            await self.bot.wait_for('reaction_add', check=configCheck)
+            await m.clear_reactions()
+            return await m.edit(embed=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST IDs":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get('ageKickDM')}''', color=yellow, timestamp=datetime.datetime.utcnow()))
         
-async def CheckRoleExclusions(member: discord.Member):
+def CheckRoleExclusions(member: discord.Member):
     '''Checks a member's roles to determine if their roles are in the exceptions list
         Return True if a member's role is in the list'''
-    exclusions = (await database.GetAntiSpamObject(member.guild)).get('roleExclusions')
+    exclusions = Cyberlog.lightningLogging.get(member.guild.id).get('antispam').get('roleExclusions')
     for role in member.roles:
         if role.id in exclusions:
             return True
     return False
+
+def GetChannelExclusions(s: discord.Guild):
+    '''Returns the list of channel IDs (exclusions) for the given server'''
+    return Cyberlog.lightningLogging.get(s.id).get('antispam').get('channelExclusions')
+
+def GetMemberExclusions(s: discord.Guild):
+    '''Returns the list of member IDs (exclusions) for the given server'''
+    return Cyberlog.lightningLogging.get(s.id).get('antispam').get('memberExclusions')
 
 def GetRoleManagementPermissions(member: discord.Member):
     '''Returns True if a member has Manage Role permissions'''
@@ -470,12 +555,12 @@ def GetRoleManagementPermissions(member: discord.Member):
             return True
     return False
 
-async def PrepareFilters(bot: commands.Bot):
+async def PrepareMembers(bot: commands.Bot):
     '''Initialize the local profanityfilter objects'''
-    global filters
-    global loading
+    global members
+    #print(Cyberlog.lightningLogging)
     for server in bot.guilds:
-        filters[str(server.id)] = await database.GetProfanityFilter(server)
+        for m in Cyberlog.lightningLogging.get(server.id).get('members'): members[f'{server.id}_{m.get("id")}'] = m
 
 def setup(bot):
     bot.add_cog(Antispam(bot))
