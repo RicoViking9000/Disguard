@@ -538,6 +538,7 @@ class Cyberlog(commands.Cog):
                 await c.send(embed=embed)
                 self.pins[after.channel.id].remove(after.id)
             if after.content.strip() == before.strip(): return #If the text before/after is the same, and after unpinned message log if applicable
+            if any([w in before.strip for w in ['attachments>', '<1 attachment:', 'embed>']]): return
         except NameError: #If before doesn't exist
             if after.author.bot: return
             embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, channel.mention, after.jump_url, received, nameZone(g))
