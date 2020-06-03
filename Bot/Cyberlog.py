@@ -174,9 +174,9 @@ class Cyberlog(commands.Cog):
                 try: self.categories[s.id] = [c[1] for c in s.by_category() if c[0] is None]
                 except discord.Forbidden: pass
                 try:
-                    self.invites[str(s.id)] = await s.invites()
+                    self.invites[str(s.id)] = (await s.invites())
                     try: self.invites[str(s.id)+"_vanity"] = (await s.vanity_invite())
-                    except: pass
+                    except discord.HTTPException: pass
                 except discord.Forbidden: pass
                 except Exception as e: print('Invite management error: Server {}\n{}'.format(s.name, e))
             for u in self.bot.users: lightningUsers[u.id] = users.get(u.id)
@@ -538,10 +538,9 @@ class Cyberlog(commands.Cog):
                 await c.send(embed=embed)
                 self.pins[after.channel.id].remove(after.id)
             if after.content.strip() == before.strip(): return #If the text before/after is the same, and after unpinned message log if applicable
-            if any(w in before.strip for w in ['attachments>', '<1 attachment:', 'embed>']): return
         except NameError: #If before doesn't exist
             if after.author.bot: return
-            embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, c.mention, after.jump_url, received, nameZone(g))
+            embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, channel.mention, after.jump_url, received, nameZone(g))
             embed.add_field(name='New message content',value=payload.data.get('content'))
             return await c.send(content='This message is old and I was unable to locate more details in my filesystem, so information is limited',embed=embed)
         if after.author.bot: return #Three statements because if this were earlier, it would return before catching unpinned messages
@@ -781,7 +780,7 @@ class Cyberlog(commands.Cog):
                 else: tempUnaccessibleString = f'''\n[Not accessible to: {" • ".join([f'{keytypes.get(type(o))}{o.name}' for o in unaccessible])}]({msg.jump_url} '{unaccessibleTail}')'''
             else: tempUnaccessibleString = ''
             if len(tempAccessibleString) + len(tempUnaccessibleString) > 1900:
-                trimmedAccessibleString = tempAccessibleString[tempAccessibleString.find('[')+1:tempAccessibleString.find(']')]
+                trimmedAccessibleString = f"\n{tempAccessibleString[tempAccessibleString.find('[')+1:tempAccessibleString.find(']')]}"
                 trimmedUnaccessibleString = f"\n{tempUnaccessibleString[tempUnaccessibleString.find('[')+1:tempUnaccessibleString.find(']')]}"
                 if len(tempAccessibleString) + len(trimmedUnaccessibleString) < 1900: embed.description+=f'{tempAccessibleString}{trimmedUnaccessibleString}'
                 elif len(trimmedAccessibleString) + len(tempUnaccessibleString) < 1900: embed.description+=f'{trimmedAccessibleString}{tempUnaccessibleString}'
@@ -927,7 +926,8 @@ class Cyberlog(commands.Cog):
                 gainDescription = (f'''{newline.join([f"[{len(v)} members gained {len(k.split(' '))} permissions • Hover for details]({message.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([permissionKeys.get(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([permissionKeys.get(p) for p in k.split(' ')])}')" for k, v in gainedKeys.items()])}{newline if len(removedKeys) > 0 and len(gainedKeys) > 0 else ''}''') if len(gainedKeys) > 0 else ''
                 removeDescription = f'''{newline.join([f"[{len(v)} members lost {len(k.split(' '))} permissions • Hover for details]({message.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([permissionKeys.get(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([permissionKeys.get(p) for p in k.split(' ')])}')" for k,v in removedKeys.items()])}''' if len(removedKeys) > 0 else ''
                 if len(gainDescription) > 0 or len(removeDescription) > 0: embed.description+=f'{newline if len(gainDescription) > 0 or len(removeDescription) > 0 else ""}{gainDescription}{removeDescription}\nPrecise timestamp: {received}'
-                else: embed.description+=f'\nChannel permission overwrites were updated but no members gained or lost permissions\nPrecise timestamp: {received}'
+                else: 
+                    if before.overwrites != after.overwrites: embed.description+=f'\nPermissions were updated but nobody gained or lost permissions\nPrecise timestamp: {received}'
                 await message.edit(embed=embed)
                 for reaction in reactions: await message.add_reaction(reaction)
                 try: 
@@ -1044,10 +1044,10 @@ class Cyberlog(commands.Cog):
                 for invite in oldInv:
                     try:
                         if newInv[newInv.index(oldInv)].uses > invite.uses:
-                            targetInvite = invite
+                            targetInvite = newInv[newInv.index(oldInv)]
                             break
                     except ValueError: #An invite that reached max uses will be missing from the new list
-                        targetInvite = invite
+                        targetInvite = newInv[newInv.index(oldInv)]
                         break 
                 if not targetInvite: #Check the vanity invite (if applicable) if we don't have an invite
                     try:
@@ -1055,7 +1055,8 @@ class Cyberlog(commands.Cog):
                         if invite.uses > self.invites.get(str(member.guild.id)+"_vanity").uses: targetInvite = invite
                     except discord.HTTPException: pass
             except Exception as e: embed.add_field(name='**Invite Details**',value=f'Error retrieving details: {e}')
-            self.invites[str(member.guild.id)] = newInv
+            try: self.invites[str(member.guild.id)] = newInv
+            except: pass
             msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed,file=f)
             embed.description=f'''{member.mention} ({member.name})\n{count}{suffix(count)} member\nAccount age: {ageDisplay[0]} old\n[Hover for more details]({msg.jump_url} 'Precise timestamp of join: {received}\nAccount created: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\nAccount age: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old\nMutual Servers: {len([g for g in bot.guilds if member in g.members])}\n\nQUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')'''
             if targetInvite: embed.add_field(name='**Invite Details**',value=f'''Invited by {targetInvite.inviter.name} ({targetInvite.inviter.mention})\n[Hover for more details]({msg.jump_url} '\nCode: discord.gg/{targetInvite.code}\nChannel: {targetInvite.channel.name}\nCreated: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\n{"Never expires" if targetInvite.max_age == 0 else f"Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}\nUsed: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')''')
