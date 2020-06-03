@@ -1343,7 +1343,7 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User):
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(member.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(user.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         if logEnabled(guild, 'doorguard'):
             embed=discord.Embed(title=f'🚫🔨{user.name} was unbanned',description="",timestamp=datetime.datetime.utcnow(),color=green)
             content=None
