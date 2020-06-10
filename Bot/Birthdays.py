@@ -535,11 +535,9 @@ async def modifyWishlistItems(self, ctx, m, new, wishlist, add=True): #If add is
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
                 await stuff.delete()
             except discord.Forbidden: pass
-            toModify += stuff.content.split(', ')
             if add: new.embeds[0].description=d.format('YOUR WISH LIST', '\n'.join(['• {}'.format(w) for w in wishlist] + ['• **{}**'.format(w) for w in toModify]), verb, preposition, ' the number or text of an entry' if not add else '', ' Type `clear` to empty your wish list.' if not add else '')
             else: 
                 if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist)
-                #new.embeds[0].description='{} Please wait...'.format(self.loading)
                 for w in wishlist:
                     for wo in range(len(toModify)):
                         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
