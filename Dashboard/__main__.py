@@ -1,6 +1,7 @@
 import os
 import pymongo
 from flask import Flask, g, session, redirect, request, url_for, jsonify, render_template
+import flask_breadcrumbs
 from requests_oauthlib import OAuth2Session
 from oauth import Oauth
 import dns
@@ -18,6 +19,7 @@ AUTHORIZATION_BASE_URL = API_BASE_URL + '/oauth2/authorize'
 TOKEN_URL = API_BASE_URL + '/oauth2/token'
 
 app = Flask(__name__)
+flask_breadcrumbs.Breadcrumbs(app=app)
 
 app.debug = True
 app.config['SECRET_KEY'] = Oauth.client_secret
@@ -50,8 +52,12 @@ def make_session(token=None, state=None, scope=None):
         auto_refresh_url=TOKEN_URL,
         token_updater=token_updater)
 
+def serverNameGen(*args, **kwargs):
+    if 'server_id' not in session: return 'You aren\'t supposed to be here'
+    return [{'text': str(servers.find_one({"server_id":session.get('server_id')}).get("name")), 'url': '.'}]
 
 @app.route('/')
+@flask_breadcrumbs.register_breadcrumb(app, '.', 'Dashboard')
 def index(redir=None):
     scope = request.args.get(
         'scope',
@@ -105,6 +111,7 @@ def ReRoute(redir=None):
         return url_for('manage')
 
 @app.route('/manage')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage', 'Select a Server')
 def manage():
     discord = make_session(token=session.get('oauth2_token'))
     try:
@@ -115,7 +122,8 @@ def manage():
         return redirect(url_for('index')) #If the website can't load servers
     return render_template('homepage.html', servers=shared, user=user.get("username"))
 
-@app.route('/manage/<int:id>')
+@app.route('/manage/<int:id>/')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.', '', dynamic_list_constructor=serverNameGen)
 def manageServer(id):
     if EnsureVerification(id):
         session['server_id'] = id
@@ -124,6 +132,7 @@ def manageServer(id):
         return redirect(ReRoute(request.url))
 
 @app.route('/manage/<int:id>/server', methods=['GET', 'POST'])
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.server', 'General Server Settings')
 def server(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))
@@ -148,6 +157,7 @@ def server(id):
     return render_template('general.html', servObj=serv, date=d, date2=d2, id=id)
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.antispam', 'Antispam')
 def antispam(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))
@@ -181,6 +191,7 @@ def antispam(id):
             "selfbot": r.get("selfbot").lower() == 'true',
             "caps": float(r.get("caps")),
             "links": r.get("links").lower() == 'false',
+            'attachments': [r.get('attachmentAttachment'), r.get('mediaAttachment'), r.get('uncommonAttachment'), r.get('imageAttachment'), r.get('audioAttachment'), r.get('videoAttachment'), r.get('staticAttachment'), r.get('gifAttachment'), r.get('tieAttachment')],
             "invites": r.get("invites").lower() == 'false',
             "everyoneTags": int(r.get("everyoneTags")),
             "hereTags": int(r.get("hereTags")),
@@ -202,11 +213,13 @@ def antispam(id):
     return render_template('antispam.html', servid = id, servObj=servObj, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
 
 @app.route('/manage/<int:id>/moderation')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.moderation', 'Moderation')
 def moderation(id):
     return "This feature will be available later!"
     
 
 @app.route('/manage/<int:id>/cyberlog', methods=['GET', 'POST'])
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.cyberlog', 'Cybersecurity/Logging')
 def cyberlog(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))

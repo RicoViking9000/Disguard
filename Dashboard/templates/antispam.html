@@ -22,7 +22,13 @@
             <div class='circle'></div>
             <div class='circle'></div>
         </div>
-        <a href="{{url_for('manageServer', id=servid)}}"><h2 class=goBack>Back</h2></a>
+        <div class=breadcrumbs>
+            {%for breadcrumb in breadcrumbs%}
+                <a {%if loop.last%}class=breadcrumbCurrent{%endif%} href='{{breadcrumb.url}}'><span {%if loop.last%}class=breadcrumbCurrent{%endif%}>{{breadcrumb.text}}</span></a>
+                {{'>' if not loop.last}}
+            {%endfor%}
+        </div>
+        <!--<a href="{{url_for('manageServer', id=servid)}}"><h2 class=goBack>Back</h2></a>-->
         <h1 class=mod-header>Antispam</h1>
         <div class=mod-master-switch>
         </div>
@@ -74,6 +80,16 @@
                         If a message contains >=<input type="number" name=caps value={{automod.caps}}>% caps, flag the message<br>
                         Flag messages containing web URLs: <select name=links><option value=True {%if not automod.links%}selected{%endif%}>Enabled</option><option value=False {%if automod.links%}selected{%endif%}>Disabled</option></select><br>
                         Flag messages containing discord.gg invites: <select name=invites><option value=True {%if not automod.invites%}selected{%endif%}>Enabled</option><option value=False {%if automod.invites%}selected{%endif%}>Disabled</option></select><br>
+                        Delete messages with attachments<br>
+                            <input type="checkbox" name='attachmentAttachment' {%if automod.attachments[0]%}checked{%endif%}> All attachments<br>
+                            <input type="checkbox" name='mediaAttachment' {%if automod.attachments[1]%}checked{%endif%}> <div class=tooltip>Media attachments<span class=tooltiptext>Image, Audio, and Video attachments that embed into Discord</span></div><br>
+                            <input type="checkbox" name='uncommonAttachment' {%if automod.attachments[2]%}checked{%endif%}> <div class=tooltip>Uncommon attachments<span class=tooltiptext>Any attachment that isn't an image, audio, or video that embeds into Discord, or a text file</span></div><br>
+                            <input type="checkbox" name='imageAttachment' {%if automod.attachments[3]%}checked{%endif%}> <div class=tooltip>Image attachments<span class=tooltiptext>png, jpeg, jpg, webp, gif attachments</span></div><br>
+                            <input type="checkbox" name='audioAttachment' {%if automod.attachments[4]%}checked{%endif%}> <div class=tooltip>Audio attachments<span class=tooltiptext>flac, mp3, ogg, wav attachments</span></div><br>
+                            <input type="checkbox" name='videoAttachment' {%if automod.attachments[5]%}checked{%endif%}> <div class=tooltip>Video attachments<span class=tooltiptext>mp4, webm, mov attachments</span></div><br>
+                            <input type="checkbox" name='staticAttachment' {%if automod.attachments[6]%}checked{%endif%}> <div class=tooltip>Static image attachments<span class=tooltiptext>Any embedded image that is not a gif</span></div><br>
+                            <input type="checkbox" name='gifAttachment' {%if automod.attachments[7]%}checked{%endif%}> <div class=tooltip>Animated image attachments<span class=tooltiptext>gif attachments</span></div><br>
+                            <input type="checkbox" name='tieAttachment' {%if automod.attachments[8]%}checked{%endif%}> <div class=tooltip>Connect this feature with the antispam flagging system<span class=tooltiptext>This module will operate by default as long as any of the above boxes are checked, even if antispam is disabled, and will simply delete messages and explain to users that the certain file tpye isn't allowed. Checking this box will allow this setting to be controlled by the antispam enabled and exclusion settings, along with flagging and punishing users who do this too many times, in accordance with the settings at the top of this page. Note that enabling this will prevent attachments from being logged, if applicable.</span></div><br>
                         If a message contains >=<input type="number" name=everyoneTags value={{automod.everyoneTags}}> @everyone mentions, and doesn't mention <i>everyone</i>, flag the message<br>
                         If a message contains >=<input type="number" name=hereTags value={{automod.hereTags}}> @here mentions, and doesn't mention <i>here</i>, flag the message<br>
                         If a message contains >=<input type="number" name=roleTags value={{automod.roleTags}}> @role mentions, flag the message<br>

@@ -9,6 +9,7 @@ import asyncio
 import collections
 import copy
 import nltk
+import os
 
 
 yellow=0xffff00
@@ -518,6 +519,18 @@ async def modifyWishlistItems(self, ctx, m, new, wishlist, add=True): #If add is
         except asyncio.TimeoutError: await new.delete()
         for future in p: future.cancel()
         if type(stuff) is discord.Message:
+            if len(stuff.attachments) == 1:
+                if stuff.attachments[0].height: #We have an image or a video, so we will create a permanent URL via the private image hosting channel
+                    await stuff.add_reaction(self.loading)
+                    imageLogChannel = bot.get_channel(534439214289256478)
+                    tempDir = 'Attachments/Temp'
+                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), stuff.attachments[0].filename[stuff.attachments[0].filename.rfind('.')+1:]))
+                    await stuff.attachments[0].save(savePath)
+                    f = discord.File(savePath)
+                    hostMessage = await imageLogChannel.send(file=f)
+                    toModify.append(hostMessage.attachments[0].url)
+                    if os.path.exists(savePath): os.remove(savePath)
+            elif stuff.content is not None and len(stuff.content) > 0: toModify += stuff.content.split(', ')
             try:
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
                 await stuff.delete()

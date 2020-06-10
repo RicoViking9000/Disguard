@@ -62,8 +62,9 @@ class Antispam(commands.Cog):
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
         server = Cyberlog.lightningLogging.get(message.guild.id)
-        spam = server.get('antispam')
-        if not spam or not spam.get('enabled'): return #return if antispam isn't enabled
+        try: spam = server.get('antispam')
+        except AttributeError: return
+        if not spam or not (spam.get('enabled') or spam.get('attachments')[-1]): return #return if antispam isn't enabled
         self.bot.loop.create_task(self.filterAntispam(message, spam))
 
 
@@ -81,7 +82,43 @@ class Antispam(commands.Cog):
         '''Removal if messages are too old'''
 
         '''FEB 29: I realize the previous code dealt with *every server member* during every message...  yeah, that won't fly anymore, and never should have. Bot will be a *lot* faster and more responsive now :)'''
-        
+        reason = [] #List of reasons (long version) that a member was flagged for
+        short = [] #list of reasons (short version) that a member was flagged for
+        flag = False
+        if any(spam.get('attachments')[:-1]) and len(message.attachments) > 0: #Check for attachments
+            #[All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
+            #File extensions from https://www.computerhope.com/issues/ch001789.htm
+            t = spam.get('attachments')
+            descriptions = ['All attachments', 'Media attachments', 'Uncommon attachments', 'Images', 'Audio attachments', 'Video attachments', 'Static images', 'Gif images']
+            aFlag = ''
+            for a in message.attachments:
+                if t[0]: aFlag = 'Attachment'
+                ext = a.filename[a.filename.rfind('.') + 1:].lower()
+                audioExt = ['mp3', 'ogg', 'wav', 'flac']
+                videoExt = ['mp4', 'webm', 'mov']
+                staticExt = ['jpeg', 'jpg', 'png', 'webp']
+                #Start with most general category and end with most specific
+                if t[1] and ext in audioExt + videoExt + staticExt + ['gif']: aFlag = 'Media attachment'
+                if t[3] and (ext in staticExt or ext == 'gif'): aFlag = 'Image attachment'
+                if t[7] and ext == 'gif': aFlag = 'Animated image attachment' #gif filtering
+                if t[6] and ext in staticExt: aFlag = 'Static image attachment' #static image filtering
+                if t[5] and ext in videoExt: aFlag = 'Video attachment' #video file filtering
+                if t[4] and ext in audioExt: aFlag = 'Audio attachment'
+                if t[2] and ext not in audioExt + videoExt + staticExt + ['gif', 'txt']: aFlag = 'Uncommon attachment'
+            if aFlag:
+                if t[-1]:
+                    flag = True
+                    reason.append(f'Sending a .{ext} attachment ({aFlag})\n\nServer antispam policy blocks the following attachment types: {", ".join([descriptions[d] for d in range(len(t[:-1])) if t[d]])}')
+                    short.append(f'Sending a {aFlag} attachment')
+                else:
+                    p = message.author.guild_permissions
+                    if not p.administrator or p.manage_guild or message.author.id == message.guild.owner.id:
+                        await message.channel.trigger_typing()
+                        if Cyberlog.logEnabled(message.guild, 'message') and Cyberlog.lightningLogging.get(message.guild.id).get('cyberlog').get('image'): await asyncio.sleep(2) #Wait two seconds if image logging is enabled
+                        try: await message.delete()
+                        except discord.Forbidden: pass
+                        return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending {aFlag}s in this server', color=0xD2691E), delete_after=15)
+        if not (any(spam.get('attachments')[:-1]) and spam.get('enabled')): return
         try: lastMessages = person.get("lastMessages")
         except AttributeError: lastMessages = []
         try: quickMessages = person.get("quickMessages")
@@ -117,9 +154,6 @@ class Antispam(commands.Cog):
             if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or cRE: return        
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
-        reason = [] #List of reasons (long version) that a member was flagged for
-        short = [] #list of reasons (short version) that a member was flagged for
-        flag = False #was a member flagged?
         if spam.get("congruent")[0] != 0 or 0 not in spam.get("quickMessages"): 
             #Checking for lastMessages and quickMessages
             lastMessages = person.get("lastMessages")

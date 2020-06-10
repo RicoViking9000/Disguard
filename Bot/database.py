@@ -59,7 +59,7 @@ async def Verification(b: commands.Bot):
     '''Longest operation. Checks entire usable database *twice*, and verifies it's as it should be, creating entries as necessary'''
     await VerifyServers(b)
     await VerifyUsers(b)
-    await VerifyUsers(b)
+    #await VerifyUsers(b)
 
 async def VerifyServers(b: commands.Bot):
     '''Ensures all servers have database entries; adding and removing as necessary'''
@@ -109,6 +109,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "selfbot": True if serv is None or spam.get('selfbot') is None else spam.get('selfbot'), #Detect possible selfbots or spam advertisers?
         "caps": 0.0 if serv is None or spam.get('caps') is None else spam.get('caps'), #Caps to tolerate - 0=no filter, int=value, double=percentage
         "links": True if serv is None or spam.get('links') is None else spam.get('links'), #URLs allowed?
+        'attachments': [False, False, False, False, False, False, False, False, False] if serv is None or spam.get('attachments') is None else spam.get('attachments'), #[All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
         "invites": True if serv is None or spam.get('invites') is None else spam.get('invites'), #Discord.gg invites allowed?
         "everyoneTags": 2 if serv is None or spam.get('everyoneTags') is None else spam.get('everyoneTags'), #Max number of @everyone, if it doesn't actually tag; 0=anything tolerated
         "hereTags": 2 if serv is None or spam.get('hereTags') is None else spam.get('hereTags'), #Max number of @here, if it doesn't actually tag; 0=anything tolerated
@@ -583,9 +584,17 @@ async def RemoveTimedEvent(s: discord.Guild, event):
     '''Removes a timed ban/mute/etc event from a server'''
     await servers.update_one({'server_id': s.id}, {'$pull': {'antispam.timedEvents': event}}, True)
 
-async def AppendCustomStatus(m: discord.Member, emoji, status):
-    '''Appends a custom status event to a member's listing of them. To be implemented; this is just for data.'''
-    await users.update_one({'user_id': m.id}, {'$push': {'customStatuses': {'emoji': emoji, 'status': status, 'timestamp': datetime.datetime.utcnow()}}}, True)
+async def AppendCustomStatusHistory(m: discord.Member, emoji, status):
+    '''Appends a custom status event to a user listing of them. Member object because only they have custom status attributes, not just user objects.'''
+    await users.update_one({'user_id': m.id}, {'$push': {'customStatusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}}}, True)
+
+async def AppendUsernameHistory(m: discord.User):
+    '''Appends a username update to a user's listing of them'''
+    await users.update_one({'user_id': m.id}, {'$push': {'usernameHistory': {'name': m.name, 'timestamp': datetime.datetime.utcnow()}}}, True)
+
+async def AppendAvatarHistory(m: discord.User, url):
+    '''Appends an avatar update to a user's listing of them. Old is the discord CDN avatar link used for comparisons, new is the permanent link from the image log channel (copy attachment)'''
+    await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': str(m.avatar_url), 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}}, True)
 
 async def SetLastActive(u: discord.User, timestamp, reason):
     '''Updates the last active attribute'''

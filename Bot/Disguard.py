@@ -230,8 +230,7 @@ async def david(ctx):
 @commands.is_owner()
 @bot.command()
 async def test(ctx):
-    print((await bot.fetch_user(128617298301943808)).bot)
-    await ctx.send('Printed')
+    await ctx.send(str(ctx.author.avatar_url_as(format='png')))
 
 
 database.Initialize(secure.token())

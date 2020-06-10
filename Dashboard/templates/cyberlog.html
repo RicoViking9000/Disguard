@@ -20,8 +20,12 @@
             <div class='circle'></div>
             <div class='circle'></div>
           </div>
-        <a href="{{url_for('manageServer', id=servid)}}"><h2 class=goBack>Back</h2></a>
-        <h1 class=mod-header>Cybersecurity/Logging</h1>
+        <div class=breadcrumbs>
+            {%for breadcrumb in breadcrumbs%}
+                <a {%if loop.last%}class=breadcrumbCurrent{%endif%} href='{{breadcrumb.url}}'><span {%if loop.last%}class=breadcrumbCurrent{%endif%}>{{breadcrumb.text}}</span></a>
+                {{'>' if not loop.last}}
+            {%endfor%}
+        </div>
         <div class=mod-main>
             <form class=mod-main method="POST">
                 <div class=masterSwitch>

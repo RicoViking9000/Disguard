@@ -13,8 +13,6 @@ import psutil
 import cpuinfo
 
 bot = None
-globalLogChannel = discord.TextChannel
-imageLogChannel = discord.TextChannel
 serverPurge = {}
 summarizeOn=False
 secondsInADay = 3600 * 24
@@ -143,13 +141,15 @@ class Cyberlog(commands.Cog):
         self.summarize.cancel()
         self.DeleteAttachments.cancel()
 
-    @tasks.loop(minutes=3)
+    @tasks.loop()
     async def summarize(self):
-        print('Summarizing')
-        started = datetime.datetime.now()
-        rawStarted = datetime.datetime.now()
         try:
-            print('Inside summarizing')
+            print('Summarizing')
+            started = datetime.datetime.now()
+            rawStarted = datetime.datetime.now()
+            if self.summarize.current_loop == 0: 
+                await self.bot.get_cog('Birthdays').updateBirthdays()
+                print(f'Initial bootup done in {(datetime.datetime.now() - started).seconds}s')
             global lightningLogging
             global lightningUsers
             global members
@@ -157,14 +157,46 @@ class Cyberlog(commands.Cog):
             rawServers = await (await database.GetAllServers()).to_list(None)
             rawUsers = await (await database.GetAllUsers()).to_list(None)
             print(f'Listed in {(datetime.datetime.now() - started).seconds}s')
-            servers = {}
-            users = {}
             started = datetime.datetime.now()
-            for s in rawServers: servers[s.get('server_id')] = s
-            for u in rawUsers: users[u.get('user_id')] = u
+            for s in rawServers: 
+                try: lightningLogging[s.get('server_id')] = s
+                except Exception as e: print(f'Server update error: {e}')
+            for u in rawUsers:
+                try: lightningUsers[u.get('user_id')] = u
+                except Exception as e: print(f'User update error: {e}')
             for s in self.bot.guilds: 
-                lightningLogging[s.id] = servers.get(s.id)
+                #lightningLogging[s.id] = servers.get(s.id)
                 members[s.id] = s.members
+                if self.summarize.current_loop == 1:
+                    for m in s.members:
+                        for a in m.activities:
+                            if a.type == discord.ActivityType.custom:
+                                try:
+                                    if {'e': str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(m, a.emoji, a.name)
+                                except AttributeError: pass
+                                except TypeError: await database.AppendCustomStatusHistory(m, str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
+                        try:
+                            if m.name != lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): await database.AppendUsernameHistory(m)
+                        except AttributeError: pass
+                        except TypeError: await database.AppendUsernameHistory(m)
+                        try:
+                            if str(m.avatar_url) != lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
+                                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                                await m.avatar_url_as(size=1024).save(savePath)
+                                f = discord.File(savePath)
+                                message = await self.imageLogChannel.send(file=f)
+                                await database.AppendAvatarHistory(m, message.attachments[0].url)
+                                if os.path.exists(savePath): os.remove(savePath)
+                                await asyncio.sleep(1)
+                        except (AttributeError, discord.HTTPException): pass
+                        except TypeError: 
+                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                            await m.avatar_url_as(size=1024).save(savePath)
+                            f = discord.File(savePath)
+                            message = await self.imageLogChannel.send(file=f)
+                            await database.AppendAvatarHistory(m, message.attachments[0].url)
+                            if os.path.exists(savePath): os.remove(savePath)
+                            await asyncio.sleep(1)
                 for c in s.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
                     except discord.Forbidden: pass
@@ -179,7 +211,6 @@ class Cyberlog(commands.Cog):
                     except discord.HTTPException: pass
                 except discord.Forbidden: pass
                 except Exception as e: print('Invite management error: Server {}\n{}'.format(s.name, e))
-            for u in self.bot.users: lightningUsers[u.id] = users.get(u.id)
             print(f'Populated in {(datetime.datetime.now() - started).seconds}s')
             started = datetime.datetime.now()                
             memberList = self.bot.get_all_members()
@@ -187,12 +218,14 @@ class Cyberlog(commands.Cog):
             print(f'Status management done in {(datetime.datetime.now() - started).seconds}s')
         except Exception as e: print('Summarize error: {}'.format(e))
         print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
+        await asyncio.sleep(300)
 
     @tasks.loop(hours=24)
     async def DeleteAttachments(self):
         print('Deleting attachments that are old')
         time = datetime.datetime.now()
         try:
+            await database.Verification(self.bot)
             removal=[]
             for server in self.bot.guilds:
                 for channel in server.text_channels:
@@ -261,7 +294,6 @@ class Cyberlog(commands.Cog):
                     else:
                         if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y - %I:%M: %p} {nameZone(message.guild)}')
                         result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar_url)
-                        result.embeds[0].color = discord.Color.default()
                         return await message.channel.send(content=result.content,embed=result.embeds[0])
 
     async def pinAddLogging(self, message: discord.Message):
@@ -496,7 +528,6 @@ class Cyberlog(commands.Cog):
         if g is None: return
         rawReceived = datetime.datetime.utcnow()
         received = (rawReceived + datetime.timedelta(hours=timeZone(g))).strftime('%b %d, %Y • %I:%M:%S %p')
-        global edits
         channel = self.bot.get_channel(int(payload.data.get('channel_id'))) #Get the channel of the edited message
         try: after = await channel.fetch_message(payload.message_id) #Get the message object, and return if not found
         except discord.NotFound: return
@@ -525,8 +556,8 @@ class Cyberlog(commands.Cog):
         except FileNotFoundError: #If we can't find the file, then we say this
             if after.author.bot: return
             embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, channel.mention, after.jump_url, received, nameZone(g))
-            embed.add_field(name='New message content',value='[{}]({})'.format(payload.data.get('content'), after.jump_url))
-            m = await c.send(content='This message is old and I was unable to locate more details in my filesystem, so information is limited',embed=embed)
+            embed.add_field(name='New message content',value='[{}]({})'.format(after.content, after.jump_url))
+            m = await c.send(content='<Error retrieving file data>',embed=embed)
             return await m.add_reaction('ℹ')
         except IndexError: before = after.content #Author is bot, and indexes aren't kept for bots; keep this for pins only
         try:
@@ -542,8 +573,8 @@ class Cyberlog(commands.Cog):
         except NameError: #If before doesn't exist
             if after.author.bot: return
             embed.description='Author: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {} {}'.format(author.mention, author.name, channel.mention, after.jump_url, received, nameZone(g))
-            embed.add_field(name='New message content',value=payload.data.get('content'))
-            return await c.send(content='This message is old and I was unable to locate more details in my filesystem, so information is limited',embed=embed)
+            embed.add_field(name='New message content',value=after.content)
+            return await c.send(content='<Error retrieving file data>',embed=embed)
         if after.author.bot: return #Three statements because if this were earlier, it would return before catching unpinned messages
         timestamp = datetime.datetime.utcnow()
         beforeWordList = before.split(" ") #A list of words in the old message
@@ -643,7 +674,9 @@ class Cyberlog(commands.Cog):
         received = (datetime.datetime.utcnow() + datetime.timedelta(hours=lightningLogging.get(g.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         if serverPurge.get(payload.guild_id): return
         if not logEnabled(g, 'message'): return
-        try: message = payload.cached_message
+        try: 
+            message = payload.cached_message
+            if message.type != discord.MessageType.default: return
         except AttributeError: message = None
         c = logChannel(g, 'message')
         if payload.message_id in self.pauseDelete: return self.pauseDelete.remove(payload.message_id)
@@ -942,10 +975,11 @@ class Cyberlog(commands.Cog):
             try: self.categories[after.guild.id] = [c[1] for c in after.guild.by_category() if c[0] is None]
             except discord.Forbidden: pass
         if type(before) is discord.TextChannel and before.name != after.name: await asyncio.gather(database.VerifyServer(after.guild, bot))
-        if logEnabled(before.guild, 'channel'):
-            final = copy.deepcopy(embed)
-            while True:
-                try:
+        try:
+            if logEnabled(before.guild, 'channel') and message:
+                final = copy.deepcopy(embed)
+                while True:
+                    #try:
                     def reactionCheck(r, u): return str(r) in ('🇵', 'ℹ') and r.message.id == message.id and not u.bot
                     r = await self.bot.wait_for('reaction_add', check=reactionCheck)
                     if str(r[0]) == '🇵':
@@ -967,7 +1001,8 @@ class Cyberlog(commands.Cog):
                         await message.edit(content=content,embed=final)
                         await message.clear_reactions()
                         for r in reactions: await message.add_reaction(r)
-                except Exception as e: print(f'Channel update reaction error {e}')
+                    #except Exception as e: print(f'Channel update reaction error {e}')
+        except UnboundLocalError: return
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
@@ -977,7 +1012,7 @@ class Cyberlog(commands.Cog):
             content=None
             f = None
             savePath = None
-            embed=discord.Embed(title=f'{self.channelKeys.get(channel.type[0])}❌{channel.type[0][0].upper() + channel.type[0][1:]} Channel was deleted', description=channel.name,color=green,timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title=f'{self.channelKeys.get(channel.type[0])}❌{channel.type[0][0].upper() + channel.type[0][1:]} Channel was deleted', description=channel.name,color=red,timestamp=datetime.datetime.utcnow())
             if readPerms(channel.guild, "channel"):
                 try:
                     log = (await channel.guild.audit_logs(limit=1).flatten())[0]
@@ -1015,6 +1050,7 @@ class Cyberlog(commands.Cog):
         global members
         if logEnabled(member.guild, "doorguard"):
             asyncio.create_task(self.doorguardHandler(member))
+            print(f'Dispatching member join log: {member.name} in {member.guild.name}')
             newInv = []
             content=None
             savePath = None
@@ -1059,6 +1095,7 @@ class Cyberlog(commands.Cog):
             try: self.invites[str(member.guild.id)] = newInv
             except: pass
             msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed,file=f)
+            print('Successfully dispatched member join log update')
             embed.description=f'''{member.mention} ({member.name})\n{count}{suffix(count)} member\nAccount age: {ageDisplay[0]} old\n[Hover for more details]({msg.jump_url} 'Precise timestamp of join: {received}\nAccount created: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\nAccount age: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old\nMutual Servers: {len([g for g in bot.guilds if member in g.members])}\n\nQUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')'''
             if targetInvite: embed.add_field(name='**Invite Details**',value=f'''Invited by {targetInvite.inviter.name} ({targetInvite.inviter.mention})\n[Hover for more details]({msg.jump_url} '\nCode: discord.gg/{targetInvite.code}\nChannel: {targetInvite.channel.name}\nCreated: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\n{"Never expires" if targetInvite.max_age == 0 else f"Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}\nUsed: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')''')
             await msg.edit(embed=embed)
@@ -1455,15 +1492,18 @@ class Cyberlog(commands.Cog):
         global bot
         if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, bot)
         if before.activities != after.activities:
-            '''This is for LastActive information'''
+            '''This is for LastActive information and custom status history'''
             for a in before.activities:
                 if a.type == discord.CustomActivity:
+                    try:
+                        if {'e': str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(after, a.emoji, a.name)
+                    except AttributeError: pass
+                    except TypeError: await database.AppendCustomStatusHistory(after, str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
                     await asyncio.sleep(600) #Wait 10 minutes to make sure that the user isn't on Android app or is experiencing internet problems
                     a = before.guild.get_member(before.id)
                     if before.status == a.status and before.name != a.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
         if before.status != after.status: #We don't want false positiives, so we only make use of changing to/from DND here
-            if after.status == discord.Status.offline: 
-                await updateLastOnline(after, datetime.datetime.now())
+            if after.status != discord.Status.offline and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]): await updateLastOnline(after, datetime.datetime.now())
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
@@ -1478,19 +1518,24 @@ class Cyberlog(commands.Cog):
                     membObj = member
                     break
         embed=discord.Embed(title="👮‍♂️🌐✏User's global attributes updated",description=after.mention+"("+after.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-        data = {'member': before.id, 'oldName': before.name, 'newName': after.name}
+        #data = {'member': before.id, 'oldName': before.name, 'newName': after.name}
+        try: embed.set_thumbnail(url=lightningUsers.get(after.id).get('avatarHistory')[-1].get('imageURL'))
+        except TypeError: 
+            if before.avatar_url is not None: embed.set_thumbnail(url=before.avatar_url_as(static_format='png', size=1024))
         if before.avatar_url != after.avatar_url:
-            data['pfp'] = True
-            if before.avatar_url is not None:
-                embed.set_thumbnail(url=before.avatar_url)
-            if after.avatar_url is not None:
-                embed.set_image(url=after.avatar_url)
-            embed.add_field(name="Profile Picture updated",value="Old: Thumbnail to the right\nNew: Image below")
+            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not after.is_avatar_animated() else 'gif'))
+            await after.avatar_url_as(size=1024).save(savePath)
+            f = discord.File(savePath)
+            message = await self.imageLogChannel.send(file=f)
+            #data['pfp'] = True
+             #Old avatar
+            embed.set_image(url=message.attachments[0].url) #New avatar
+            embed.add_field(name="Profile Picture updated",value="Old: Thumbnail to the right\nNew: Image below", inline=False)
             await updateLastActive(after, datetime.datetime.now(), 'updated their profile picture')
-        else:
-            embed.set_thumbnail(url=before.avatar_url)
+            await database.AppendAvatarHistory(after, message.attachments[0].url)
+            if os.path.exists(savePath): os.remove(savePath)
         if before.discriminator != after.discriminator:
-            data['discrim'] = True
+            #data['discrim'] = True
             embed.add_field(name="Prev discriminator",value=before.discriminator)
             embed.add_field(name="New discriminator",value=after.discriminator)
             await updateLastActive(after, datetime.datetime.now(), 'updated their discriminator')
@@ -1498,10 +1543,11 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Prev username",value=before.name)
             embed.add_field(name="New username",value=after.name)
             await updateLastActive(after, datetime.datetime.now(), 'updated their username')
+            await database.AppendUsernameHistory(after)
         embed.set_footer(text="User ID: "+str(after.id))
         for server in servers:
             try:
-                data['server'] = server.id
+                #data['server'] = server.id
                 if logEnabled(server, "member") and memberGlobal(server) != 0:
                     if await database.SummarizeEnabled(server, 'member'):
                         summaries.get(str(server.id)).add('member', 9, datetime.datetime.now(), data, embed)
