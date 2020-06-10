@@ -169,16 +169,19 @@ class Cyberlog(commands.Cog):
                 members[s.id] = s.members
                 if self.summarize.current_loop == 1:
                     for m in s.members:
-                        for a in m.activities:
-                            if a.type == discord.ActivityType.custom:
-                                try:
-                                    if {'e': str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(m, a.emoji, a.name)
-                                except AttributeError: pass
-                                except TypeError: await database.AppendCustomStatusHistory(m, str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
+                        try:
+                            for a in m.activities:
+                                if a.type == discord.ActivityType.custom:
+                                    try:
+                                        if {'e': str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(m, a.emoji, a.name)
+                                    except AttributeError: pass
+                                    except TypeError: await database.AppendCustomStatusHistory(m, str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
+                        except Exception as e: print(f'Custom status error for {m.name}: {e}')
                         try:
                             if m.name != lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): await database.AppendUsernameHistory(m)
                         except AttributeError: pass
                         except TypeError: await database.AppendUsernameHistory(m)
+                        except Exception as e: print(f'Username error for {m.name}: {e}')
                         try:
                             if str(m.avatar_url) != lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
                                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
@@ -197,6 +200,7 @@ class Cyberlog(commands.Cog):
                             await database.AppendAvatarHistory(m, message.attachments[0].url)
                             if os.path.exists(savePath): os.remove(savePath)
                             await asyncio.sleep(1)
+                        except Exception as e: print(f'Avatar error for {m.name}: {e}')
                 for c in s.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
                     except discord.Forbidden: pass
@@ -209,7 +213,7 @@ class Cyberlog(commands.Cog):
                     self.invites[str(s.id)] = (await s.invites())
                     try: self.invites[str(s.id)+"_vanity"] = (await s.vanity_invite())
                     except discord.HTTPException: pass
-                except discord.Forbidden: pass
+                except discord.Forbidden as e: print(f'Invite management error: Server {s.name}: {e.text}')
                 except Exception as e: print('Invite management error: Server {}\n{}'.format(s.name, e))
             print(f'Populated in {(datetime.datetime.now() - started).seconds}s')
             started = datetime.datetime.now()                
@@ -1050,12 +1054,12 @@ class Cyberlog(commands.Cog):
         global members
         if logEnabled(member.guild, "doorguard"):
             asyncio.create_task(self.doorguardHandler(member))
-            print(f'Dispatching member join log: {member.name} in {member.guild.name}')
             newInv = []
             content=None
             savePath = None
             f = None
             targetInvite = None
+            reactions = ['🔽', 'ℹ', '🤐', '🔒', '👢', '🔨']
             count = len(member.guild.members)
             ageDelta = datetime.datetime.utcnow() - member.created_at
             units = ['second', 'minute', 'hour', 'day']
@@ -1080,24 +1084,28 @@ class Cyberlog(commands.Cog):
             try:
                 for invite in oldInv:
                     try:
-                        if newInv[newInv.index(oldInv)].uses > invite.uses:
-                            targetInvite = newInv[newInv.index(oldInv)]
+                        if newInv[newInv.index(invite)].uses > invite.uses:
+                            targetInvite = newInv[newInv.index(invite)]
                             break
                     except ValueError: #An invite that reached max uses will be missing from the new list
-                        targetInvite = newInv[newInv.index(oldInv)]
+                        targetInvite = newInv[newInv.index(invite)]
                         break 
                 if not targetInvite: #Check the vanity invite (if applicable) if we don't have an invite
                     try:
                         invite = await member.guild.vanity_invite()
                         if invite.uses > self.invites.get(str(member.guild.id)+"_vanity").uses: targetInvite = invite
                     except discord.HTTPException: pass
-            except Exception as e: embed.add_field(name='**Invite Details**',value=f'Error retrieving details: {e}')
+            except Exception as e: embed.add_field(name='**Invite Details**',value=f'Error retrieving details: {e}'[:1023])
             try: self.invites[str(member.guild.id)] = newInv
             except: pass
             msg = await logChannel(member.guild, "doorguard").send(content=content,embed=embed,file=f)
-            print('Successfully dispatched member join log update')
-            embed.description=f'''{member.mention} ({member.name})\n{count}{suffix(count)} member\nAccount age: {ageDisplay[0]} old\n[Hover for more details]({msg.jump_url} 'Precise timestamp of join: {received}\nAccount created: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\nAccount age: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old\nMutual Servers: {len([g for g in bot.guilds if member in g.members])}\n\nQUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')'''
-            if targetInvite: embed.add_field(name='**Invite Details**',value=f'''Invited by {targetInvite.inviter.name} ({targetInvite.inviter.mention})\n[Hover for more details]({msg.jump_url} '\nCode: discord.gg/{targetInvite.code}\nChannel: {targetInvite.channel.name}\nCreated: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\n{"Never expires" if targetInvite.max_age == 0 else f"Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}\nUsed: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')''')
+            descriptionString = [f'''{member.mention} ({member.name})\n{count}{suffix(count)} member\nPrecise timestamp of join: {received}\nAccount created: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\nAccount age: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old\nMutual Servers: {len([g for g in bot.guilds if member in g.members])}\n\nQUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}''', 
+                f'''{member.mention} ({member.name})\n{count}{suffix(count)} member\nAccount age: {ageDisplay[0]} old\n[Hover or react 🔽 for more details]({msg.jump_url} 'Precise timestamp of join: {received}\nAccount created: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\nAccount age: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old\nMutual Servers: {len([g for g in bot.guilds if member in g.members])}\n\nQUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')''']
+            embed.description = descriptionString[1]
+            if targetInvite: 
+                inviteString = [f'''Invited by {targetInvite.inviter.name} ({targetInvite.inviter.mention})\nCode: discord.gg/{targetInvite.code}\nChannel: {targetInvite.channel.name}\nCreated: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\n{"Never expires" if targetInvite.max_age == 0 else f"Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}\nUsed: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times''',
+                    f'''Invited by {targetInvite.inviter.name} ({targetInvite.inviter.mention})\n[Hover or react 🔽 for more details]({msg.jump_url} '\nCode: discord.gg/{targetInvite.code}\nChannel: {targetInvite.channel.name}\nCreated: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}\n{"Never expires" if targetInvite.max_age == 0 else f"Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}\nUsed: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')''']
+                embed.add_field(name='**Invite Details**',value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             await msg.edit(embed=embed)
             await VerifyLightningLogs(msg, 'doorguard')
         members[member.guild.id] = member.guild.members
@@ -1110,13 +1118,25 @@ class Cyberlog(commands.Cog):
                 final = copy.deepcopy(embed)
                 memberInfoEmbed = None
                 while True:
-                    for r in ['ℹ', '🤐', '🔒', '👢', '🔨']: await msg.add_reaction(r)
+                    for r in reactions: await msg.add_reaction(r)
                     embed = copy.deepcopy(final)
-                    def navigationCheck(r, u): return str(r) in ['ℹ', '🤐', '🔒', '👢', '🔨'] and not u.bot and r.message.id == msg.id
+                    def navigationCheck(r, u): return str(r) in reactions and not u.bot and r.message.id == msg.id
                     r = await self.bot.wait_for('reaction_add', check=navigationCheck)
                     embed.clear_fields()
                     await msg.clear_reactions()
-                    if str(r[0]) == 'ℹ':
+                    if str(r[0]) == '🔽':
+                        final.description = descriptionString[0]
+                        try: final.set_field_at(0, name='**Invite Details**', value=inviteString[0])
+                        except: pass
+                        reactions.remove('🔽')
+                        reactions.insert(0, '🔼')
+                    elif str(r[0]) == '🔼':
+                        final.description = descriptionString[1]
+                        try: final.set_field_at(0, name='**Invite Details**', value=inviteString[1])
+                        except: pass
+                        reactions.remove('🔼')
+                        reactions.insert(0, '🔽')
+                    elif str(r[0]) == 'ℹ':
                         if not memberInfoEmbed:
                             embed.description = f'{self.loading}Please wait for member information to load'
                             await msg.edit(embed=embed)
@@ -1520,7 +1540,7 @@ class Cyberlog(commands.Cog):
         embed=discord.Embed(title="👮‍♂️🌐✏User's global attributes updated",description=after.mention+"("+after.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
         #data = {'member': before.id, 'oldName': before.name, 'newName': after.name}
         try: embed.set_thumbnail(url=lightningUsers.get(after.id).get('avatarHistory')[-1].get('imageURL'))
-        except TypeError: 
+        except (TypeError, AttributeError): 
             if before.avatar_url is not None: embed.set_thumbnail(url=before.avatar_url_as(static_format='png', size=1024))
         if before.avatar_url != after.avatar_url:
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not after.is_avatar_animated() else 'gif'))

@@ -522,7 +522,7 @@ async def modifyWishlistItems(self, ctx, m, new, wishlist, add=True): #If add is
             if len(stuff.attachments) == 1:
                 if stuff.attachments[0].height: #We have an image or a video, so we will create a permanent URL via the private image hosting channel
                     await stuff.add_reaction(self.loading)
-                    imageLogChannel = bot.get_channel(534439214289256478)
+                    imageLogChannel = self.bot.get_channel(534439214289256478)
                     tempDir = 'Attachments/Temp'
                     savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), stuff.attachments[0].filename[stuff.attachments[0].filename.rfind('.')+1:]))
                     await stuff.attachments[0].save(savePath)

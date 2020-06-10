@@ -75,9 +75,9 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
                 bot.load_extension(cog)
             except:
                 pass
-        await database.Verification(bot)
+        #await database.Verification(bot)
         #await Antispam.PrepareMembers(bot)
-        await bot.get_cog('Birthdays').updateBirthdays()
+        #await bot.get_cog('Birthdays').updateBirthdays()
         # easterAnnouncement.start()
         #Cyberlog.ConfigureSummaries(bot)
         await bot.change_presence(status=discord.Status.idle, activity=discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening))
