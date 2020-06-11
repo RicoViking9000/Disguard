@@ -192,14 +192,16 @@ class Cyberlog(commands.Cog):
                                 if os.path.exists(savePath): os.remove(savePath)
                                 await asyncio.sleep(1)
                         except (AttributeError, discord.HTTPException): pass
-                        except TypeError: 
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                            await m.avatar_url_as(size=1024).save(savePath)
-                            f = discord.File(savePath)
-                            message = await self.imageLogChannel.send(file=f)
-                            await database.AppendAvatarHistory(m, message.attachments[0].url)
-                            if os.path.exists(savePath): os.remove(savePath)
-                            await asyncio.sleep(1)
+                        except TypeError:
+                            try:
+                                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                                await m.avatar_url_as(size=1024).save(savePath)
+                                f = discord.File(savePath)
+                                message = await self.imageLogChannel.send(file=f)
+                                await database.AppendAvatarHistory(m, message.attachments[0].url)
+                                if os.path.exists(savePath): os.remove(savePath)
+                                await asyncio.sleep(1)
+                            except discord.HTTPException: pass
                         except Exception as e: print(f'Avatar error for {m.name}: {e}')
                 for c in s.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
