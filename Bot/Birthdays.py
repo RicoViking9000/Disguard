@@ -723,14 +723,33 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
     mess: the message the person reacted to (used to remove reaction because my view is people shouldn't know when others are writing a message to them; it's a birthday gift)
     autoTrigger: go straight to query rather than waiting for cake reaction
     u: User who is sending a message, used when this differs from person reacting with cake (such as when autoTrigger is True)'''
-    def cakeReac(r, u):
-        return str(r) == '🍰' and u not in target and not u.bot and r.message.id == mess.id
+    def cakeReac(r, u): return str(r) == '🍰' and not u.bot and r.message.id == mess.id
+    specialUserID = 596381991151337482 #My friend's ID, joking around with them :P
     while True:
         try: 
             if not autoTrigger:
-                r, u = await self.bot.wait_for('reaction_add', check=cakeReac)
-                try: await mess.remove_reaction(r, u)
-                except discord.Forbidden: pass
+                haveAppropriateUser = False
+                while not haveAppropriateUser:
+                    r, u = await self.bot.wait_for('reaction_add', check=cakeReac)
+                    if u in target: #User attempts to send a message to themself
+                        if u.id == specialUserID:
+                            confirmationMessage = await mess.channel.send(embed=discord.Embed(description='Aight Kailey, would you like to write a message to yourself?', color=yellow))
+                            def confirmationCheck(reaction, user): return str(reaction) == '✔' and user.id == specialUserID and reaction.message.id == confirmationMessage.id
+                            try: 
+                                await confirmationMessage.add_reaction('✔')
+                                await self.bot.wait_for('reaction_add', check=confirmationCheck, timeout=15)
+                                await confirmationMessage.delete()
+                                haveAppropriateUser = True
+                                break
+                            except asyncio.TimeoutError: 
+                                await confirmationMessage.delete()
+                                try: await mess.remove_reaction(r, u)
+                                except discord.Forbidden: pass
+                        else: await mess.channel.send(embed=discord.Embed(description=f'Sorry {u.name}, you can\'t write a personal birthday message to yourself', color=yellow), delete_after=15)
+                    else:
+                        try: await mess.remove_reaction(r, u)
+                        except discord.Forbidden: pass
+                        haveAppropriateUser = True
             if len(target) > 1: 
                 while True:
                     await u.send('Who would you like to write a personal message to? Type the number corresponding of the person\n\n{}'.format('\n'.join(['{}: {}'.format(a, target[a].name) for a in range(len(target))])))
@@ -742,6 +761,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
                         break
                     except: pass
             else: recipient = target[0]
+            if birthday is None: return await mess.channel.send(embed=discord.Embed(description=f'{recipient.name} must set a birthday before you can write personal messages to them.', color=yellow))
             verifying = await u.send('{} Verifying...'.format(self.loading))
             recipientMessages = await database.GetBirthdayMessages(recipient)
             alreadySent = [m for m in recipientMessages if u.id == m.get('author')]
@@ -787,7 +807,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
             r = await self.bot.wait_for('reaction_add', check=finalConfirm, timeout=180)
             if str(r[0]) == '✅':
                 await database.SetBirthdayMessage(recipient, script, u, [a for a in selected if type(a) is discord.Guild])
-                await u.send('Your personal message for {} has been successfully set. To write personal messages, set your birthday, age, wishlist, or view your Birthday Profile, you may use the `birthday` command.'.format(recipient))
+                await u.send(f'Your personal message for {recipient} has been successfully set. To write personal messages, set your birthday, age, wishlist, or view your Birthday Profile, you may use the `birthday` command.\n\n{"And congrats on finding the Easter egg :)))" if u.id == specialUserID else ""}'.strip())
             elif str(r[0]) == '🔁': await writePersonalMessage(self, birthday, target, mess, True, u)
             else: return await u.send('Cancelled birthday message configuration')
         except asyncio.TimeoutError:

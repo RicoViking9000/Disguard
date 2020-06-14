@@ -169,18 +169,28 @@ class Cyberlog(commands.Cog):
                 members[s.id] = s.members
                 if self.summarize.current_loop == 1:
                     for m in s.members:
+                        memberStart = datetime.datetime.now()
+                        updates = []
                         try:
                             for a in m.activities:
                                 if a.type == discord.ActivityType.custom:
                                     try:
-                                        if {'e': str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(m, a.emoji, a.name)
+                                        if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
+                                            await database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)
+                                            updates.append('status')
                                     except AttributeError: pass
-                                    except TypeError: await database.AppendCustomStatusHistory(m, str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
+                                    except (TypeError, IndexError): 
+                                        await database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
+                                        updates.append('status')
                         except Exception as e: print(f'Custom status error for {m.name}: {e}')
                         try:
-                            if m.name != lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): await database.AppendUsernameHistory(m)
+                            if m.name != lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
+                                await database.AppendUsernameHistory(m)
+                                updates.append('username')
                         except AttributeError: pass
-                        except TypeError: await database.AppendUsernameHistory(m)
+                        except (TypeError, IndexError):
+                            await database.AppendUsernameHistory(m)
+                            updates.append('username')
                         except Exception as e: print(f'Username error for {m.name}: {e}')
                         try:
                             if str(m.avatar_url) != lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
@@ -190,9 +200,9 @@ class Cyberlog(commands.Cog):
                                 message = await self.imageLogChannel.send(file=f)
                                 await database.AppendAvatarHistory(m, message.attachments[0].url)
                                 if os.path.exists(savePath): os.remove(savePath)
-                                await asyncio.sleep(1)
+                                updates.append('avatar')
                         except (AttributeError, discord.HTTPException): pass
-                        except TypeError:
+                        except (TypeError, IndexError):
                             try:
                                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
                                 await m.avatar_url_as(size=1024).save(savePath)
@@ -200,9 +210,11 @@ class Cyberlog(commands.Cog):
                                 message = await self.imageLogChannel.send(file=f)
                                 await database.AppendAvatarHistory(m, message.attachments[0].url)
                                 if os.path.exists(savePath): os.remove(savePath)
-                                await asyncio.sleep(1)
-                            except discord.HTTPException: pass
+                                updates.append('avatar')
+                            except discord.HTTPException: pass #Filesize is too large
                         except Exception as e: print(f'Avatar error for {m.name}: {e}')
+                        if len(updates) > 0: lightningUsers[m.id] = await database.GetUser(m)
+                        if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
                 for c in s.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
                     except discord.Forbidden: pass
@@ -1511,16 +1523,15 @@ class Cyberlog(commands.Cog):
                 #else:
                 msg = await (logChannel(before.guild, "member")).send(content=content,embed=embed)
                 await VerifyLightningLogs(msg, 'member')
-        global bot
-        if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, bot)
+        if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, self.bot)
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
             for a in before.activities:
                 if a.type == discord.CustomActivity:
                     try:
-                        if {'e': str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(after, a.emoji, a.name)
+                        if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)
                     except AttributeError: pass
-                    except TypeError: await database.AppendCustomStatusHistory(after, str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
+                    except TypeError: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
                     await asyncio.sleep(600) #Wait 10 minutes to make sure that the user isn't on Android app or is experiencing internet problems
                     a = before.guild.get_member(before.id)
                     if before.status == a.status and before.name != a.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
@@ -1532,6 +1543,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when a user changes their global username, avatar, or discriminator'''
         servers = []
         global bot
+        global lightningUsers
         membObj = None
         for server in bot.guilds: #Since this method doesn't supply a server, we need to get every server this member is a part of, to
             for member in server.members: #log to when they change their username, discriminator, or avatar
@@ -1555,6 +1567,7 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Profile Picture updated",value="Old: Thumbnail to the right\nNew: Image below", inline=False)
             await updateLastActive(after, datetime.datetime.now(), 'updated their profile picture')
             await database.AppendAvatarHistory(after, message.attachments[0].url)
+            lightningUsers[after.id] = await database.GetUser(after)
             if os.path.exists(savePath): os.remove(savePath)
         if before.discriminator != after.discriminator:
             #data['discrim'] = True
@@ -1939,7 +1952,7 @@ class Cyberlog(commands.Cog):
             try: await m.clear_reactions()
             except: pass
             await m.edit(content=self.loading)
-            embed=discord.Embed(title='⚠An error has occured⚠',description=f"""{error}\n\n⬆: Collapse information\n{self.disguard}: Send this to my developer via my official server\n\n[Hover for traceback]({m.jump_url} '{''.join(traceback.format_exception(type(error), error, error.__traceback__, 2))}')""",timestamp=datetime.datetime.utcnow(),color=red)
+            embed=discord.Embed(title='⚠An error has occured⚠',description=f"""{error}\n\n⬆: Collapse information\n{self.disguard}: Send this to my developer via my official server\n\n[Hover for traceback]({m.jump_url} '{''.join(traceback.format_exception(type(error), error, error.__traceback__, 3)[:5])}')""",timestamp=datetime.datetime.utcnow(),color=red)
             embed.add_field(name='Command',value='{}{}'.format(ctx.prefix, ctx.command))
             embed.add_field(name='Server',value='{} ({})'.format(ctx.guild.name, ctx.guild.id) if ctx.guild is not None else 'N/A')
             embed.add_field(name='Channel',value='{} ({}){}'.format(ctx.channel.name, ctx.channel.id, '(NSFW)' if ctx.channel.is_nsfw() else '') if type(ctx.channel) is discord.TextChannel else 'DMs')
@@ -2393,12 +2406,12 @@ class Cyberlog(commands.Cog):
             for act in m.activities:
                 try:
                     if act.type is discord.ActivityType.playing: 
-                        try: current.append(f'playing {act.name}: {act.details}, {act.state}')
-                        except AttributeError: current.append(f'playing {act.name}')
-                    elif act.type is discord.ActivityType.custom: current.append(f'{act.emoji if act.emoji is not None else ""}{act.name if act.name is not None else ""}')
-                    elif act.type is discord.ActivityType.streaming: current.append(f'streaming {act.name}')
-                    elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append('Listening to Spotify\n{}'.format('\n'.join(['🎵{}'.format(act.title), '👮‍♂️{}'.format(', '.join(act.artists)), '💿{}'.format(act.album)])))
-                    elif act.type is discord.ActivityType.watching: current.append(f'watching {act.name}')
+                        try: current.append(f'playing {act.name}: {act.details}{(", " + act.state) if act.state is not None else ""}{" (⭐Visible under username)" if act == m.activity else ""}')
+                        except AttributeError: current.append(f'playing {act.name}{" (⭐Visible under username)" if act == m.activity else ""}')
+                    elif act.type is discord.ActivityType.custom: current.append(f'{act.emoji if act.emoji is not None else ""} {act.name if act.name is not None else ""}{" (⭐Visible under username)" if act == m.activity else ""}')
+                    elif act.type is discord.ActivityType.streaming: current.append(f'streaming {act.name}{" (⭐Visible under username)" if act == m.activity else ""}')
+                    elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append(f'Listening to Spotify{" (⭐Visible under username)" if act == m.activity else ""}\n 🎵 {act.title}\n 👮‍♂️ {", ".join(act.artists)}\n 💿 {act.album}')
+                    elif act.type is discord.ActivityType.watching: current.append(f'watching {act.name}{" (⭐Visible under username)" if act == m.activity else ""}')
                 except:
                     current.append('Error parsing activity')
             embed.description+='\n\n • {}'.format('\n • '.join(current))

@@ -154,8 +154,7 @@ async def help(ctx):
 
 @bot.command()
 async def ping(ctx):
-    if datetime.datetime.utcnow() > ctx.message.created_at: await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms\nMessage latency: {round((datetime.datetime.utcnow() - ctx.message.created_at).microseconds / 1000)}ms')
-    else: await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms\nMessage latency: -{round((ctx.message.created_at - datetime.datetime.utcnow()).microseconds / 1000)}ms')
+    await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms')
 
 @commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
 @bot.command()
@@ -165,7 +164,7 @@ async def say(ctx, m: typing.Optional[discord.Member] = None, c: typing.Optional
     await ctx.message.delete()
     if c is None: c = ctx.channel
     if m is None: m = ctx.author
-    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar_url_as().read(), reason='Initiated by {} to imitate {} by saying "{}"'.format(ctx.author.name, m.name, t))
+    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar_url_as().read(), reason=f'Initiated by {ctx.author.name} to imitate {m.name} by saying "{t}"')
     await w.send(t, username=m.name)
     await w.delete()
 
@@ -178,10 +177,21 @@ async def evaluate(ctx, *args):
     if inspect.iscoroutine(result): await ctx.send(await eval(args))
     else: await ctx.send(result)
 
+@commands.is_owner()
 @bot.command()
-async def setLogging(ctx, channel: discord.TextChannel):
-    await database.SetLogChannel(ctx.guild, channel)
-    await ctx.send('Yes')
+async def unduplicate(ctx):
+    '''Removes duplicate entries from a user's status/username/avatar history. The problem came from users with multiple servers with Disguard, and has been patched. This will repair the existing duplicates in the database.'''
+    '''For the first stage, to avoid loss of data, I'm only going to test this on myself'''
+    status = await ctx.send('Working on it')
+    interval = datetime.datetime.now()
+    completed = 0
+    for u in bot.users: 
+        if (datetime.datetime.now() - interval).seconds > 2: 
+            await status.edit(content=f'Working on it\n{completed} / {len(bot.users)} users completed')
+            interval = datetime.datetime.now()
+        await database.UnduplicateHistory(u)
+        completed += 1
+    await status.edit(content='Done')
 
 @commands.is_owner()
 @bot.command()

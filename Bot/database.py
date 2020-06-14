@@ -596,6 +596,32 @@ async def AppendAvatarHistory(m: discord.User, url):
     '''Appends an avatar update to a user's listing of them. Old is the discord CDN avatar link used for comparisons, new is the permanent link from the image log channel (copy attachment)'''
     await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': str(m.avatar_url), 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}}, True)
 
+async def UnduplicateHistory(u: discord.User):
+    '''Removes duplicate entries from a user's history lists'''
+    userEntry = await users.find_one({'user_id': u.id})
+    csh, uh, ah = [], [], []
+    try:
+        for c in userEntry.get('customStatusHistory'):
+            if {'emoji': c.get('emoji'), 'name': c.get('name')} not in [{'emoji': i.get('emoji'), 'name': i.get('name')} for i in csh]: csh.append(c)
+    except TypeError: pass
+    try:
+        for c in userEntry.get('usernameHistory'):
+            if c.get('name') not in [i.get('name') for i in uh]: uh.append(c)
+    except TypeError: pass
+    try:
+        for c in userEntry.get('avatarHistory'):
+            if c.get('discordURL') not in [i.get('discordURL') for i in ah]: ah.append(c)
+    except TypeError: pass
+    for c in csh:
+        await users.update_one({'user_id': u.id}, {'$pull': {'customStatusHistory': {'emoji': c.get('emoji'), 'name': c.get('name')}}})
+        await users.update_one({'user_id': u.id}, {'$push': {'customStatusHistory': c}})
+    for c in uh: 
+        await users.update_one({'user_id': u.id}, {'$pull': {'usernameHistory': {'name': c.get('name')}}})
+        await users.update_one({'user_id': u.id}, {'$push': {'usernameHistory': c}})
+    for c in ah:
+        await users.update_one({'user_id': u.id}, {'$pull': {'avatarHistory': {'discordURL': c.get('discordURL')}}})
+        await users.update_one({'user_id': u.id}, {'$push': {'avatarHistory': c}})
+
 async def SetLastActive(u: discord.User, timestamp, reason):
     '''Updates the last active attribute'''
     await users.update_one({'user_id': u.id}, {'$set': {'lastActive': {'timestamp': timestamp, 'reason': reason}}}, True)
