@@ -1523,20 +1523,21 @@ class Cyberlog(commands.Cog):
                 #else:
                 msg = await (logChannel(before.guild, "member")).send(content=content,embed=embed)
                 await VerifyLightningLogs(msg, 'member')
-        if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, self.bot)
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
-            for a in before.activities:
-                if a.type == discord.CustomActivity:
+            for a in after.activities:
+                if a.type == discord.ActivityType.custom:
                     try:
-                        if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('emoji'), 'n': lightningUsers.get(after.id).get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)
-                    except AttributeError: pass
+                        databaseUser = await database.GetUser(after)
+                        if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': databaseUser.get('customStatusHistory')[-1].get('emoji'), 'n': databaseUser.get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)
+                    except AttributeError as e: print(f'Attribute error: {e}')
                     except TypeError: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
-                    await asyncio.sleep(600) #Wait 10 minutes to make sure that the user isn't on Android app or is experiencing internet problems
-                    a = before.guild.get_member(before.id)
-                    if before.status == a.status and before.name != a.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
-        if before.status != after.status: #We don't want false positiives, so we only make use of changing to/from DND here
-            if after.status != discord.Status.offline and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]): await updateLastOnline(after, datetime.datetime.now())
+                    newMemb = before.guild.get_member(before.id)
+                    if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
+        if before.status != after.status:
+            if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
+            if after.status != discord.Status.offline and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+        if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, self.bot)
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
@@ -1937,7 +1938,7 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_webhooks_update(self, c):
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
         await updateLastActive((await c.guild.audit_logs(limit=1).flatten())[0].user, datetime.datetime.now(), 'updated webhooks')
 
     @commands.Cog.listener()

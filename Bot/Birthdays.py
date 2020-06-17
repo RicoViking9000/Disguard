@@ -55,7 +55,7 @@ class Birthdays(commands.Cog):
                         if len(messages) > 0: embed.description=f'You have {len(messages)} personal messages that will be sent below this message.'
                         else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
                         await member.send(embed=embed)
-                        for m in messages: await member.send(discord.Embed(title=f'Personal Birthday Message from {m.get("authName")}', description=m.get('message'), timestamp=m.get('created'), color=yellow))
+                        for m in messages: await member.send(embed=discord.Embed(title=f'Personal Birthday Message from {m.get("authName")}', description=m.get('message'), timestamp=m.get('created'), color=yellow))
         except: traceback.print_exc()
 
     @tasks.loop(minutes=5)
