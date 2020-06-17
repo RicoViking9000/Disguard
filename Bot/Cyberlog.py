@@ -1066,8 +1066,8 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when member joins a server'''
         received = (member.joined_at + datetime.timedelta(hours=lightningLogging.get(member.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         global members
+        asyncio.create_task(self.doorguardHandler(member))
         if logEnabled(member.guild, "doorguard"):
-            asyncio.create_task(self.doorguardHandler(member))
             newInv = []
             content=None
             savePath = None
@@ -1324,7 +1324,9 @@ class Cyberlog(commands.Cog):
                     try: await member.send(f'You have been banned from `{member.guild.name}` until {timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)} for repeatedly joining and leaving the server.')
                     except: pass
                     try: await member.ban(reason=f'''[Antispam: repeatedJoins] {member.name} joined the server {len(joinLogs)} times in {f"{', '.join(joinSpanDisplay[:-1])} and {joinSpanDisplay[-1]}" if len(joinSpanDisplay) > 1 else joinSpanDisplay[0]}, and will remain banned until {f"{timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}" if rj[2] > 0 else "the ban is manually revoked"}.''')
-                    except discord.Forbidden: await logChannel(member.guild, "doorguard").send(f'Unable to ban {member.name} for [ageKick: repeatedJoins] module')
+                    except discord.Forbidden: 
+                        try: await logChannel(member.guild, "doorguard").send(f'Unable to ban {member.name} for [ageKick: repeatedJoins] module')
+                        except: pass
                     self.repeatedJoins[f'{member.guild.id}_{member.id}'].clear()
                     banTimedEvent = {'type': 'ban', 'flavor': '[Antispam: repeatedJoins]', 'target': member.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=rj[2])}
                     await database.AppendTimedEvent(member.guild, banTimedEvent)
@@ -1340,7 +1342,9 @@ class Cyberlog(commands.Cog):
                 timezone = nameZone(member.guild)
                 dm = antispam.get('ageKickDM')
                 try: await member.send(eval(dm))
-                except discord.Forbidden as e: await logChannel(member.guild, "doorguard").send(content=f'I will kick {member.name}, but I can\'t DM them explaining why they were kicked because {e.text}.')
+                except discord.Forbidden as e: 
+                    try: await logChannel(member.guild, "doorguard").send(content=f'I will kick {member.name}, but I can\'t DM them explaining why they were kicked because {e.text}.')
+                    except: pass
                 await member.kick(reason=f'[Antispam: ageKick] Account must be {ageKick} days old')
             elif member.id in antispam.get('ageKickWhitelist'): await database.RemoveWhitelistEntry(member.guild, member.id)
         '''Repeated Joins: Sleeping'''
