@@ -11,6 +11,7 @@ import sys
 import random
 import psutil
 import cpuinfo
+import typing
 
 bot = None
 serverPurge = {}
@@ -2032,6 +2033,108 @@ class Cyberlog(commands.Cog):
         if 'logging' in args:
             await database.ResumeMod(ctx.guild, 'cyberlog')
             await ctx.send("✅Successfully resumed logging")
+
+    @commands.command()
+    async def history(self, ctx, target: typing.Optional[discord.Member] = None, *, mod = ''):
+        '''Viewer for custom status, username, and avatar history
+        •If no member is provided, it will default to the command author
+        •If no module is provided, it will default to the homepage'''
+        await ctx.trigger_typing()
+        if target is None: target = ctx.author
+        p = prefix(ctx.guild)
+        embed=discord.Embed(color=yellow)
+        letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
+        def navigationCheck(r, u): return str(r) in navigationList and u.id == ctx.author.id and r.message.id == message.id
+        async def viewerAbstraction(db=False):
+            e = copy.deepcopy(embed)
+            e.description = ''
+            tailMappings = {'avatar': 'imageURL', 'username': 'name', 'customStatus': 'name'}
+            backslash = '\\'
+            if db: 
+                rootData = await database.GetUser(target)
+                data = rootData.get(f'{mod}History')
+                e.description = f'{len(data)} / {len(data) if len(data) < 25 else 25} entries shown; oldest on top\nWebsite portal coming soon'
+                if mod == 'avatar': e.description += '\nTo set an entry as the embed thumbnail, react with that letter'
+                if mod == 'customStatus': e.description += '\nTo set a custom emoji as the embed thumbnail, react with that letter' 
+            else: 
+                rootData = lightningUsers.get(target.id)
+                data = rootData.get(f'{mod}History')
+                e.description = f'{self.loading}Updating data...'
+            for i in range(len(data[-20:])): #first thirty entries because that is the max number of embed fields
+                if i > 0:
+                    span = data[i].get('timestamp') - data[i - 1].get('timestamp')
+                    hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
+                    times = [seconds, minutes, hours, span.days]
+                    distanceDisplay = []
+                    for j in range(len(times) - 1, -1, -1):
+                        if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
+                    if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
+                timestampString = f'{data[i].get("timestamp") + datetime.timedelta(hours=timeZone(ctx.guild) if ctx.guild is not None else -4):%b %d, %Y • %I:%M: %p} {nameZone(ctx.guild) if ctx.guild is not None else "EST"}'
+                if mod in ('avatar', 'customStatus'): timestampString += f' {"• " + (backslash + letters[i]) if mod == "avatar" or (mod == "customStatus" and data[i].get("emoji") and len(data[i].get("emoji")) > 1) else ""}'
+                e.add_field(name=timestampString if i == 0 else f'**{distanceDisplay[0]} later** • {timestampString}', value=f'''> {data[i].get("emoji") if data[i].get("emoji") and len(data[i].get("emoji")) == 1 else f"[Custom Emoji]({data[i].get('emoji')})" if data[i].get("emoji") else ""} {data[i].get(tailMappings.get(mod)) if data[i].get(tailMappings.get(mod)) else ""}''', inline=False)
+            headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
+            header = f'📜 Attribute History / 👮 / {headerTail}'
+            header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
+            footerText = 'Data from June 10, 2020 and on • Data before June 14 may be missing'
+            if mod == 'customStatus': footerText = 'Data from June 10, 2020 and on • Data before June 17 may be missing'
+            e.set_footer(text=footerText)
+            e.title = header
+            return e, data
+        while True:
+            embed=discord.Embed(color=yellow)
+            if any(attempt in mod.lower() for attempt in ['avatar', 'picture', 'pfp']): mod = 'avatar'
+            elif any(attempt in mod.lower() for attempt in ['name']): mod = 'username'
+            elif any(attempt in mod.lower() for attempt in ['status', 'emoji', 'presence', 'quote']): mod = 'customStatus'
+            elif mod != '': 
+                members = await self.FindMoreMembers(ctx.guild.members, mod)
+                members.sort(key = lambda x: x.get('check')[1], reverse=True)
+                if len(members) == 0: return await ctx.send(embed=discord.Embed(description=f'Unknown history module type or invalid user \"{mod}\"\n\nUsage: `{"." if ctx.guild is None else p}history |<member>| |<module>|`\n\nSee the [help page](https://disguard.netlify.app/history.html) for more information'))
+                target = members[0].get('member')
+                mod = ''
+            headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
+            header = f'📜 Attribute History / 👮 / {headerTail}'
+            header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
+            embed.title = header
+            navigationList = ['🖼', '📝', '💭']
+            if mod == '':
+                try: await message.clear_reactions()
+                except UnboundLocalError: pass
+                embed.description=f'Welcome to the attribute history viewer! Currently, the following options are available:\n🖼: Avatar History (`{p}history avatar`)\n📝: Username History(`{p}history username`)\n💭: Custom Status History(`{p}history status`)\n\nReact with your choice to enter the respective module'
+                try: await message.edit(embed=embed)
+                except UnboundLocalError: message = await ctx.send(embed=embed)
+                for emoji in navigationList: await message.add_reaction(emoji)
+                result = await self.bot.wait_for('reaction_add', check=navigationCheck)
+                if str(result[0]) == '🖼': mod = 'avatar'
+                elif str(result[0]) == '📝': mod = 'username'
+                elif str(result[0]) == '💭': mod = 'customStatus'
+            newEmbed, data = await viewerAbstraction()
+            try: await message.edit(embed=newEmbed)
+            except UnboundLocalError: message = await ctx.send(embed=newEmbed)
+            newEmbed, data = await viewerAbstraction(True)
+            await message.edit(embed=newEmbed)
+            await message.clear_reactions()
+            navigationList = ['🏠']
+            if mod == 'avatar': navigationList += letters[:len(data)]
+            if mod == 'customStatus':
+                for letter in letters[:len(data)]:
+                    if newEmbed.fields[letters.index(letter)].name.endswith(letter): navigationList.append(letter)
+            for emoji in navigationList: await message.add_reaction(emoji)
+            cache = '' #Stores last letter reaction, if applicable, to remove reaction later on
+            while mod != '':
+                result = await self.bot.wait_for('reaction_add', check=navigationCheck)
+                if str(result[0]) == '🏠': mod = ''
+                else: 
+                    value = newEmbed.fields[letters.index(str(result[0]))].value
+                    newEmbed.set_thumbnail(url=value[value.find('>')+1:].strip() if mod == 'avatar' else value[value.find('(')+1:value.find(')')])
+                    headerTail = '🏠 Home' if mod == '' else '🖼 Avatar History' if mod == 'avatar' else '📝 Username History' if mod == 'username' else '💭 Custom Status History'
+                    header = f'📜 Attribute History / 👮 / {headerTail}'
+                    header = f'📜 Attribute History / 👮 {target.name:.{50 - len(header)}} / {headerTail}'
+                    newEmbed.title = header
+                    if cache: await message.remove_reaction(cache, result[1])
+                    cache = str(result[0])
+                    await message.edit(embed=newEmbed)
+
+    
     
     @commands.guild_only()
     @commands.command()

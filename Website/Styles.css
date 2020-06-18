@@ -57,7 +57,8 @@
             color: black;
             background-color: inherit;}
 .collist ul {padding-left: 20px;}
-.comDesc {font-size: 20px; color: rgb(199, 199, 199); text-align: left}
+.comName {text-align: center;}
+.comDesc {font-size: 20px; color: rgb(199, 199, 199); text-align: left; padding-left: 50px;}
 .comIndivDesc {font-size: 30px; color: rgb(185, 185, 185)}
 .comIndivTitle {font-size: 50px}
 .comIndivSub {font-size: 35px; color: darkgray}
@@ -68,7 +69,9 @@
 .pageHeader {padding-top: 25px}
 #navig li a:hover:not(.active) {background-color: black}
 #mainbullethead {font-size: 40px}
-#comTable, td, th {border: 1px solid rgb(161, 161, 161); font-size: 25px}
+#comTable {width: 100%; padding-top: 60px;}
+#comTable, td, th {font-size: 25px}
+#comTable td {height: 85px; border: 1px solid rgb(161, 161, 161);}
 #desc {font-size: 25px}
 #title {font-size: 85px;
         text-align: center}
