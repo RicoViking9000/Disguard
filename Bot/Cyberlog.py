@@ -1528,20 +1528,23 @@ class Cyberlog(commands.Cog):
                 #else:
                 msg = await (logChannel(before.guild, "member")).send(content=content,embed=embed)
                 await VerifyLightningLogs(msg, 'member')
+        targetServer = [g for g in self.bot.guilds if after in g.members][0] #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
+        if before.status != after.status:
+            if after.guild.id == targetServer.id:
+                if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
+                if after.status != discord.Status.offline and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
-            for a in after.activities:
-                if a.type == discord.ActivityType.custom:
-                    try:
-                        databaseUser = await database.GetUser(after)
-                        if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': databaseUser.get('customStatusHistory')[-1].get('emoji'), 'n': databaseUser.get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)
-                    except AttributeError as e: print(f'Attribute error: {e}')
-                    except TypeError: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
-                    newMemb = before.guild.get_member(before.id)
-                    if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
-        if before.status != after.status:
-            if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
-            if after.status != discord.Status.offline and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+            if after.guild.id == targetServer.id:
+                for a in after.activities:
+                    if a.type == discord.ActivityType.custom:
+                        try:
+                            databaseUser = await database.GetUser(after)
+                            if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': databaseUser.get('customStatusHistory')[-1].get('emoji'), 'n': databaseUser.get('customStatusHistory')[-1].get('name')}: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)
+                        except AttributeError as e: print(f'Attribute error: {e}')
+                        except TypeError: await database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name) #If the customStatusHistory is empty, we create the first entry
+                        newMemb = before.guild.get_member(before.id)
+                        if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
         if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, self.bot)
 
     @commands.Cog.listener()
@@ -1991,6 +1994,7 @@ class Cyberlog(commands.Cog):
         classify = ''
         duration = 0
         args = [a.lower() for a in args]
+        global lightningLogging
         if 'logging' in args:
             if 'logging' != args[0]:
                 return
@@ -2004,6 +2008,7 @@ class Cyberlog(commands.Cog):
             if ctx.channel !=logChannel(ctx.guild, 'message'):
                 await logChannel(ctx.guild, 'message').send(classify+" was paused by "+ctx.author.name)
             await database.PauseMod(ctx.guild, classify.lower())
+            lightningLogging[ctx.guild.id]['antispam'][args[0]]['enabled'] = False
             return
         duration = self.ParsePauseDuration((" ").join(args[1:]))
         embed=discord.Embed(title=classify+" was paused",description="by "+ctx.author.mention+" ("+ctx.author.name+")\n\n"+(" ").join(args[1:]),color=0x008000,timestamp=datetime.datetime.utcnow()+datetime.timedelta(seconds=duration))
@@ -2016,8 +2021,10 @@ class Cyberlog(commands.Cog):
             pass
         await status.edit(content="✅",embed=embed)
         await database.PauseMod(ctx.guild, classify.lower())
+        lightningLogging[ctx.guild.id][args[0]]['enabled'] = False
         await asyncio.sleep(duration)
         await database.ResumeMod(ctx.guild, classify.lower())
+        lightningLogging[ctx.guild.id][args[0]]['enabled'] = True
         try:
             await logged.delete()
         except discord.Forbidden:
@@ -2027,11 +2034,14 @@ class Cyberlog(commands.Cog):
     async def unpause(self, ctx, *args):
         if len(args) < 1: return await ctx.send("Please provide module `antispam` or `logging` to unpause")
         args = [a.lower() for a in args]
+        global lightningLogging
         if 'antispam' in args:
             await database.ResumeMod(ctx.guild, 'antispam')
+            lightningLogging[ctx.guild.id]['antispam']['enabled'] = True
             await ctx.send("✅Successfully resumed antispam moderation")
         if 'logging' in args:
             await database.ResumeMod(ctx.guild, 'cyberlog')
+            lightningLogging[ctx.guild.id]['cyberlog']['enabled'] = True
             await ctx.send("✅Successfully resumed logging")
 
     @commands.command()
@@ -2053,7 +2063,7 @@ class Cyberlog(commands.Cog):
             if db: 
                 rootData = await database.GetUser(target)
                 data = rootData.get(f'{mod}History')
-                e.description = f'{len(data)} / {len(data) if len(data) < 25 else 25} entries shown; oldest on top\nWebsite portal coming soon'
+                e.description = f'{len(data) if len(data) < 20 else 20} / {len(data)} entries shown; oldest on top\nWebsite portal coming soon'
                 if mod == 'avatar': e.description += '\nTo set an entry as the embed thumbnail, react with that letter'
                 if mod == 'customStatus': e.description += '\nTo set a custom emoji as the embed thumbnail, react with that letter' 
             else: 
@@ -2079,7 +2089,7 @@ class Cyberlog(commands.Cog):
             if mod == 'customStatus': footerText = 'Data from June 10, 2020 and on • Data before June 17 may be missing'
             e.set_footer(text=footerText)
             e.title = header
-            return e, data
+            return e, data[-20:]
         while True:
             embed=discord.Embed(color=yellow)
             if any(attempt in mod.lower() for attempt in ['avatar', 'picture', 'pfp']): mod = 'avatar'
