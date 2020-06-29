@@ -55,8 +55,8 @@ class Moderation(commands.Cog):
         global current
         global loading
         global filters
-        filters[ctx.guild.id] = PurgeObject()
-        current = filters.get(ctx.guild.id)
+        current = PurgeObject()
+        filters[ctx.guild.id] = current
         if not (GetManageMessagePermissions(ctx.author) and GetManageMessagePermissions(ctx.guild.me)) and ('purge:true' in args or len(args) == 1):
             return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
             #await ctx.send('Temporarily bypassing permission restrictions')
@@ -506,54 +506,51 @@ class Moderation(commands.Cog):
         actuallyPurge = False
         current.channel.append(ctx.channel)
         current.message = ctx.message
-        try:
-            for arg in args:
-                meat = arg[arg.find(":")+1:].strip()
-                body = arg.lower()
-                if "count" in body: current.limit = int(meat)
-                elif "purge" in body: actuallyPurge = True if "true" in meat.lower() else False
-                elif "author" in body: current.author.append(ctx.guild.get_member_named(meat))
-                elif "contains" in body: current.contains = meat
-                elif "startswith" in body: current.startsWith = meat
-                elif "endswith" in body: current.endsWith = meat
-                elif "links" in body: current.links = True if "true" in meat.lower() else False
-                elif "invites" in body: current.invites = True if "true" in meat.lower() else False
-                elif "images" in body: current.images = True if "true" in meat.lower() else False
-                elif "embeds" in body: current.embeds = True if "true" in meat.lower() else False
-                elif "mentions" in body: current.mentions = True if "true" in meat.lower() else False
-                elif "bots" in body: current.bots = 0 if "true" in meat.lower() else False
-                elif "channel" in body: current.channel[0] = ctx.message.channel_mentions[0] if len(ctx.message.channel_mentions) > 0 else ctx.channel
-                elif "attachments" in body: current.files = True if "true" in meat.lower() else False
-                elif "reactions" in body: current.reactions = True if "true" in meat.lower() else False
-                elif "external_messages" in body: current.appMessages = True if "true" in meat.lower() else False
-                elif "after" in body: current.startDate = ConvertToDatetime(meat)
-                elif "before" in body: current.endDate = ConvertToDatetime(meat)
-                else:
-                    try: 
-                        current.limit = int(body) #for example, .purge 10 wouldn't fall into the above categories, but is used due to rapid ability
-                    except:
-                        current = None
-                        return await ctx.send("I don't think **"+body+"** is a number... please try again, or use the website documentation for filters")
-                    actuallyPurge = True
-                current.limit += 2
-            if actuallyPurge:
-                await current.botMessage.edit(content=str(loading)+"Purging...")
-                Cyberlog.beginPurge(ctx.guild)
-                messages = await current.channel[0].purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
-                Cyberlog.endPurge(ctx.guild)
-                await current.botMessage.edit(content="**Successfully purged "+str(len(messages) - 1)+" messages :ok_hand:**",delete_after=5)
+        for arg in args:
+            meat = arg[arg.find(":")+1:].strip()
+            body = arg.lower()
+            if "count" in body: current.limit = int(meat)
+            elif "purge" in body: actuallyPurge = True if "true" in meat.lower() else False
+            elif "author" in body: current.author.append(ctx.guild.get_member_named(meat))
+            elif "contains" in body: current.contains = meat
+            elif "startswith" in body: current.startsWith = meat
+            elif "endswith" in body: current.endsWith = meat
+            elif "links" in body: current.links = True if "true" in meat.lower() else False
+            elif "invites" in body: current.invites = True if "true" in meat.lower() else False
+            elif "images" in body: current.images = True if "true" in meat.lower() else False
+            elif "embeds" in body: current.embeds = True if "true" in meat.lower() else False
+            elif "mentions" in body: current.mentions = True if "true" in meat.lower() else False
+            elif "bots" in body: current.bots = 0 if "true" in meat.lower() else False
+            elif "channel" in body: current.channel[0] = ctx.message.channel_mentions[0] if len(ctx.message.channel_mentions) > 0 else ctx.channel
+            elif "attachments" in body: current.files = True if "true" in meat.lower() else False
+            elif "reactions" in body: current.reactions = True if "true" in meat.lower() else False
+            elif "external_messages" in body: current.appMessages = True if "true" in meat.lower() else False
+            elif "after" in body: current.startDate = ConvertToDatetime(meat)
+            elif "before" in body: current.endDate = ConvertToDatetime(meat)
             else:
-                await current.botMessage.edit(content=str(loading)+"Indexing... please be patient")
-                count = 0
-                async for message in current.channel[0].history(limit=current.limit, before=current.endDate, after=current.startDate):
-                    if PurgeFilter(message): count += 1
-                embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=discord.Color.blue(), timestamp=datetime.datetime.utcnow())
-                embed.set_footer(text="To actually purge, copy & paste your command message, but add 'purge:true' to the filters")
-                embed.description+="\n**"+str(count)+" messages matched the filters**"
-                await current.botMessage.edit(content=None,embed=embed)
-            current = None
-        except Exception as e:
-            await ctx.send("Error - send this to my dev to decode:\n"+str(e))
+                try: 
+                    current.limit = int(body) #for example, .purge 10 wouldn't fall into the above categories, but is used due to rapid ability
+                except:
+                    current = None
+                    return await ctx.send("I don't think **"+body+"** is a number... please try again, or use the website documentation for filters")
+                actuallyPurge = True
+            current.limit += 2
+        if actuallyPurge:
+            await current.botMessage.edit(content=str(loading)+"Purging...")
+            Cyberlog.beginPurge(ctx.guild)
+            messages = await current.channel[0].purge(limit=current.limit, check=PurgeFilter, before=current.endDate, after=current.startDate)
+            Cyberlog.endPurge(ctx.guild)
+            await current.botMessage.edit(content="**Successfully purged "+str(len(messages) - 1)+" messages :ok_hand:**",delete_after=5)
+        else:
+            await current.botMessage.edit(content=str(loading)+"Indexing... please be patient")
+            count = 0
+            async for message in current.channel[0].history(limit=current.limit, before=current.endDate, after=current.startDate):
+                if PurgeFilter(message): count += 1
+            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=discord.Color.blue(), timestamp=datetime.datetime.utcnow())
+            embed.set_footer(text="To actually purge, copy & paste your command message, but add 'purge:true' to the filters")
+            embed.description+="\n**"+str(count)+" messages matched the filters**"
+            await current.botMessage.edit(content=None,embed=embed)
+        current = None
 
     async def SuperPurge(self, m: discord.Message):
         if not PurgeFilter(m): return 0
