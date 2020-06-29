@@ -52,8 +52,6 @@ class Moderation(commands.Cog):
     @commands.command()
     async def purge(self, ctx, *args):
         '''Purge messages'''
-        global current
-        global loading
         global filters
         current = PurgeObject()
         filters[ctx.guild.id] = current
