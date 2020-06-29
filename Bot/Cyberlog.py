@@ -2073,13 +2073,14 @@ class Cyberlog(commands.Cog):
                 e.description = f'{self.loading}Updating data...'
             for i, entry in enumerate(data[-20:]): #first twenty entries because that is the max number of reactions
                 if i > 0:
-                    span = entry.get('timestamp') - data[i - 1].get('timestamp')
+                    span = entry.get('timestamp') - prior.get('timestamp')
                     hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
                     times = [seconds, minutes, hours, span.days]
                     distanceDisplay = []
                     for j in range(len(times) - 1, -1, -1):
                         if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
                     if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
+                prior = entry
                 timestampString = f'{entry.get("timestamp") + datetime.timedelta(hours=timeZone(ctx.guild) if ctx.guild is not None else -4):%b %d, %Y • %I:%M %p} {nameZone(ctx.guild) if ctx.guild is not None else "EST"}'
                 if mod in ('avatar', 'customStatus'): timestampString += f' {"• " + (backslash + letters[i]) if mod == "avatar" or (mod == "customStatus" and entry.get("emoji") and len(entry.get("emoji")) > 1) else ""}'
                 e.add_field(name=timestampString if i == 0 else f'**{distanceDisplay[0]} later** • {timestampString}', value=f'''> {entry.get("emoji") if entry.get("emoji") and len(entry.get("emoji")) == 1 else f"[Custom Emoji]({entry.get('emoji')})" if entry.get("emoji") else ""} {entry.get(tailMappings.get(mod)) if entry.get(tailMappings.get(mod)) else ""}''', inline=False)

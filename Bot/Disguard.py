@@ -240,7 +240,7 @@ async def david(ctx):
 @bot.command()
 async def loki(ctx):
     if not any([ctx.author in bot.get_guild(g).members for g in [611301150129651763]]): return
-    r = fileAbstraction(bot.get_emoji(26991924086702121), 'L O K I', 'Loki')
+    r = fileAbstraction(bot.get_emoji(726991924086702121), 'L O K I', 'Loki')
     await ctx.send(embed=r[0],file=r[1])
 
 @commands.is_owner()
