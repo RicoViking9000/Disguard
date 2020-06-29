@@ -2071,6 +2071,7 @@ class Cyberlog(commands.Cog):
                 rootData = lightningUsers.get(target.id)
                 data = rootData.get(f'{mod}History')
                 e.description = f'{self.loading}Updating data...'
+            for i, entry in enumerate(data[-20:]): #first twenty entries because that is the max number of reactions
                 if i > 0:
                     span = entry.get('timestamp') - data[i - 1].get('timestamp')
                     hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
