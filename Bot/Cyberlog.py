@@ -168,7 +168,7 @@ class Cyberlog(commands.Cog):
             for s in self.bot.guilds: 
                 #lightningLogging[s.id] = servers.get(s.id)
                 members[s.id] = s.members
-                if self.summarize.current_loop == 1:
+                if self.summarize.current_loop % 4 == 1:
                     for m in s.members:
                         memberStart = datetime.datetime.now()
                         updates = []
@@ -2030,6 +2030,7 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden:
             pass
         await logChannel(ctx.guild, 'message').send(classify+" was unpaused",delete_after=60*60*24)
+        
     @commands.command()
     async def unpause(self, ctx, *args):
         if len(args) < 1: return await ctx.send("Please provide module `antispam` or `logging` to unpause")
@@ -2070,18 +2071,17 @@ class Cyberlog(commands.Cog):
                 rootData = lightningUsers.get(target.id)
                 data = rootData.get(f'{mod}History')
                 e.description = f'{self.loading}Updating data...'
-            for i in range(len(data[-20:])): #first thirty entries because that is the max number of embed fields
                 if i > 0:
-                    span = data[i].get('timestamp') - data[i - 1].get('timestamp')
+                    span = entry.get('timestamp') - data[i - 1].get('timestamp')
                     hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
                     times = [seconds, minutes, hours, span.days]
                     distanceDisplay = []
                     for j in range(len(times) - 1, -1, -1):
                         if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
                     if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
-                timestampString = f'{data[i].get("timestamp") + datetime.timedelta(hours=timeZone(ctx.guild) if ctx.guild is not None else -4):%b %d, %Y • %I:%M: %p} {nameZone(ctx.guild) if ctx.guild is not None else "EST"}'
-                if mod in ('avatar', 'customStatus'): timestampString += f' {"• " + (backslash + letters[i]) if mod == "avatar" or (mod == "customStatus" and data[i].get("emoji") and len(data[i].get("emoji")) > 1) else ""}'
-                e.add_field(name=timestampString if i == 0 else f'**{distanceDisplay[0]} later** • {timestampString}', value=f'''> {data[i].get("emoji") if data[i].get("emoji") and len(data[i].get("emoji")) == 1 else f"[Custom Emoji]({data[i].get('emoji')})" if data[i].get("emoji") else ""} {data[i].get(tailMappings.get(mod)) if data[i].get(tailMappings.get(mod)) else ""}''', inline=False)
+                timestampString = f'{entry.get("timestamp") + datetime.timedelta(hours=timeZone(ctx.guild) if ctx.guild is not None else -4):%b %d, %Y • %I:%M %p} {nameZone(ctx.guild) if ctx.guild is not None else "EST"}'
+                if mod in ('avatar', 'customStatus'): timestampString += f' {"• " + (backslash + letters[i]) if mod == "avatar" or (mod == "customStatus" and entry.get("emoji") and len(entry.get("emoji")) > 1) else ""}'
+                e.add_field(name=timestampString if i == 0 else f'**{distanceDisplay[0]} later** • {timestampString}', value=f'''> {entry.get("emoji") if entry.get("emoji") and len(entry.get("emoji")) == 1 else f"[Custom Emoji]({entry.get('emoji')})" if entry.get("emoji") else ""} {entry.get(tailMappings.get(mod)) if entry.get(tailMappings.get(mod)) else ""}''', inline=False)
             headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
             header = f'📜 Attribute History / 👮 / {headerTail}'
             header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
