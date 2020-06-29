@@ -662,4 +662,4 @@ def ConvertToDatetime(string: str):
 def setup(bot):
     global loading
     bot.add_cog(Moderation(bot))
-    loading = bot.get_emoji(573298271775227914)
+    loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
