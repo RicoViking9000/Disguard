@@ -6,6 +6,7 @@ import Cyberlog #Used to prevent delete logs upon purging
 import asyncio
 import os
 import traceback
+import copy
 
 filters = {}
 loading = None
@@ -53,7 +54,7 @@ class Moderation(commands.Cog):
     async def purge(self, ctx, *args):
         '''Purge messages'''
         global filters
-        current = PurgeObject()
+        current = copy.deepcopy(PurgeObject())
         filters[ctx.guild.id] = current
         if not (GetManageMessagePermissions(ctx.author) and GetManageMessagePermissions(ctx.guild.me)) and ('purge:true' in args or len(args) == 1):
             return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
