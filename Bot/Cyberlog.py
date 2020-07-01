@@ -1532,7 +1532,7 @@ class Cyberlog(commands.Cog):
         if before.status != after.status:
             if after.guild.id == targetServer.id:
                 if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
-                if after.status != discord.Status.offline and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+                if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
             if after.guild.id == targetServer.id:
