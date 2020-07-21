@@ -112,8 +112,9 @@ class Birthdays(commands.Cog):
     async def updateBirthdays(self):
         print('Updating birthdays')
         updated = []
-        for member in self.bot.get_all_members():
+        for member in self.bot.users:
             bday = await database.GetMemberBirthday(member)
+            print(bday)
             if bday is not None:
                 if bday < datetime.datetime.now():
                     new = datetime.datetime(bday.year + 1, bday.month, bday.day)
