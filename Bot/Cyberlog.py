@@ -336,6 +336,7 @@ class Cyberlog(commands.Cog):
         if destination is None: return
         pinned = (await message.channel.pins())[0]
         embed=discord.Embed(title='📌Message was pinned',description='Pinned by: {} ({})\nAuthored by: {} ({})\nChannel: {} • [Jump to message]({})\nPrecise timestamp: {}'.format(message.author.mention, message.author.name, pinned.author.mention, pinned.author.name, pinned.channel.mention, pinned.jump_url, received),color=blue,timestamp=datetime.datetime.utcnow())
+        embed.add_field(name='Message', value=pinned.content)
         embed.set_footer(text='Pinned message ID: {}'.format(pinned.id))
         await destination.send(embed=embed)
         try: self.pins[pinned.channel.id].append(pinned.id)
