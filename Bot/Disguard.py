@@ -257,10 +257,11 @@ async def broadcast(ctx):
     status = await ctx.send(f'{loading}Sending broadcast to servers...')
     successfulList = []
     for d in destinations:
-        try:
-            await d.send(embed=embed)
-            successfulList.append(d.name)
-        except Exception as e: await ctx.send(f'Error with destination {d.name}: {e}')
+        if d:
+            try:
+                await d.send(embed=embed)
+                successfulList.append(d.name)
+            except: await ctx.send(f'Error with destination {d.name}')
     await status.edit(content=f'Successfully sent broadcast to {len(successfulList)} / {len(destinations)} destinations')
 
 @bot.command(aliases=['feedback', 'ticket'])
