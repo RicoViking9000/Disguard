@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Lock - Disguard Commands</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
+                </ul>
+            </nav>
+        </header>
+        <div class=pad>
+            <h1>Lock command</h1>
+            <p>Lock or unlock members from a server</p>
+            <p>Locking a member removes their access to all channels, and unlocking them reverses it</p>
+            <p>Requires Manage Channels permissions because the bot uses channel permission overwrites to execute this command</p>
+            <h3>.lock {member} |{reason}|</h3>
+            <h3>.unlock {member}</h3>
+            <h4>{member}</h4>
+            <div>
+                <p>The member to lock or unlock. For the time being, must exactly match (Case Sensitive) one of the following formats:</p>
+                <ul>
+                    <li>Member ID</li>
+                    <li>Member Mention</li>
+                    <li>Username#0000</li>
+                    <li>Username</li>
+                    <li>Nickname</li>
+                </ul>
+            </div>
+            <h4>{reason}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>Only applies to the lock command</p>
+                <p>If provided, this will be DMd to the member upon being locked out</p>
+            </div>
+            <p>Examples</p>
+            <div>
+                <h4>.lock Hijacker#4554</h4>
+                <p>Lock Hijacker out of the server, removing their access to channels</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.lock Troller Please change your profile picture to conform with our server rules and the Discord Terms of Service to be readmitted to the server</h4>
+                <p>Lock Troller out of the server and let them know why</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.unlock Troller</h4>
+                <p>Restore server access to Troller</p>
+            </div>
+        </div>
+    </body>
+</html>

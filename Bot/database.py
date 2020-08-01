@@ -46,12 +46,14 @@ def Initialize(token):
     global db
     global servers
     global users
+    global disguard
     if token == secure.token():
         db = mongo.disguard
     elif token == secure.beta():
         db = mongo.disguard_beta
     servers = db.servers
     users = db.users
+    disguard = db.disguard
 
 
 '''Checking events'''
@@ -84,13 +86,13 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
-    'offset': -5 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
+    'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
     'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
     'jumpContext': True if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
     'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
     'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
     'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
-    "channels": [{"name": channel.name, "id": channel.id} for channel in iter(s.channels) if type(channel) is discord.TextChannel],
+    "channels": [{"name": channel.name, "id": channel.id} for channel in s.text_channels],
     "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
     'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
     "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
@@ -482,15 +484,15 @@ async def GetBirthday(s: discord.Guild):
     '''Return the channel associated with a server's Birthday Management'''
     return (await servers.find_one({'server_id': s.id})).get('birthday')
 
-async def SetBirthday(m: discord.Member, d):
+async def SetBirthday(m: discord.User, d):
     '''Update a member's birthday information'''
     await users.update_one({'user_id': m.id}, {'$set': {'birthday': d}})
 
-async def GetMemberBirthday(m: discord.Member):
+async def GetMemberBirthday(m: discord.User):
     '''Return a member's birthday'''
     return (await users.find_one({'user_id': m.id})).get('birthday')
 
-async def GetBirthdayMessages(m: discord.Member):
+async def GetBirthdayMessages(m: discord.User):
     '''Return a member's birthday messages'''
     return (await users.find_one({'user_id': m.id})).get('birthdayMessages')
 
@@ -719,16 +721,48 @@ async def VerifyRole(r: discord.Role, new=False):
     if new: await servers.update_one({'server_id': r.guild.id}, {'$push': {'roles': {'name': r.name, 'id': r.id}}})
     else: await servers.update_one({'server_id': r.guild.id, 'roles.$.id': r.id}, {'$set': {'name': r.name}})
  
-async def CalculateGeneralChannel(g: discord.Guild, r=False):
+async def CalculateGeneralChannel(g: discord.Guild, update=False):
     '''Determines the most active channel based on indexed message count
     r: Whether to return the channel. If False, just set this to the database'''
     popular = max(g.text_channels, key = lambda c: len(os.listdir('Indexes/{}/{}'.format(g.id, c.id))))
-    if r: return popular
-    else: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': popular.id}})
+    if update: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': popular.id}})
+    return popular
 
-async def CalculateAnnouncementsChannel(g: discord.Guild, r=False):
+async def CalculateAnnouncementsChannel(g: discord.Guild, update=False):
     '''Determines the announcement channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
-    s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcements'), reverse=True)[0]
-    if r: return s
-    else: await servers.update_one({'server_id': g.id}, {'$set': {'announcementChannel': s.id}})
+    s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcements'))[0]
+    if update: await servers.update_one({'server_id': g.id}, {'$set': {'announcementChannel': s.id}})
+    return s
+
+async def CalculateModeratorChannel(g: discord.Guild, update=False):
+    '''Determines the moderator channel based on channel name and permissions
+    r: Whether to return the channel. If False, just set this to the database'''
+    relevanceKeys = {}
+    for c in g.text_channels:
+        if not c.overwrites_for(g.default_role).read_messages: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
+    for k in relevanceKeys:
+        if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
+    result = max(relevanceKeys, key=relevanceKeys.get)
+    if update: await servers.update_one({'server_id': g.id}, {'$set': {'moderatorChannel': result.id}})
+    return result
+    
+async def CreateSupportTicket(ticket):
+    '''Appends a new support ticket to the system'''
+    await disguard.update_one({}, {'$push': {'tickets': ticket}}, True)
+
+async def UpdateSupportTicket(ticketNumber, newTicket):
+    '''Updates a support ticket with a new version'''
+    await disguard.update_one({}, {'$set': {'tickets.$[elem]': newTicket}}, array_filters=[{'elem.number': ticketNumber}])
+
+async def AppendTicketConversation(ticketNumber, conversationEntry):
+    '''Appends a conversation entry to a support ticket'''
+    await disguard.update_one({}, {'$push': {'tickets.$[elem].conversation': conversationEntry}}, array_filters=[{'elem.number': ticketNumber}])
+
+async def FetchSupportTicket(ticketNumber):
+    '''Fetches a specific support ticket, given its placement number'''
+    return await disguard.find_one({'tickets': {'$elemMatch': {'number': ticketNumber}}})
+
+async def GetSupportTickets():
+    '''Returns entire support ticket collection'''
+    return (await disguard.find_one({})).get('tickets')

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>purge - Disguard Commands</title>
+        <title>Purge - Disguard Commands</title>
         <link rel="stylesheet" type="text/css" href="Styles.css">
         <link rel='icon' type='image/png' href='icoDisguard.png'>
     </head>
@@ -19,134 +19,165 @@
                 </ul>
             </nav>
         </header>
-    <h1 class=comIndivTitle>purge command</h1>
-    <p class=comIndivDesc>Purge messages</p>
-    <h3 class=comIndivSub>Quick purge: .purge [number]</h3>
-    <h4 class=comIndivMeat>Example - purge 10 posts: <u>.purge 10</u></h4>
-    <h3 class=comIndivSub>Advanced purge: use filters</h3>
-    <p>filter_name:value</p>
-    <h5>Multi-lining filters is optional. If you use filters, you must include 'purge:true' to actually purge for safety reasons. Separate different filters by a space or newline; separate filter:value with only a colon - no space. Use as many filters as necessary. If a value requires a space for multiple words, surround filter:value with quotes, like this: "filter:value". For the True/False values, you can set them as false to ignore them, but omitting them is also valid - all filters are optional. Also happens to be a handy search tool if needed. Please see examples below the table.</h5>
-    <table border=1 id=purgeFilters>
-        <tr><td colspan=5><center>Filters</center></td></tr>
-        <tr>
-            <td><center>Name</center></td>
-            <td><center>Description</center></td>
-            <td><center>Values</center></td>
-        </tr>
-        <tr>
-            <td>count</td>
-            <td>The maximum number of messages to purge; the limit. Defaults to 100</td>
-            <td>An integer</td>
-        </tr>
-        <tr>
-            <td>author</td>
-            <td>Match messages sent by this author. Do not mention people. Discriminator (#0001) is optional, but recommended for accuracy. Nicknames will work.</td>
-            <td>Username#0001</td>
-        </tr>
-        <tr>
-            <td>channel</td>
-            <td>Match messages sent in this channel. Defaults to current channel</td>
-            <td>#{channel_name}</td>
-        </tr>
-        <tr>
-            <td>contains</td>
-            <td>Match messages that contain this text</td>
-            <td>word or phrase</td>
-        </tr>
-        <tr>
-            <td>startswith</td>
-            <td>Match messages that start with this text</td>
-            <td>word or phrase</td>
-        </tr>
-        <tr>
-            <td>endswith</td>
-            <td>Match messages that end with this text</td>
-            <td>word or phrase</td>
-        </tr>
-        <tr>
-            <td>links</td>
-            <td>Match messages that contain web URLs</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>invites</td>
-            <td>Match messages that server invites</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>images</td>
-            <td>Match messages that contain image attachments</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>embeds</td>
-            <td>Match messages that contain embeds, including embedded URLs</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>mentions</td>
-            <td>Match messages that contain @mentions</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>bots</td>
-            <td>Match messages that were sent by bot accounts</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>attachments</td>
-            <td>Match messages that contain attachments, such as images or files</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>reactions</td>
-            <td>Match messages that contain reactions</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>external_messages</td>
-            <td>Match messages that contain 3rd party embeds, such as Spotify invites or game invites through Discord (e.g. Fortnite)</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td>before</td>
-            <td>Match messages that were sent before this date</td>
-            <td>mm/dd/yyyy</td>
-        </tr>
-        <tr>
-            <td>after</td>
-            <td>Match messages that were sent after this date</td>
-            <td>mm/dd/yyyy</td>
-        </tr>
-        <tr>
-            <td>purge</td>
-            <td>Include 'purge:true' to purge, exclude to pre-scan to see how many messages would be purged, if you included it</td>
-            <td>true</td>
-        </tr>
-    </table>
-    <p>This example isn't necessarily realistic, but includes every option, so you can follow this guide for your filters. Quotes are only required for multiple-word values, and again, all filters are optional</p>
-    <p>And if you find this daunting, you aren't alone. An interactive purge walkthrough is in the works.</p>
-    <p>.purge<br>
-        count:5<br>
-        author:Disguard#1890<br>
-        contains:noob<br>
-        "startswith:you are"<br>
-        endswith:idiot<br>
-        links:true<br>
-        invites:true<br>
-        images:true<br>
-        embeds:true<br>
-        mentions:true<br>
-        bots:true<br>
-        channel:#general<br>
-        attachments:true<br>
-        reactions:true<br>
-        external_messages:true<br>
-        before:4/27/19<br>
-        after:1/1/19<br>
-        purge:true<br></p>
-    <p>Here's a more realistic example - purging the most recent 20 messages in #bots sent by Mee6#4876 that contain image attachments:</p>
-    <p>.purge count:20 author:Mee6 channel:#bots images:true purge:true</p>
-    <p>And here's what a purge pre-scan looks like: (.purge channel:#general after:4/25/19)</p>
-    <img src=https://cdn.discordapp.com/attachments/567741860559454210/571858736704913409/unknown.png>
+        <div class=pad>
+            <h1>Purge command</h1>
+            <p>Purge messages</p>
+            <h3>.purge {number} - quick purge</h3>
+            <h3>.purge {filters} - advanced purge</h3>
+            <h3>.purge - interactive purge</h3>
+            <h4>{number}</h4>
+            <div>
+                <p>The number of messages to purge, omitting this will trigger interactive setup mode</p>
+                <hr class=argSeparator>
+            </div>
+            <h4>Filters</h4>
+            <div>
+                <p>Supply parameters in the form of {filter_name:value <span class=grayed>etc.</span>} to quickly apply advanced options to purging</p>
+                <p>You may provide filters all on the same line, or put each one on its own line; either works. You must include 'purge' in the filter list for purging to take place, in order to prevent accidental purges. Excluding 'purge' will simply initiate a pre-scan to display how many messages would be purged had the purge filter been in there.</p>
+                <p>Separate different filters with a space or newline, and you may use as many filters as necessary. If a parameter is multiple words, you must put quotation marks around the argument, like so: .purge "contains: hello world." All parameters are case insensitive.</p>
+                <p>For the Boolean (T/F) values, simply type them in to apply them (.purge links 12 will purge up to twelve messages containing links).</p>
+                <p>Some of these features are still in progress - the purge command needs to be renovated. Please use interactive setup (just .purge) until this message is removed</p>
+            </div>
+        </div>
+        <hr>
+        <table id=purgeFilters>
+            <p id=filterHeader>Filters</p>
+            <tr class=sticky>
+                <th>Filter</th>
+                <th>Values</th>
+                <th>Example and Description</th>
+            </tr>
+            <tr>
+                <td>{number}</td>
+                <td>An integer</td>
+                <td>.purge <span class=blueUnderline>10</span> links<br><br><span class=grayed>Match the <span class=blueUnderline>10</span> most recent messages containing links<br><br>If {number} is omitted from the filters, it will default to 100</span></td>
+            </tr>
+            <tr>
+                <td>noLimit</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline>nolimit</span> author:Spiderman<br><br><span class=grayed>Match <span class=blueUnderline>every single message </span>sent by Spiderman</span></td>
+            </tr>
+            <tr>
+                <td>author</td>
+                <td>User ID<br>Username#0000<br>Username<br>Nickname<br><span class=red>NOT mention</span></td>
+                <td>.purge <span class=blueUnderline>author:Mee6</span><br><br><span class=grayed>Match messages by <span class=blueUnderline>Mee6</span></span></td>
+            </tr>
+            <tr>
+                <td>humans<br><br>bots</td>
+                <td>-</td>
+                <td>.purge 50 <span class=blueUnderline>bots</span><br>.purge 50 <span class=blueUnderline>humans</span><br><br><span class=grayed>Match the last 50 messages by <span class=blueUnderline>bots only</span><br>Match the last 50 messages by <span class=blueUnderline>humans only</span></td>
+            </tr>
+            <tr>
+                <td>channel</td>
+                <td>Channel name<br>Channel ID</td>
+                <td>.purge <span class=blueUnderline>channel:bot-commands</span> author:Dyno<br><br><span class=grayed>Match messages by Dyno <span class=blueUnderline>in the bot-commands channel</span><br><br>If channel is omitted from the filters, it will default to the current channel</span></td>
+            </tr>
+            <tr>
+                <td>contains<br>equals<br>startswith<br>endswith</td>
+                <td>Word or phrase</td>
+                <td>.purge <span class=blueUnderline>"{filter}:Bruno Mars"</span><br><br><span class=grayed>contains: Match messages containing the phrase <span class=blueUnderline>"Bruno Mars"</span><br>equals: Match messages with content exactly matching the phrase <span class=blueUnderline>"Bruno Mars"</span><br>startswith: Match messages starting with the phrase <span class=blueUnderline>"Bruno Mars"</span><br>endswith: Match messages ending with the phrase <span class=blueUnderline>"Bruno Mars"</span></td>
+            </tr>
+            <tr>
+                <td>links</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline>links</span> startswith:http://<br><br><span class=grayed>Match messages <span class=blueUnderline>containing hyperlink URLs</span> starting with "http://"</td>
+            </tr>
+            <tr>
+                <td>invites</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline>invites</span> author:Spammer#9876<br><br><span class=grayed>Match messages by Spammer <span class=blueUnderline>containing server invites</span></td>
+            </tr>
+            <tr>
+                <td>images</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline>images</span> channel:memes<br><br><span class=grayed>Match messages <span class=blueUnderline>containing image attachments</span> sent in #memes</td>
+            </tr>
+            <tr>
+                <td>videos</td>
+                <td>-</td>
+                <td>.purge 20 <span class=blueUnderline>videos</span><br><br><span class=grayed>Match 20 messages <span class=blueUnderline>containing video attachments</span></td>
+            </tr>
+            <tr>
+                <td>audio</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline>audio</span> bots<br><br><span class=grayed>Match messages by bots only <span class=blueUnderline>containing audio attachments</span></td>
+            </tr>
+            <tr>
+                <td>uncommon</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline>uncommon</span> channel:general<br><br><span class=grayed>Match messages <span class=blueUnderline>containing uncommon attachments</span> sent in #general<br><br>Uncommon attachments are anything not text/audio/video/image</span></td>
+            </tr>
+            <tr>
+                <td>attachments</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline>attachments equals</span><br><br><span class=grayed>Match messages <span class=blueUnderline>containing attachments</span> with no text content</span></td>
+            </tr>
+            <tr>
+                <td>embeds</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline> embeds</span> Auttaja<br><br><span class=grayed>Match messages <span class=blueUnderline>containing embeds</span> sent by Auttaja</span></td>
+            </tr>
+            <tr>
+                <td>mentions</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline> mentions</span> author:Raider#6969<br><br><span class=grayed>Match messages <span class=blueUnderline>containing user mentions</span> sent by Raider</span></td>
+            </tr>
+            <tr>
+                <td>roleMentions</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline> rolementions</span> humans<br><br><span class=grayed>Match messages <span class=blueUnderline>containing role mentions</span> sent by humans</span></td>
+            </tr>
+            <tr>
+                <td>reaction</td>
+                <td>if emoji provided, match that, else, any reaction</td>
+                <td>.purge <span class=blueUnderline> reaction:⭐</span> author:Hamilton#1804<br><br><span class=grayed>Match messages <span class=blueUnderline>containing the ⭐ reaction</span> sent by Hamilton</span></td>
+            </tr>
+            <tr>
+                <td>presences</td>
+                <td>-</td>
+                <td>.purge <span class=blueUnderline> presences</span> channel:general<br><br><span class=grayed>Match messages <span class=blueUnderline>containing party invites</span> sent in #general</span></td>
+            </tr>
+            <tr>
+                <td>beforeDate<br><br>afterDate</td>
+                <td>mm/dd/yyyy</td>
+                <td>.purge <span class=blueUnderline> afterdate: 6/20/2020</span> channel:spam<br><br><span class=grayed>Match messages <span class=blueUnderline>sent after June 20th, 2020</span> in #spam</span></td>
+            </tr>
+            <tr>
+                <td>beforeTime<br><br>afterTime</td>
+                <td>hhmm (24 hour)<br><br>hhmmAM or hhmmPM (12 hour)</td>
+                <td>.purge afterdate:yesterday <span class=blueUnderline> beforetime:600pm</span> images<br><br><span class=grayed>Match messages sent today <span class=blueUnderline>posted before 6:00 PM</span> containing images</span></td>
+            </tr>
+            <tr>
+                <td>purge</td>
+                <td>-</td>
+                <td>.purge videos <span class=blueUnderline> purge</span><br><br><span class=grayed>Execute the purge by skipping the confirmation pre-scan message<br><br>By excluding this keyword, the bot will tell you how many messages will be purged, and you'll be able to confirm or redo the command</span></td>
+            </tr>
+        </table>
+        <hr>
+        <div class=pad>
+            <p>Advanced Examples and Scenarios</p>
+            <div>
+                <p>A user (named Ganon) is new to the server, and has been spam-posting random unrelated images in the #art channel</p>
+                <h4>.purge author:Ganon channel:art images nolimit</h4>
+                <p>This will match any message sent by Ganon in the art channel, containing an image</p>
+                <hr>
+            </div>
+            <div>
+                <p>Your server was raided at 3:28PM by The Cat In The Hat#9999, Thing One#0001, and Thing Two#0002, who were already in the server and active before the raid. You need to purge their messages without deleting messages by others, or their messages before the raid.<br><br>Protip: You can stack the same filter!</p>
+                <h4>.purge "author:The Cat In The Hat#9999" "author:Thing One#0001" "author:Thing Two#0001" afterTime:1527 nolimit</h4>
+                <p>This will match any message sent by any of these three members that were sent since the start of the raid.<br><br>You can check out this page to learn more about how timezones work.</p>
+                <hr>
+            </div>
+            <div>
+                <p>You would like to purge all the messages in #bot-commands containing either image or video files<br><br>For this, we'll use a logical {or} operator</p>
+                <h4>.purge channel:bot-commands (image or video) NoLimit</h4>
+                <p>By default, specifying an 'or' will link the two surrounding filters, meaning that the parentheses in this example aren't mandatory, but they improve organization.</p>
+            </div>
+            <p>Notes</p>
+            <div>
+                <p>The purpose of filters is to allow users to <em>quickly</em> purge messages if they know the syntax. If you aren't in a rush, you can get more fine-tuning in a much more intuitive method with the ineractive purge (it just takes longer due to the walkthrough process).</p>
+            </div>
+
+        </div>
     </body>
+</html>

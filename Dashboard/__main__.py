@@ -161,11 +161,11 @@ def server(id):
 def antispam(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))
+    servObj = servers.find_one({"server_id": id})
     if request.method == 'POST':
         r = request.form
-        database.UpdateMemberWarnings(id, int(r.get('warn')))
-        serv = servers.find_one({"server_id": id})
-        antispam = serv.get("antispam")
+        antispam = servObj.get("antispam")
+        if antispam.get('warn') != int(r.get('warn')): database.UpdateMemberWarnings(id, int(r.get('warn')))
         cex = list(map(int, r.getlist('channelExclusions'))) #HTML forms pass data as strings, but we need ints
         rex = list(map(int, r.getlist('roleExclusions'))) #rex = (R)ole(Ex)clusions
         mex = list(map(int, r.getlist('memberExclusions')))
@@ -179,7 +179,7 @@ def antispam(id):
         servers.update_one({"server_id": id}, {"$set": {"antispam": { #Save and convert values for DB
             "enabled": r.get('enabled').lower() == 'true',
             "whisper": r.get("whisper").lower() == 'true',
-            "log": [None if r.get("log").lower() == "none" or r.get("log") is None else [a.get("name") for a in iter(serv.get("channels")) if a.get('id') == int(r.get("log"))][0], None if r.get('log').lower() == "none" else int(r.get("log"))],
+            "log": [None if r.get("log").lower() == "none" or r.get("log") is None else [a.get("name") for a in iter(servObj.get("channels")) if a.get('id') == int(r.get("log"))][0], None if r.get('log').lower() == "none" else int(r.get("log"))],
             "warn": int(r.get("warn")),
             "delete": r.get("delete").lower() == 'true',
             "muteTime": int(float(r.get("muteTime"))) * 60,
@@ -209,7 +209,6 @@ def antispam(id):
             "profanityTolerance": float(r.get("profanityTolerance")) / 100,
             "filter": profane}}})
         return redirect(url_for('antispam', id=id))
-    servObj = servers.find_one({"server_id": id})
     return render_template('antispam.html', servid = id, servObj=servObj, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
 
 @app.route('/manage/<int:id>/moderation')
@@ -235,7 +234,7 @@ def cyberlog(id):
         "image": r.get('imageLogging').lower() == 'true',
         "defaultChannel": None if r.get('defaultChannel').lower() == 'none' or r.get('defaultChannel') is None else int(r.get('defaultChannel')),
         'memberGlobal': int(r.get('memberGlobal')),
-        'summarize': int(r.get('summarize')),
+        #'summarize': int(r.get('summarize')),
         "channelExclusions": cex,
         "roleExclusions": rex,
         "memberExclusions": mex,
@@ -246,7 +245,7 @@ def cyberlog(id):
             "read": r.get('messageRead').lower() == 'true',
             "enabled": r.get('message').lower() == 'true',
             "channel": None if r.get('messageChannel').lower() == 'none' or r.get('messageChannel') is None else int(r.get('messageChannel')),
-            'summarize': int(r.get('messageSummarize')),
+            #'summarize': int(r.get('messageSummarize')),
             "color": c.get('message').get('color'),
             "advanced": c.get('message').get('advanced')},
         "doorguard": {
@@ -256,7 +255,7 @@ def cyberlog(id):
             "read": r.get('doorRead').lower() == 'true',
             "enabled": r.get('doorguard').lower() == 'true',
             "channel": None if r.get('doorChannel').lower() == 'none' or r.get('doorChannel') is None else int(r.get('doorChannel')),
-            'summarize': int(r.get('doorSummarize')),
+            #'summarize': int(r.get('doorSummarize')),
             "color": c.get('doorguard').get('color'),
             "advanced": c.get('doorguard').get('advanced')},
         "server": {
@@ -266,7 +265,7 @@ def cyberlog(id):
             "read": r.get('serverRead').lower() == 'true',
             "enabled": r.get('server').lower() == 'true',
             "channel": None if r.get('serverChannel').lower() == 'none' or r.get('serverChannel') is None else int(r.get('serverChannel')),
-            'summarize': int(r.get('serverSummarize')),
+            #'summarize': int(r.get('serverSummarize')),
             "color": c.get('server').get('color'),
             "advanced": c.get('server').get('advanced')},
         "channel": {
@@ -276,7 +275,7 @@ def cyberlog(id):
             "read": r.get('channelRead').lower() == 'true',
             "enabled": r.get('channel').lower() == 'true',
             "channel": None if r.get('channelChannel').lower() == 'none' or r.get('channelChannel') is None else int(r.get('channelChannel')),
-            'summarize': int(r.get('channelSummarize')),
+            #'summarize': int(r.get('channelSummarize')),
             "color": c.get('channel').get('color'),
             "advanced": c.get('channel').get('advanced')},
         "member": {
@@ -286,7 +285,7 @@ def cyberlog(id):
             "read": r.get('memberRead').lower() == 'true',
             "enabled": r.get('member').lower() == 'true',
             "channel": None if r.get('memberChannel').lower() == 'none' or r.get('memberChannel') is None else int(r.get('memberChannel')),
-            'summarize': int(r.get('memberSummarize')),
+            #'summarize': int(r.get('memberSummarize')),
             "color": c.get('member').get('color'),
             "advanced": c.get('member').get('advanced')},
         "role": {
@@ -296,7 +295,7 @@ def cyberlog(id):
             "read": r.get('roleRead').lower() == 'true',
             "enabled": r.get('role').lower() == 'true',
             "channel": None if r.get('roleChannel').lower() == 'none' or r.get('roleChannel') is None else int(r.get('roleChannel')),
-            'summarize': int(r.get('roleSummarize')),
+            #'summarize': int(r.get('roleSummarize')),
             "color": c.get('role').get('color'),
             "advanced": c.get('role').get('advanced')},
         "emoji": {
@@ -306,7 +305,7 @@ def cyberlog(id):
             "read": r.get('emojiRead').lower() == 'true',
             "enabled": r.get('emoji').lower() == 'true',
             "channel": None if r.get('emojiChannel').lower() == 'none' or r.get('emojiChannel') is None else int(r.get('emojiChannel')),
-            'summarize': int(r.get('emojiSummarize')),
+            #'summarize': int(r.get('emojiSummarize')),
             "color": c.get('emoji').get('color'),
             "advanced": c.get('emoji').get('advanced')},
         "voice": {
@@ -316,7 +315,7 @@ def cyberlog(id):
             "read": r.get('voiceRead').lower() == 'true',
             "enabled": r.get('voice').lower() == 'true',
             "channel": None if r.get('voiceChannel').lower() == 'none' or r.get('voiceChannel') is None else int(r.get('voiceChannel')),
-            'summarize': int(r.get('voiceSummarize')),
+            #'summarize': int(r.get('voiceSummarize')),
             "color": c.get('voice').get('color'),
             "advanced": c.get('voice').get('advanced')}}}})
         return redirect(url_for('cyberlog', id=id))

@@ -593,9 +593,10 @@ def GetRoleManagementPermissions(member: discord.Member):
 async def PrepareMembers(bot: commands.Bot):
     '''Initialize the local profanityfilter objects'''
     global members
-    #print(Cyberlog.lightningLogging)
     for server in bot.guilds:
-        for m in Cyberlog.lightningLogging.get(server.id).get('members'): members[f'{server.id}_{m.get("id")}'] = m
+        try:
+            for m in Cyberlog.lightningLogging.get(server.id).get('members'): members[f'{server.id}_{m.get("id")}'] = m
+        except Exception as e: print(f'Passing - {e}')
 
 def setup(bot):
     bot.add_cog(Antispam(bot))

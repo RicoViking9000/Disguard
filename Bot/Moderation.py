@@ -10,6 +10,7 @@ import copy
 
 filters = {}
 loading = None
+newline = '\n'
 
 class PurgeObject(object):
     def __init__(self, message=None, botMessage=None, limit=100, author=[], contains=None, startsWith=None, endsWith=None, links=None, invites=None, images=None, embeds=None, mentions=None, bots=None, channel=[], files=None, reactions=None, appMessages=None, startDate=None, endDate=None, caseSensitive=False, cleanup=False, anyMatch=False):
@@ -45,10 +46,28 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
+    async def lock(self, ctx, member: discord.Member, *, reason=''):
+        status = await ctx.send(f'{loading}Locking...')
+        messages = []
+        for c in ctx.guild.channels:
+            try:
+                if c.type[0] == 'text': await c.set_permissions(member, read_messages=False)
+                elif c.type[0] == 'voice': await c.set_permissions(member, connect=False)
+            except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error editing channel permission overwrites for {c.name}: {e.text}')
+        if len(reason) > 0:
+            try: await member.send(f'You have been restricted from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}')
+            except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error DMing {member.name}: {e.text}')
+        await status.edit(content=f'{member.name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {newline.join(messages)}' if len(messages) > 0 else ''))
+
+    @commands.has_guild_permissions(manage_channels=True)
+    @commands.command()
     async def unlock(self, ctx, member: discord.Member):
         status = await ctx.send(f'{loading}Unlocking...')
-        for c in ctx.guild.text_channels: await c.set_permissions(m, overwrite=None)
-        await status.edit(content=f'{m.name} is now unlocked and can access channels again.')
+        for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None)
+        errorMessage = None
+        try: await member.send(f'You may now access channels again in {ctx.guild.name}')
+        except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
+        await status.edit(content=f'{member.name} is now unlocked and can access channels again.{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
 
     @commands.command()
     async def purge(self, ctx, *args):
@@ -81,9 +100,9 @@ class Moderation(commands.Cog):
             embed.set_author(name='Waiting for input')
             channels = []
             if len(post.channel_mentions) > 0: channels += post.channel_mentions
+            if 'cancel' in post.content.lower(): return await message.edit(embed=cancel)
             if 'h' in post.content.lower(): channels.append(ctx.channel)
             if 'a' in post.content.lower(): channels = ctx.guild.text_channels
-            if 'cancel' in post.content.lower(): return await message.edit(embed=cancel)
             try:
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()

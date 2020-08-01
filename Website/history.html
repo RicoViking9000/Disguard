@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>history - Disguard Commands</title>
+        <title>History - Disguard Commands</title>
         <link rel="stylesheet" type="text/css" href="Styles.css">
         <link rel='icon' type='image/png' href='icoDisguard.png'>
     </head>
@@ -19,6 +19,41 @@
                 </ul>
             </nav>
         </header>
-        <h1 class=comIndivTitle>history command (IN PROGRESS)</h1>
-        
+        <div class=pad>
+            <h1>History command</h1>
+            <p>View your attribute history</p>
+            <h3>.history |{module}| |{member}|</h3>
+            <h4>{module}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>The attribute history module to jump to<br>If omitted, the homepage selector with available options will be brought up<br>Currently, the following options are available:</p>
+                <ul>
+                    <li>avatar --> View your 20 most recent profile pictures</li>
+                    <li>username --> View your 20 most recent usernames</li>
+                    <li>status --> View your 20 most recent custom statuses</li>
+                </ul>
+            </div>
+            <hr class=argSeparator>
+            <h4>{member}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>The member whose attributes you would like to view<br>If omitted, you will view your own attributes</p><hr>
+            </div>
+            <p>Examples</p>
+            <div>
+                <h4>.history</h4>
+                <p>View the homepage (the available options) for your own attribute history</p>
+                <img src='https://cdn.discordapp.com/attachments/567741860559454210/723683189666611260/unknown.png'>
+            </div>
+            <hr>
+            <div>
+                <h4>.history status</h4>
+                <p>Jump right to your custom status history</p>
+                <img src='https://cdn.discordapp.com/attachments/567741860559454210/723685162453565590/unknown.png'>
+            </div>
+            <hr>
+            <div>
+                <h4>.history Disguard avatar</h4>
+                <p>View Disguard's avatar (profile picture) history</p>
+                <img src='https://cdn.discordapp.com/attachments/567741860559454210/723685852785541192/unknown.png'>
+            </div>
+        </div>
     </body>

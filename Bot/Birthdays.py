@@ -74,8 +74,10 @@ class Birthdays(commands.Cog):
                                 if bday.strftime('%m%d') == initial.strftime('%m%d'):
                                     print(f'Announcing birthday for {member.name}')
                                     messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
-                                    toSend = '🍰 Greetings {}, it\'s {}\'s birthday! Let\'s all wish them a very special day! 🍰{}'.format(server.name, member.mention, '' if len(messages) == 0 else '\nThey also have {} special birthday messages from people in this server!\n\n{}'.format(len(messages),
-                                    '\n'.join(['• {}: {}'.format(server.get_member(m.get('author')).name, m.get('message')) for m in messages])))
+                                    newline = '\n'
+                                    messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m).name}: {m['message']}" for m in messages])}'''
+                                    if member.id == 247412852925661185: toSend = f"🍰🎊🍨🎈 Greetings {server.name}! It's my developer {member.mention}'s birthday!! Let's wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ''}"
+                                    else: toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
                                     try: 
                                         m = await self.bot.get_channel(channel).send(toSend)
                                         await m.add_reaction('🍰')
@@ -99,7 +101,7 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def configureServerBirthdayAnnouncements(self):
-        if int(datetime.datetime.utcnow().strftime('%M')) % 5 == 0:
+        if int(datetime.datetime.utcnow().strftime('%M')) % 5 == 0 and self.configureServerBirthdayAnnouncements.current_loop > 0:
             self.serverBirthdayAnnouncements.start()
             self.configureServerBirthdayAnnouncements.cancel()
 

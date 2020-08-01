@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Disguard Commands</title>
+        <title>⚙ Disguard Commands</title>
         <link rel="stylesheet" type="text/css" href="Styles.css">
         <link rel='icon' type='image/png' href='icoDisguard.png'>
     </head>
@@ -19,28 +19,61 @@
                 </ul>
             </nav>
         </header>
-    <h1 class=pageHeader>List of commands</h1>
-    <h3>Prefix: . (period), customizable through server dashboard<br>Click the name of a command to learn more<br>Arguments surrounded by |pipestems| are optional</h3>
+    <div class="commandsHeader pageHeader">
+        <h1>List of commands</h1>
+        <p><span class=grayed>Default perfix: . (period) - customizable through your server dashboards</span></p>
+        <p><span class=grayed>Arguments surrounded by <span class=white>|</span>pipestems<span class=white>|</span> are optional</span></p>
+        <p><span class=grayed>Click on the name of a command to learn more about it, and see usage details and examples</span></p>
+    </div>
     <table id=comTable>
         <tr>
             <th>Command name</th>
             <th>Command description</th>
         </tr>
         <tr>
-            <td class=comName><a href=purge.html>purge |{number}|</a></td>
-            <td class=comDesc>Purge {number} messages. Omit {number} to enter interactive setup</td>
-        </tr>
-        <tr>
             <td class=comName><a href=commands.html>help</a></td>
             <td class=comDesc>Shortcut to this page</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=support.html>support</a></td>
+            <td class=comDesc>Create a support ticket through Disguard to get in direct contact with my developer if you have issues or questions about the bot</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=tickets.html>tickets</a></td>
+            <td class=comDesc>View the support tickets you are a participant of</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=invite.html>invite</a></td>
+            <td class=comDesc>Pulls up bot invite link and invite link to the Disguard's official Discord server</td>
         </tr>
         <tr>
             <td class=comName><a href=pause.html>pause {module} |{duration}|<br><br>unpause {module}</a></td>
             <td class=comDesc>Pause or unpause an active module (logging or antispam)</td>
         </tr>
         <tr>
-            <td class=comName><a href=info.html>info {search term}</a></td>
-            <td class=comDesc>Intelligent search feature for server objects: Members, roles, channels, emojis, invites, etc. Type what you want to search for.</td>
+            <td class=comName><a href=server.html>server</a></td>
+            <td class=comDesc>Snapchat of basic server configuration (Logging and Antispam) - will be improved on in the future</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=info.html>info |{search term}|</a></td>
+            <td class=comDesc>Intelligent search feature for server objects: Members, roles, channels, emojis, invites, etc.</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=birthday.html>birthday |{action}|</a></td>
+            <td class=comDesc>View upcoming birthdays, your birthday information, another member's birthday information, or set your birthday/age</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=purge.html>purge |{number}|</a></td>
+            <td class=comDesc>Purge {number} messages. Omit {number} to enter interactive setup</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=lock.html>lock {member} |{reason}|<br><br>unlock {member}</a></td>
+            <td class=comDesc>Lock a member out of the server (prevent them from accessing channels), or unlock them, removing this restriction</td>
+        </tr>
+        <tr>
+            <td class=comName><a href=history.html>history |{member}| |{module}|</a></td>
+            <td class=comDesc>View the attribute history of {member} (yourself if omitted), such as username history, avatar history, custom status history, and more to come</td>
         </tr>
     </table>
     </body>
+</html>
