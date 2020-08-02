@@ -198,6 +198,7 @@ async def VerifyUsers(b: commands.Bot):
     '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
     '''First: Go through all members, verifying they have entries and variables'''
     await asyncio.gather(*[VerifyUser(m, b) for m in b.users])
+    await users.delete_many({'user_id': {'$nin': [m.id for m in b.users]}}) #Remove all of the user data that no longer exists
     
 async def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''

@@ -878,7 +878,9 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name="**Category Tree**",value=f'''📁{channel.category}\n{f"[...Hover to view {len(channelList[:cIndexes[0]])} more channels]({msg.jump_url} '{newline.join(chan.name for chan in channelList[:cIndexes[0]])}'){newline}" if cIndexes[0] > 0 else ""}{newline.join([f'| {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{newline}[Hover to view {len(channelList[cIndexes[1]:])} more channels...]({msg.jump_url} '{newline.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}''')
             await msg.edit(embed=embed)
             await VerifyLightningLogs(msg, 'channel')
-            if os.path.exists(savePath): os.remove(savePath)
+            try:
+                if os.path.exists(savePath): os.remove(savePath)
+            except: pass
         try:
             if channel.category is not None: self.categories[channel.category.id] = channel.category.channels
             else: self.categories[channel.guild.id] = [c[1] for c in channel.guild.by_category() if c[0] is None]
@@ -1157,7 +1159,9 @@ class Cyberlog(commands.Cog):
             await VerifyLightningLogs(msg, 'doorguard')
         members[member.guild.id] = member.guild.members
         await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot), updateLastActive(member, datetime.datetime.now(), 'joined a server')])
-        if os.path.exists(savePath): os.remove(savePath)
+        try:
+            if os.path.exists(savePath): os.remove(savePath)
+        except: pass
         if logEnabled(member.guild, "doorguard"):
             if member in member.guild.members:
                 embed.title=f'👮‍♂️{self.greenPlus}New member (React ℹ for member info viewer)'
@@ -1442,11 +1446,13 @@ class Cyberlog(commands.Cog):
             embed.description+="')"
             if 'Finalizing' in embed.title: embed.title = '👮‍♂️❌Member left'
             await message.edit(embed=embed)
-            embed.set_field_at(-1, name='**Post count**', value=await self.MemberPosts(member))
+            embed.set_field_at(-1, name='**Post count**', value=await asyncio.create_task(self.MemberPosts(member)))
             await message.edit(embed=embed)
             await VerifyLightningLogs(message, 'doorguard')
         members[member.guild.id] = member.guild.members
-        if os.path.exists(savePath): os.remove(savePath)
+        try: 
+            if os.path.exists(savePath): os.remove(savePath)
+        except: pass
         await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot)])
 
     @commands.Cog.listener()
@@ -1680,7 +1686,6 @@ class Cyberlog(commands.Cog):
         if logEnabled(before, 'server'):
             embed=discord.Embed(title="✏Server updated (React with ℹ to view server details)",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
             content=None
-            data = {'server': before.id}
             if readPerms(before, 'server'):
                 try:
                     async for log in before.audit_logs(limit=1):
@@ -1693,36 +1698,26 @@ class Cyberlog(commands.Cog):
             if before.afk_channel != after.afk_channel:
                 b4 = before.afk_channel.name if before.afk_channel is not None else "(None)"
                 af = after.afk_channel.name if after.afk_channel is not None else "(None)"
-                data['oldAfkChan'] = 0 if before.afk_channel is None else before.afk_channel.id
-                data['newAfkChan'] = 0 if after.afk_channel is None else after.afk_channel.id
                 embed.add_field(name="AFK Channel",value=b4+" → "+af)
             if before.afk_timeout != after.afk_timeout:
-                data['oldAfkTime'] = before.afk_timeout, data['newAfkTime'] = after.afk_channel.id
                 embed.add_field(name="AFK Timeout",value=str(before.afk_timeout)+"s → "+str(after.afk_timeout)+"s")
             if before.mfa_level != after.mfa_level:
                 b4 = True if before.mfa_level == 1 else False
                 af = True if after.mfa_level == 1 else False
-                data['oldMfa'] = before.mfa_level, data['newMfa'] = after.mfa_level
                 embed.add_field(name="Mods need 2FA",value=b4+" → "+af)
             if before.name != after.name:
-                data['oldName'] = before.name, data['newName'] = after.name
                 embed.add_field(name="Name",value=before.name+" → "+after.name)
             if before.owner != after.owner:
-                data['oldOwner'] = before.owner.id, data['newOwner'] = after.owner.id
                 embed.add_field(name="Owner",value=before.owner.mention+" → "+after.owner.mention)
             if before.default_notifications != after.default_notifications:
-                data['oldNotif'] = before.default_notifications.name, data['newNotif'] = after.default_notifications.name
                 embed.add_field(name="Default notifications",value=before.default_notifications.name+" → "+after.default_notifications.name)
             if before.explicit_content_filter != after.explicit_content_filter:
-                data['oldFilter'] = before.explicit_content_filter.name, data['newFilter'] = after.explicit_content_filter.name
                 embed.add_field(name="Explicit content filter",value=before.explicit_content_filter.name+" → "+after.explicit_content_filter.name)
             if before.system_channel != after.system_channel:
-                data['oldSysChan'] = before.system_channel.id, data['newSysChan'] = after.system_channel.id
                 b4 = before.system_channel.mention if before.system_channel is not None else "(None)"
                 af = after.system_channel.mention if after.system_channel is not None else "(None)"
                 embed.add_field(name="System channel",value=b4+" → "+af)
             if before.icon_url != after.icon_url:
-                data['pfp'] = True
                 embed.add_field(name='Server icon updated',value='Old: Thumbnail to the right\nNew: Image below')
                 embed.set_thumbnail(url=before.icon_url)
                 embed.set_image(url=after.icon_url)
@@ -2249,7 +2244,7 @@ class Cyberlog(commands.Cog):
         if len(arg) == 0:
             await message.edit(content='{}Loading content'.format(self.loading)) 
             mainKeys.append('ℹInformation about you :)')
-            indiv = await self.MemberInfo(ctx.author)
+            indiv = await asyncio.create_task(self.MemberInfo(ctx.author))
         if 'me' == arg:
             await message.edit(content='{}Loading content'.format(self.loading))
             mainKeys.append('ℹInformation about you :)')
