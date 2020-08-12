@@ -1515,7 +1515,7 @@ class Cyberlog(commands.Cog):
             data = {'member': before.id, 'name': before.name, 'server': before.guild.id}
             embed=discord.Embed(title="👮‍♂️✏Member's server attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
             if before.roles != after.roles:
-                print(f'{datetime.datetime.now()} Member update - role for {after.name} in server {after.guild.name}')
+                #print(f'{datetime.datetime.now()} Member update - role for {after.name} in server {after.guild.name}')
                 try:
                     async for log in before.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.member_role_update: 
@@ -1547,7 +1547,7 @@ class Cyberlog(commands.Cog):
                     if len(lost) > 0: embed.description+='\n\n**Lost permissions: **{}'.format(', '.join(lost))
                     if len(gained) > 0: embed.description+='\n\n**Gained permissions: **{}'.format(', '.join(gained))
             if before.nick != after.nick:
-                print(f'{datetime.datetime.now()} Member update - nickname for {after.name} in server {after.guild.name}')
+                #print(f'{datetime.datetime.now()} Member update - nickname for {after.name} in server {after.guild.name}')
                 try:
                     async for log in before.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.member_update and log.target.id == before.id: 
@@ -1573,26 +1573,26 @@ class Cyberlog(commands.Cog):
         targetServer = [g for g in self.bot.guilds if after in g.members][0] #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
         if before.status != after.status:
             if after.guild.id == targetServer.id:
-                print(f'{datetime.datetime.now()} Member update - inside of status update for {after.name} in server {after.guild.name}')
+                #print(f'{datetime.datetime.now()} Member update - inside of status update for {after.name} in server {after.guild.name}')
                 if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
                 if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
-            print(f'{datetime.datetime.now()} Member update - outside of activity update for {after.name} in server {after.guild.name}')
+            #print(f'{datetime.datetime.now()} Member update - outside of activity update for {after.name} in server {after.guild.name}')
             if after.guild.id == targetServer.id:
                 for a in after.activities:
                     if a.type == discord.ActivityType.custom:
-                        print(f'{datetime.datetime.now()} Member update - inside of activity update for {after.name} in server {after.guild.name}')
+                        #print(f'{datetime.datetime.now()} Member update - inside of activity update for {after.name} in server {after.guild.name}')
                         try:
                             timeStarted = datetime.datetime.now()
                             databaseUser = await asyncio.create_task(database.GetUser(after))
-                            print(f'{datetime.datetime.now()} Time taken to fetch user from database: {(datetime.datetime.now() - timeStarted).seconds} seconds')
+                            #print(f'{datetime.datetime.now()} Time taken to fetch user from database: {(datetime.datetime.now() - timeStarted).seconds} seconds')
                             if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': databaseUser.get('customStatusHistory')[-1].get('emoji'), 'n': databaseUser.get('customStatusHistory')[-1].get('name')}: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                         except AttributeError as e: print(f'Attribute error: {e}')
                         except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
                         if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
-        print(f'Excluding verifying the user, finished the latter half of member update in {(datetime.datetime.now() - halfwayStart).seconds} seconds')
+        #print(f'Excluding verifying the user, finished the latter half of member update in {(datetime.datetime.now() - halfwayStart).seconds} seconds')
         if before.guild_permissions != after.guild_permissions: asyncio.create_task(database.VerifyUser(before, self.bot))
 
 
