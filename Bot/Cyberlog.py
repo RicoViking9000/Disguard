@@ -561,6 +561,7 @@ class Cyberlog(commands.Cog):
         author = after.author
         channel = after.channel
         c = logChannel(guild, 'message')
+        utcTimestamp = timestamp - datetime.timedelta(hours=timeZone(guild))
         if c is None: return await updateLastActive(author, datetime.datetime.now(), 'edited a message') #Invalid log channel
         if after.id in self.pins.get(after.channel.id) and not after.pinned: #Message was unpinned
             eventMessage = [m for m in await after.channel.history(limit=5).flatten() if m.type is discord.MessageType.pins_add][0]
@@ -577,7 +578,7 @@ class Cyberlog(commands.Cog):
         if any([len(m) == 0 for m in [beforeC, afterC]]): beforeC, afterC = self.parseEdits(beforeWordList, afterWordList, True)
         if len(beforeC) >= 1024: beforeC = 'Message content too long to display in embed field'
         if len(afterC) >= 1024: afterC = 'Message content too long to display in embed field'
-        embed = discord.Embed(title="📜✏ Message was edited (ℹ to expand details)", description=f'{self.loading} Finalyzing log', color=blue, timestamp=timestamp)
+        embed = discord.Embed(title="📜✏ Message was edited (ℹ to expand details)", description=f'{self.loading} Finalyzing log', color=blue, timestamp=utcTimestamp)
         embed.set_footer(text=f'Message ID: {after.id} {footerAppendum}')
         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
         try: await author.avatar_url_as(size=1024).save(savePath)
@@ -871,7 +872,7 @@ class Cyberlog(commands.Cog):
                 elif len(trimmedAccessibleString) + len(tempUnaccessibleString) < 1900: embed.description+=f'{trimmedAccessibleString}{tempUnaccessibleString}'
                 elif len(trimmedAccessibleString) + len(trimmedUnaccessibleString) < 1900: embed.description+=f'{trimmedAccessibleString}{trimmedUnaccessibleString}'
             else: embed.description+=f'{tempAccessibleString}{tempUnaccessibleString}'
-            embed.description+=f'\nPrecise timestamp: {received}'
+            embed.description+=f'\nPrecise timestamp: {received} {nameZone(channel.Guild)}'
             if channel.type[0] != 'category':
                 channelList = channel.category.channels if channel.category is not None else [c for c in channel.guild.channels if c.category is None]
                 cIndexes = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList))
@@ -1014,7 +1015,7 @@ class Cyberlog(commands.Cog):
                 removeDescription = f'''{newline.join([f"[{len(v)} members lost {len(k.split(' '))} permissions • Hover for details]({message.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([permissionKeys.get(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([permissionKeys.get(p) for p in k.split(' ')])}')" for k,v in removedKeys.items()])}''' if len(removedKeys) > 0 else ''
                 if len(gainDescription) > 0 or len(removeDescription) > 0: embed.description+=f'{newline if len(gainDescription) > 0 or len(removeDescription) > 0 else ""}{gainDescription}{removeDescription}\nPrecise timestamp: {received}'
                 else: 
-                    if before.overwrites != after.overwrites: embed.description+=f'\nPermissions were updated but nobody gained or lost permissions\nPrecise timestamp: {received}'
+                    if before.overwrites != after.overwrites: embed.description+=f'\nPermissions were updated but nobody gained or lost permissions\nPrecise timestamp: {received} {nameZone(after.guild)}'
                 await message.edit(embed=embed)
                 for reaction in reactions: await message.add_reaction(reaction)
                 try: 
@@ -1078,7 +1079,7 @@ class Cyberlog(commands.Cog):
                         embed.set_thumbnail(url=f'attachment://{f.filename}')
                         await updateLastActive(log.user, datetime.datetime.now(), 'deleted a channel')
                 except discord.Forbidden: content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
-            embed.description+=f'\nPrecise timestamp: {received}'
+            embed.description+=f'\nPrecise timestamp: {received} {nameZone(channel.guild)}'
             embed.set_footer(text=f'Channel ID: {channel.id}')
             msg = await logChannel(channel.guild, "channel").send(content=content,embed=embed,file=f)
             if channel.type[0] != 'category':
@@ -1514,6 +1515,7 @@ class Cyberlog(commands.Cog):
             data = {'member': before.id, 'name': before.name, 'server': before.guild.id}
             embed=discord.Embed(title="👮‍♂️✏Member's server attributes updated",description=before.mention+"("+before.name+")",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
             if before.roles != after.roles:
+                print(f'{datetime.datetime.now()} Member update - role for {after.name} in server {after.guild.name}')
                 try:
                     async for log in before.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.member_role_update: 
@@ -1545,6 +1547,7 @@ class Cyberlog(commands.Cog):
                     if len(lost) > 0: embed.description+='\n\n**Lost permissions: **{}'.format(', '.join(lost))
                     if len(gained) > 0: embed.description+='\n\n**Gained permissions: **{}'.format(', '.join(gained))
             if before.nick != after.nick:
+                print(f'{datetime.datetime.now()} Member update - nickname for {after.name} in server {after.guild.name}')
                 try:
                     async for log in before.guild.audit_logs(limit=1):
                         if log.action == discord.AuditLogAction.member_update and log.target.id == before.id: 
@@ -1566,24 +1569,32 @@ class Cyberlog(commands.Cog):
                 #else:
                 msg = await (logChannel(before.guild, "member")).send(content=content,embed=embed)
                 await VerifyLightningLogs(msg, 'member')
+        halfwayStart = datetime.datetime.now()
         targetServer = [g for g in self.bot.guilds if after in g.members][0] #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
         if before.status != after.status:
             if after.guild.id == targetServer.id:
+                print(f'{datetime.datetime.now()} Member update - inside of status update for {after.name} in server {after.guild.name}')
                 if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
                 if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
+            print(f'{datetime.datetime.now()} Member update - outside of activity update for {after.name} in server {after.guild.name}')
             if after.guild.id == targetServer.id:
                 for a in after.activities:
                     if a.type == discord.ActivityType.custom:
+                        print(f'{datetime.datetime.now()} Member update - inside of activity update for {after.name} in server {after.guild.name}')
                         try:
-                            databaseUser = await database.GetUser(after)
+                            timeStarted = datetime.datetime.now()
+                            databaseUser = await asyncio.create_task(database.GetUser(after))
+                            print(f'{datetime.datetime.now()} Time taken to fetch user from database: {(datetime.datetime.now() - timeStarted).seconds} seconds')
                             if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': databaseUser.get('customStatusHistory')[-1].get('emoji'), 'n': databaseUser.get('customStatusHistory')[-1].get('name')}: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                         except AttributeError as e: print(f'Attribute error: {e}')
                         except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
                         if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
-        if before.guild_permissions != after.guild_permissions: await database.VerifyUser(before, self.bot)
+        print(f'Excluding verifying the user, finished the latter half of member update in {(datetime.datetime.now() - halfwayStart).seconds} seconds')
+        if before.guild_permissions != after.guild_permissions: asyncio.create_task(database.VerifyUser(before, self.bot))
+
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
