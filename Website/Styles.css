@@ -75,7 +75,7 @@
 .grayed {color: rgb(161, 161, 161); padding: 0px;}
 .white {color: white; padding: 0px;}
 .red {color: rgb(202, 66, 66);}
-.blue {color: blue; padding: 0px;}
+.blue {color: rgb(66, 66, 248); padding: 0px;}
 .blueUnderline {text-decoration: underline; text-decoration-color: rgb(66, 66, 248); color: inherit;}
 .center {text-align: center}
 .sticky th {position: -webkit-sticky; position: sticky; top: 0;}

@@ -59,12 +59,12 @@
                     <br>Notify members by<select name="whisper">
                         <option value=True {% if automod.whisper %}selected{% endif %}>DM</option>
                         <option value=False {% if not automod.whisper %}selected{% endif %}>Current channel</option></select>upon being flagged
-                    <br>Send detailed logs to channel<select name="log">
-                        <option value=None {%if not automod.log[0]%}selected{%endif%}>--No channel--</option>
+                    <br>Send detailed logs to channel
+                        <select name=log><option value=None {%if not automod.log[0]%}selected{%endif%}>--No channel--</option>
                         {%for channel in channels%}
-                            <option value={{channel.id}} {%if channel.id == automod.log[1]%}selected{%endif%}>{{channel.name}}</option>
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if automod.log[1] == channel.id%}selected{%endif%}>{{channel.name}}</option>
                         {%endfor%}
-                    </select>
+                        </select>
                     <br>Delete messages that are flagged<select name="delete">
                         <option value=True {%if automod.delete%}selected{%endif%}>Enabled</option>
                         <option value=False {%if not automod.delete%}selected{%endif%}>Disabled</option></select>

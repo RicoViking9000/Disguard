@@ -39,7 +39,7 @@ body.light {background-color: white; color: rgb(46, 46, 46);}*/
     visibility: visible;
   }
 
-
+.blue {color: rgb(89, 89, 248); padding: 0px;}
 
 .pageTitle {font-size: 60px}
 .center {text-align: center}

@@ -28,11 +28,7 @@
         </div>
         <div class=mod-main>
             <form class=mod-main method="POST">
-                <div class=masterSwitch>
-                    Logging module<br><input type="radio" name="enabled" value=True {%if cyberlog.enabled%}checked{%endif%}>Enabled
-                    <br><input type="radio" name="enabled" value=False {%if not cyberlog.enabled%}checked{%endif%}>Disabled
-                </div>
-                <br>Post log recaps every so often instead of in real time to prevent spam and to save space <select name=summarize>
+                <!-- <br>Post log recaps every so often instead of in real time to prevent spam and to save space <select name=summarize>
                     <option value=0 {%if cyberlog.summarize==0%}selected{%endif%}>Disabled</option>
                     <option value=15 {%if cyberlog.summarize==15%}selected{%endif%}>Every 15 minutes</option>
                     <option value=30 {%if cyberlog.summarize==30%}selected{%endif%}>Every 30 minutes</option>
@@ -41,116 +37,77 @@
                     <option value=360 {%if cyberlog.summarize==360%}selected{%endif%}>Every 6 hours</option>
                     <option value=720 {%if cyberlog.summarize==720%}selected{%endif%}>Every 12 hours</option>
                     <option value=1440 {%if cyberlog.summarize==1440%}selected{%endif%}>Every day</option>
-                    <option value=10080 {%if cyberlog.summarize==10080%}selected{%endif%}>Every week</option></select>
-                <br>Default logging channel <select name=defaultChannel><option value=None {%if not cyberlog.defaultChannel%}selected{%endif%}>--Select a channel--</option>
-                {%for channel in channels%}
-                    <option value={{channel.id}} {%if cyberlog.defaultChannel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                {%endfor%}
-                </select>
+                    <option value=10080 {%if cyberlog.summarize==10080%}selected{%endif%}>Every week</option></select> -->
+                <br>Default logging channel
+                    <select name=defaultChannel><option value=None {%if not cyberlog.defaultChannel%}selected{%endif%}>--Select a channel--</option>
+                    {%for channel in channels%}
+                        <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.defaultChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                    {%endfor%}
+                    </select><br>
 
                 <fieldset>
                     <legend class=log-mod-title>Message</legend>
                     <p class=log-mod-desc>{{cyberlog.message.description}}</p>
                     Use this module? <select name=message><option value=True {%if cyberlog.message.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.message.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite default log channel <select name=messageChannel><option value=None {%if not cyberlog.message.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.message.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel
+                        <select name=messageChannel><option value=None {%if not cyberlog.message.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.message.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=messageEmbed disabled><option value=True {%if cyberlog.message.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.message.embed%}selected{%endif%}>Disabled</option></select><br>
                     Read server's audit log to send who deleted the message <select name=messageRead><option value=True {%if cyberlog.message.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.message.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=messageColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=messageAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
                     Log images and attachments that are deleted <select name=imageLogging><option value=True {%if cyberlog.image%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.image%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite log recaps <select name=messageSummarize>
-                        <option value=0 {%if cyberlog.message.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.message.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.message.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.message.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.message.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.message.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.message.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.message.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.message.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.message.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>
                     <legend class=log-mod-title>Doorguard</legend>
                     <p class=log-mod-desc>{{cyberlog.doorguard.description}}</p>
                     Use this module? <select name=doorguard><option value=True {%if cyberlog.doorguard.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.doorguard.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite default log channel <select name=doorChannel><option value=None {%if not cyberlog.doorguard.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.doorguard.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel 
+                        <select name=doorChannel><option value=None {%if not cyberlog.doorguard.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.doorguard.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=doorEmbed disabled><option value=True {%if cyberlog.doorguard.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.doorguard.embed%}selected{%endif%}>Disabled</option></select><br>
                     Read server's audit log to send who kicked/banned/unbanned member <select name=doorRead><option value=True {%if cyberlog.doorguard.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.doorguard.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=doorColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=doorAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Overwrite log recaps <select name=doorSummarize>
-                        <option value=0 {%if cyberlog.doorguard.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.doorguard.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.doorguard.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.doorguard.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.doorguard.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.doorguard.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.doorguard.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.doorguard.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.doorguard.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.doorguard.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>
                     <legend class=log-mod-title>Server</legend>
                     <p class=log-mod-desc>{{cyberlog.server.description}}</p>
                     Use this module? <select name=server><option value=True {%if cyberlog.server.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.server.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite default log channel <select name=serverChannel><option value=None {%if not cyberlog.server.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.server.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel 
+                        <select name=serverChannel><option value=None {%if not cyberlog.server.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.server.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=serverEmbed disabled><option value=True {%if cyberlog.server.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.server.embed%}selected{%endif%}>Disabled</option></select><br>
                     Read server's audit log to send who edited the server <select name=serverRead><option value=True {%if cyberlog.server.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.server.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=serverColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=serverAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Overwrite log recaps <select name=serverSummarize>
-                        <option value=0 {%if cyberlog.server.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.server.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.server.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.server.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.server.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.server.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.server.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.server.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.server.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.server.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>
                     <legend class=log-mod-title>Channel</legend>
                     <p class=log-mod-desc>{{cyberlog.channel.description}}</p>
                     Use this module? <select name=channel><option value=True {%if cyberlog.channel.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.channel.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite default log channel <select name=channelChannel><option value=None {%if not cyberlog.channel.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.channel.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel
+                        <select name=channelChannel><option value=None {%if not cyberlog.channel.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.channel.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=channelEmbed disabled><option value=True {%if cyberlog.channel.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.channel.embed%}selected{%endif%}>Disabled</option></select><br>
                     Read server's audit log to send who created/edited/deleted the channel <select name=channelRead><option value=True {%if cyberlog.channel.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.channel.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=channelColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=channelAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Overwrite log recaps <select name=channelSummarize>
-                        <option value=0 {%if cyberlog.channel.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.channel.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.channel.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.channel.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.channel.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.channel.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.channel.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.channel.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.channel.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.channel.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>
@@ -158,104 +115,64 @@
                     <p class=log-mod-desc>{{cyberlog.member.description}}</p>
                     Use this module? <select name=member><option value=True {%if cyberlog.member.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.member.enabled%}selected{%endif%}>Disabled</option></select><br>
                     Enable which logs? <select name=memberGlobal><option value=0 {%if cyberlog.memberGlobal == 0%}selected{%endif%}>Only member role/nickname change</option><option value=1 {%if cyberlog.memberGlobal == 1%}selected{%endif%}>Only user profile pic/username change</option><option value=2 {%if cyberlog.memberGlobal == 2%}selected{%endif%}>Both</option></select><br>
-                    Overwrite default log channel <select name=memberChannel><option value=None {%if not cyberlog.member.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.member.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel
+                        <select name=memberChannel><option value=None {%if not cyberlog.member.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.member.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=memberEmbed disabled><option value=True {%if cyberlog.member.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.member.embed%}selected{%endif%}>Disabled</option></select><br>
                     Read server's audit log to send who edited the member <select name=memberRead><option value=True {%if cyberlog.member.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.member.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=memberColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=memberAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Overwrite log recaps <select name=memberSummarize>
-                        <option value=0 {%if cyberlog.member.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.member.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.member.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.member.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.member.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.member.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.member.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.member.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.member.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.member.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>
                     <legend class=log-mod-title>Role</legend>
                     <p class=log-mod-desc>{{cyberlog.role.description}}</p>
                     Use this module? <select name=role><option value=True {%if cyberlog.role.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.role.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite default log channel <select name=roleChannel><option value=None {%if not cyberlog.role.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.role.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel
+                        <select name=roleChannel><option value=None {%if not cyberlog.role.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.role.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=roleEmbed disabled><option value=True {%if cyberlog.role.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.role.embed%}selected{%endif%}>Disabled</option></select><br>
                     Read server's audit log to send who created, edited, deleted the role <select name=roleRead><option value=True {%if cyberlog.role.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.role.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=roleColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=roleAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Overwrite log recaps <select name=roleSummarize>
-                        <option value=0 {%if cyberlog.role.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.role.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.role.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.role.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.role.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.role.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.role.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.role.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.role.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.role.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>
                     <legend class=log-mod-title>Emoji</legend>
                     <p class=log-mod-desc>{{cyberlog.emoji.description}}</p>
                     Use this module? <select name=emoji><option value=True {%if cyberlog.emoji.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.emoji.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite default log channel <select name=emojiChannel><option value=None {%if not cyberlog.emoji.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.emoji.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel
+                        <select name=emojiChannel><option value=None {%if not cyberlog.emoji.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.emoji.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=emojiEmbed disabled><option value=True {%if cyberlog.emoji.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.emoji.embed%}selected{%endif%}>Disabled</option></select><br>
                     Read server's audit log to send who created, edited, deleted the emoji <select name=emojiRead><option value=True {%if cyberlog.emoji.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.emoji.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=emojiColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=emojiAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Overwrite log recaps <select name=emojiSummarize>
-                        <option value=0 {%if cyberlog.emoji.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.emoji.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.emoji.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.emoji.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.emoji.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.emoji.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.emoji.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.emoji.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.emoji.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.emoji.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>
                     <legend class=log-mod-title>Voice</legend>
                     <p class=log-mod-desc>{{cyberlog.voice.description}}</p>
                     Use this module? <select name=voice><option value=True {%if cyberlog.voice.enabled%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.enabled%}selected{%endif%}>Disabled</option></select><br>
-                    Overwrite default log channel <select name=voiceChannel><option value=None {%if not cyberlog.voice.channel%}selected{%endif%}>(Disabled)</option>
-                    {%for channel in channels%}
-                        <option value={{channel.id}} {%if cyberlog.voice.channel==channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
+                    Log channel
+                        <select name=voiceChannel><option value=None {%if not cyberlog.voice.channel%}selected{%endif%}>--Use default channel--</option>
+                        {%for channel in channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.voice.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
+                        {%endfor%}
+                        </select><br>
                     Send this module's logs in embed form <select name=voiceEmbed disabled><option value=True {%if cyberlog.voice.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.embed%}selected{%endif%}>Disabled</option></select><br>
                     Only log moderator enforced mutes/deafens <select name=voiceRead><option value=True {%if cyberlog.voice.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.read%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=voiceColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=voiceAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
-                    Overwrite log recaps <select name=voiceSummarize>
-                        <option value=0 {%if cyberlog.voice.summarize==0%}selected{%endif%}>(Don't overwrite)</option>
-                        <option value=1 {%if cyberlog.voice.summarize==1%}selected{%endif%}>(Don't recap; send in real time)</option>
-                        <option value=15 {%if cyberlog.voice.summarize==15%}selected{%endif%}>Every 15 minutes</option>
-                        <option value=30 {%if cyberlog.voice.summarize==30%}selected{%endif%}>Every 30 minutes</option>
-                        <option value=60 {%if cyberlog.voice.summarize==60%}selected{%endif%}>Every hour</option>
-                        <option value=120 {%if cyberlog.voice.summarize==120%}selected{%endif%}>Every 2 hours</option>
-                        <option value=360 {%if cyberlog.voice.summarize==360%}selected{%endif%}>Every 6 hours</option>
-                        <option value=720 {%if cyberlog.voice.summarize==720%}selected{%endif%}>Every 12 hours</option>
-                        <option value=1440 {%if cyberlog.voice.summarize==1440%}selected{%endif%}>Every day</option>
-                        <option value=10080 {%if cyberlog.voice.summarize==10080%}selected{%endif%}>Every week</option></select><br>
                 </fieldset>
 
                 <fieldset>

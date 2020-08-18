@@ -83,6 +83,14 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         log = serv.get("cyberlog") #cyberlog object from database
     #membIDs = [memb.id for memb in s.members]
     await servers.update_one({"server_id": s.id}, {"$set": { #update database
+
+    serverChannels = []
+    for c in [channel for channel in s.by_category() if not channel[0] and type(channel) is discord.TextChannel]:
+        if len(serverChannels) == 0: serverChannels.append({'name': '-----NO CATEGORY-----', 'id': 0})
+        serverChannels.append({'name': c.name, 'id': c.id})
+    for c in s.categories:
+        serverChannels.append({'name': f'-----{c.name.upper()}-----', 'id': c.id})
+        for channel in c.text_channels: serverChannels.append({'name': channel.name, 'id': channel.id})
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
@@ -92,7 +100,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
     'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
     'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
-    "channels": [{"name": channel.name, "id": channel.id} for channel in s.text_channels],
+    "channels": serverChannels,
     "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
     'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
     "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
@@ -733,7 +741,7 @@ async def CalculateAnnouncementsChannel(g: discord.Guild, update=False):
     '''Determines the announcement channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
     s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcements'))[0]
-    if update: await servers.update_one({'server_id': g.id}, {'$set': {'announcementChannel': s.id}})
+    if update: await servers.update_one({'server_id': g.id}, {'$set': {'announcementsChannel': s.id}})
     return s
 
 async def CalculateModeratorChannel(g: discord.Guild, update=False):
