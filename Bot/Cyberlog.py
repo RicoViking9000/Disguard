@@ -1644,7 +1644,9 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="New discriminator",value=after.discriminator)
             await updateLastActive(after, datetime.datetime.now(), 'updated their discriminator')
         if before.name != after.name:
-            embed.add_field(name="Prev username",value=before.name)
+            titles.append('Username')
+            titleEmoji.append('📄')
+            embed.add_field(name="Old username",value=before.name)
             embed.add_field(name="New username",value=after.name)
             await updateLastActive(after, datetime.datetime.now(), 'updated their username')
             asyncio.create_task(database.AppendUsernameHistory(after))
