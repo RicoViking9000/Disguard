@@ -91,6 +91,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     for c in s.categories:
         serverChannels.append({'name': f'-----{c.name.upper()}-----', 'id': c.id})
         for channel in c.text_channels: serverChannels.append({'name': channel.name, 'id': channel.id})
+    await servers.update_one({'server_id': s.id}, {"$set": { #update database
     "name": s.name,
     "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
     "thumbnail": str(s.icon_url),
