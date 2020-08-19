@@ -1540,8 +1540,8 @@ class Cyberlog(commands.Cog):
                 if beforePerms != afterPerms:
                     lost = [p for p in beforePerms if p not in afterPerms]
                     gained = [p for p in afterPerms if p not in beforePerms]
-                    if len(lost) > 0: embed.add_field(name='Lost permissions', value='\n'.join([f'{r.name}\n> {", ".join([permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in beforePerms and p in iter(r.permissions)])}' for r in removed]), inline=False)
-                    if len(gained) > 0: embed.add_field(name='Gained permissions', value='\n'.join([f'{r.name}\n> {", ".join([permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in afterPerms and p in iter(r.permissions)])}' for r in added]), inline=False)
+                    if len(lost) > 0: embed.add_field(name='Lost permissions', value='\n'.join([f'{r.name}\n> {", ".join([permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in beforePerms and permissionKeys[p[0]] not in afterPerms and p in iter(r.permissions)])}' for r in removed]), inline=False)
+                    if len(gained) > 0: embed.add_field(name='Gained permissions', value='\n'.join([f'{r.name}\n> {", ".join([permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in afterPerms and permissionKeys[p[0]] not in beforePerms and p in iter(r.permissions)])}' for r in added]), inline=False)
             if before.nick != after.nick:
                 #print(f'{datetime.datetime.now()} Member update - nickname for {after.name} in server {after.guild.name}')
                 try:
