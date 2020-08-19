@@ -82,8 +82,6 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         spam = serv.get("antispam") #antispam object from database
         log = serv.get("cyberlog") #cyberlog object from database
     #membIDs = [memb.id for memb in s.members]
-    await servers.update_one({"server_id": s.id}, {"$set": { #update database
-
     serverChannels = []
     for c in [channel for channel in s.by_category() if not channel[0] and type(channel) is discord.TextChannel]:
         if len(serverChannels) == 0: serverChannels.append({'name': '-----NO CATEGORY-----', 'id': 0})
