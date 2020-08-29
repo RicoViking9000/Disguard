@@ -16,6 +16,7 @@ mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
 db = None
 servers = None
 users = None
+def getDatabase(): return db
 
 verifications = {}
 defaultAgeKickDM = ''''You have been kicked from **{}** temporarily due to their antispam configuration: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
