@@ -186,7 +186,7 @@ class Cyberlog(commands.Cog):
             rawStarted = datetime.datetime.now()
             if self.summarize.current_loop % 24 == 0:
                 if self.summarize.current_loop > 0: asyncio.create_task(self.synchronizeDatabase())
-                def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel
+                def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                 await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 for g in self.bot.guilds:
                     generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, True), await database.CalculateAnnouncementsChannel(g, True), await database.CalculateModeratorChannel(g, True)

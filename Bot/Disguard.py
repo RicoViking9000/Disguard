@@ -96,7 +96,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         # easterAnnouncement.start()
         #Cyberlog.ConfigureSummaries(bot)
         asyncio.create_task(bot.get_cog('Cyberlog').synchronizeDatabase(True))
-        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478
+        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478 and m.content == 'Synchronized'
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
         await UpdatePresence()
@@ -157,7 +157,7 @@ async def index(ctx, t: int = None):
         if target is None:
             target = bot.get_guild(t)
             if target is None: return await ctx.send('No target found for <{}>'.format(t))
-    def rCheck(r, u): return str(r) in ('✅', '❌') and u.id == ctx.author.id and r.message.channel.id == ctx.channel.id
+    def rCheck(r, u): return str(r) in ('✅', '❌') and u.id == ctx.author.id and r.message.id == ctx.message.id
     m = await ctx.send('Index fully?')
     for r in ('✅', '❌'): await m.add_reaction(r)
     try: result = await bot.wait_for('reaction_add', check=rCheck, timeout=300)
