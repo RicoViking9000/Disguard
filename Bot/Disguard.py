@@ -15,6 +15,7 @@ import random
 import logging
 import inspect
 import typing
+import json
 
 
 booted = False
@@ -94,6 +95,9 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         #await bot.get_cog('Birthdays').updateBirthdays()
         # easterAnnouncement.start()
         #Cyberlog.ConfigureSummaries(bot)
+        asyncio.create_task(bot.get_cog('Cyberlog').synchronizeDatabase(True))
+        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478
+        await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
         await UpdatePresence()
         print('Starting indexing...')
@@ -106,35 +110,34 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     await UpdatePresence()
 
 async def indexMessages(server, channel, full=False):
-    path = "{}/{}/{}".format(indexes,server.id, channel.id)
+    path = f'{indexes}/{server.id}/{channel.id}'
     start = datetime.datetime.now()
     try: os.makedirs(path)
     except FileExistsError: pass
-    p = os.listdir(path)
+    path += '.json'
     saveImages = await database.GetImageLogPerms(server)
+    if not os.path.exists(path): 
+        with open(path, 'w+') as f: f.write('{}')
+    with open(path) as f:
+        try: indexData = json.load(f)
+        except: indexData = {}
     try: 
         async for message in channel.history(limit=None, oldest_first=full):
-            if not message.author.bot:
-                if '{}_{}.txt'.format(message.id, message.author.id) in p: 
-                    if not full: break
-                    else: 
-                        continue #Skip the code below as to not overwrite message edit history, plus to skip saving message indexes we already have (program will keep running, however, this is intentional)
-                try: f = open('{}/{}_{}.txt'.format(path, message.id, message.author.id), "w+")
-                except FileNotFoundError: pass
-                try: f.write('{}\n{}\n{}'.format(message.created_at.strftime('%b %d, %Y - %I:%M:%S %p'), message.author.name, message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"))
-                except UnicodeEncodeError: pass
-                try: f.close()
-                except: pass
-                if (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
-                    attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-                    try: os.makedirs(attach)
-                    except FileExistsError: pass
-                    for attachment in message.attachments:
-                        if attachment.size / 1000000 < 8:
-                            try: await attachment.save('{}/{}'.format(attach, attachment.filename))
-                            except discord.HTTPException: pass
-                if full: await asyncio.sleep(0.25)
-    except discord.Forbidden: print('Index error for {}'.format(server.name))
+            if str(message.id) in indexData.keys():
+                break
+            indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
+            if not message.author.bot and (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
+                attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+                try: os.makedirs(attach)
+                except FileExistsError: pass
+                for attachment in message.attachments:
+                    if attachment.size / 1000000 < 8:
+                        try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                        except discord.HTTPException: pass
+        indexData = json.dumps(indexData, indent=4)
+        with open(path, "w+") as f:
+            f.write(indexData)
+    except Exception as e: print(f'Index error for {server.name} - {channel.name}: {e}')
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 
 @commands.is_owner()
@@ -182,9 +185,9 @@ async def server(ctx):
     red = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='dnd')
     embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow)
     embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
-    embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}\n> React to expand details'''
+    embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}\n'''
     # embed.description+=f'''Flag members for: {f"{antispam.get('congruent')[0]} duplicate messages/{} min "}'''
-    embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else "{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n> React to expand details'''
+    embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else "{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n'''
     # embed.description+=f'''\nMessage Edit & Delete\n{f" {green}Enabled" if cyberlog.get("message").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('message').get('channel')).mention}" if cyberlog.get('message').get('channel') and cyberlog.get('message').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('message').get('read') else f"{red}Read audit log: Disabled"}\n{f"{green}Log deleted images and attachments: Enabled" if cyberlog.get('image') else f"{red}Log deleted images and attachments: Disabled"}'''
     # embed.description+=f'''\nMember Join & Leave\n{f" {green}Enabled" if cyberlog.get("doorguard").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('doorguard').get('channel')).mention}" if cyberlog.get('doorguard').get('channel') and cyberlog.get('doorguard').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('doorguard').get('read') else f"{red}Read audit log: Disabled"}'''
     # embed.description+=f'''\nChannel Create, Edit & Delete\n{f" {green}Enabled" if cyberlog.get("channel").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('channel').get('channel')).mention}" if cyberlog.get('channel').get('channel') and cyberlog.get('channel').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('channel').get('read') else f"{red}Read audit log: Disabled"}'''
@@ -330,6 +333,8 @@ async def ticketsCommand(ctx, number:int = None):
     '''Command to view feedback tickets'''
     g = ctx.guild
     alphabet = [l for l in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
+    qlf = '  ' #Two special characters to represent quoteLineFormat
+    qlfc = ' '
     trashcan = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='trashcan')
     statusDict = {0: 'Unopened', 1: 'Viewed', 2: 'In progress', 3: 'Closed', 4: 'Locked'}
     message = await ctx.send(embed=discord.Embed(description=f'{loading}Downloading ticket data'))
@@ -352,7 +357,7 @@ async def ticketsCommand(ctx, number:int = None):
         for i, ticket in enumerate(pages[index]):
             tg = g
             if not tg and ticket['server']: tg = bot.get_guild(ticket['server'])
-            embed.add_field(name=f"{alphabet[i]}Ticket {ticket['number']}", value=f'''Members: {", ".join([bot.get_user(u['id']).name for i, u in enumerate(ticket['members']) if i not in (1, 2)])}\nStatus: {statusDict[ticket['status']]}\nLatest reply: {bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(bot.lightningLogging[tg.id]['offset'] if tg else -4))):%b %d, %Y • %I:%M %p} {bot.lightningLogging[tg.id]['tzname'] if tg else 'EDT'}\n> {ticket['conversation'][-1]['message']}''', inline=False)
+            embed.add_field(name=f"{alphabet[i]}Ticket {ticket['number']}", value=f'''> Members: {", ".join([bot.get_user(u['id']).name for i, u in enumerate(ticket['members']) if i not in (1, 2)])}\n> Status: {statusDict[ticket['status']]}\n> Latest reply: {bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(bot.lightningLogging[tg.id]['offset'] if tg else -4))):%b %d, %Y • %I:%M %p} {bot.lightningLogging[tg.id]['tzname'] if tg else 'EDT'}\n> {qlf}{ticket['conversation'][-1]['message']}''', inline=False)
     async def notifyMembers(ticket):
         e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^70}", color=yellow)
         entry = ticket['conversation'][-1]
@@ -376,7 +381,6 @@ async def ticketsCommand(ctx, number:int = None):
     while True:
         filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
         organize(sortMode)
-        pages = list(paginate(filtered))
         sortDescription = sortDescriptions[sortMode]
         populateEmbed(pages, currentPage, sortDescription)
         if number and number > len(tickets): 
@@ -403,9 +407,9 @@ async def ticketsCommand(ctx, number:int = None):
         elif str(destination[0]) == '🗃':
             clearReactions = False
             sortMode += 1 if sortMode != 3 else -3
-            messageContent = '\n'.join([f'**{d}**' if i == sortMode else d for i, d in enumerate(sortDescriptions)])
+            messageContent = '--SORT MODE--\n' + '\n'.join([f'> **{d}**' if i == sortMode else f'{qlfc}{d}' for i, d in enumerate(sortDescriptions)])
             await message.edit(content=messageContent)
-            clearAt = datetime.datetime.now() + datetime.timedelta(seconds=5)
+            clearAt = datetime.datetime.now() + datetime.timedelta(seconds=4)
             asyncio.create_task(clearMessageContent())
         elif str(destination[0]) in ['◀', '▶']:
             if str(destination[0]) == '◀': currentPage -= 1
@@ -609,7 +613,13 @@ async def ticketsCommand(ctx, number:int = None):
                 ticket['members'] = [member if i == memberIndex else m for i, m in enumerate(ticket['members'])]
                 asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
         number = None #Triggers browse mode
-        await message.edit(content=None)
+        try:
+            if datetime.datetime.now() > clearAt: await message.edit(content=None)
+        except UnboundLocalError: await message.edit(content=None)
+
+@bot.command()
+async def schedule(ctx):
+    await ctx.send('Coming soon - 🔒Private command')
 
 @commands.is_owner()
 @bot.command()

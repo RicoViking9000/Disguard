@@ -40,7 +40,7 @@ class Antispam(commands.Cog):
         if self.checkTimedEvents.current_loop == 0: await asyncio.sleep(120)
         try:
             for g in self.bot.guilds:
-                events = Cyberlog.lightningLogging.get(g.id).get('antispam').get('timedEvents')
+                events = self.bot.lightningLogging.get(g.id).get('antispam').get('timedEvents')
                 for e in events:
                     if datetime.datetime.utcnow() > e.get('expires'):
                         if e.get('type') == 'ban':
@@ -61,7 +61,7 @@ class Antispam(commands.Cog):
         '''[DISCORD API METHOD] Called when message is sent'''
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
-        server = Cyberlog.lightningLogging.get(message.guild.id)
+        server = self.bot.lightningLogging.get(message.guild.id)
         try: spam = server.get('antispam')
         except AttributeError: return
         if not spam or not (spam.get('enabled') or spam.get('attachments')[-1]): return #return if antispam isn't enabled
@@ -114,7 +114,7 @@ class Antispam(commands.Cog):
                     p = message.author.guild_permissions
                     if not p.administrator or p.manage_guild or message.author.id == message.guild.owner.id:
                         await message.channel.trigger_typing()
-                        if Cyberlog.logEnabled(message.guild, 'message') and Cyberlog.lightningLogging.get(message.guild.id).get('cyberlog').get('image'): await asyncio.sleep(2) #Wait two seconds if image logging is enabled
+                        if Cyberlog.logEnabled(message.guild, 'message') and self.bot.lightningLogging.get(message.guild.id).get('cyberlog').get('image'): await asyncio.sleep(2) #Wait two seconds if image logging is enabled
                         try: await message.delete()
                         except discord.Forbidden: pass
                         return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending {aFlag}s in this server', color=0xD2691E), delete_after=15)
@@ -501,7 +501,7 @@ class Antispam(commands.Cog):
         await ctx.trigger_typing()
         newline = '\n'
         if not await database.ManageServer(ctx.author): return await ctx.send('You need manage server, administrator, or server owner permissions to use this')
-        config = Cyberlog.lightningLogging.get(ctx.guild.id).get('antispam')
+        config = self.bot.lightningLogging.get(ctx.guild.id).get('antispam')
         wl = config.get('ageKickWhitelist')
         if len(args) == 0:
             e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get("ageKickDM")}''', color=yellow, timestamp=datetime.datetime.utcnow())
@@ -559,7 +559,7 @@ class Antispam(commands.Cog):
             await m.edit(embed=e)
             await m.add_reaction('🔄')
             await Cyberlog.updateServer(ctx.guild)
-            config = Cyberlog.lightningLogging.get(ctx.guild.id).get('antispam')
+            config = self.bot.lightningLogging.get(ctx.guild.id).get('antispam')
             wl = config.get('ageKickWhitelist')
             def configCheck(r, u): return str(r) == '🔄' and r.message.id == m.id and u.id == ctx.author.id
             await self.bot.wait_for('reaction_add', check=configCheck)

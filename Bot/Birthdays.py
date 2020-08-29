@@ -115,7 +115,7 @@ class Birthdays(commands.Cog):
         print('Updating birthdays')
         updated = []
         for member in self.bot.users:
-            bday = await database.GetMemberBirthday(member)
+            bday = self.bot.lightningUsers[member.id]['birthday']
             if bday is not None:
                 if bday < datetime.datetime.now():
                     new = datetime.datetime(bday.year + 1, bday.month, bday.day)
@@ -136,12 +136,12 @@ class Birthdays(commands.Cog):
         if ctx.valid:
             if any([message.content.startswith(w) for w in [ctx.prefix + 'bday', ctx.prefix + 'birthday']]): return #Don't auto detect birthday information is the user is using a command
         try: 
-            if Cyberlog.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
+            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
         except AttributeError: pass
         self.bot.loop.create_task(self.messagehandler(message))
 
     async def messagehandler(self, message):
-        try: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=Cyberlog.lightningLogging.get(message.guild.id).get('offset'))
+        try: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(message.guild.id).get('offset'))
         except: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(message.guild)) #Use database if local variables aren't available
         birthday = calculateDate(message, adjusted)
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
@@ -149,7 +149,7 @@ class Birthdays(commands.Cog):
         target = await verifyBirthday(message, adjusted, birthday)
         #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
         if birthday and target is not None and len(target) > 0:
-            if Cyberlog.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add cake reaction
+            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add cake reaction
                 def cakeAutoVerify(r,u): return u == message.author and str(r) == '🍰' and r.message.id == message.id
                 await message.add_reaction('🍰')
                 await self.bot.wait_for('reaction_add', check=cakeAutoVerify)
@@ -174,7 +174,7 @@ class Birthdays(commands.Cog):
         try: ages.remove(currentAge) #Remove the user's current age if it's in there
         except ValueError: pass
         if len(ages) > 0:
-            if Cyberlog.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add candle reaction
+            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add candle reaction
                 def candleAutoVerify(r,u): return u == message.author and str(r) == '🕯' and r.message.id == message.id
                 await message.add_reaction('🕯')
                 await self.bot.wait_for('reaction_add', check=candleAutoVerify)
@@ -205,7 +205,7 @@ class Birthdays(commands.Cog):
         if len(args) == 0:
             embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), description='{} Fetching information from database...'.format(self.loading), color=yellow, timestamp=datetime.datetime.utcnow())
             embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
-            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=Cyberlog.lightningLogging.get(ctx.guild.id).get('offset'))
+            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
             bday = Cyberlog.lightningUsers.get(ctx.author.id).get('birthday')
             embed.add_field(name='Your Birthday',value='Unknown' if bday is None else bday.strftime('%a %b %d\n(In {} days)').format((bday - adjusted).days))
             embed.add_field(name='Your Age', value='Unknown' if await database.GetAge(ctx.author) is None else await database.GetAge(ctx.author))
@@ -251,7 +251,7 @@ class Birthdays(commands.Cog):
                     await message.delete()
                     return await self.bot.get_cog('Cyberlog').info(ctx)
         else:
-            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=Cyberlog.lightningLogging.get(ctx.guild.id).get('offset'))
+            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
             embed=discord.Embed(title='🍰 Birthdays', description='{} Processing...'.format(self.loading),color=yellow,timestamp=datetime.datetime.utcnow())
             message = await ctx.send(embed=embed)
             arg = ' '.join(args)
@@ -273,7 +273,7 @@ class Birthdays(commands.Cog):
             memberList = [m for m in memberList if len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members])]
             actionList += memberList
             def infoCheck(r,u): return str(r) == 'ℹ' and u == ctx.author and r.message.id == message.id
-            date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=Cyberlog.lightningLogging.get(ctx.guild.id).get('offset')))
+            date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=self.bot.lightningLogging.get(ctx.guild.id).get('offset')))
             if date is not None: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
             if len(actionList) >= 1:
                 if type(actionList[0]) is int and actionList[0] < 10000: return await ageContinuation(self, actionList[0], ctx.author, message, embed, partial=True)
@@ -466,7 +466,7 @@ async def messageManagement(self, ctx, message, user, groups):
         
 async def guestBirthdayViewer(self, ctx, target, cake=False):
     '''Displays information about somebody else's profile'''
-    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=Cyberlog.lightningLogging.get(ctx.guild.id).get('offset'))
+    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
     bday = Cyberlog.lightningUsers.get(target.id).get('birthday')
     age = Cyberlog.lightningUsers.get(target.id).get('age')
     wishlist = Cyberlog.lightningUsers.get(target.id).get('wishList')

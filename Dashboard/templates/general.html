@@ -41,19 +41,19 @@
                 Announce birthdays at what time (Increments of 5 minutes) <input type="time" name=birthdate value={{date2}}><br>
                 Quote message content of posted jump URLs <select name=jumpContext><option value=True {%if servObj.jumpContext%}selected{%endif%}>Enabled</option><option value=False {%if not servObj.jumpContext%}selected{%endif%}>Disabled</option></select><br>
                 Server announcements channel
-                    <select name=announcementsChannel><option value=0 {%if servObj.announcementsChannel == 0 or not servObj.announcementsChannel%}selected{%endif%}>--Select a channel--</option>
+                    <select name=announcementsChannel disabled><option value=0 {%if servObj.announcementsChannel == 0 or not servObj.announcementsChannel%}selected{%endif%}>--Select a channel--</option>
                     {%for channel in servObj.channels%}
                         <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.announcementsChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
                     </select><br>
                 Server moderator channel
-                    <select name=moderatorChannel><option value=0 {%if servObj.moderatorChannel == 0 or not servObj.moderatorChannel%}selected{%endif%}>--Select a channel--</option>
+                    <select name=moderatorChannel disabled><option value=0 {%if servObj.moderatorChannel == 0 or not servObj.moderatorChannel%}selected{%endif%}>--Select a channel--</option>
                     {%for channel in servObj.channels%}
                         <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.moderatorChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
                     </select><br>
                 Server general channel
-                    <select name=generalChannel><option value=0 {%if servObj.generalChannel == 0 or not servObj.generalChannel%}selected{%endif%}>--Select a channel--</option>
+                    <select name=generalChannel disabled><option value=0 {%if servObj.generalChannel == 0 or not servObj.generalChannel%}selected{%endif%}>--Select a channel--</option>
                     {%for channel in servObj.channels%}
                         <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.generalChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>
                     {%endfor%}
