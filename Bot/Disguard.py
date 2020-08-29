@@ -123,7 +123,7 @@ async def indexMessages(server, channel, full=False):
         except: indexData = {}
     try: 
         async for message in channel.history(limit=None, oldest_first=full):
-            if str(message.id) in indexData.keys():
+            if str(message.id) in indexData.keys() and not full:
                 break
             indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
             if not message.author.bot and (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
@@ -134,6 +134,7 @@ async def indexMessages(server, channel, full=False):
                     if attachment.size / 1000000 < 8:
                         try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                         except discord.HTTPException: pass
+            if full: await asyncio.sleep(0.05)
         indexData = json.dumps(indexData, indent=4)
         with open(path, "w+") as f:
             f.write(indexData)
@@ -149,18 +150,25 @@ async def verify(ctx):
 
 @commands.is_owner()
 @bot.command()
-async def index(ctx, t: int):
-    if t == 0: target = bot.guilds
+async def index(ctx, t: int = None):
+    if not t: target = bot.guilds
     else:
         target = bot.get_channel(t)
         if target is None:
             target = bot.get_guild(t)
             if target is None: return await ctx.send('No target found for <{}>'.format(t))
-    status = await ctx.send('Indexing...')
-    if type(target) is discord.Guild: await asyncio.gather(*[indexMessages(target, c, True) for c in target.text_channels])
+    def rCheck(r, u): return str(r) in ('✅', '❌') and u.id == ctx.author.id and r.message.channel.id == ctx.channel.id
+    m = await ctx.send('Index fully?')
+    for r in ('✅', '❌'): await m.add_reaction(r)
+    try: result = await bot.wait_for('reaction_add', check=rCheck, timeout=300)
+    except asyncio.TimeoutError: return
+    if str(result[0]) == '✅': full = True
+    else: full = False
+    status = await ctx.send(f'Indexing {"fully" if full else "partially"}...')
+    if type(target) is discord.Guild: await asyncio.gather(*[indexMessages(target, c, full) for c in target.text_channels])
     elif type(target) is list:
-        for t in target: await asyncio.gather(*[indexMessages(t, c, True) for c in t.text_channels])
-    else: await asyncio.wait([indexMessages(ctx.guild, target, True)], return_when=asyncio.FIRST_COMPLETED)
+        for t in target: await asyncio.gather(*[indexMessages(t, c, full) for c in t.text_channels])
+    else: await asyncio.wait([indexMessages(ctx.guild, target, full)], return_when=asyncio.FIRST_COMPLETED)
     await status.delete()
 
 @bot.command()
