@@ -381,6 +381,7 @@ async def ticketsCommand(ctx, number:int = None):
     while True:
         filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
         organize(sortMode)
+        pages = list(paginate(filtered, 5))
         sortDescription = sortDescriptions[sortMode]
         populateEmbed(pages, currentPage, sortDescription)
         if number and number > len(tickets): 
