@@ -9,6 +9,7 @@ import datetime
 import asyncio
 import faulthandler
 import os
+import json
 from discord.ext import commands
 
 #mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
@@ -733,7 +734,10 @@ async def VerifyRole(r: discord.Role, new=False):
 async def CalculateGeneralChannel(g: discord.Guild, update=False):
     '''Determines the most active channel based on indexed message count
     r: Whether to return the channel. If False, just set this to the database'''
-    popular = max(g.text_channels, key = lambda c: len(os.listdir('Indexes/{}/{}'.format(g.id, c.id))), default=0)
+    channels = {}
+    for c in g.text_channels:
+        with open(f'Indexes/{g.id}/{c.id}.json') as f: channels[c] = len([v for v in json.load(f).values() if (datetime.datetime.utcnow() - datetime.datetime.fromisoformat(v['timestamp0'])).days < 14]) #Most messages sent in last two weeks
+    popular = max(channels, key = channels.get, default=0)
     if update: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': popular.id}})
     return popular
 
