@@ -184,8 +184,8 @@ class Cyberlog(commands.Cog):
             print('Summarizing')
             started = datetime.datetime.now()
             rawStarted = datetime.datetime.now()
-            if self.summarize.current_loop % 24 == 1:
-                if self.summarize.current_loop == 1: 
+            if self.summarize.current_loop % 24 == 0:
+                if self.summarize.current_loop == 0:
                     asyncio.create_task(self.synchronizeDatabase(True))
                     def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                     await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
@@ -1665,7 +1665,8 @@ class Cyberlog(commands.Cog):
                         #print(f'{datetime.datetime.now()} Member update - inside of activity update for {after.name} in server {after.guild.name}')
                         try:
                             #timeStarted = datetime.datetime.now()
-                            user = self.bot.lightningUsers[after.id]
+                            try: user = self.bot.lightningUsers[after.id]
+                            except KeyError: return
                             #print(f'{datetime.datetime.now()} Time taken to fetch user from database: {(datetime.datetime.now() - timeStarted).seconds} seconds')
                             if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': user.get('customStatusHistory')[-1].get('emoji'), 'n': user.get('customStatusHistory')[-1].get('name')}: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                         except AttributeError as e: print(f'Attribute error: {e}')
