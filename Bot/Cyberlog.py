@@ -184,11 +184,12 @@ class Cyberlog(commands.Cog):
             print('Summarizing')
             started = datetime.datetime.now()
             rawStarted = datetime.datetime.now()
-            if self.summarize.current_loop % 24 == 0:
-                if self.summarize.current_loop > 0: 
+            if self.summarize.current_loop % 24 == 1:
+                if self.summarize.current_loop == 1: 
                     asyncio.create_task(self.synchronizeDatabase(True))
-                def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
-                await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
+                    def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
+                    await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
+                else: asyncio.create_task(self.synchronizeDatabase())
                 await self.bot.get_cog('Birthdays').updateBirthdays()
                 for g in self.bot.guilds:
                     generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, True), await database.CalculateAnnouncementsChannel(g, True), await database.CalculateModeratorChannel(g, True)
