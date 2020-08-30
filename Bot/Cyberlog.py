@@ -239,7 +239,7 @@ class Cyberlog(commands.Cog):
                                 updates.append('avatar')
                             except discord.HTTPException: pass #Filesize is too large
                         except Exception as e: print(f'Avatar error for {m.name}: {e}')
-                        if len(updates) > 0: lightningUsers[m.id] = await database.GetUser(m) #Debating if we even need this line
+                        #if len(updates) > 0: lightningUsers[m.id] = await database.GetUser(m) #Debating if we even need this line
                         if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
                     print(f'Member Management and attribute updates done in {(datetime.datetime.now() - started).seconds}s')
                     started = datetime.datetime.now()
@@ -258,7 +258,7 @@ class Cyberlog(commands.Cog):
                         try: self.invites[str(g.id)+"_vanity"] = (await g.vanity_invite())
                         except discord.HTTPException: pass
                     except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
-                    except Exception as e: print(f'Invite management error: Server {s.name}\n{e}')
+                    except Exception as e: print(f'Invite management error: Server {g.name}\n{e}')
                 print(f'Invite management done in {(datetime.datetime.now() - started).seconds}s')
             started = datetime.datetime.now()                
             memberList = self.bot.get_all_members()
