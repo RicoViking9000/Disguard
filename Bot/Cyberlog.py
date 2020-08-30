@@ -175,7 +175,7 @@ class Cyberlog(commands.Cog):
                     print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
 
-    @tasks.loop(hours = 1)
+    @tasks.loop(hours = 6)
     async def summarize(self):
         global lightningUsers
         global lightningLogging
@@ -184,7 +184,7 @@ class Cyberlog(commands.Cog):
             print('Summarizing')
             started = datetime.datetime.now()
             rawStarted = datetime.datetime.now()
-            if self.summarize.current_loop % 24 == 0:
+            if self.summarize.current_loop % 4 == 0:
                 if self.summarize.current_loop == 0:
                     asyncio.create_task(self.synchronizeDatabase(True))
                     def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
