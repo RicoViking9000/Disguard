@@ -191,74 +191,76 @@ class Cyberlog(commands.Cog):
                     await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 else: asyncio.create_task(self.synchronizeDatabase())
                 await self.bot.get_cog('Birthdays').updateBirthdays()
-                for g in self.bot.guilds:
+            for g in self.bot.guilds:
+                try:
                     generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, True), await database.CalculateAnnouncementsChannel(g, True), await database.CalculateModeratorChannel(g, True)
                     print(f'{g.name}\n -general channel: {generalChannel}\n -announcements channel: {announcementsChannel}\n -moderator channel: {moderatorChannel}')
-                    for m in g.members:
-                        memberStart = datetime.datetime.now()
-                        updates = []
-                        try:
-                            for a in m.activities:
-                                if a.type == discord.ActivityType.custom:
-                                    try:
-                                        if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
-                                            asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
-                                            updates.append('status')
-                                    except AttributeError: pass
-                                    except (TypeError, IndexError): 
-                                        asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
+                except IndexError: pass
+                for m in g.members:
+                    memberStart = datetime.datetime.now()
+                    updates = []
+                    try:
+                        for a in m.activities:
+                            if a.type == discord.ActivityType.custom:
+                                try:
+                                    if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
+                                        asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                                         updates.append('status')
-                        except Exception as e: print(f'Custom status error for {m.name}: {e}')
-                        try:
-                            if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
-                                asyncio.create_task(database.AppendUsernameHistory(m))
-                                updates.append('username')
-                        except AttributeError: pass
-                        except (TypeError, IndexError):
+                                except AttributeError: pass
+                                except (TypeError, IndexError): 
+                                    asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
+                                    updates.append('status')
+                    except Exception as e: print(f'Custom status error for {m.name}: {e}')
+                    try:
+                        if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
                             asyncio.create_task(database.AppendUsernameHistory(m))
                             updates.append('username')
-                        except Exception as e: print(f'Username error for {m.name}: {e}')
-                        try:
-                            if str(m.avatar_url) != self.bot.lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
-                                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                                await m.avatar_url_as(size=1024).save(savePath)
-                                f = discord.File(savePath)
-                                message = await self.imageLogChannel.send(file=f)
-                                asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                                if os.path.exists(savePath): os.remove(savePath)
-                                updates.append('avatar')
-                        except (AttributeError, discord.HTTPException): pass
-                        except (TypeError, IndexError):
-                            try:
-                                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                                await m.avatar_url_as(size=1024).save(savePath)
-                                f = discord.File(savePath)
-                                message = await self.imageLogChannel.send(file=f)
-                                asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                                if os.path.exists(savePath): os.remove(savePath)
-                                updates.append('avatar')
-                            except discord.HTTPException: pass #Filesize is too large
-                        except Exception as e: print(f'Avatar error for {m.name}: {e}')
-                        #if len(updates) > 0: lightningUsers[m.id] = await database.GetUser(m) #Debating if we even need this line
-                        if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
-                    print(f'Member Management and attribute updates done in {(datetime.datetime.now() - started).seconds}s')
-                    started = datetime.datetime.now()
-                    for c in g.text_channels: 
-                        try: self.pins[c.id] = [m.id for m in await c.pins()]
-                        except discord.Forbidden: pass
-                    for c in g.categories:
-                        try: self.categories[c.id] = c.channels
-                        except discord.Forbidden: pass
-                    try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
-                    except discord.Forbidden: pass
-                    print(f'Channel management done in {(datetime.datetime.now() - started).seconds}s')
-                    started = datetime.datetime.now()
+                    except AttributeError: pass
+                    except (TypeError, IndexError):
+                        asyncio.create_task(database.AppendUsernameHistory(m))
+                        updates.append('username')
+                    except Exception as e: print(f'Username error for {m.name}: {e}')
                     try:
-                        self.invites[str(g.id)] = (await g.invites())
-                        try: self.invites[str(g.id)+"_vanity"] = (await g.vanity_invite())
-                        except discord.HTTPException: pass
-                    except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
-                    except Exception as e: print(f'Invite management error: Server {g.name}\n{e}')
+                        if str(m.avatar_url) != self.bot.lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
+                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                            await m.avatar_url_as(size=1024).save(savePath)
+                            f = discord.File(savePath)
+                            message = await self.imageLogChannel.send(file=f)
+                            asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
+                            if os.path.exists(savePath): os.remove(savePath)
+                            updates.append('avatar')
+                    except (AttributeError, discord.HTTPException): pass
+                    except (TypeError, IndexError):
+                        try:
+                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                            await m.avatar_url_as(size=1024).save(savePath)
+                            f = discord.File(savePath)
+                            message = await self.imageLogChannel.send(file=f)
+                            asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
+                            if os.path.exists(savePath): os.remove(savePath)
+                            updates.append('avatar')
+                        except discord.HTTPException: pass #Filesize is too large
+                    except Exception as e: print(f'Avatar error for {m.name}: {e}')
+                    #if len(updates) > 0: lightningUsers[m.id] = await database.GetUser(m) #Debating if we even need this line
+                    if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
+                print(f'Member Management and attribute updates done in {(datetime.datetime.now() - started).seconds}s')
+                started = datetime.datetime.now()
+                for c in g.text_channels: 
+                    try: self.pins[c.id] = [m.id for m in await c.pins()]
+                    except discord.Forbidden: pass
+                for c in g.categories:
+                    try: self.categories[c.id] = c.channels
+                    except discord.Forbidden: pass
+                try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
+                except discord.Forbidden: pass
+                print(f'Channel management done in {(datetime.datetime.now() - started).seconds}s')
+                started = datetime.datetime.now()
+                try:
+                    self.invites[str(g.id)] = (await g.invites())
+                    try: self.invites[str(g.id)+"_vanity"] = (await g.vanity_invite())
+                    except discord.HTTPException: pass
+                except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
+                except Exception as e: print(f'Invite management error: Server {g.name}\n{e}')
                 print(f'Invite management done in {(datetime.datetime.now() - started).seconds}s')
             started = datetime.datetime.now()                
             memberList = self.bot.get_all_members()

@@ -733,14 +733,15 @@ async def VerifyRole(r: discord.Role, new=False):
 async def CalculateGeneralChannel(g: discord.Guild, update=False):
     '''Determines the most active channel based on indexed message count
     r: Whether to return the channel. If False, just set this to the database'''
-    popular = max(g.text_channels, key = lambda c: len(os.listdir('Indexes/{}/{}'.format(g.id, c.id))))
+    popular = max(g.text_channels, key = lambda c: len(os.listdir('Indexes/{}/{}'.format(g.id, c.id))), default=0)
     if update: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': popular.id}})
     return popular
 
 async def CalculateAnnouncementsChannel(g: discord.Guild, update=False):
     '''Determines the announcement channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
-    s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcements'))[0]
+    try: s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcements'))[0]
+    except IndexError: return 0
     if update: await servers.update_one({'server_id': g.id}, {'$set': {'announcementsChannel': s.id}})
     return s
 
@@ -752,7 +753,7 @@ async def CalculateModeratorChannel(g: discord.Guild, update=False):
         if not c.overwrites_for(g.default_role).read_messages: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
     for k in relevanceKeys:
         if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
-    result = max(relevanceKeys, key=relevanceKeys.get)
+    result = max(relevanceKeys, key=relevanceKeys.get, default=0)
     if update: await servers.update_one({'server_id': g.id}, {'$set': {'moderatorChannel': result.id}})
     return result
     
