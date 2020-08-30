@@ -185,9 +185,11 @@ class Cyberlog(commands.Cog):
             started = datetime.datetime.now()
             rawStarted = datetime.datetime.now()
             if self.summarize.current_loop % 24 == 0:
-                if self.summarize.current_loop > 0: asyncio.create_task(self.synchronizeDatabase())
+                if self.summarize.current_loop > 0: 
+                    asyncio.create_task(self.synchronizeDatabase(True))
                 def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                 await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
+                await self.bot.get_cog('Birthdays').updateBirthdays()
                 for g in self.bot.guilds:
                     generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, True), await database.CalculateAnnouncementsChannel(g, True), await database.CalculateModeratorChannel(g, True)
                     print(f'{g.name}\n -general channel: {generalChannel}\n -announcements channel: {announcementsChannel}\n -moderator channel: {moderatorChannel}')
@@ -238,26 +240,25 @@ class Cyberlog(commands.Cog):
                         except Exception as e: print(f'Avatar error for {m.name}: {e}')
                         if len(updates) > 0: lightningUsers[m.id] = await database.GetUser(m) #Debating if we even need this line
                         if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
-                await self.bot.get_cog('Birthdays').updateBirthdays()
-                print(f'Member Management and attribute updates done in {(datetime.datetime.now() - started).seconds}s')
-                started = datetime.datetime.now()
-                for c in g.text_channels: 
-                    try: self.pins[c.id] = [m.id for m in await c.pins()]
+                    print(f'Member Management and attribute updates done in {(datetime.datetime.now() - started).seconds}s')
+                    started = datetime.datetime.now()
+                    for c in g.text_channels: 
+                        try: self.pins[c.id] = [m.id for m in await c.pins()]
+                        except discord.Forbidden: pass
+                    for c in g.categories:
+                        try: self.categories[c.id] = c.channels
+                        except discord.Forbidden: pass
+                    try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
                     except discord.Forbidden: pass
-                for c in g.categories:
-                    try: self.categories[c.id] = c.channels
-                    except discord.Forbidden: pass
-                try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
-                except discord.Forbidden: pass
-                print(f'Channel management done in {(datetime.datetime.now() - started).seconds}s')
-                started = datetime.datetime.now()
-                try:
-                    self.invites[str(g.id)] = (await g.invites())
-                    try: self.invites[str(g.id)+"_vanity"] = (await g.vanity_invite())
-                    except discord.HTTPException: pass
-                except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
-                except Exception as e: print(f'Invite management error: Server {s.name}\n{e}')
-            print(f'Invite management done in {(datetime.datetime.now() - started).seconds}s')
+                    print(f'Channel management done in {(datetime.datetime.now() - started).seconds}s')
+                    started = datetime.datetime.now()
+                    try:
+                        self.invites[str(g.id)] = (await g.invites())
+                        try: self.invites[str(g.id)+"_vanity"] = (await g.vanity_invite())
+                        except discord.HTTPException: pass
+                    except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
+                    except Exception as e: print(f'Invite management error: Server {s.name}\n{e}')
+                print(f'Invite management done in {(datetime.datetime.now() - started).seconds}s')
             started = datetime.datetime.now()                
             memberList = self.bot.get_all_members()
             await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in memberList if m.status != discord.Status.offline])               

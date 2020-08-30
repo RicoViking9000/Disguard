@@ -95,7 +95,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         #await bot.get_cog('Birthdays').updateBirthdays()
         # easterAnnouncement.start()
         #Cyberlog.ConfigureSummaries(bot)
-        asyncio.create_task(bot.get_cog('Cyberlog').synchronizeDatabase(True))
         def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478 and m.content == 'Synchronized'
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
