@@ -115,7 +115,8 @@ class Birthdays(commands.Cog):
         print('Updating birthdays')
         updated = []
         for member in self.bot.users:
-            bday = self.bot.lightningUsers[member.id]['birthday']
+            try: bday = self.bot.lightningUsers[member.id]['birthday']
+            except KeyError: continue
             if bday is not None:
                 if bday < datetime.datetime.now():
                     new = datetime.datetime(bday.year + 1, bday.month, bday.day)
