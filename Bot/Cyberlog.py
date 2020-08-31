@@ -158,7 +158,7 @@ class Cyberlog(commands.Cog):
             async with database.getDatabase().watch(full_document='updateLookup') as change_stream:
                 async for change in change_stream:
                     if change['operationType'] == 'delete': 
-                        print(f"{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}")
+                        print(f"{qlf}{change['clusterTime'].as_datetime() + datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}")
                         continue
                     fullDocument = change['fullDocument']
                     objectID = list(fullDocument.values())[1]
@@ -172,7 +172,7 @@ class Cyberlog(commands.Cog):
                         self.bot.lightningUsers[objectID] = fullDocument
                         lightningUsers[objectID] = fullDocument
                     if change['operationType'] == 'update' and any([word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]): continue
-                    print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
+                    print(f'''{qlf}{change['clusterTime'].as_datetime() + datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
 
     @tasks.loop(hours = 6)

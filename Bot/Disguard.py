@@ -629,12 +629,22 @@ async def ticketsCommand(ctx, number:int = None):
 
 @bot.command(aliases = ['schedule'])
 async def _schedule(ctx, *, desiredDate=None):
-    pRoles = [619514236736897024, 739597955178430525, 615002577007804416, 668263236214456320, 565694432494485514]
+    pRoles = [619514236736897024, 739597955178430525, 615002577007804416, 668263236214456320, 623685383489585163, 565694432494485514]
     try:
         if 'set' == desiredDate: raise KeyError
         schedule = bot.lightningUsers[ctx.author.id]['schedule']
     except KeyError:
-        if not any([r.id in pRoles for r in [m.roles for m in g.members if m.id == ctx.author.id for g in bot.guilds]]):
+        #memberRoles = [[r.id for r in m.roles for m in [g.members for g in bot.guilds] if m.id == ctx.author.id]]
+        # unlock = False
+        # for g in [server for server in bot.guilds if ctx.author in server.members]:
+        #     for r in [member for member in g.members if member.id == ctx.author.id][0].roles:
+        #         if r.id in pRoles: 
+        #             unlock = True
+        #             break
+        memberRoleList = [m.roles for m in bot.get_all_members() if ctx.author.id == m.id]
+        totalRoleList = []
+        for roleList in memberRoleList: totalRoleList.extend(roleList)
+        if not any([r.id in pRoles for r in totalRoleList]):
             locked = await ctx.send('🔒This is a private command, and you don\'t have a permitted role. If you believe this is a mistake, please wait patiently - Google verification will be available soon')
             def unlock(r, u): return str(r) == '🔓' and r.message.id == locked.id and u.id == 247412852925661185
             await bot.wait_for('reaction_add', check=unlock)
