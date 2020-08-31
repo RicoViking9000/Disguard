@@ -8,6 +8,7 @@ import profanityfilter
 import datetime
 import asyncio
 import faulthandler
+import copy
 import os
 import json
 from discord.ext import commands
@@ -780,3 +781,7 @@ async def FetchSupportTicket(ticketNumber):
 async def GetSupportTickets():
     '''Returns entire support ticket collection'''
     return (await disguard.find_one({})).get('tickets')
+
+async def SetSchedule(u: discord.User, schedule):
+    '''Updates a member's school schedule'''
+    await users.update_one({'user_id': u.id}, {'$set': {'schedule': schedule}}, True)

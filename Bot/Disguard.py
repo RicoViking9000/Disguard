@@ -6,6 +6,7 @@ import secure
 import database
 import Antispam
 import Cyberlog
+import Birthdays
 import os
 import datetime
 import collections
@@ -16,6 +17,7 @@ import logging
 import inspect
 import typing
 import json
+import copy
 
 
 booted = False
@@ -26,6 +28,8 @@ print("Booting...")
 prefixes = {}
 variables = {}
 newline = '\n'
+qlf = '  ' #Two special characters to represent quoteLineFormat
+qlfc = ' '
 yellow = 0xffff00
 
 logger = logging.getLogger('discord')
@@ -35,7 +39,7 @@ handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(me
 logger.addHandler(handler)
 
 def prefix(bot, message):
-    try: p = prefixes.get(message.guild.id)
+    try: p = bot.lightningLogging[message.guild.id]['prefix']
     except AttributeError: return '.'
     return p if p is not None else '.'
 
@@ -47,9 +51,9 @@ oPath = 'G:/My Drive/Other'
 urMom = 'G:/My Drive/Other/ur mom'
 campMax = 'G:/My Drive/Other/M A X'
 
-@tasks.loop(minutes=1)
-async def updatePrefixes():
-    for server in bot.guilds: prefixes[server.id] = await database.GetPrefix(server)
+# @tasks.loop(minutes=1)
+# async def updatePrefixes():
+#     for server in bot.guilds: prefixes[server.id] = await database.GetPrefix(server)
 
 # @tasks.loop(minutes=1)
 # async def anniversaryDayKickoff():
@@ -81,7 +85,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     global loading
     if not booted:
         booted=True
-        updatePrefixes.start()
+        #updatePrefixes.start()
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening)
         await UpdatePresence()
@@ -156,7 +160,7 @@ async def index(ctx, t: int = None):
         if target is None:
             target = bot.get_guild(t)
             if target is None: return await ctx.send('No target found for <{}>'.format(t))
-    def rCheck(r, u): return str(r) in ('✅', '❌') and u.id == ctx.author.id and r.message.id == ctx.message.id
+    def rCheck(r, u): return str(r) in ('✅', '❌') and u.id == ctx.author.id and r.message.id == m.id
     m = await ctx.send('Index fully?')
     for r in ('✅', '❌'): await m.add_reaction(r)
     try: result = await bot.wait_for('reaction_add', check=rCheck, timeout=300)
@@ -340,8 +344,6 @@ async def ticketsCommand(ctx, number:int = None):
     '''Command to view feedback tickets'''
     g = ctx.guild
     alphabet = [l for l in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-    qlf = '  ' #Two special characters to represent quoteLineFormat
-    qlfc = ' '
     trashcan = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='trashcan')
     statusDict = {0: 'Unopened', 1: 'Viewed', 2: 'In progress', 3: 'Closed', 4: 'Locked'}
     message = await ctx.send(embed=discord.Embed(description=f'{loading}Downloading ticket data'))
@@ -625,9 +627,93 @@ async def ticketsCommand(ctx, number:int = None):
             if datetime.datetime.now() > clearAt: await message.edit(content=None)
         except UnboundLocalError: await message.edit(content=None)
 
-@bot.command()
-async def schedule(ctx):
-    await ctx.send('Coming soon - 🔒Private command')
+@bot.command(aliases = ['schedule'])
+async def _schedule(ctx, *, desiredDate=None):
+    pRoles = [619514236736897024, 739597955178430525, 615002577007804416, 668263236214456320, 565694432494485514]
+    try:
+        if 'set' == desiredDate: raise KeyError
+        schedule = bot.lightningUsers[ctx.author.id]['schedule']
+    except KeyError:
+        if not any(r.id in pRoles for r in ctx.author.roles):
+            return await ctx.send('🔒This is a private command, and you don\'t have a permitted role. If you believe this is a mistake, please wait patiently - Google verification will be available soon')
+        string = f"Welcome to schedule setup! Since you're setting up a new schedule, let's go over the basics:\n{qlf}• Your schedule is private and only accessible to you, unless you use this command in a server"
+        string += f'\n{qlf}• This command will be expanded with new features as time goes on, such as Google Account verification, sending you your schedule every morning, lunch schedules, website viewer, and more\n{qlf}• If you make a mistake during setup, type `cancel`\n{qlf}• If you are resetting an existing schedule, the old one will not be overwritten until this setup is complete\n\nLet\'s get started with your last name, due to the alphabet split. What\'s your last name? (Only the first letter will be stored)'
+        await ctx.send(string)
+        def rChecker(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
+        response = await bot.wait_for('message', check=rChecker)
+        if response.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
+        lastName = response.content
+        await ctx.send(f'Now to enter your classes: Enter all 8 of your classes (excluding advisory), each on its own line (no indents), P1 first, P9 last. On desktop, use shift+enter to create a newline. Example:\n{qlf}Math\n{qlf}English\n{qlf}History\n{qlf}Theology\n{qlf}Band\n{qlf}PE\n{qlf}Spanish\n{qlf}Biology')
+        response = await bot.wait_for('message', check=rChecker)
+        if response.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
+        classes = response.content.split('\n') + [lastName[0]]
+        statusMessage = await ctx.send(f'{loading}')
+        await database.SetSchedule(ctx.author, classes)
+        await statusMessage.edit(content=f'Schedule setup complete!\n{qlf}To reset your schedule, type `{bot.lightningLogging[ctx.guild.id]["prefix"]}schedule set`\n{qlf}You may type a day after the command (such as "tomorrow," "Friday," or "September 21") to view the schedule for that day\n\nReact 📅 or use the schedule command to view your schedule')
+        await statusMessage.add_reaction('📅')
+        def calendarChecker(r, u): return str(r) == '📅' and r.message.id == statusMessage.id and u.id == ctx.author.id
+        await bot.wait_for('reaction_add', check=calendarChecker, timeout=None)
+        desiredDate = None
+        schedule = bot.lightningUsers[ctx.author.id]['schedule']
+    statusMessage = await ctx.send(f'{loading}Building schedule...')
+    contentLog = []
+    firstDay = datetime.date(2020, 8, 31) #First day of classes
+    noClasses = ['09-23', '10-12', '10-14', '10-30', '11-25', '11-26', '11-27'] #list of days when there aren't classes - MM-DD
+    today = datetime.date.today()
+    if not desiredDate:
+        desiredDate = today
+        if f'{datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50)}' and int(f'{today:%w}') not in (0, 6):  #If it's later than 2:50PM and it's not a weekend, pull up tomorrow's schedule
+            contentLog.append("It's after 2:50PM, so tomorrow's schedule will be displayed")
+            date = today + datetime.timedelta(days=1)
+        else:
+            date = today
+    elif type(desiredDate) is str: 
+        dt = Birthdays.calculateDate(ctx.message, datetime.datetime.now())
+        if not dt:
+            contentLog.append(f"⚠Unable to calculate a date from `{desiredDate}`, switching to today's schedule")
+            date = today
+            desiredDate = today
+        else: 
+            date = datetime.date(dt.year, dt.month, dt.day)
+            desiredDate = date
+    while int(f'{date:%w}') in (0, 6) or f'{date:%m-%d}' in noClasses or date < firstDay: #If it's not a weekend, there are classes today, or it's not the first day of classes yet
+        date += datetime.timedelta(days=1) #If the provided date is a weekend day, or a day without classes, we jump ahead to the next available day
+        if int(f'{today:%w}') != 5: contentLog.append(f'ℹClasses are not in session during the date you provided ({desiredDate:%A, %B %d}), so the next date with classes ({date:%A, %B %d}) will be displayed') #If it's not Friday
+        else: contentLog.append(f"ℹThis school week is over, so the next date with classes ({date:%A, %B %d}) will be displayed") #If it's friday - this may get passed from 'if not desiredDate'
+        desiredDate = date
+    lastInitial = schedule[-1] #Last initial of user
+    schedule.pop(-1) #Remove the last initial since it's not part of the schedule and was simply placed there for convenience
+    letters = 'PANTHERS'
+    onlineLetters = 'PAHE' if lastInitial.lower() > 'k' else 'NTRS'
+    daySpan = []
+    daysSince = (date - firstDay).days
+    while daysSince > 0:
+        if len(daySpan) == 0: daySpan.append(date - datetime.timedelta(days=1))
+        else: daySpan.append(daySpan[-1] - datetime.timedelta(days=1))
+        daysSince -= 1
+    daySpan = [d for d in daySpan if int(f'{d:%w}') not in (0, 6) and f'{d:%m-%d}' not in noClasses] #get the days that are not weekend days or days without classes
+    currentDayLetter = letters[len(daySpan) % len(letters)]
+    online = currentDayLetter in onlineLetters
+    dailyClasses = schedule[:4] if letters.index(currentDayLetter) % 2 == 0 else schedule[4:] #take either the first or last half of classes depending on letter day
+    try: rotationFactor = letters.index(currentDayLetter) // 2
+    except ZeroDivisionError: rotationFactor = 0
+    rotatedClasses = collections.deque(copy.deepcopy(dailyClasses))
+    rotatedClasses.rotate(rotationFactor)
+    rotatedClasses = list(rotatedClasses) #the four daily classes, rotated depending on the schedule
+    rotatedClasses.insert(3, 'Advisory')
+    schedule.insert(1, 'Advisory')
+    def time(s): return datetime.time(int(s[:s.find(':')]), int(s[s.find(':') + 1:]))
+    def fTime(t): return f'{t:%I:%M %p}'
+    times = [(time('7:45'), time('9:20')), (time('9:25'), time('10:55')), (time('11:00'), time('12:55')), (time('13:00'), time('13:15')), (time('13:20'), time('14:50'))]
+    dayDescription = f'{"Today" if date == datetime.date.today() else "Tomorrow" if date == datetime.date.today() + datetime.timedelta(days=1) else f"{date:%A, %B %d}"}'
+    embed = discord.Embed(title=f'{date:%B %d} - {currentDayLetter} day', color=yellow)
+    embed.description=f'''{"💻" if online else "👥"}{"Today" if date == datetime.date.today() else "Tomorrow" if date == datetime.date.today() + datetime.timedelta(days=1) else f"On {date:%A, %B %d}, "} your classes are {"online" if online else "in person"}\n\n{f"{f'{dayDescription.upper()}'}'S SCHEDULE":-^70}'''
+    for i, period in enumerate(rotatedClasses):
+        embed.add_field(name=f'{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
+            value=f'> {period}', inline=False)
+    return await statusMessage.edit(content=contentLog[-1], embed=embed)
+    
+    
 
 @commands.is_owner()
 @bot.command()
@@ -698,7 +784,7 @@ async def marvel(ctx):
 @commands.is_owner()
 @bot.command()
 async def test(ctx):
-    await ctx.send(str(ctx.author.avatar_url_as(format='png')))
+    await ctx.send((await database.CalculateGeneralChannel(ctx.guild)).mention)
 
 
 database.Initialize(secure.token())
