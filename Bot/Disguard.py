@@ -634,8 +634,11 @@ async def _schedule(ctx, *, desiredDate=None):
         if 'set' == desiredDate: raise KeyError
         schedule = bot.lightningUsers[ctx.author.id]['schedule']
     except KeyError:
-        if not any(r.id in pRoles for r in ctx.author.roles):
-            return await ctx.send('🔒This is a private command, and you don\'t have a permitted role. If you believe this is a mistake, please wait patiently - Google verification will be available soon')
+        if not any([r.id in pRoles for r in [m.roles for m in g.members if m.id == ctx.author.id for g in bot.guilds]]):
+            locked = await ctx.send('🔒This is a private command, and you don\'t have a permitted role. If you believe this is a mistake, please wait patiently - Google verification will be available soon')
+            def unlock(r, u): return str(r) == '🔓' and r.message.id == locked.id and u.id == 247412852925661185
+            await bot.wait_for('reaction_add', check=unlock)
+            await ctx.send('🔓My developer has unlocked this command for you')
         string = f"Welcome to schedule setup! Since you're setting up a new schedule, let's go over the basics:\n{qlf}• Your schedule is private and only accessible to you, unless you use this command in a server"
         string += f'\n{qlf}• This command will be expanded with new features as time goes on, such as Google Account verification, sending you your schedule every morning, lunch schedules, website viewer, and more\n{qlf}• If you make a mistake during setup, type `cancel`\n{qlf}• If you are resetting an existing schedule, the old one will not be overwritten until this setup is complete\n\nLet\'s get started with your last name, due to the alphabet split. What\'s your last name? (Only the first letter will be stored)'
         await ctx.send(string)
@@ -655,15 +658,26 @@ async def _schedule(ctx, *, desiredDate=None):
         await bot.wait_for('reaction_add', check=calendarChecker, timeout=None)
         desiredDate = None
         schedule = bot.lightningUsers[ctx.author.id]['schedule']
-    statusMessage = await ctx.send(f'{loading}Building schedule...')
+    if ctx.guild:
+        statusMessage = await ctx.send("🔒You're using this command publicly in a server. By 🔓unlocking your schedule, you're aware that others may view your schedule. Alternately, react 🔒 and I'll DM you your schedule")
+        def lockedOut(r, u): return str(r) in ('🔓', '🔒') and r.message.id == statusMessage.id and u.id == ctx.author.id
+        for r in ('🔓', '🔒'): await statusMessage.add_reaction(r)
+        result = await bot.wait_for('reaction_add', check=lockedOut)
+        if str(result[0]) == '🔒':
+            if not ctx.author.dm_channel: await ctx.author.create_dm()
+            ctx.channel = ctx.author.dm_channel
+            statusMessage = None #to trigger the error
+        else: await statusMessage.clear_reactions()
+    try: await statusMessage.edit(content=f'{loading}Building schedule...')
+    except: statusMessage = await ctx.send(f'{loading}Building schedule...')
     contentLog = []
     firstDay = datetime.date(2020, 8, 31) #First day of classes
     noClasses = ['09-23', '10-12', '10-14', '10-30', '11-25', '11-26', '11-27'] #list of days when there aren't classes - MM-DD
     today = datetime.date.today()
     if not desiredDate:
         desiredDate = today
-        if f'{datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50)}' and int(f'{today:%w}') not in (0, 6):  #If it's later than 2:50PM and it's not a weekend, pull up tomorrow's schedule
-            contentLog.append("It's after 2:50PM, so tomorrow's schedule will be displayed")
+        if datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50) and int(f'{today:%w}') not in (0, 6):  #If it's later than 2:50PM and it's not a weekend, pull up tomorrow's schedule
+            contentLog.append("ℹIt's after 2:50PM, so tomorrow's schedule will be displayed")
             date = today + datetime.timedelta(days=1)
         else:
             date = today
@@ -715,7 +729,7 @@ async def _schedule(ctx, *, desiredDate=None):
         dt = datetime.datetime.now()
         embed.add_field(name=f'{classStatus(times[i])}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
             value=f'> {period}', inline=False)
-    return await statusMessage.edit(content=contentLog[-1], embed=embed)
+    return await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
     
     
 
