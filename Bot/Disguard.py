@@ -680,7 +680,6 @@ async def _schedule(ctx, *, desiredDate=None):
         date += datetime.timedelta(days=1) #If the provided date is a weekend day, or a day without classes, we jump ahead to the next available day
         if int(f'{today:%w}') != 5: contentLog.append(f'ℹClasses are not in session during the date you provided ({desiredDate:%A, %B %d}), so the next date with classes ({date:%A, %B %d}) will be displayed') #If it's not Friday
         else: contentLog.append(f"ℹThis school week is over, so the next date with classes ({date:%A, %B %d}) will be displayed") #If it's friday - this may get passed from 'if not desiredDate'
-        desiredDate = date
     lastInitial = schedule[-1] #Last initial of user
     schedule.pop(-1) #Remove the last initial since it's not part of the schedule and was simply placed there for convenience
     letters = 'PANTHERS'
@@ -709,7 +708,12 @@ async def _schedule(ctx, *, desiredDate=None):
     embed = discord.Embed(title=f'{date:%B %d} - {currentDayLetter} day', color=yellow)
     embed.description=f'''{"💻" if online else "👥"}{"Today" if date == datetime.date.today() else "Tomorrow" if date == datetime.date.today() + datetime.timedelta(days=1) else f"On {date:%A, %B %d}, "} your classes are {"online" if online else "in person"}\n\n{f"{f'{dayDescription.upper()}'}'S SCHEDULE":-^70}'''
     for i, period in enumerate(rotatedClasses):
-        embed.add_field(name=f'{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
+        def classStatus(t):
+            nowTime = datetime.datetime.now()
+            compareTime = (datetime.datetime(date.year, date.month, date.day, t[0].hour, t[0].minute), datetime.datetime(date.year, date.month, date.day, t[1].hour, t[1].minute))
+            return '✅' if nowTime > compareTime[1] else discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online') if nowTime > compareTime[0] else ''
+        dt = datetime.datetime.now()
+        embed.add_field(name=f'{classStatus(times[i])}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
             value=f'> {period}', inline=False)
     return await statusMessage.edit(content=contentLog[-1], embed=embed)
     
