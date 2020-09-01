@@ -158,7 +158,7 @@ class Cyberlog(commands.Cog):
             async with database.getDatabase().watch(full_document='updateLookup') as change_stream:
                 async for change in change_stream:
                     if change['operationType'] == 'delete': 
-                        print(f"{qlf}{change['clusterTime'].as_datetime() + datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}")
+                        print(f"{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}")
                         continue
                     fullDocument = change['fullDocument']
                     objectID = list(fullDocument.values())[1]
@@ -172,7 +172,7 @@ class Cyberlog(commands.Cog):
                         self.bot.lightningUsers[objectID] = fullDocument
                         lightningUsers[objectID] = fullDocument
                     if change['operationType'] == 'update' and any([word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]): continue
-                    print(f'''{qlf}{change['clusterTime'].as_datetime() + datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
+                    print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
 
     @tasks.loop(hours = 6)
@@ -269,6 +269,7 @@ class Cyberlog(commands.Cog):
             #self.bot.lightningLogging = lightningLogging
             lightningLogging = self.bot.lightningLogging
             lightningUsers = self.bot.lightningUsers
+            await self.imageLogChannel.send('Completed')
         except Exception as e: 
             print('Summarize error: {}'.format(e))
             traceback.print_exc()
@@ -1574,7 +1575,8 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with this bot'''
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(after.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
+        try: received = (datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(after.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
+        except (KeyError, AttributeError): return
         embed = discord.Embed(timestamp = datetime.datetime.utcnow(), color=blue)
         if (before.nick != after.nick or before.roles != after.roles) and logEnabled(before.guild, "member") and memberGlobal(before.guild) != 1:
             content=None

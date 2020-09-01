@@ -99,7 +99,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         #await bot.get_cog('Birthdays').updateBirthdays()
         # easterAnnouncement.start()
         #Cyberlog.ConfigureSummaries(bot)
-        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478 and m.content == 'Synchronized'
+        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478 and m.content == 'Completed'
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
         await UpdatePresence()
@@ -727,18 +727,30 @@ async def _schedule(ctx, *, desiredDate=None):
     schedule.insert(1, 'Advisory')
     def time(s): return datetime.time(int(s[:s.find(':')]), int(s[s.find(':') + 1:]))
     def fTime(t): return f'{t:%I:%M %p}'
+    nowTime = datetime.datetime.now()
     times = [(time('7:45'), time('9:20')), (time('9:25'), time('10:55')), (time('11:00'), time('12:55')), (time('13:00'), time('13:15')), (time('13:20'), time('14:50'))]
+    dateTimes = [(datetime.datetime(nowTime.year, nowTime.month, nowTime.day, t[0].hour, t[0].minute), datetime.datetime(nowTime.year, nowTime.month, nowTime.day, t[1].hour, t[1].minute)) for t in times]
     dayDescription = f'{"Today" if date == datetime.date.today() else "Tomorrow" if date == datetime.date.today() + datetime.timedelta(days=1) else f"{date:%A, %B %d}"}'
     embed = discord.Embed(title=f'{date:%B %d} - {currentDayLetter} day', color=yellow)
     embed.description=f'''{"💻" if online else "👥"}{"Today" if date == datetime.date.today() else "Tomorrow" if date == datetime.date.today() + datetime.timedelta(days=1) else f"On {date:%A, %B %d}, "} your classes are {"online" if online else "in person"}\n\n{f"{f'{dayDescription.upper()}'}'S SCHEDULE":-^70}'''
     for i, period in enumerate(rotatedClasses):
-        def classStatus(t):
-            nowTime = datetime.datetime.now()
-            compareTime = (datetime.datetime(date.year, date.month, date.day, t[0].hour, t[0].minute), datetime.datetime(date.year, date.month, date.day, t[1].hour, t[1].minute))
+        compareTime = (datetime.datetime(date.year, date.month, date.day, times[i][0].hour, times[i][0].minute), datetime.datetime(date.year, date.month, date.day, times[i][1].hour, times[i][1].minute))
+        def classStatus():
             return '✅' if nowTime > compareTime[1] else discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online') if nowTime > compareTime[0] else ''
-        dt = datetime.datetime.now()
-        embed.add_field(name=f'{classStatus(times[i])}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
-            value=f'> {period}', inline=False)
+        def timeUntil():
+            string = ''
+            if dateTimes[i][0] > nowTime:
+                hours = (dateTimes[i][0] - nowTime) // datetime.timedelta(hours=1)
+                result = (hours, (dateTimes[i][0] - nowTime) // datetime.timedelta(minutes=1) - 60*hours)
+                string = 'Begins'
+            else: 
+                hours = (dateTimes[i][1] - nowTime) // datetime.timedelta(hours=1)
+                result = (hours, (dateTimes[i][1] - nowTime) // datetime.timedelta(minutes=1) - 60*hours)
+                string = 'Ends'
+            if result[0] > 0: return f'> {string} in {result[0]}h {result[1]}m'
+            else: return f'> {string} in {result[1]} minutes'
+        embed.add_field(name=f'{classStatus()}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
+            value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1] and i != 0) else ""}', inline=False)
     return await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
     
     
