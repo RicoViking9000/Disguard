@@ -195,7 +195,7 @@ class Cyberlog(commands.Cog):
                 try:
                     generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, True), await database.CalculateAnnouncementsChannel(g, True), await database.CalculateModeratorChannel(g, True)
                     print(f'{g.name}\n -general channel: {generalChannel}\n -announcements channel: {announcementsChannel}\n -moderator channel: {moderatorChannel}')
-                except IndexError: pass
+                except: pass
                 for m in g.members:
                     memberStart = datetime.datetime.now()
                     updates = []
