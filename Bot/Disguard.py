@@ -40,7 +40,7 @@ logger.addHandler(handler)
 
 def prefix(bot, message):
     try: p = bot.lightningLogging[message.guild.id]['prefix']
-    except AttributeError: return '.'
+    except (AttributeError, KeyError): return '.'
     return p if p is not None else '.'
 
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500)
@@ -750,7 +750,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if result[0] > 0: return f'> {string} in {result[0]}h {result[1]}m'
             else: return f'> {string} in {result[1]} minutes'
         embed.add_field(name=f'{classStatus()}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
-            value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1] and i != 0) else ""}', inline=False)
+            value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1]) else ""}', inline=False)
     return await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
     
     
