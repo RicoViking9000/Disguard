@@ -18,6 +18,8 @@ mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
 db = None
 servers = None
 users = None
+disguard = None
+
 def getDatabase(): return db
 
 verifications = {}

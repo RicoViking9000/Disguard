@@ -18,6 +18,7 @@ import inspect
 import typing
 import json
 import copy
+import shutil
 
 
 booted = False
@@ -669,7 +670,7 @@ async def _schedule(ctx, *, desiredDate=None):
         desiredDate = None
         schedule = bot.lightningUsers[ctx.author.id]['schedule']
     if ctx.guild:
-        statusMessage = await ctx.send("🔒You're using this command publicly in a server. By 🔓unlocking your schedule, you're aware that others may view your schedule. Alternately, react 🔒 and I'll DM you your schedule")
+        statusMessage = await ctx.send("🔒You're using this command publicly in a server. By 🔓unlocking your schedule, you're aware that others may view your schedule. Alternatively, react 🔒 and I'll DM you your schedule")
         def lockedOut(r, u): return str(r) in ('🔓', '🔒') and r.message.id == statusMessage.id and u.id == ctx.author.id
         for r in ('🔓', '🔒'): await statusMessage.add_reaction(r)
         result = await bot.wait_for('reaction_add', check=lockedOut)
@@ -705,6 +706,7 @@ async def _schedule(ctx, *, desiredDate=None):
         if int(f'{today:%w}') != 5: contentLog.append(f'ℹClasses are not in session during the date you provided ({desiredDate:%A, %B %d}), so the next date with classes ({date:%A, %B %d}) will be displayed') #If it's not Friday
         else: contentLog.append(f"ℹThis school week is over, so the next date with classes ({date:%A, %B %d}) will be displayed") #If it's friday - this may get passed from 'if not desiredDate'
     lastInitial = schedule[-1] #Last initial of user
+    schedule = copy.deepcopy(schedule)
     schedule.pop(-1) #Remove the last initial since it's not part of the schedule and was simply placed there for convenience
     letters = 'PANTHERS'
     onlineLetters = 'PAHE' if lastInitial.lower() > 'k' else 'NTRS'
@@ -752,8 +754,79 @@ async def _schedule(ctx, *, desiredDate=None):
         embed.add_field(name=f'{classStatus()}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
             value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1]) else ""}', inline=False)
     return await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
-    
-    
+
+@commands.guild_only()
+@bot.command()
+async def data(ctx):
+    def accept(r, u): return str(r) == '✅' and u.id == ctx.author.id and r.message.id == requestMessage.id
+    requestMessage = await ctx.send('React ✅ to confirm that you would like me to DM you a zip file of all applicable data I store regarding you')
+    await requestMessage.add_reaction('✅')
+    await bot.wait_for('reaction_add', check=accept)
+    if not ctx.author.dm_channel: await ctx.author.create_dm()
+    ctx.channel = ctx.author.dm_channel
+    statusMessage = await ctx.send(f'•You will be sent a .zip file containing all relevant data involving you for each server, with directories containing relevant data from that server stored as .json files\n•If you have Administrator permissions in a server, one of the .json files will be the entire database entry for your server\n•You will also receive a .json containing your global user data (independent of server-specific data)\n\n{loading}Processing data...')
+    await requestMessage.edit(content=None, embed=discord.Embed(description=f'[Click to jump to the DM I just sent you]({statusMessage.jump_url})'))
+    def convertToFilename(string):
+        export = ''
+        illegalCharList = [c for c in '#%&\{\}\\<>*?/$!\'":@+`|=']
+        for char in string:
+            if char not in illegalCharList: 
+                if char != ' ': export += char
+                else: export += '-'
+        return export
+    def serializeJson(o):
+        if type(o) is datetime.datetime: return o.isoformat()
+    basePath = f'Attachments/Temp/{ctx.message.id}'
+    os.makedirs(basePath)
+    userData = (await database.GetUser(ctx.author))
+    userData.pop('_id')
+    dataToWrite = json.dumps(userData, indent=4, default=serializeJson)
+    with open(f'{basePath}/{f"{convertToFilename(str(ctx.author))} - UserData"}.json', 'w+') as f:
+        f.write(dataToWrite)
+    for server in [g for g in bot.guilds if ctx.author in g.members]:
+        member = [m for m in server.members if m.id == ctx.author.id][0]
+        serverPath = f'{basePath}/{convertToFilename(server.name)}'
+        if any(role.permissions.administrator for role in member.roles) or server.owner.id == member.id:
+            try: os.makedirs(serverPath)
+            except FileExistsError: pass
+            serverData = (await database.GetServer(server))
+            serverData.pop('_id')
+            dataToWrite = json.dumps(serverData, indent=4, default=serializeJson)
+            with open(f'{serverPath}/ServerDatabaseEntry.json', 'w+') as f:
+                f.write(dataToWrite)
+        dataToWrite = json.dumps(await database.GetMember(member), indent=4, default=serializeJson)
+        with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
+            f.write(dataToWrite)
+        try: 
+            os.makedirs(f'{serverPath}/MessageIndexes')
+            os.makedirs(f'{serverPath}/MessageAttachments')
+        except FileExistsError: pass
+        for channel in server.text_channels:
+            with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
+            memberIndexData = {}
+            for k, v in indexData.items():
+                if v['author0'] == member.id: 
+                    memberIndexData.update({k: v})
+                    try: 
+                        shutil.copytree(f'Attachments/{server.id}/{channel.id}/{int(k)}', f'{serverPath}/MessageAttachments/{channel.id}')
+                        os.replace(f'{serverPath}/MessageAttachments/{channel.id}', f'{serverPath}/MessageAttachments/{convertToFilename(channel.name)}')
+                    except FileNotFoundError: pass
+            if len(memberIndexData) > 0:
+                with open(f'{serverPath}/MessageIndexes/{convertToFilename(channel.name)}.json', 'w+') as f:
+                    f.write(json.dumps(memberIndexData, indent=4))
+    readMe = f'Directory Format\n\nDisguardUserDataRequest [Timestamp]\n|-- UserData.json --> Contains the database entry for your global data, not specific to a server\n|-- 📁[Server name] --> Contains the data for this server'
+    readMe += f'\n|--|-- ServerDatabaseEntry.json --> If you are an administrator of this server, this will be a file containing the database entry for this server\n|--|-- Server-MemberInfo.json --> Contains your server-indepedent data entry for this server'
+    readMe += f'\n|--|-- 📁MessageIndexes --> Folder containing message indexes authored by you for this server\n|--|--|-- [channel name].json --> File containing message indexes authored by you for this channel'
+    readMe += f'\n|--|-- 📁MessageAttachments --> Folder containing logged attachments authored by you for this server - folder of channel names\n|--|--|-- 📁[Channel Name] --> Message attachments by you for this channel\n|--|--|--|-- 📁[Message ID] --> Folder containing list of attachments to this message'
+    readMe += '\n\nThis readME is also saved just inside of the zipped folder. If you do not have a code editor to open .json files and make them look nice, web browsers can open them (drag into new tab area or use ctrl + o in your web browser), along with Notepad or Notepad++ (or any text editor)\n\nA guide on how to interpret the data fields will be available soon on my website'
+    import codecs
+    with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
+        f.write(readMe)
+    fileName = f'{basePath}/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=bot.lightningLogging[ctx.guild.id]["offset"])):%m-%b-%Y %I %M %p}'
+    shutil.make_archive(fileName, 'zip', basePath)
+    fl = discord.File(f'{fileName}.zip')
+    await statusMessage.delete()
+    await ctx.send(content=f'```{readMe}```', file=fl)
 
 @commands.is_owner()
 @bot.command()

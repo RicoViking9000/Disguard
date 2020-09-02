@@ -13,6 +13,7 @@ import psutil
 import cpuinfo
 import typing
 import json
+import shutil
 
 bot = None
 serverPurge = {}
@@ -280,6 +281,7 @@ class Cyberlog(commands.Cog):
         print('Synchronizing Database')
         global lightningLogging
         global lightningUsers
+        await database.Verification(self.bot)
         async for s in await database.GetAllServers():
             self.bot.lightningLogging[s['server_id']] = s
             lightningLogging[s['server_id']] = s
@@ -294,7 +296,6 @@ class Cyberlog(commands.Cog):
         print('Deleting attachments that are old')
         time = datetime.datetime.now()
         try:
-            await database.Verification(self.bot)
             removal=[]
             outstandingTempFiles = os.listdir(tempDir)
             for server in self.bot.guilds:
@@ -311,7 +312,7 @@ class Cyberlog(commands.Cog):
                 try: os.removedirs(path)
                 except Exception as e: print(f'Attachment Deletion fail: {e}')
             for fl in outstandingTempFiles:
-                try: os.remove(os.path.join(tempDir, fl))
+                try: shutil.rmtree((os.path.join(tempDir, fl)))
                 except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
             print('Removed {} attachments in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
         except Exception as e: print('Fail: {}'.format(e))
@@ -1728,6 +1729,7 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="New username",value=after.name)
             await updateLastActive(after, datetime.datetime.now(), 'updated their username')
             asyncio.create_task(database.AppendUsernameHistory(after))
+            asyncio.create_task(database.VerifyUser(membObj, bot))
         if len(titles) == 3: embed.title = f"👤{''.join(titleEmoji)}✏User's {', '.join(titles)} updated"
         else: embed.title = f"👤{''.join(titleEmoji)}✏User's {' & '.join(titles)} updated"
         embed.set_footer(text=f'User ID: {after.id}')
@@ -1743,7 +1745,6 @@ class Cyberlog(commands.Cog):
                     msg = await (await database.GetLogChannel(server, "member")).send(embed=embed)
                     await VerifyLightningLogs(msg, 'member')
             except: pass
-        await database.VerifyUser(membObj, bot)
         for s in servers: asyncio.create_task(database.VerifyServer(s, bot))
 
     @commands.Cog.listener()
