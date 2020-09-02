@@ -143,6 +143,7 @@ class Cyberlog(commands.Cog):
         self.invites = {}
         self.rawMessages = {}
         self.pauseDelete = []
+        self.resumeToken = None
         self.summarize.start()
         self.DeleteAttachments.start()
         self.trackChanges.start()
@@ -155,12 +156,11 @@ class Cyberlog(commands.Cog):
     async def trackChanges(self):
         global lightningUsers
         global lightningLogging
-        token = None
         while True:
             try:
-                async with database.getDatabase().watch(full_document='updateLookup', resume_after = token) as change_stream:
+                async with database.getDatabase().watch(full_document='updateLookup', resume_after = self.resumeToken) as change_stream:
                     async for change in change_stream:
-                        token = change_stream.resume_token
+                        self.resumeToken = change_stream.resume_token
                         if change['operationType'] == 'delete': 
                             print(f"{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}")
                             continue
@@ -316,7 +316,9 @@ class Cyberlog(commands.Cog):
                 except Exception as e: print(f'Attachment Deletion fail: {e}')
             for fl in outstandingTempFiles:
                 try: shutil.rmtree((os.path.join(tempDir, fl)))
-                except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
+                except:
+                    try: os.remove(os.path.join(tempDir, fl))
+                    except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
             print('Removed {} attachments in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
         except Exception as e: print('Fail: {}'.format(e))
     
