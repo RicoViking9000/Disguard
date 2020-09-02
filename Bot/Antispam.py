@@ -27,13 +27,7 @@ class Antispam(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
-        self.updateMembers.start()
         self.checkTimedEvents.start()
-
-    @tasks.loop(minutes=6)
-    async def updateMembers(self):
-        if self.updateMembers.current_loop == 0: await asyncio.sleep(120)
-        await PrepareMembers(self.bot)
 
     @tasks.loop(minutes=15)
     async def checkTimedEvents(self):
@@ -69,8 +63,8 @@ class Antispam(commands.Cog):
 
 
     async def filterAntispam(self, message: discord.Message, spam):
-        try: person = copy.deepcopy(members).get(f'{message.guild.id}_{message.author.id}')
-        except AttributeError: return
+        try: person = [m for m in self.bot.lightningLogging[message.guild.id]['members'] if m['id'] == message.author.id][0]
+        except: return
         if not person: return
 
         '''IMPLEMENT QUICKMESSAGE/LASTMESSAGE MESSAGE ARRAYS'''
@@ -595,8 +589,9 @@ async def PrepareMembers(bot: commands.Bot):
     global members
     for server in bot.guilds:
         try:
-            for m in Cyberlog.lightningLogging.get(server.id).get('members'): members[f'{server.id}_{m.get("id")}'] = m
+            for m in bot.lightningLogging.get(server.id).get('members'): members[f'{server.id}_{m.get("id")}'] = m
         except Exception as e: print(f'Passing - {e}')
+    print(members)
 
 def setup(bot):
     bot.add_cog(Antispam(bot))
