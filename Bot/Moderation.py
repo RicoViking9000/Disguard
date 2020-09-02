@@ -7,6 +7,7 @@ import asyncio
 import os
 import traceback
 import copy
+import json
 
 filters = {}
 loading = None
@@ -69,6 +70,7 @@ class Moderation(commands.Cog):
         except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
         await status.edit(content=f'{member.name} is now unlocked and can access channels again.{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
 
+    @commands.guild_only()
     @commands.command()
     async def purge(self, ctx, *args):
         '''Purge messages'''
@@ -79,7 +81,6 @@ class Moderation(commands.Cog):
             return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
             #await ctx.send('Temporarily bypassing permission restrictions')
         if len(args) < 1:
-            #return await ctx.send('Please refer to my help site for usage. THis is a placeholder message; interactive command will be out soon')
             timeout=discord.Embed(title='Purge command',description='Timed out')
             path = 'Indexes/{}/{}'
             cancel=discord.Embed(title='Purge command',description='Cancelled')
@@ -107,7 +108,9 @@ class Moderation(commands.Cog):
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
-            counts = [len(os.listdir(path.format(channel.guild.id, channel.id))) for channel in channels]
+            counts = []
+            for channel in channels:
+                with open(f'Indexes/{channel.guild.id}/{channel.id}.json') as f: counts.append(len(json.load(f).keys()))
             total = sum(counts)
             current.channel=channels
             embed.description='Ok cool, {} for a total of {} messages BTW.\n\nWould you like me to index the channel(s) you selected to let you know how many messages match your filters as we progress through setup? This may take a long time if the channel(s) has/have lots of messages. If it takes longer than 5 minutes, I\'ll tag you when I\'m done. Type `yes` or `no`'.format(', '.join(['{} has {} posts'.format(channels[c].mention, counts[c]) for c in range(len(channels))]), total)
