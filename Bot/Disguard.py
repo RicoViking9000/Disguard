@@ -794,13 +794,13 @@ async def data(ctx):
             dataToWrite = json.dumps(serverData, indent=4, default=serializeJson)
             with open(f'{serverPath}/ServerDatabaseEntry.json', 'w+') as f:
                 f.write(dataToWrite)
-        dataToWrite = json.dumps(await database.GetMember(member), indent=4, default=serializeJson)
-        with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
-            f.write(dataToWrite)
         try: 
             os.makedirs(f'{serverPath}/MessageIndexes')
             os.makedirs(f'{serverPath}/MessageAttachments')
         except FileExistsError: pass
+        dataToWrite = json.dumps(await database.GetMember(member), indent=4, default=serializeJson)
+        with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
+            f.write(dataToWrite)
         for channel in server.text_channels:
             with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
             memberIndexData = {}
