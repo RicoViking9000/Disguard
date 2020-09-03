@@ -196,6 +196,7 @@ class Cyberlog(commands.Cog):
                 else: asyncio.create_task(self.synchronizeDatabase())
                 await self.bot.get_cog('Birthdays').updateBirthdays()
             for g in self.bot.guilds:
+                started = datetime.datetime.now()
                 try:
                     generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, True), await database.CalculateAnnouncementsChannel(g, True), await database.CalculateModeratorChannel(g, True)
                     print(f'{g.name}\n -general channel: {generalChannel}\n -announcements channel: {announcementsChannel}\n -moderator channel: {moderatorChannel}')
@@ -266,6 +267,11 @@ class Cyberlog(commands.Cog):
                 except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
                 except Exception as e: print(f'Invite management error: Server {g.name}\n{e}')
                 print(f'Invite management done in {(datetime.datetime.now() - started).seconds}s')
+            if self.summarize.current_loop % 4 == 0:
+                if self.summarize.current_loop == 0:
+                    started = datetime.datetime.now()   
+                    asyncio.create_task(database.Verification(self.bot))
+                    print(f'Full post-verification done in {(datetime.datetime.now() - started).seconds}s')
             started = datetime.datetime.now()                
             memberList = self.bot.get_all_members()
             await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in memberList if m.status != discord.Status.offline])               
@@ -284,7 +290,6 @@ class Cyberlog(commands.Cog):
         print('Synchronizing Database')
         global lightningLogging
         global lightningUsers
-        await database.Verification(self.bot)
         async for s in await database.GetAllServers():
             self.bot.lightningLogging[s['server_id']] = s
             lightningLogging[s['server_id']] = s
