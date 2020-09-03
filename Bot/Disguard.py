@@ -683,7 +683,7 @@ async def _schedule(ctx, *, desiredDate=None):
     except: statusMessage = await ctx.send(f'{loading}Building schedule...')
     contentLog = []
     firstDay = datetime.date(2020, 8, 31) #First day of classes
-    noClasses = ['09-23', '10-12', '10-14', '10-30', '11-25', '11-26', '11-27'] #list of days when there aren't classes - MM-DD
+    noClasses = ['09-07', '09-23', '10-12', '10-14', '10-30', '11-25', '11-26', '11-27'] #list of days when there aren't classes - MM-DD
     today = datetime.date.today()
     if not desiredDate:
         desiredDate = today
@@ -809,7 +809,7 @@ async def data(ctx):
                     memberIndexData.update({k: v})
                     try: 
                         shutil.copytree(f'Attachments/{server.id}/{channel.id}/{int(k)}', f'{serverPath}/MessageAttachments/{channel.id}')
-                        os.replace(f'{serverPath}/MessageAttachments/{channel.id}', f'{serverPath}/MessageAttachments/{convertToFilename(channel.name)}')
+                        os.rename(f'{serverPath}/MessageAttachments/{channel.id}', f'{serverPath}/MessageAttachments/{convertToFilename(channel.name)}')
                     except FileNotFoundError: pass
             if len(memberIndexData) > 0:
                 with open(f'{serverPath}/MessageIndexes/{convertToFilename(channel.name)}.json', 'w+') as f:

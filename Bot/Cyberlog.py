@@ -14,6 +14,7 @@ import cpuinfo
 import typing
 import json
 import shutil
+import aiohttp
 
 bot = None
 serverPurge = {}
@@ -211,7 +212,7 @@ class Cyberlog(commands.Cog):
                                     if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
                                         asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                                         updates.append('status')
-                                except AttributeError: pass
+                                except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError): pass
                                 except (TypeError, IndexError): 
                                     asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                                     updates.append('status')
@@ -220,7 +221,7 @@ class Cyberlog(commands.Cog):
                         if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
                             asyncio.create_task(database.AppendUsernameHistory(m))
                             updates.append('username')
-                    except AttributeError: pass
+                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError): pass
                     except (TypeError, IndexError):
                         asyncio.create_task(database.AppendUsernameHistory(m))
                         updates.append('username')
@@ -234,7 +235,7 @@ class Cyberlog(commands.Cog):
                             asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
                             if os.path.exists(savePath): os.remove(savePath)
                             updates.append('avatar')
-                    except (AttributeError, discord.HTTPException): pass
+                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError): pass
                     except (TypeError, IndexError):
                         try:
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
