@@ -809,7 +809,7 @@ async def data(ctx):
                     memberIndexData.update({k: v})
                     try: 
                         shutil.copytree(f'Attachments/{server.id}/{channel.id}/{int(k)}', f'{serverPath}/MessageAttachments/{channel.id}')
-                        os.rename(f'{serverPath}/MessageAttachments/{channel.id}', f'{serverPath}/MessageAttachments/{convertToFilename(channel.name)}')
+                        os.replace(f'{serverPath}/MessageAttachments/{channel.id}', f'{serverPath}/MessageAttachments/{convertToFilename(channel.name)}')
                     except FileNotFoundError: pass
             if len(memberIndexData) > 0:
                 with open(f'{serverPath}/MessageIndexes/{convertToFilename(channel.name)}.json', 'w+') as f:
