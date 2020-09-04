@@ -18,6 +18,7 @@ import inspect
 import typing
 import json
 import copy
+import codecs
 import shutil
 
 
@@ -683,7 +684,7 @@ async def _schedule(ctx, *, desiredDate=None):
     except: statusMessage = await ctx.send(f'{loading}Building schedule...')
     contentLog = []
     firstDay = datetime.date(2020, 8, 31) #First day of classes
-    noClasses = ['09-07', '09-23', '10-12', '10-14', '10-30', '11-25', '11-26', '11-27'] #list of days when there aren't classes - MM-DD
+    noClasses = ['09-04', '09-07', '09-23', '10-12', '10-14', '10-30', '11-25', '11-26', '11-27'] #list of days when there aren't classes - MM-DD
     today = datetime.date.today()
     if not desiredDate:
         desiredDate = today
@@ -755,17 +756,19 @@ async def _schedule(ctx, *, desiredDate=None):
             value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1]) else ""}', inline=False)
     return await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
 
-@commands.guild_only()
 @bot.command()
 async def data(ctx):
-    def accept(r, u): return str(r) == '✅' and u.id == ctx.author.id and r.message.id == requestMessage.id
-    requestMessage = await ctx.send('React ✅ to confirm that you would like me to DM you a zip file of all applicable data I store regarding you')
-    await requestMessage.add_reaction('✅')
-    await bot.wait_for('reaction_add', check=accept)
+    def accept(r, u): return str(r) in ['🇦', '🇧'] and u.id == ctx.author.id and r.message.id == requestMessage.id
+    requestMessage = await ctx.send(f'Data retrieval command: I will gather all of the data I store about you and DM it to you as an archive file\nTo continue, please choose a file format\n{qlf}A - .zip\n{qlf}B - .7z')
+    for reac in ['🇦', '🇧']: await requestMessage.add_reaction(reac)
+    result = await bot.wait_for('reaction_add', check=accept)
+    if str(result[0]) == '🇦': ext = 'zip'
+    else: ext = '7z'
     if not ctx.author.dm_channel: await ctx.author.create_dm()
     ctx.channel = ctx.author.dm_channel
-    statusMessage = await ctx.send(f'•You will be sent a .zip file containing all relevant data involving you for each server, with directories containing relevant data from that server stored as .json files\n•If you have Administrator permissions in a server, one of the .json files will be the entire database entry for your server\n•You will also receive a .json containing your global user data (independent of server-specific data)\n\n{loading}Processing data...')
-    await requestMessage.edit(content=None, embed=discord.Embed(description=f'[Click to jump to the DM I just sent you]({statusMessage.jump_url})'))
+    statusMessage = await ctx.send(f'•You will be sent a .{ext} file containing all relevant data involving you for each server, with directories containing relevant data from that server stored as .json files\n•If you have Administrator permissions in a server, one of the .json files will be the entire database entry for your server\n•You will also receive a .json containing your global user data (independent of server-specific data)\n\n{loading}Processing data...')
+    if not ctx.guild: await requestMessage.delete()
+    else: await requestMessage.edit(content=None, embed=discord.Embed(description=f'[Click to jump to the DM I just sent you]({statusMessage.jump_url})'))
     def convertToFilename(string):
         export = ''
         illegalCharList = [c for c in '#%&\{\}\\<>*?/$!\'":@+`|=']
@@ -781,11 +784,13 @@ async def data(ctx):
     userData = (await database.GetUser(ctx.author))
     userData.pop('_id')
     dataToWrite = json.dumps(userData, indent=4, default=serializeJson)
+    attachmentCount = 0
     with open(f'{basePath}/{f"{convertToFilename(str(ctx.author))} - UserData"}.json', 'w+') as f:
         f.write(dataToWrite)
     for server in [g for g in bot.guilds if ctx.author in g.members]:
         member = [m for m in server.members if m.id == ctx.author.id][0]
         serverPath = f'{basePath}/{convertToFilename(server.name)}'
+        os.makedirs(f'{serverPath}/MessageAttachments')
         if any(role.permissions.administrator for role in member.roles) or server.owner.id == member.id:
             try: os.makedirs(serverPath)
             except FileExistsError: pass
@@ -794,10 +799,6 @@ async def data(ctx):
             dataToWrite = json.dumps(serverData, indent=4, default=serializeJson)
             with open(f'{serverPath}/ServerDatabaseEntry.json', 'w+') as f:
                 f.write(dataToWrite)
-        try: 
-            os.makedirs(f'{serverPath}/MessageIndexes')
-            os.makedirs(f'{serverPath}/MessageAttachments')
-        except FileExistsError: pass
         dataToWrite = json.dumps(await database.GetMember(member), indent=4, default=serializeJson)
         with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
             f.write(dataToWrite)
@@ -806,28 +807,67 @@ async def data(ctx):
             memberIndexData = {}
             for k, v in indexData.items():
                 if v['author0'] == member.id: 
+                    try: os.makedirs(f'{serverPath}/MessageIndexes')
+                    except FileExistsError: pass
                     memberIndexData.update({k: v})
-                    try: 
-                        shutil.copytree(f'Attachments/{server.id}/{channel.id}/{int(k)}', f'{serverPath}/MessageAttachments/{channel.id}')
-                        try: os.replace(f'{serverPath}/MessageAttachments/{channel.id}', f'{serverPath}/MessageAttachments/{convertToFilename(channel.name)}')
-                        except (PermissionError, FileExistsError): pass
+                    try:
+                        aPath = f'Attachments/{server.id}/{channel.id}/{k}'
+                        attachment += len(os.listdir(aPath))
                     except FileNotFoundError: pass
             if len(memberIndexData) > 0:
                 with open(f'{serverPath}/MessageIndexes/{convertToFilename(channel.name)}.json', 'w+') as f:
                     f.write(json.dumps(memberIndexData, indent=4))
-    readMe = f'Directory Format\n\nDisguardUserDataRequest [Timestamp]\n|-- UserData.json --> Contains the database entry for your global data, not specific to a server\n|-- 📁[Server name] --> Contains the data for this server'
-    readMe += f'\n|--|-- ServerDatabaseEntry.json --> If you are an administrator of this server, this will be a file containing the database entry for this server\n|--|-- Server-MemberInfo.json --> Contains your server-indepedent data entry for this server'
-    readMe += f'\n|--|-- 📁MessageIndexes --> Folder containing message indexes authored by you for this server\n|--|--|-- [channel name].json --> File containing message indexes authored by you for this channel'
-    readMe += f'\n|--|-- 📁MessageAttachments --> Folder containing logged attachments authored by you for this server - folder of channel names\n|--|--|-- 📁[Channel Name] --> Message attachments by you for this channel\n|--|--|--|-- 📁[Message ID] --> Folder containing list of attachments to this message'
-    readMe += '\n\nThis readME is also saved just inside of the zipped folder. If you do not have a code editor to open .json files and make them look nice, web browsers can open them (drag into new tab area or use ctrl + o in your web browser), along with Notepad or Notepad++ (or any text editor)\n\nA guide on how to interpret the data fields will be available soon on my website'
-    import codecs
+        with codecs.open(f'{serverPath}/MessageAttachments/README.TXT', 'w+', 'utf-8-sig') as f: 
+            f.write(f"I also have {attachmentCount} file attachments on file that you've uploaded, but I can't attach them due to the 8MB file size limit. If you would like to receive these files, contact my developer (RicoViking9000#2395) in one of the following ways:\n{qlf}•Use the `invite` command to join my support server\n{qlf}•Use the `ticket` command to get in direct contact with my developer through the Ticket System\n{qlf}•If you share a server with my developer, you may DM him - but he won\'t accept random friend requests from users sharing no servers with him'")
+    readMe = f'Directory Format\n\nDisguardUserDataRequest_[Timestamp]\n|-- 📄UserData.json --> Contains the database entry for your global data, not specific to a server\n|-- 📁[Server name] --> Contains the data for this server'
+    readMe += f'\n|-- |-- 📄ServerDatabaseEntry.json --> If you are an administrator of this server, this will be a file containing the database entry for this server\n|-- |-- 📄Server-MemberInfo.json --> Contains your server-indepedent data entry for this server'
+    readMe += f'\n|-- |-- 📁MessageIndexes --> Folder containing message indexes authored by you for this server\n|-- |-- |-- 📄[channel name].json --> File containing message indexes authored by you for this channel'
+    readMe += f'\n|-- |-- 📁MessageAttachments --> Folder containing a ReadMe file explaining how to obtain message attachment data'
+    readMe += '\n\nThis readME is also saved just inside of the zipped folder. If you do not have a code editor to open .json files and make them look nice, web browsers can open them (drag into new tab area or use ctrl + o in your web browser), along with Notepad or Notepad++ (or any text editor)\n\nA guide on how to interpret the data fields will be available soon on my website. In the meantime, if you have a question about any of the data, contact my developer through the `ticket` command or ask in my support server (`invite` command)'
     with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
         f.write(readMe)
-    fileName = f'{basePath}/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=bot.lightningLogging[ctx.guild.id]["offset"])):%m-%b-%Y %I %M %p}'
-    shutil.make_archive(fileName, 'zip', basePath)
-    fl = discord.File(f'{fileName}.zip')
+    fileName = f'Attachments/Temp/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=bot.lightningLogging[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find(str(loading))] + f'{loading}Zipping data...')
+    import py7zr
+    shutil.register_archive_format('7zip', py7zr.pack_7zarchive, description='7zip archive')
+    shutil.make_archive(fileName, '7zip' if ext == '7z' else 'zip', basePath)
+    fl = discord.File(f'{fileName}.{ext}')
     await statusMessage.delete()
     await ctx.send(content=f'```{readMe}```', file=fl)
+
+@commands.is_owner()
+@bot.command()
+async def retrieveAttachments(ctx, user: discord.User):
+    statusMessage = await ctx.send(f'{loading}Retrieving attachments for {user.name}')
+    basePath = f'Attachments/Temp/{ctx.message.id}'
+    def convertToFilename(string):
+        export = ''
+        illegalCharList = [c for c in '#%&\{\}\\<>*?/$!\'":@+`|=']
+        for char in string:
+            if char not in illegalCharList: 
+                if char != ' ': export += char
+                else: export += '-'
+        return export
+    for server in [g for g in bot.guilds if ctx.author in g.members]:
+        serverPath = f'{basePath}/MessageAttachments/{convertToFilename(server.name)}'
+        for channel in server.text_channels:
+            with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
+            channelPath = f'{serverPath}/{convertToFilename(channel.name)}'
+            for k, v in indexData.items():
+                if v['author0'] == user.id: 
+                    try: 
+                        aPath = f'Attachments/{server.id}/{channel.id}/{k}'
+                        for attachment in os.listdir(aPath):
+                            try: os.makedirs(channelPath)
+                            except FileExistsError: pass
+                            savedFile = shutil.copy2(f'{aPath}/{attachment}', channelPath)
+                            os.replace(savedFile, f'{channelPath}/{k}_{attachment}')
+                    except FileNotFoundError: pass
+    with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
+        f.write(f"📁MessageAttachments --> Master Folder\n|-- 📁[Server Name] --> Folder of channel names in this server\n|-- |-- 📁[Channel Name] --> Folder of message attachments sent by you in this channel in the following format: MessageID_AttachmentName.xxx\n\nWhy are message attachments stored? Solely for the purposes of message deletion logging. Additionally, attachment storing is a per-server basis, and will only be done if the moderators of the server choose to tick 'Log images and attachments that are deleted' on the web dashboard. If a message containing an attachment is sent in a channel, I attempt to save the attachment, and if a message containing an attachment is deleted, I attempt to retrieve the attachment - which is then permanently deleted from my records.")
+    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(datetime.datetime.utcnow() + datetime.timedelta(hours=bot.lightningLogging[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    shutil.make_archive(fileName, 'zip', basePath)
+    await statusMessage.edit(content=f'{os.path.abspath(fileName)}.zip')
 
 @commands.is_owner()
 @bot.command()
