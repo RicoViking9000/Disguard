@@ -214,7 +214,7 @@ class Cyberlog(commands.Cog):
                                     if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
                                         asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                                         updates.append('status')
-                                except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError): pass
+                                except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
                                 except (TypeError, IndexError): 
                                     asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                                     updates.append('status')
@@ -223,7 +223,7 @@ class Cyberlog(commands.Cog):
                         if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
                             asyncio.create_task(database.AppendUsernameHistory(m))
                             updates.append('username')
-                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError): pass
+                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
                     except (TypeError, IndexError):
                         asyncio.create_task(database.AppendUsernameHistory(m))
                         updates.append('username')
@@ -237,7 +237,7 @@ class Cyberlog(commands.Cog):
                             asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
                             if os.path.exists(savePath): os.remove(savePath)
                             updates.append('avatar')
-                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError): pass
+                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
                     except (TypeError, IndexError):
                         try:
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
@@ -255,18 +255,18 @@ class Cyberlog(commands.Cog):
                 started = datetime.datetime.now()
                 for c in g.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
-                    except discord.Forbidden: pass
+                    except (discord.Forbidden, aiohttp.client_exceptions.ClientOSError): pass
                 for c in g.categories:
                     try: self.categories[c.id] = c.channels
-                    except discord.Forbidden: pass
+                    except (discord.Forbidden, aiohttp.client_exceptions.ClientOSError): pass
                 try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
-                except discord.Forbidden: pass
+                except (discord.Forbidden, aiohttp.client_exceptions.ClientOSError): pass
                 print(f'Channel management done in {(datetime.datetime.now() - started).seconds}s')
                 started = datetime.datetime.now()
                 try:
                     self.invites[str(g.id)] = (await g.invites())
                     try: self.invites[str(g.id)+"_vanity"] = (await g.vanity_invite())
-                    except discord.HTTPException: pass
+                    except (discord.HTTPException, aiohttp.client_exceptions.ClientOSError): pass
                 except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
                 except Exception as e: print(f'Invite management error: Server {g.name}\n{e}')
                 print(f'Invite management done in {(datetime.datetime.now() - started).seconds}s')

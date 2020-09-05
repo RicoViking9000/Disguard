@@ -65,23 +65,30 @@ class Birthdays(commands.Cog):
             for server in self.bot.guilds:
                 tz = Cyberlog.timeZone(server)
                 initial = started + datetime.timedelta(hours=tz)
-                channel = await database.GetBirthday(server)
+                try: channel = self.bot.lightningLogging[server.id]['birthday']
+                except KeyError: continue
                 if channel > 0:
-                    if (initial.strftime('%H:%M') == (await database.GetBirthdate(server)).strftime('%H:%M')):
-                        for member in server.members:
-                            bday = await database.GetMemberBirthday(member)
-                            if bday is not None:
-                                if bday.strftime('%m%d') == initial.strftime('%m%d'):
-                                    print(f'Announcing birthday for {member.name}')
-                                    messages = [a for a in await database.GetBirthdayMessages(member) if server.id in a.get('servers')]
-                                    newline = '\n'
-                                    messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m).name}: {m['message']}" for m in messages])}'''
-                                    if member.id == 247412852925661185: toSend = f"🍰🎊🍨🎈 Greetings {server.name}! It's my developer {member.mention}'s birthday!! Let's wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ''}"
-                                    else: toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
-                                    try: 
-                                        m = await self.bot.get_channel(channel).send(toSend)
-                                        await m.add_reaction('🍰')
-                                    except discord.Forbidden as e: print(f'Birthdays error - server: {e}')
+                    try:
+                        if (initial.strftime('%H:%M') == self.bot.lightningLogging[server.id]['birthdate'].strftime('%H:%M')):
+                            for member in server.members:
+                                try:
+                                    bday = self.bot.lightningUsers[member.id]['birthday']
+                                    if bday is not None:
+                                        if bday.strftime('%m%d') == initial.strftime('%m%d'):
+                                            print(f'Announcing birthday for {member.name}')
+                                            try:
+                                                messages = [a for a in self.bot.lightningUsers[member.id]['birthdayMessages'] if server.id in a['servers']]
+                                                newline = '\n'
+                                                messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m).name}: {m['message']}" for m in messages])}'''
+                                                if member.id == 247412852925661185: toSend = f"🍰🎊🍨🎈 Greetings {server.name}! It's my developer {member.mention}'s birthday!! Let's wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ''}"
+                                                else: toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
+                                                try: 
+                                                    m = await self.bot.get_channel(channel).send(toSend)
+                                                    await m.add_reaction('🍰')
+                                                except discord.Forbidden as e: print(f'Birthdays error - server: {e}')
+                                            except KeyError: pass
+                                except KeyError: continue
+                    except KeyError: pass
         except: traceback.print_exc()
 
     @tasks.loop(hours=24)
