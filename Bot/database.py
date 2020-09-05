@@ -228,7 +228,7 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
     'birthday': None if current is None or current.get('birthday') is None else current.get('birthday'),
     'wishList': [] if current is None or current.get('wishList') is None else current.get('wishList'),
     "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
-    print(f'Verified User {u.name} in {(datetime.datetime.now() - started).seconds}s')
+    print(f'Verified User {m.name} in {(datetime.datetime.now() - started).seconds}s')
 
 async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
