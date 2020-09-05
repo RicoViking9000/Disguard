@@ -77,6 +77,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
+    started = datetime.datetime.now()
     serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
         await servers.delete_one({'server_id': s.id})
@@ -204,6 +205,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
                 }}, upsert=True)
             except: pass
         else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': member.get('id')}}})
+    print(f'Verified Server {s.name} in {(datetime.datetime.now() - started).seconds}s')
     return (serv.get('name'), serv.get('server_id'))
 
 async def VerifyUsers(b: commands.Bot):
@@ -214,6 +216,7 @@ async def VerifyUsers(b: commands.Bot):
     
 async def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''
+    started = datetime.datetime.now()
     current = await users.find_one({'user_id': m.id})
     if b.get_user(m.id) is None: await users.delete_one({'user_id': m.id})
     else: await users.update_one({"user_id": m.id}, {"$set": { #update database
@@ -225,6 +228,7 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
     'birthday': None if current is None or current.get('birthday') is None else current.get('birthday'),
     'wishList': [] if current is None or current.get('wishList') is None else current.get('wishList'),
     "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
+    print(f'Verified User {u.name} in {(datetime.datetime.now() - started).seconds}s')
 
 async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''

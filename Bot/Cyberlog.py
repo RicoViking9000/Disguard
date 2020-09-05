@@ -347,7 +347,8 @@ class Cyberlog(commands.Cog):
         except FileExistsError: pass
         try:
             with open(f'{path}/{message.channel.id}.json', 'r+') as f: 
-                indexData = json.load(f)
+                try: indexData = json.load(f)
+                except json.JSONDecodeError: indexData = {}
                 indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
         except (FileNotFoundError, PermissionError): 
             indexData = {}

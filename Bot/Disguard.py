@@ -812,7 +812,7 @@ async def data(ctx):
                     memberIndexData.update({k: v})
                     try:
                         aPath = f'Attachments/{server.id}/{channel.id}/{k}'
-                        attachment += len(os.listdir(aPath))
+                        attachmentCount += len(os.listdir(aPath))
                     except FileNotFoundError: pass
             if len(memberIndexData) > 0:
                 with open(f'{serverPath}/MessageIndexes/{convertToFilename(channel.name)}.json', 'w+') as f:
