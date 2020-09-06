@@ -164,6 +164,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(await GetCyberMod(s, 'emoji'))),
         "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(await GetCyberMod(s, 'server'))),
         "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(await GetCyberMod(s, 'voice')))}}},upsert=True)
+    started2 = datetime.datetime.now()
     membDict = {}
     if serv is None: serv = await servers.find_one({'server_id': s.id})
     if serv is not None:
@@ -212,7 +213,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     if bulkUpdates: await servers.bulk_write(bulkUpdates)
     if toRemove: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'$in': [member['id'] for member in toRemove]}}})
     #for member in toUpdate: await servers.update_one({'server_id': s.id, 'members.id': member.id}, {"$set": {'members.$.name': member.name}}, True)
-    print(f'Verified Server {s.name} in {(datetime.datetime.now() - started).seconds}s')
+    print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds}s\n Members only: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     return (serv.get('name'), serv.get('server_id'))
 
 async def VerifyUsers(b: commands.Bot):
