@@ -112,7 +112,7 @@ class Antispam(commands.Cog):
                         try: await message.delete()
                         except discord.Forbidden: pass
                         return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending {aFlag}s in this server', color=0xD2691E), delete_after=15)
-        if not (any(spam.get('attachments')[:-1]) and spam.get('enabled')): return
+        if not (any([spam.get('attachments')[:-1], spam.get('enabled')])): return
         try: lastMessages = person.get("lastMessages")
         except AttributeError: lastMessages = []
         try: quickMessages = person.get("quickMessages")
@@ -141,7 +141,8 @@ class Antispam(commands.Cog):
                     print('Resetting quickmessages for {}, {}'.format(message.author.name, message.guild.name))
             #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
             #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
-            members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
+            #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
+            self.bot.lightningUsers[message.author.id].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
         if spam.get('exclusionMode') == 0:
             if not (message.channel.id in spam.get('channelExclusions') and cRE or message.author.id in spam.get('memberExclusions')): return
         else:
@@ -167,7 +168,8 @@ class Antispam(commands.Cog):
                     flag = True
                     reason.append("Repeated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
                     short.append("Repeated messages")
-                    members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': []})
+                    #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': []})
+                    self.bot.lightningUsers[message.author.id].update({'lastMessages': []})
                     lastMessages = []
                     #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
             if 0 not in spam.get("quickMessages") and len(quickMessages) > 0:
@@ -177,7 +179,8 @@ class Antispam(commands.Cog):
                     flag = True
                     reason.append("Sending too many messages too quickly\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
                     short.append("Spamming messages too fast")
-                    members[f'{message.guild.id}_{message.author.id}'].update({'quickMessages': []})
+                    #members[f'{message.guild.id}_{message.author.id}'].update({'quickMessages': []})
+                    self.bot.lightningUsers[message.author.id].update({'quickMessages': []})
                     quickMessages = []
                     #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         if spam.get('consecutiveMessages')[0] != 0:
@@ -319,9 +322,9 @@ class Antispam(commands.Cog):
                             short.append("Profanity")
             except TypeError: pass
         if not flag:
-            if person != members.get(f'{message.guild.id}_{message.author.id}'):
-                if person.get('lastMessages') != members.get(f'{message.guild.id}_{message.author.id}').get('lastMessages'): asyncio.create_task(database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages))
-                if person.get('quickMessages') != members.get(f'{message.guild.id}_{message.author.id}').get('quickMessages'): asyncio.create_task(database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages))
+            if person != self.bot.lightningUsers[message.author.id]:
+                if person.get('lastMessages') != self.bot.lightningUsers.get('lastMessages'): asyncio.create_task(database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages))
+                if person.get('quickMessages') != self.bot.lightningUsers.get('quickMessages'): asyncio.create_task(database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages))
             return
         await message.channel.trigger_typing()
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
@@ -340,7 +343,8 @@ class Antispam(commands.Cog):
         if person.get("warnings") >= 1:
             try:
                 #await database.UpdateMemberWarnings(message.guild, message.author, person.get("warnings") - 1)
-                members[f'{message.guild.id}_{message.author.id}'].update({'warnings': person.get('warnings') - 1})
+                #members[f'{message.guild.id}_{message.author.id}'].update({'warnings': person.get('warnings') - 1})
+                self.bot.lightningUsers[message.author.id].update({'warnings': person['warnings'] - 1})
                 successful = True
                 warned = True
             except:
@@ -437,7 +441,7 @@ class Antispam(commands.Cog):
                 whispered = 1
         if not spam.get("whisper") or whispered != 2:
             await message.channel.send(embed=shorter)
-        if person.get('warnings') != members.get(f'{message.guild.id}_{message.author.id}').get('warnings'): asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, person.get('warnings') - 1))
+        if person.get('warnings') != self.bot.lightningUsers[message.author.id].get('warnings'): asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, person.get('warnings') - 1))
         if None not in spam.get("log"):
             longer = discord.Embed(title=message.author.name + " was flagged for spam",description=message.author.mention + " was flagged for **" + str(len(short)) + " reasons**, details below",timestamp=datetime.datetime.utcnow(),color=0xFF00FF)
             for a in range(len(reason)):

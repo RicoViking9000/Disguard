@@ -201,8 +201,8 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     toRemove = []
     for member in members:
         def retrieveMember(identification):
-            for m in s.members:
-                if m.id == identification: return m
+            for m in serverMembIDs:
+                if m == identification: return s.get_member(m)
             return None
         serverMember = retrieveMember(member['id'])
         if not serverMember: toRemove.append(member)

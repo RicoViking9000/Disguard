@@ -164,7 +164,7 @@ class Birthdays(commands.Cog):
             bdays = {} #Local storage b/c database operations take time and resources
             if birthday < adjusted: birthday = datetime.datetime(birthday.year + 1, birthday.month, birthday.day)
             for member in target:
-                bdays[member.id] = Cyberlog.lightningUsers.get(member.id).get('birthday')
+                bdays[member.id] = self.bot.lightningUsers.get(member.id).get('birthday')
                 if bdays.get(member.id) is not None:
                     if bdays.get(member.id).strftime('%B %d') == birthday.strftime('%B %d'): target.remove(member)
             if len(target) > 0:
@@ -177,7 +177,7 @@ class Birthdays(commands.Cog):
                 await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple processes for anyone to react to if necessary
         ages = calculateAge(message)
         ages = [a for a in ages if await verifyAge(message, a)]
-        try: currentAge = Cyberlog.lightningUsers.get(message.author.id).get('age')
+        try: currentAge = self.bot.lightningUsers.get(message.author.id).get('age')
         except: currentAge = await database.GetMemberBirthday(message.author) #Use database if local variables aren't available
         try: ages.remove(currentAge) #Remove the user's current age if it's in there
         except ValueError: pass
@@ -214,7 +214,7 @@ class Birthdays(commands.Cog):
             embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), description='{} Fetching information from database...'.format(self.loading), color=yellow, timestamp=datetime.datetime.utcnow())
             embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
             adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-            bday = Cyberlog.lightningUsers.get(ctx.author.id).get('birthday')
+            bday = self.bot.lightningUsers.get(ctx.author.id).get('birthday')
             embed.add_field(name='Your Birthday',value='Unknown' if bday is None else bday.strftime('%a %b %d\n(In {} days)').format((bday - adjusted).days))
             embed.add_field(name='Your Age', value='Unknown' if await database.GetAge(ctx.author) is None else await database.GetAge(ctx.author))
             embed.description = '{} Processing global birthday information...'.format(self.loading)
@@ -223,11 +223,12 @@ class Birthdays(commands.Cog):
             currentServer = []
             disguardSuggest = []
             weekBirthday = []
+            memberIDs = [m.id for m in ctx.guild.members]
             for m in self.bot.users:
                 try:
-                    if m in ctx.guild.members and Cyberlog.lightningUsers.get(m.id).get('birthday') is not None: currentServer.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
-                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1 and (Cyberlog.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
-                    elif Cyberlog.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1: disguardSuggest.append({'data': m, 'bday': Cyberlog.lightningUsers.get(m.id).get('birthday')})
+                    if m in memberIDs and self.bot.lightningUsers.get(m.id).get('birthday') is not None: currentServer.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
+                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1 and (self.bot.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
+                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1: disguardSuggest.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
                 except AttributeError: pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
@@ -265,7 +266,7 @@ class Birthdays(commands.Cog):
             arg = ' '.join(args)
             actionList = []
             age = calculateAge(ctx.message)
-            currentAge = Cyberlog.lightningUsers.get(ctx.author.id).get('age')
+            currentAge = self.bot.lightningUsers.get(ctx.author.id).get('age')
             try: age.remove(currentAge)
             except: pass
             addLater = []
@@ -292,7 +293,7 @@ class Birthdays(commands.Cog):
                     if actionList[0] == ctx.author: await message.add_reaction('ℹ')
                     await message.add_reaction('👮‍♂️')
                     while True:
-                        d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, Cyberlog.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
+                        d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
                         try: r = d.pop().result()
                         except: pass
                         for f in p: f.cancel()
@@ -344,7 +345,7 @@ class Birthdays(commands.Cog):
                 if actionList[0] == ctx.author: await message.add_reaction('ℹ')
                 await message.add_reaction('👮‍♂️')
                 while True:
-                    r = await asyncio.wait([self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, Cyberlog.lightningUsers.get(actionList[index].id).get('birthday'), [actionList[index]], message)], return_when=asyncio.FIRST_COMPLETED)
+                    r = await asyncio.wait([self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[index].id).get('birthday'), [actionList[index]], message)], return_when=asyncio.FIRST_COMPLETED)
                     try: r = d.pop().result()
                     except: pass
                     for f in p: f.cancel()
@@ -475,9 +476,9 @@ async def messageManagement(self, ctx, message, user, groups):
 async def guestBirthdayViewer(self, ctx, target, cake=False):
     '''Displays information about somebody else's profile'''
     adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-    bday = Cyberlog.lightningUsers.get(target.id).get('birthday')
-    age = Cyberlog.lightningUsers.get(target.id).get('age')
-    wishlist = Cyberlog.lightningUsers.get(target.id).get('wishList')
+    bday = self.bot.lightningUsers.get(target.id).get('birthday')
+    age = self.bot.lightningUsers.get(target.id).get('age')
+    wishlist = self.bot.lightningUsers.get(target.id).get('wishList')
     embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 👤 Guest View'.format(target.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 👤 Guest View')), color=yellow, description='**{0:–^70}**\n{1}'.format('WISH LIST', '\n'.join(['• {}'.format(w) for w in wishlist])), timestamp=datetime.datetime.utcnow())
     embed.description+='\n**{0:–^70}**'.format('AVAILABLE OPTIONS')
     embed.description += '{}{}{}'.format('\n🍰 (Anyone except {0}): Write a personal birthday message to {0}'.format(target.name) if not cake else '', 

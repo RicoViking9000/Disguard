@@ -1670,7 +1670,7 @@ class Cyberlog(commands.Cog):
             except: pass
         #halfwayStart = datetime.datetime.now()
         for g in self.bot.guilds:
-            if after in g.members:
+            if after.id in [m.id for m in g.members]:
                 targetServer = g
                 break
         #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
