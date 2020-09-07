@@ -78,7 +78,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
-    started = datetime.datetime.now()
+    #started = datetime.datetime.now()
     serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: 
         await servers.delete_one({'server_id': s.id})
@@ -174,7 +174,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
             'thumbnail': str(s.icon_url),
             'channels': serverChannels,
             'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]}})
-    started2 = datetime.datetime.now()
+    #started2 = datetime.datetime.now()
     membDict = {}
     if serv is None: serv = await servers.find_one({'server_id': s.id})
     if serv is not None:
@@ -223,7 +223,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     if bulkUpdates: await servers.bulk_write(bulkUpdates)
     if toRemove: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'$in': [member['id'] for member in toRemove]}}})
     #for member in toUpdate: await servers.update_one({'server_id': s.id, 'members.id': member.id}, {"$set": {'members.$.name': member.name}}, True)
-    print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds}s\n Members only: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
+    #print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds}s\n Members only: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     return (serv.get('name'), serv.get('server_id'))
 
 async def VerifyUsers(b: commands.Bot):
@@ -234,7 +234,7 @@ async def VerifyUsers(b: commands.Bot):
     
 async def VerifyUser(m: discord.Member, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''
-    started = datetime.datetime.now()
+    #started = datetime.datetime.now()
     current = await users.find_one({'user_id': m.id})
     if b.get_user(m.id) is None: return await users.delete_one({'user_id': m.id})
     if current: await users.update_one({'user_id': m.id}, {'$set': {'username': m.name, 'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon_url)} for server in b.guilds if await DashboardManageServer(server, m)]}})
@@ -248,7 +248,7 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
         'birthday': None,
         'wishList': [],
         "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
-    print(f'Verified User {m.name} in {(datetime.datetime.now() - started).seconds}s')
+    #print(f'Verified User {m.name} in {(datetime.datetime.now() - started).seconds}s')
 
 async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''

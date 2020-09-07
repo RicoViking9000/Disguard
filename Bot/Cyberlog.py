@@ -1669,7 +1669,11 @@ class Cyberlog(commands.Cog):
                 if os.path.exists(savePath): os.remove(savePath)
             except: pass
         #halfwayStart = datetime.datetime.now()
-        targetServer = [g for g in self.bot.guilds if after in g.members][0] #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
+        for g in self.bot.guilds:
+            if after in g.members:
+                targetServer = g
+                break
+        #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
         if before.status != after.status:
             if after.guild.id == targetServer.id:
                 #print(f'{datetime.datetime.now()} Member update - inside of status update for {after.name} in server {after.guild.name}')
