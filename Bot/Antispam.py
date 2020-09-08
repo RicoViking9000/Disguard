@@ -321,7 +321,7 @@ class Antispam(commands.Cog):
                             reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
                             short.append("Profanity")
             except TypeError: pass
-        #if not flag:
+        if not flag: return
         #    if person != self.bot.lightningUsers[message.author.id]:
         #        if person.get('lastMessages') != self.bot.lightningUsers.get('lastMessages'): asyncio.create_task(database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages))
         #        if person.get('quickMessages') != self.bot.lightningUsers.get('quickMessages'): asyncio.create_task(database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages))
