@@ -69,12 +69,12 @@ async def Verification(b: commands.Bot):
     await VerifyUsers(b)
     #await VerifyUsers(b)
 
-async def VerifyServers(b: commands.Bot):
+async def VerifyServers(b: commands.Bot, newOnly = False):
     '''Ensures all servers have database entries; adding and removing as necessary'''
     '''First: Index all bot servers, and verify them'''
     await asyncio.gather(*[VerifyServer(s, b) for s in b.guilds])
 
-async def VerifyServer(s: discord.Guild, b: commands.Bot):
+async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly = False):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
@@ -86,6 +86,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
     spam = None
     log = None
     if serv is not None:
+        if newOnly: return
         spam = serv.get("antispam") #antispam object from database
         log = serv.get("cyberlog") #cyberlog object from database
     #membIDs = [memb.id for memb in s.members]
