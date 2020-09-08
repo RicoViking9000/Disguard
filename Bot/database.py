@@ -108,6 +108,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
         'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
         'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
         "channels": serverChannels,
+        'server_id': s.id,
         "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
         'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
         "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
@@ -181,7 +182,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
             'name': s.name,
             'thumbnail': str(s.icon_url),
             'channels': serverChannels,
-            'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]}}, True)
+            'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]}})
     #started2 = datetime.datetime.now()
     membDict = {}
     if serv is None: serv = await servers.find_one({'server_id': s.id})
