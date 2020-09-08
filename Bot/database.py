@@ -203,38 +203,39 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly = False):
         for member in s.members:
             membersToUpdate.append({'id': member.id, 'name': member.name, 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []})
         await servers.update_one({'server_id': s.id}, {'$set': {'members': membersToUpdate}}, True)
-    if any([m not in databaseMembIDs for m in serverMembIDs]):
+    else:
+        if any([m not in databaseMembIDs for m in serverMembIDs]):
+            toUpdate = []
+            for userID in [m for m in serverMembIDs if m not in databaseMembIDs]:
+                toUpdate.append({'id': userID, 'name': membDict[str(userID)], 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []})
+            await servers.update_one({'server_id': s.id}, {"$push": {'members': { '$each': toUpdate}}}, True)
         toUpdate = []
-        for userID in [m for m in serverMembIDs if m not in databaseMembIDs]:
-            toUpdate.append({'id': userID, 'name': membDict[str(userID)], 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []})
-        await servers.update_one({'server_id': s.id}, {"$push": {'members': { '$each': toUpdate}}}, True)
-    toUpdate = []
-    toRemove = []
-    for member in members:
-        def retrieveMember(identification):
-            for m in serverMembIDs:
-                if m == identification: return s.get_member(m)
-            return None
-        serverMember = retrieveMember(member['id'])
-        if not serverMember: toRemove.append(member)
-        else:
-            if serverMember.name != member['name']: toUpdate.append(serverMember)
-        # if member.get('id') in serverMembIDs:
-        #     try:
-        #         await servers.update_one({'server_id': s.id, 'members.id': member.get('id')}, {"$set": {
-        #             "members.$.id": member.get('id'),
-        #             "members.$.name": membDict.get(str(member.get('id'))),
-        #             "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
-        #             "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
-        #             "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
-        #         }}, upsert=True)
-        #     except: pass
-        # else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': member.get('id')}}})
-    bulkUpdates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': member.id}, {'$set': {'members.$.name': member.name}}) for member in toUpdate]
-    if bulkUpdates: await servers.bulk_write(bulkUpdates)
-    if toRemove: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'$in': [member['id'] for member in toRemove]}}})
-    #for member in toUpdate: await servers.update_one({'server_id': s.id, 'members.id': member.id}, {"$set": {'members.$.name': member.name}}, True)
-    #print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds}s\n Members only: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
+        toRemove = []
+        for member in members:
+            def retrieveMember(identification):
+                for m in serverMembIDs:
+                    if m == identification: return s.get_member(m)
+                return None
+            serverMember = retrieveMember(member['id'])
+            if not serverMember: toRemove.append(member)
+            else:
+                if serverMember.name != member['name']: toUpdate.append(serverMember)
+            # if member.get('id') in serverMembIDs:
+            #     try:
+            #         await servers.update_one({'server_id': s.id, 'members.id': member.get('id')}, {"$set": {
+            #             "members.$.id": member.get('id'),
+            #             "members.$.name": membDict.get(str(member.get('id'))),
+            #             "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
+            #             "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
+            #             "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
+            #         }}, upsert=True)
+            #     except: pass
+            # else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': member.get('id')}}})
+        bulkUpdates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': member.id}, {'$set': {'members.$.name': member.name}}) for member in toUpdate]
+        if bulkUpdates: await servers.bulk_write(bulkUpdates)
+        if toRemove: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'$in': [member['id'] for member in toRemove]}}})
+        #for member in toUpdate: await servers.update_one({'server_id': s.id, 'members.id': member.id}, {"$set": {'members.$.name': member.name}}, True)
+        #print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds}s\n Members only: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     return (serv.get('name'), serv.get('server_id'))
 
 async def VerifyUsers(b: commands.Bot):
