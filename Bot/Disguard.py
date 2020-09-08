@@ -120,7 +120,8 @@ async def indexMessages(server, channel, full=False):
     try: os.makedirs(path)
     except FileExistsError: pass
     path += '.json'
-    saveImages = await database.GetImageLogPerms(server)
+    try: saveImages = await database.GetImageLogPerms(server)
+    except AttributeError: return
     if not os.path.exists(path): 
         with open(path, 'w+') as f: f.write('{}')
     with open(path) as f:
