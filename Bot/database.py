@@ -158,16 +158,24 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
             'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
             'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
             'lastUpdate': datetime.datetime.utcnow() if serv is None or serv.get('lastUpdate') is None else serv.get('lastUpdate'),
-            'modules': [
-                vars(messageContainer),
-                vars(doorguardContainer),
-                vars(channelContainer),
-                vars(memberContainer),
-                vars(roleContainer),
-                vars(emojiContainer),
-                vars(serverContainer),
-                vars(voiceContainer)]
-            }}},upsert=True)
+            "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else vars(LogModule("message", "Send logs when a message is edited or deleted").update(await GetCyberMod(s, 'message'))),
+            "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else vars(LogModule("doorguard", "Send logs when a member joins or leaves server").update(await GetCyberMod(s, 'doorguard'))),
+            "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else vars(LogModule("channel", "Send logs when channel is created, edited, or deleted").update(await GetCyberMod(s, 'channel'))),
+            "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(await GetCyberMod(s, 'member'))),
+            "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted").update(await GetCyberMod(s, 'role'))),
+            "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(await GetCyberMod(s, 'emoji'))),
+            "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(await GetCyberMod(s, 'server'))),
+            "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(await GetCyberMod(s, 'voice')))}}},upsert=True)
+            # 'modules': [
+            #     vars(messageContainer),
+            #     vars(doorguardContainer),
+            #     vars(channelContainer),
+            #     vars(memberContainer),
+            #     vars(roleContainer),
+            #     vars(emojiContainer),
+            #     vars(serverContainer),
+            #     vars(voiceContainer)]
+            #}}},upsert=True)
     else: #only update things that may have changed (on discord's side) if the server already exists; otherwise we're literally putting things back into the variable for no reason
         await servers.update_one({'server_id': s.id}, {"$set": { 
             'name': s.name,
