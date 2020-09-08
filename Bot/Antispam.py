@@ -321,11 +321,11 @@ class Antispam(commands.Cog):
                             reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
                             short.append("Profanity")
             except TypeError: pass
-        if not flag:
-            if person != self.bot.lightningUsers[message.author.id]:
-                if person.get('lastMessages') != self.bot.lightningUsers.get('lastMessages'): asyncio.create_task(database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages))
-                if person.get('quickMessages') != self.bot.lightningUsers.get('quickMessages'): asyncio.create_task(database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages))
-            return
+        #if not flag:
+        #    if person != self.bot.lightningUsers[message.author.id]:
+        #        if person.get('lastMessages') != self.bot.lightningUsers.get('lastMessages'): asyncio.create_task(database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages))
+        #        if person.get('quickMessages') != self.bot.lightningUsers.get('quickMessages'): asyncio.create_task(database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages))
+        #    return
         await message.channel.trigger_typing()
         if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
             return await message.channel.send("I flagged user `" + str(message.author) + "`, but need Manage Role permissions for the current consequence to be given. There are two solutions:\n  •Add the Manage Role permissions to me\n  •Enter your server's web dashboard and change the punishment for being flagged")
