@@ -181,7 +181,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot):
             'name': s.name,
             'thumbnail': str(s.icon_url),
             'channels': serverChannels,
-            'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]}})
+            'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]}}, True)
     #started2 = datetime.datetime.now()
     membDict = {}
     if serv is None: serv = await servers.find_one({'server_id': s.id})
