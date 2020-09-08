@@ -150,7 +150,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly = False):
             'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist'),
             'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents')}, #Bans, mutes, etc
         "cyberlog": {
-            'globalSettings': vars(loggingHome),
+            # 'globalSettings': vars(loggingHome),
             "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
             "image": False if log is None or log.get('image') is None else log.get('enabled'),
             "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
@@ -167,7 +167,8 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly = False):
             "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else vars(LogModule("role", "Send logs when a role is created, edited, or deleted").update(await GetCyberMod(s, 'role'))),
             "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(await GetCyberMod(s, 'emoji'))),
             "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else vars(LogModule("server", "Send logs when server is updated, such as thumbnail").update(await GetCyberMod(s, 'server'))),
-            "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(await GetCyberMod(s, 'voice')))}}},upsert=True)
+            "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else vars(LogModule('voice', "Send logs when members' voice chat attributes change").update(await GetCyberMod(s, 'voice')))
+            }}}, upsert=True)
             # 'modules': [
             #     vars(messageContainer),
             #     vars(doorguardContainer),
