@@ -40,22 +40,27 @@ class Birthdays(commands.Cog):
         print('Checking daily birthday announcements')
         try:
             for member in self.bot.users:
-                bday = await database.GetMemberBirthday(member)
-                if bday is not None:
-                    if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
-                        print(f'DMing {member.name} because it is their birthday')
-                        age = await database.GetAge(member)
-                        if age is not None:
-                            age += 1
-                            await database.SetAge(member, age)
-                        new = datetime.datetime(bday.year + 1, bday.month, bday.day)
-                        await database.SetBirthday(member, new)
-                        messages = await database.GetBirthdayMessages(member)
-                        embed=discord.Embed(title='🍰 Happy {}Birthday, {}! 🍰'.format('{}{}'.format(age, '{} '.format(Cyberlog.suffix(age))) if age is not None else '', member.name), timestamp=datetime.datetime.utcnow(), color=yellow)
-                        if len(messages) > 0: embed.description=f'You have {len(messages)} personal messages that will be sent below this message.'
-                        else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
-                        await member.send(embed=embed)
-                        for m in messages: await member.send(embed=discord.Embed(title=f'Personal Birthday Message from {m.get("authName")}', description=m.get('message'), timestamp=m.get('created'), color=yellow))
+                try:
+                    bday = self.bot.lightningUsers[member.id]['birthday']
+                    if bday is not None:
+                        if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
+                            print(f'DMing {member.name} because it is their birthday')
+                            try: age = self.bot.lightningUsers[member.id]['birthday']
+                            except KeyError: age = None
+                            if age is not None:
+                                age += 1
+                                await database.SetAge(member, age)
+                            new = datetime.datetime(bday.year + 1, bday.month, bday.day)
+                            await database.SetBirthday(member, new)
+                            messages = await database.GetBirthdayMessages(member)
+                            try: messages = self.bot.lightningUsers[member.id]['birthdayMessages']
+                            except KeyError: pass
+                            embed=discord.Embed(title=f'''🍰 Happy {f"{age}{Cyberlog.suffix(age) if age else ''} "}Birthday, {member.name}! 🍰''', timestamp=datetime.datetime.utcnow(), color=yellow)
+                            if len(messages) > 0: embed.description=f'You have {len(messages)} personal messages that will be sent below this message.'
+                            else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
+                            await member.send(embed=embed)
+                            for m in messages: await member.send(embed=discord.Embed(title=f'Personal Birthday Message from {m["authName"]}', description=m['message'], timestamp=m['created'], color=yellow))
+                except KeyError: pass
         except: traceback.print_exc()
 
     @tasks.loop(minutes=5)
@@ -67,7 +72,7 @@ class Birthdays(commands.Cog):
                 initial = started + datetime.timedelta(hours=tz)
                 try: channel = self.bot.lightningLogging[server.id]['birthday']
                 except KeyError: continue
-                if channel > 0:
+                if channel:
                     try:
                         if (initial.strftime('%H:%M') == self.bot.lightningLogging[server.id]['birthdate'].strftime('%H:%M')):
                             for member in server.members:
@@ -95,7 +100,8 @@ class Birthdays(commands.Cog):
     async def deleteBirthdayMessages(self):
         try:
             for member in self.bot.users:
-                bday = await database.GetMemberBirthday(member)
+                try: bday = self.bot.lightningUsers[member.id]['birthday']
+                except KeyError: continue
                 if bday is not None:
                     if bday.strftime('%m%d%y') == datetime.datetime.now().strftime('%m%d%y'): await database.ResetBirthdayMessages(member)
         except: traceback.print_exc()
@@ -211,12 +217,13 @@ class Birthdays(commands.Cog):
         await ctx.trigger_typing()
         #return await ctx.send('This command will be available soon')
         if len(args) == 0:
-            embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), description='{} Fetching information from database...'.format(self.loading), color=yellow, timestamp=datetime.datetime.utcnow())
+            embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), color=yellow, timestamp=datetime.datetime.utcnow())
             embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
             adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-            bday = self.bot.lightningUsers.get(ctx.author.id).get('birthday')
-            embed.add_field(name='Your Birthday',value='Unknown' if bday is None else bday.strftime('%a %b %d\n(In {} days)').format((bday - adjusted).days))
-            embed.add_field(name='Your Age', value='Unknown' if await database.GetAge(ctx.author) is None else await database.GetAge(ctx.author))
+            try: bday, age = self.bot.lightningUsers[ctx.author.id]['birthday'], self.bot.lightningUsers[ctx.author.id]['age']
+            except KeyError: bday, age = await database.GetMemberBirthday(ctx.author), await database.GetAge(ctx.author)
+            embed.add_field(name='Your Birthday',value='Unknown' if not bday else f'{bday:%a %b %d}\n(In {(bday - adjusted).days} days)')
+            embed.add_field(name='Your Age', value='Unknown' if not age else age)
             embed.description = '{} Processing global birthday information...'.format(self.loading)
             message = await ctx.send(embed=embed)
             #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
@@ -226,10 +233,10 @@ class Birthdays(commands.Cog):
             memberIDs = [m.id for m in ctx.guild.members]
             for m in self.bot.users:
                 try:
-                    if m in memberIDs and self.bot.lightningUsers.get(m.id).get('birthday') is not None: currentServer.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
-                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1 and (self.bot.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
-                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members]) >= 1: disguardSuggest.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
-                except AttributeError: pass
+                    if m.id in memberIDs and self.bot.lightningUsers[m.id].get('birthday'): currentServer.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
+                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m.id in [member.id for member in s.members] and ctx.author in s.members]) >= 1 and (self.bot.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
+                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m.id in [member.id for member in s.members] and ctx.author in s.members]) >= 1: disguardSuggest.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
+                except (AttributeError, TypeError): pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
             disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members]), reverse=True) #Servers the author and target share
