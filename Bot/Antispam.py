@@ -113,11 +113,15 @@ class Antispam(commands.Cog):
                         except discord.Forbidden: pass
                         return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending {aFlag}s in this server', color=0xD2691E), delete_after=15)
         if not (any([spam.get('attachments')[:-1], spam.get('enabled')])): return
+        cRE = CheckRoleExclusions(message.author)
+        if spam.get('exclusionMode') == 0:
+            if not (message.channel.id in spam.get('channelExclusions') and cRE or message.author.id in spam.get('memberExclusions')): return
+        else:
+            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or cRE: return
         try: lastMessages = person.get("lastMessages")
         except AttributeError: lastMessages = []
         try: quickMessages = person.get("quickMessages")
         except AttributeError: quickMessages = []
-        cRE = CheckRoleExclusions(message.author)
         if message.content is not None and len(message.content) > 0: lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
         if message.channel.id not in GetChannelExclusions(message.guild) and not cRE and message.author.id not in GetMemberExclusions(message.guild):
             quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
@@ -143,10 +147,6 @@ class Antispam(commands.Cog):
             #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
             #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
             self.bot.lightningUsers[message.author.id].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
-        if spam.get('exclusionMode') == 0:
-            if not (message.channel.id in spam.get('channelExclusions') and cRE or message.author.id in spam.get('memberExclusions')): return
-        else:
-            if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or cRE: return        
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         if spam.get("congruent")[0] != 0 or 0 not in spam.get("quickMessages"): 
@@ -564,6 +564,38 @@ class Antispam(commands.Cog):
             await m.clear_reactions()
             return await m.edit(embed=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST IDs":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get('ageKickDM')}''', color=yellow, timestamp=datetime.datetime.utcnow()))
         
+    @commands.is_owner()
+    @commands.command()
+    async def setWarnings(self, ctx, members: commands.Greedy[discord.Member], setTo: int = 0):
+        embed=discord.Embed(title='Set Member Warnings', description=f'{self.loading}Updating member data...', color=yellow)
+        if len(members) == 0: members = ctx.guild.members
+        if setTo == 0: 
+            try: setTo = self.bot.lightningLogging[ctx.guild.id]['antispam']['warn']
+            except KeyError: setTo = 3
+        status = await ctx.send(embed=embed)
+        oldWarnings = {}
+        for m in self.bot.lightningLogging[ctx.guild.id]['members']:
+            if m['id'] in [member.id for member in members]: oldWarnings[m['id']] = m['warnings'] 
+        await database.SetWarnings(members, setTo)
+        if len(members) <= 10:
+            for m in members: 
+                embed.add_field(name=m.name, value=f'> {oldWarnings[m.id]} → **{setTo}** warnings', inline=False)
+                embed.description = ''
+        else: embed.description = f'Updated warnings for {len(members)} members\n> Set to {setTo} warnings'
+        await status.edit(embed=embed)
+
+    @commands.command()
+    async def warnings(self, ctx):
+        warningCount = self.FetchWarnings(ctx.author)
+        mentions = discord.AllowedMentions(users=False)
+        if warningCount: await ctx.send(f'{ctx.author.mention}, you have {warningCount} warning{"s" if warningCount != 1 else ""} in my antispam system', allowed_mentions = mentions)
+        else: await ctx.send(f'{ctx.author.mention}, I was unable to retrieve your warning count')
+
+    async def FetchWarnings(self, member: discord.Member):
+        for m in self.bot.lightningLogging[member.guild.id]['members']:
+            if m['id'] == member.id: return m['warnings']
+        return -1
+
 def CheckRoleExclusions(member: discord.Member):
     '''Checks a member's roles to determine if their roles are in the exceptions list
         Return True if a member's role is in the list'''

@@ -823,3 +823,7 @@ async def GetSupportTickets():
 async def SetSchedule(u: discord.User, schedule):
     '''Updates a member's school schedule'''
     await users.update_one({'user_id': u.id}, {'$set': {'schedule': schedule}}, True)
+
+async def SetWarnings(members, warnings):
+    bulkUpdates = [pymongo.UpdateOne({'server_id': members[0].guild.id, 'members.id': member.id}, {'$set': {'members.$.warnings': warnings}}) for member in members]
+    await servers.bulk_write(bulkUpdates)

@@ -2161,7 +2161,7 @@ class Cyberlog(commands.Cog):
             if ctx.channel !=logChannel(ctx.guild, 'message'):
                 await logChannel(ctx.guild, 'message').send(classify+" was paused by "+ctx.author.name)
             await database.PauseMod(ctx.guild, classify.lower())
-            self.bot.lightningLogging[ctx.guild.id]['antispam'][args[0]]['enabled'] = False
+            self.bot.lightningLogging[ctx.guild.id][args[0]]['enabled'] = False
             return
         duration = self.ParsePauseDuration((" ").join(args[1:]))
         embed=discord.Embed(title=classify+" was paused",description="by "+ctx.author.mention+" ("+ctx.author.name+")\n\n"+(" ").join(args[1:]),color=0x008000,timestamp=datetime.datetime.utcnow()+datetime.timedelta(seconds=duration))
