@@ -221,10 +221,13 @@ class Antispam(commands.Cog):
                 flag = True
                 reason.append("Appearing to selfbot: Sending an embed")
                 short.append("Selfbotting (embed)")
-            if any([w.startswith('ping') for w in message.content.lower().split(' ')]) and any([w.endswith('ms') for w in message.content.lower().split(' ')]):
-                flag = True
-                reason.append("Appearing to selfbot: Latency ping message")
-                short.append("Selfbotting (ping message)")
+            for word in message.content.lower().split(' '):
+                if word.endswith('ms') and all([letter in '1234567890' for letter in word[:word.find('ms')]]):
+                    if any(w.startswith('ping') for w in message.content.lower().split(' ')):
+                        flag = True
+                        reason.append("Appearing to selfbot: Latency ping message")
+                        short.append("Selfbotting (ping message)")
+                        break
         if int(spam.get("caps")) != 0:
             changes = 0
             spaces = 0
@@ -575,7 +578,7 @@ class Antispam(commands.Cog):
         status = await ctx.send(embed=embed)
         oldWarnings = {}
         for m in self.bot.lightningLogging[ctx.guild.id]['members']:
-            if m['id'] in [member.id for member in members]: oldWarnings[m['id']] = m['warnings'] 
+            if m['id'] in [member.id for member in members]: oldWarnings[m['id']] = copy.deepcopy(m)['warnings'] 
         await database.SetWarnings(members, setTo)
         if len(members) <= 10:
             for m in members: 
@@ -586,7 +589,7 @@ class Antispam(commands.Cog):
 
     @commands.command()
     async def warnings(self, ctx):
-        warningCount = self.FetchWarnings(ctx.author)
+        warningCount = await self.FetchWarnings(ctx.author)
         mentions = discord.AllowedMentions(users=False)
         if warningCount: await ctx.send(f'{ctx.author.mention}, you have {warningCount} warning{"s" if warningCount != 1 else ""} in my antispam system', allowed_mentions = mentions)
         else: await ctx.send(f'{ctx.author.mention}, I was unable to retrieve your warning count')

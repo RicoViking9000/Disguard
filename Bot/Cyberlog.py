@@ -216,9 +216,10 @@ class Cyberlog(commands.Cog):
                                         asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                                         updates.append('status')
                                 except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                                except (TypeError, IndexError): 
-                                    asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
-                                    updates.append('status')
+                                except (TypeError, IndexError):
+                                    if not await database.GetUser(m.id).get('customStatusHistory'):
+                                        asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
+                                        updates.append('status')
                     except Exception as e: print(f'Custom status error for {m.name}: {e}')
                     try:
                         if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
@@ -386,7 +387,7 @@ class Cyberlog(commands.Cog):
                             except: pass
                         return await message.channel.send(embed=embed)
                     else:
-                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y - %I:%M: %p} {nameZone(message.guild)}')
+                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y - %I:%M %p} {nameZone(message.guild)}')
                         if result.embeds[0].author.name is discord.Embed.Empty: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar_url)
                         return await message.channel.send(content=result.content,embed=result.embeds[0])
 
@@ -426,10 +427,6 @@ class Cyberlog(commands.Cog):
         except: fid = str(message.id)
         oldReac = message.reactions
         if str(ej) == 'ℹ':
-            if 'Server updated' in e.title:
-                try: await message.clear_reactions()
-                except discord.Forbidden: pass
-                await message.edit(content='Embed will retract in 3 minutes',embed=await self.ServerInfo(message.guild, await message.guild.audit_logs(limit=None).flatten(), await message.guild.bans(), await message.guild.webhooks(), await message.guild.invites()))
             if 'Role was updated' in e.title:
                 try: await message.clear_reactions()
                 except discord.Forbidden: pass
@@ -991,18 +988,16 @@ class Cyberlog(commands.Cog):
                     self.categories[before.category.id] = after.category.channels
             if before.overwrites != after.overwrites:
                 embed.add_field(name='Permission overwrites updated',value='Manually react 🇵 to show/hide') #The rest of this code is later because we need a message link to the current message
-            if before.name != after.name: 
-                embed.add_field(name="Old Name",value=before.name)
-                embed.add_field(name="New Name",value=after.name)
+            if before.name != after.name:
+                embed.add_field(name='Name', value=f'{before.name} → **{after.name}**')
             if type(before) is discord.TextChannel:
                 beforeTopic = before.topic if before.topic is not None and len(before.topic) > 0 else "<No topic>"
                 afterTopic = after.topic if after.topic is not None and len(after.topic) > 0 else "<No topic>"
                 if beforeTopic != afterTopic:
-                    embed.add_field(name="Old Description",value=beforeTopic)
-                    embed.add_field(name="New Description",value=afterTopic)
+                    embed.add_field(name='Old Description', value=beforeTopic)
+                    embed.add_field(name='New Description', value=afterTopic)
                 if before.is_nsfw() != after.is_nsfw():
-                    embed.add_field(name="Old NSFW",value=before.is_nsfw())
-                    embed.add_field(name="New NSFW",value=after.is_nsfw())
+                    embed.add_field(name='NSFW', value=f'{before.is_nsfw()} → **{after.is_nsfw()}**')
                 if before.slowmode_delay != after.slowmode_delay:
                     delays = [[before.slowmode_delay, 'second'], [after.slowmode_delay, 'second']]
                     for d in delays:
@@ -1012,15 +1007,12 @@ class Cyberlog(commands.Cog):
                             if d[0] >= 60:
                                 d[0] //= 60
                                 d[1] = 'hour'
-                    embed.add_field(name='Old Slowmode',value=f'{delays[0][0]} {delays[0][1]}{"s" if delays[0][0] != 1 else ""}' if before.slowmode_delay > 0 else '<Disabled>')
-                    embed.add_field(name='New Slowmode',value=f'{delays[1][0]} {delays[1][1]}{"s" if delays[1][0] != 1 else ""}' if after.slowmode_delay > 0 else '<Disabled>')
+                    embed.add_field(name='Slowmode',value=f'{delays[0][0]} {delays[0][1]}{"s" if delays[0][0] != 1 else ""}' if before.slowmode_delay > 0 else '<Disabled>' + f' → **{delays[1][0]} {delays[1][1]}{"s" if delays[1][0] != 1 else ""}**' if after.slowmode_delay > 0 else '**<Disabled>**')
             elif type(before) is discord.VoiceChannel:
                 if before.bitrate != after.bitrate:
-                    embed.add_field(name="Old Bitrate",value=f'{before.bitrate // 1000} kbps')
-                    embed.add_field(name="New Bitrate",value=f'{after.bitrate // 1000} kbps')
+                    embed.add_field(name='Bitrate',value=f'{before.bitrate // 1000} kbps' + f' → **{after.bitrate // 1000} kbps**')
                 if before.user_limit != after.user_limit:
-                    embed.add_field(name="Old User Limit",value=before.user_limit)
-                    embed.add_field(name="New User Limit",value=after.user_limit)
+                    embed.add_field(name='User Limit', value=f'{before.user_limit} → **{after.user_limit}**')
             if type(before) is not discord.CategoryChannel and before.category != after.category:
                 embed.add_field(name='Old Category', value='Old')
                 embed.add_field(name='New Category', value='New')
@@ -1246,7 +1238,7 @@ class Cyberlog(commands.Cog):
             if os.path.exists(savePath): os.remove(savePath)
         except: pass
         if logEnabled(member.guild, "doorguard"):
-            if member in member.guild.members:
+            if member.id in [m.id for m in member.guild.members]:
                 embed.title=f'👤{self.greenPlus}New member (React ℹ for member info viewer)'
                 await msg.edit(embed=embed)
                 final = copy.deepcopy(embed)
@@ -1629,12 +1621,14 @@ class Cyberlog(commands.Cog):
                     gainedList = [] 
                     for r in removed:
                         rolePermissions = [permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in beforePerms and permissionKeys[p[0]] not in afterPerms and p in iter(r.permissions) and permissionKeys[p[0]] not in lPK]
-                        lPK += rolePermissions
-                        lostList.append(f'{r.name}\n> {", ".join(rolePermissions)}')
+                        if rolePermissions:
+                            lPK += rolePermissions
+                            lostList.append(f'{r.name}\n> {", ".join(rolePermissions)}')
                     for r in added:
                         rolePermissions = [permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in afterPerms and permissionKeys[p[0]] not in beforePerms and p in iter(r.permissions) and permissionKeys[p[0]] not in gPK]
-                        gPK += rolePermissions
-                        gainedList.append(f'{r.name}\n> {", ".join(rolePermissions)}')
+                        if rolePermissions:
+                            gPK += rolePermissions
+                            gainedList.append(f'{r.name}\n> {", ".join(rolePermissions)}')
                     if len(lost) > 0: embed.add_field(name='Lost permissions', value='\n'.join(lostList), inline=False)
                     if len(gained) > 0: embed.add_field(name='Gained permissions', value='\n'.join(gainedList), inline=False)
             if before.nick != after.nick:
@@ -1769,27 +1763,26 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot joins a server'''
-        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="{} servers".format(len(self.bot.guilds)), type=discord.ActivityType.watching))
-        await self.globalLogChannel.send(embed=discord.Embed(title="{}Joined server".format(self.whitePlus),description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0x008000))
+        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
+        embed = discord.Embed(title=f'{self.greenPlus}Joined server', description=f'{guild.name}\n{guild.member_count} Members\nCreated {guild.created_at:%b %d, %Y • %I:%M %p} EDT', color=green)
+        embed.set_footer(text=guild.id)
+        await self.globalLogChannel.send(embed=embed)
         asyncio.create_task(database.VerifyServer(guild, bot))
         for member in guild.members:
             await database.VerifyUser(member, bot)
-        post=None
-        content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: <https://disguard.herokuapp.com>\n{}Please wait while I index your server's messages...".format(self.loading)
-        if guild.system_channel is not None:
-            try: post = await guild.system_channel.send(content) #Update later to provide more helpful information
-            except discord.Forbidden: pass
-        if post is None:
-            for channel in guild.text_channels:
-                if 'general' in channel.name:
-                    try: 
-                        post = await channel.send(content) #Update later to provide more helpful information
+        content=f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.com>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
+        content+=f'\n\n❔Need help with anything, or just have a question? My developer would be more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `.ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
+        try: target = await database.CalculateModeratorChannel(guild, False)
+        except:
+            if guild.system_channel is not None: target = guild.system_channel
+            else:
+                for channel in guild.text_channels:
+                    if 'general' in channel.name: 
+                        target = channel
                         break
-                    except discord.Forbidden: pass
-        await asyncio.gather(*[self.indexServer(c) for c in guild.text_channels])
-        indexed[guild.id] = True
-        try: await post.edit(content="Thank you for inviting me to your server!\nTo configure me, you can connect your Discord account and enter your server's settings here: <https://disguard.herokuapp.com>")
+        try: await target.send(content)
         except: pass
+        await asyncio.gather(*[self.indexServer(c) for c in guild.text_channels])
 
     async def indexServer(self, channel):
         path = f'{indexes}/{channel.guild.id}/{channel.id}'
@@ -1810,58 +1803,95 @@ class Cyberlog(commands.Cog):
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
         global bot
         if logEnabled(before, 'server'):
-            embed=discord.Embed(title="✏Server updated (React with ℹ to view server details)",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-            content=None
+            embed=discord.Embed(title="✏Server updated (React with ℹ to view server details)", timestamp=datetime.datetime.utcnow(), color=blue)
+            content = None
+            f = None
             if readPerms(before, 'server'):
                 try:
-                    async for log in before.audit_logs(limit=1):
-                        if log.action == discord.AuditLogAction.guild_update:
-                            embed.description= "By: "+log.user.mention+" ("+log.user.name+")"
-                            embed.set_thumbnail(url=log.user.avatar_url)
-                            await updateLastActive(log.user, datetime.datetime.now(), 'updated a server')
+                    log = (await after.audit_logs(limit=1, action=discord.AuditLogAction.guild_update).flatten())[0]
+                    embed.description = f'👮‍♂️Updated by: {log.user.mention} ({log.user.name})' + (f' because "{log.reason}"' if log.reason is not None else '')
+                    embed.set_thumbnail(url=log.user.avatar_url)
+                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
+                    try: await log.user.avatar_url_as(size=1024).save(savePath)
+                    except discord.HTTPException: pass
+                    f = discord.File(savePath)
+                    embed.set_author(icon_url=f'attachment://{f.filename}', name=log.user.name)
+                    await updateLastActive(log.user, datetime.datetime.now(), 'updated a server')
                 except discord.Forbidden:
                     content="You have enabled audit log reading for your server, but I am missing the required permission for that feature: `View Audit Log`"
             if before.afk_channel != after.afk_channel:
-                b4 = before.afk_channel.name if before.afk_channel is not None else "(None)"
-                af = after.afk_channel.name if after.afk_channel is not None else "(None)"
-                embed.add_field(name="AFK Channel",value=b4+" → "+af)
+                embed.add_field(name='AFK Channel', value=f"{before.afk_channel.name if before.afk_channel else '<None>'} → **{after.afk_channel.name if after.afk_channel else '<None>'}**")
             if before.afk_timeout != after.afk_timeout:
-                embed.add_field(name="AFK Timeout",value=str(before.afk_timeout)+"s → "+str(after.afk_timeout)+"s")
+                timeouts = [[before.afk_timeout, 'second'], [after.afk_timeout, 'second']]
+                for t in timeouts:
+                    if t[0] and t[0] >= 60:
+                        t[0] //= 60
+                        t[1] = 'minute'
+                        if t[0] >= 60:
+                            t[0] //= 60
+                            t[1] = 'hour'
+                embed.add_field(name='AFK Timeout', value=f'{timeouts[0][0]} {timeouts[0][1]}{"s" if timeouts[0][0] != 1 else ""} → **{timeouts[1][0]} {timeouts[1][1]}{"s" if timeouts[1][0] != 1 else ""}**')
             if before.mfa_level != after.mfa_level:
-                b4 = True if before.mfa_level == 1 else False
-                af = True if after.mfa_level == 1 else False
-                embed.add_field(name="Mods need 2FA",value=b4+" → "+af)
+                values = {0: False, 1: True}
+                embed.add_field(name='2FA Requirement for Mods', value=f'{values[before.mfa_level]} → **{after.mfa_level}**')
             if before.name != after.name:
-                embed.add_field(name="Name",value=before.name+" → "+after.name)
+                embed.add_field(name='Name', value=f'{before.name} → **{after.name}**')
             if before.owner != after.owner:
-                embed.add_field(name="Owner",value=before.owner.mention+" → "+after.owner.mention)
+                embed.add_field(name='Owner', value=f'{before.owner.mention} ({before.owner.name}) → **{after.owner.mention} ({after.owner.name})**')
             if before.default_notifications != after.default_notifications:
-                embed.add_field(name="Default notifications",value=before.default_notifications.name+" → "+after.default_notifications.name)
+                values = {'all_messages': 'All messages', 'only_mentions': 'Only mentions'}
+                embed.add_field(name='Default Notifications', value=f'{values[before.default_notifications.name]} → **{values[after.default_notifications.name]}**')
             if before.explicit_content_filter != after.explicit_content_filter:
-                embed.add_field(name="Explicit content filter",value=before.explicit_content_filter.name+" → "+after.explicit_content_filter.name)
+                values = {'disabled': 'Disabled', 'no_role': 'Filter for members without a role', 'all_members': 'Filter for everyone'}
+                embed.add_field(name='Explicit Content Filter', value=f'{values[before.explicit_content_filter.name]} → **{values[after.explicit_content_filter.name]}**')
             if before.system_channel != after.system_channel:
-                b4 = before.system_channel.mention if before.system_channel is not None else "(None)"
-                af = after.system_channel.mention if after.system_channel is not None else "(None)"
-                embed.add_field(name="System channel",value=b4+" → "+af)
+                embed.add_field(name='System channel', value=f"{f'{before.system_channel.mention} ({before.system_channel.name})' if before.system_channel else '<None>'} → {f'{after.system_channel.mention} ({after.system_channel.name})' if after.system_channel else '<None>'}")
             if before.icon_url != after.icon_url:
-                embed.add_field(name='Server icon updated',value='Old: Thumbnail to the right\nNew: Image below')
-                embed.set_thumbnail(url=before.icon_url)
-                embed.set_image(url=after.icon_url)
+                message = await self.imageLogChannel.send(before.icon_url_as(static_format='png'))
+                thumbURL = message.attachments[0].url
+                message = await self.imageLogChannel.send(after.icon_url_as(static_format='png'))
+                imageURL = message.attachments[0].url
+                embed.set_thumbnail(url=thumbURL)
+                embed.set_image(url=imageURL)
+                embed.add_field(name='Server icon updated',value=f'Old: [Thumbnail to the right]({thumbURL})\nNew: [Image below]({imageURL})')
             if len(embed.fields) > 0:
                 reactions = ['ℹ']
-                #if await database.SummarizeEnabled(before, 'server'):
-                #    summaries.get(str(before.id)).add('server', 10, datetime.datetime.now(), data, embed,content=content, reactions=reactions)
-                #else:
-                message = await logChannel(before, 'server').send(content=content,embed=embed)
+                message = await logChannel(before, 'server').send(content=content, embed=embed, file=f)
                 for r in reactions: await message.add_reaction(r)
                 await VerifyLightningLogs(message, 'server')
+                final = copy.deepcopy(embed)
+                while True:
+                    def reactionCheck(r, u): return str(r) in reactions and r.message.id == message.id and not u.bot
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                    if 'Loading server information' not in embed.description: embed.description+=f'\n\n{self.loading}Loading server information'
+                    await message.edit(embed=embed)
+                    logs, bans, hooks, invites = None, None, None, None
+                    try:
+                        logs = await after.audit_logs(limit=None).flatten()
+                        bans = await after.bans()
+                        hooks = await after.webhooks()
+                        invites = await after.invites()
+                    except: pass
+                    new = await self.ServerInfo(after, logs, bans, hooks, invites)
+                    if embed.author.name: new.set_author(icon_url=f'attachment://{f.filename}', name=log.user.name)
+                    await message.edit(embed=new)
+                    await message.clear_reactions()
+                    await message.add_reaction('⬅')
+                    def backCheck(r, u): return str(r) == '⬅' and r.message.id == message.id and u.id == result[1].id
+                    try: await self.bot.wait_for('reaction_add', check=backCheck, timeout=120)
+                    except asyncio.TimeoutError: pass
+                    await message.edit(content=content, embed=final)
+                    await message.clear_reactions()
+                    for r in reactions: await message.add_reaction(r)
         asyncio.create_task(database.VerifyServer(after, bot))
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot leaves a server'''
-        await self.globalLogChannel.send(embed=discord.Embed(title="❌Left server",description='{} {}'.format(guild.name, guild.id),timestamp=datetime.datetime.utcnow(),color=0xff0000))
-        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name="{} servers".format(len(self.bot.guilds)), type=discord.ActivityType.watching))
+        embed = discord.Embed(title="❌Left server", description=f'{guild.name}', timestamp=datetime.datetime.utcnow(), color=0xff0000)
+        embed.set_footer(text=guild.id)
+        await self.globalLogChannel.send(embed=embed)
+        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
         asyncio.create_task(database.VerifyServer(guild, bot))
         for member in guild.members:
             await database.VerifyUser(member, bot)
@@ -2553,13 +2583,13 @@ class Cyberlog(commands.Cog):
         embed.add_field(name='Default notifications',value=str(s.default_notifications)[str(s.default_notifications).find('.')+1:])
         try: embed.add_field(name='Locale',value=s.preferred_locale)
         except: pass
-        embed.add_field(name='Audit logs',value='N/A' if logs is None else len(logs))
+        embed.add_field(name='Audit logs',value='🔒Unable to obtain audit logs' if logs is None else len(logs))
         if s.system_channel is not None: embed.add_field(name='System channel',value='{}: {}'.format(s.system_channel.mention, ', '.join([k[0] for k in (iter(s.system_channel_flags))])))
         embed.add_field(name='Role count',value=len(s.roles) - 1)
         embed.add_field(name='Owner',value=s.owner.mention)
-        embed.add_field(name='Banned members',value=0 if bans is None else len(bans))
-        embed.add_field(name='Webhooks',value=0 if hooks is None else len(hooks))
-        embed.add_field(name='Invites',value=0 if invites is None else len(invites))
+        embed.add_field(name='Banned members',value='🔒Unable to obtain server bans' if bans is None else len(bans))
+        embed.add_field(name='Webhooks',value='🔒Unable to obtain webhooks' if hooks is None else len(hooks))
+        embed.add_field(name='Invites',value='🔒Unable to obtain invites' if invites is None else len(invites))
         embed.add_field(name='Emojis',value='{}/{}'.format(len(s.emojis), s.emoji_limit))
         embed.add_field(name='Messages', value='about {}'.format(messages))
         embed.set_footer(text='Server ID: {}'.format(s.id))

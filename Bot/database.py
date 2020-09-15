@@ -653,7 +653,8 @@ async def UnduplicateHistory(u: discord.User):
     csh, uh, ah = [], [], []
     try:
         for c in userEntry.get('customStatusHistory'):
-            if {'emoji': c.get('emoji'), 'name': c.get('name')} not in [{'emoji': i.get('emoji'), 'name': i.get('name')} for i in csh]: csh.append(c)
+            if len(csh) > 0 and {'emoji': c.get('emoji'), 'name': c.get('name')} != {'emoji': csh[-1].get('emoji'), 'name': csh[-1].get('name')}: csh.append(c)
+            elif len(csh) == 0: csh.append(c)
     except TypeError: pass
     try:
         for c in userEntry.get('usernameHistory'):
@@ -663,9 +664,13 @@ async def UnduplicateHistory(u: discord.User):
         for c in userEntry.get('avatarHistory'):
             if c.get('discordURL') not in [i.get('discordURL') for i in ah]: ah.append(c)
     except TypeError: pass
+    customStatusPulls = []
     for c in csh:
-        await users.update_one({'user_id': u.id}, {'$pull': {'customStatusHistory': {'emoji': c.get('emoji'), 'name': c.get('name')}}})
-        await users.update_one({'user_id': u.id}, {'$push': {'customStatusHistory': c}})
+        def inRange(time, comp): return comp >= time - datetime.timedelta(minutes=30) and comp <= time + datetime.timedelta(minutes=30)
+        for e in userEntry['customStatusHistory']:
+            if inRange(e['timestamp'], c['timestamp']): customStatusPulls.append(pymongo.UpdateOne({'user_id': u.id}, {'$pull': {'customStatusHistory': e}}))
+    if customStatusPulls: await users.bulk_write(customStatusPulls)
+    for c in csh: await users.update_one({'user_id': u.id}, {'$push': {'customStatusHistory': c}})
     for c in uh: 
         await users.update_one({'user_id': u.id}, {'$pull': {'usernameHistory': {'name': c.get('name')}}})
         await users.update_one({'user_id': u.id}, {'$push': {'usernameHistory': c}})
@@ -796,6 +801,8 @@ async def CalculateModeratorChannel(g: discord.Guild, update=False):
         if not c.overwrites_for(g.default_role).read_messages: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
     for k in relevanceKeys:
         if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
+        if any(word in k.name.lower() for word in ['chat', 'discussion', 'talk']): relevanceKeys[k] += 10
+        if 'announce' in k.name.lower(): relevanceKeys[k] = 1
     result = max(relevanceKeys, key=relevanceKeys.get, default=0)
     if update: await servers.update_one({'server_id': g.id}, {'$set': {'moderatorChannel': result.id}})
     return result
