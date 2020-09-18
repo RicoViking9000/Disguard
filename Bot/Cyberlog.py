@@ -1856,7 +1856,7 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name='Server icon updated',value=f'Old: [Thumbnail to the right]({thumbURL})\nNew: [Image below]({imageURL})')
             if len(embed.fields) > 0:
                 reactions = ['ℹ']
-                message = await logChannel(before, 'server').send(content=content, embed=embed, file=f)
+                message = await logChannel(before, 'server').send(content=content, embed=embed, file=f, allowed_mentions=discord.AllowedMentions(users=[after.owner]))
                 for r in reactions: await message.add_reaction(r)
                 await VerifyLightningLogs(message, 'server')
                 final = copy.deepcopy(embed)
