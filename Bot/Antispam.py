@@ -580,11 +580,14 @@ class Antispam(commands.Cog):
         for m in self.bot.lightningLogging[ctx.guild.id]['members']:
             if m['id'] in [member.id for member in members]: oldWarnings[m['id']] = copy.deepcopy(m)['warnings'] 
         await database.SetWarnings(members, setTo)
-        if len(members) <= 10:
-            for m in members: 
-                embed.add_field(name=m.name, value=f'> {oldWarnings[m.id]} → **{setTo}** warnings', inline=False)
+        configured = [k for k, v in oldWarnings.items() if v != setTo]
+        if len(configured) == 0:
+            embed.description='All members up to date already'
+        elif len(configured) <= 15:
+            for identification in configured: 
+                embed.add_field(name=m.name, value=f'> {oldWarnings[identification]} → **{setTo}** warnings', inline=False)
                 embed.description = ''
-        else: embed.description = f'Updated warnings for {len(members)} members\n> Set to {setTo} warnings'
+        else: embed.description = f'Updated warnings for {len(configured)} members\n> Set to {setTo} warnings'
         await status.edit(embed=embed)
 
     @commands.command()

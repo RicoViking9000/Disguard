@@ -217,7 +217,7 @@ class Cyberlog(commands.Cog):
                                         updates.append('status')
                                 except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
                                 except (TypeError, IndexError):
-                                    if not await database.GetUser(m.id).get('customStatusHistory'):
+                                    if not (await database.GetUser(m.id)).get('customStatusHistory'):
                                         asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                                         updates.append('status')
                     except Exception as e: print(f'Custom status error for {m.name}: {e}')
