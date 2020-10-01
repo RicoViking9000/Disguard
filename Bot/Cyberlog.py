@@ -3275,20 +3275,19 @@ def logChannel(s: discord.Guild, mod):
 
 async def verifyLogChannel(s: discord.Guild):
     #modular = lightningLogging.get(s.id).get('cyberlog').get('modules')[modElement(s, mod)].get('channel')
+    default = lightningLogging.get(s.id).get('cyberlog').get('defaultChannel')
+    final = s.get_channel(default)
     for mod in ['message', 'doorguard', 'server', 'channel', 'member', 'role', 'emoji', 'voice']:
         modular = lightningLogging.get(s.id).get('cyberlog').get(mod).get('channel')
-        final = s.get_channel(default) if modular is None else s.get_channel(modular)
         if not modular:
             channel = s.get_channel(modular)
             if not channel and type(modular) is int:
-                if default:
-                    try: await s.get_channel(default).send(embed=discord.Embed(description=f'⚠Your configured log channel (ID `{modular}`) for the `{mod}` module is invalid and has been reset to no value.\n[Edit settings online](http://disguard.herokuapp.com/manage/{s.id}/cyberlog)'))
+                if final:
+                    try: await final.send(embed=discord.Embed(description=f'⚠Your configured log channel (ID `{modular}`) for the `{mod}` module is invalid and has been reset to no value.\n[Edit settings online](http://disguard.herokuapp.com/manage/{s.id}/cyberlog)'))
                     except: pass
                 await database.SetLogChannel(s, mod, None)
-    default = lightningLogging.get(s.id).get('cyberlog').get('defaultChannel')
     if not default:
-        channel = s.get_channel(default)
-        if not channel and type(default) is int:
+        if not final and type(default) is int:
             try: await (await database.CalculateModeratorChannel(s, False)).send(embed=discord.Embed(description=f'⚠Your configured default log channel (ID `{default}`) is invalid and has been reset to no value.\n[Edit settings online](http://disguard.herokuapp.com/manage/{s.id}/cyberlog)'))
             except: pass
             await database.SetMainLogChannel(s, None)
