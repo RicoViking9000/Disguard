@@ -2827,10 +2827,12 @@ class Cyberlog(commands.Cog):
         #if start < 0: start = 0
         created = r.created_at + datetime.timedelta(hours=timeZone(r.guild))
         updated = None
-        for log in logs:
-                if log.target.id == r.id:
-                    updated = log.created_at + datetime.timedelta(hours=timeZone(r.guild))
-                    break
+        if logs:
+            for log in logs:
+                if log.action == discord.AuditLogAction.role_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
+                    if log.target.id == r.id:
+                        updated = log.created_at + datetime.timedelta(hours=timeZone(r.guild))
+                        break
         if updated is None: updated = created
         embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([permissionKeys.get(p[0]) for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
         #embed.description+='\n**Position**:\n{}'.format('\n'.join(['{0}{1}{0}'.format('**' if sortedRoles[role] == r else '', sortedRoles[role].name) for role in range(start, start+6)]))
