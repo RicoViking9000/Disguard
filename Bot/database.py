@@ -266,6 +266,14 @@ async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
     return s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel")) if (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None else s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
 
+async def SetLogChannel(s: discord.Guild, mod: str, channel: int):
+    '''Sets the log channel associated with <mod> module. Not configured for beta data management revision.'''
+    await servers.update_one({'server_id': s.id}, {'$set': {f'cyberlog.{mod}.channel': channel}})
+
+async def SetMainLogChannel(s: discord.Guild, channel: int):
+    '''Sets the default log channel associated with <mod> module'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.defaultChannel': channel}})
+
 async def GetMainLogChannel(s: discord.Guild):
     '''Returns the log channel associated with the server (general one), if one is set'''
     return s.get_channel(await (servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
@@ -793,12 +801,12 @@ async def CalculateAnnouncementsChannel(g: discord.Guild, update=False):
     if update: await servers.update_one({'server_id': g.id}, {'$set': {'announcementsChannel': s.id}})
     return s
 
-async def CalculateModeratorChannel(g: discord.Guild, update=False):
+async def CalculateModeratorChannel(g: discord.Guild, update=False, *, logChannelID=0):
     '''Determines the moderator channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
     relevanceKeys = {}
     for c in g.text_channels:
-        if not c.overwrites_for(g.default_role).read_messages: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
+        if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
     for k in relevanceKeys:
         if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
         if any(word in k.name.lower() for word in ['chat', 'discussion', 'talk']): relevanceKeys[k] += 10

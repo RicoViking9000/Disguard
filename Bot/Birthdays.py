@@ -45,7 +45,7 @@ class Birthdays(commands.Cog):
                     if bday is not None:
                         if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
                             print(f'DMing {member.name} because it is their birthday')
-                            try: age = self.bot.lightningUsers[member.id]['birthday']
+                            try: age = self.bot.lightningUsers[member.id]['age']
                             except KeyError: age = None
                             if age is not None:
                                 age += 1
@@ -643,7 +643,10 @@ async def ageContinuation(self, age, author, mess, draft, callback=None, partial
     await database.SetAge(u[1], age)
     embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ✅ Success'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Success')),color=yellow, timestamp=datetime.datetime.utcnow())
     embed.set_author(name=author.name, icon_url=author.avatar_url)
-    embed.description = 'Your age has been successfully saved, and will be used for your next birthday announcement.'
+    embed.description = 'Your age has successfully been saved, and will be used for your next birthday announcement.'
+    try: 
+        if not self.lightningUsers[author.id]['birthday']: embed.description = f'Your age ({age}) has successfully been saved.\n\nYou do not have a birthday configured yet - set your birthday by typing `my birthday is [date]` or using the birthday command (no args) & subsequently reacting with 🍰'
+    except: pass
     if callback is not None: embed.set_footer(text='Callback: {}'.format(callback))
     await mess.edit(embed=embed)
 

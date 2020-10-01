@@ -111,7 +111,7 @@ class Antispam(commands.Cog):
                         if Cyberlog.logEnabled(message.guild, 'message') and self.bot.lightningLogging.get(message.guild.id).get('cyberlog').get('image'): await asyncio.sleep(2) #Wait two seconds if image logging is enabled
                         try: await message.delete()
                         except discord.Forbidden: pass
-                        return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending {aFlag}s in this server', color=0xD2691E), delete_after=15)
+                        return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending `{aFlag}`s in this server', color=0xD2691E), delete_after=15)
         if not (any([spam.get('attachments')[:-1], spam.get('enabled')])): return
         cRE = CheckRoleExclusions(message.author)
         if spam.get('exclusionMode') == 0:
@@ -166,8 +166,8 @@ class Antispam(commands.Cog):
                                 break
                 if likenessCounter >= spam.get("congruent")[0]:
                     flag = True
-                    reason.append("Repeated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
-                    short.append("Repeated messages")
+                    reason.append("Duplicated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
+                    short.append("Duplicated messages")
                     #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': []})
                     self.bot.lightningUsers[message.author.id].update({'lastMessages': []})
                     lastMessages = []
@@ -178,7 +178,7 @@ class Antispam(commands.Cog):
                 if (timeLast - timeOne).seconds < spam.get("quickMessages")[1] and len(quickMessages) >= spam.get("quickMessages")[0]:
                     flag = True
                     reason.append("Sending too many messages too quickly\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
-                    short.append("Spamming messages too fast")
+                    short.append("Sending messages too fast")
                     #members[f'{message.guild.id}_{message.author.id}'].update({'quickMessages': []})
                     self.bot.lightningUsers[message.author.id].update({'quickMessages': []})
                     quickMessages = []

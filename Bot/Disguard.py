@@ -45,7 +45,7 @@ def prefix(bot, message):
     except (AttributeError, KeyError): return '.'
     return p if p is not None else '.'
 
-bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500)
+bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)) #Make sure bot doesn't tag everyone/mass roles people unless I specify
 bot.remove_command('help')
 
 indexes = 'Indexes'
@@ -179,7 +179,7 @@ async def index(ctx, t: int = None):
 
 @bot.command()
 async def help(ctx):
-    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands '✔ Verified URL to Disguard website - https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard discord server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{prefixes.get(ctx.guild.id) if ctx.guild else '.'}ticket` command", color=yellow)
+    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands '✔ Verified URL to Disguard website - https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{bot.lightningLogging.get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow)
     await ctx.send(embed=e)
 
 @bot.command()
@@ -199,7 +199,7 @@ async def server(ctx):
     red = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='dnd')
     embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow)
     embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
-    embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}\n'''
+    embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
     # embed.description+=f'''Flag members for: {f"{antispam.get('congruent')[0]} duplicate messages/{} min "}'''
     embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else "{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n'''
     # embed.description+=f'''\nMessage Edit & Delete\n{f" {green}Enabled" if cyberlog.get("message").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('message').get('channel')).mention}" if cyberlog.get('message').get('channel') and cyberlog.get('message').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('message').get('read') else f"{red}Read audit log: Disabled"}\n{f"{green}Log deleted images and attachments: Enabled" if cyberlog.get('image') else f"{red}Log deleted images and attachments: Disabled"}'''
@@ -878,13 +878,16 @@ async def unduplicate(ctx):
     status = await ctx.send('Working on it')
     interval = datetime.datetime.now()
     completed = 0
+    errors = 0
     for u in bot.users: 
         if (datetime.datetime.now() - interval).seconds > 2: 
-            await status.edit(content=f'Working on it\n{completed} / {len(bot.users)} users completed')
+            await status.edit(content=f'Working on it\n{completed} / {len(bot.users)} users completed ({errors} errors)')
             interval = datetime.datetime.now()
-        await database.UnduplicateHistory(u)
-        completed += 1
-    await status.edit(content='Done')
+        try: 
+            await database.UnduplicateHistory(u)
+            completed += 1
+        except: errors += 1
+    await status.edit(content=f'Done - {completed} successful, {errors} errors')
 
 @commands.is_owner()
 @bot.command()
