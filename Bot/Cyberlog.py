@@ -235,26 +235,26 @@ class Cyberlog(commands.Cog):
                         asyncio.create_task(database.AppendUsernameHistory(m))
                         updates.append('username')
                     except Exception as e: print(f'Username error for {m.name}: {e}')
-                    # try:
-                    #     if str(m.avatar_url) != self.bot.lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
-                    #         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                    #         await m.avatar_url_as(size=1024).save(savePath)
-                    #         f = discord.File(savePath)
-                    #         message = await self.imageLogChannel.send(file=f)
-                    #         asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                    #         if os.path.exists(savePath): os.remove(savePath)
-                    #         updates.append('avatar')
-                    # except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                    # except (TypeError, IndexError):
-                    #     try:
-                    #         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                    #         await m.avatar_url_as(size=1024).save(savePath)
-                    #         f = discord.File(savePath)
-                    #         message = await self.imageLogChannel.send(file=f)
-                    #         asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                    #         if os.path.exists(savePath): os.remove(savePath)
-                    #         updates.append('avatar')
-                    #     except discord.HTTPException: pass #Filesize is too large
+                    try:
+                        if str(m.avatar_url) != self.bot.lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
+                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                            await m.avatar_url_as(size=1024).save(savePath)
+                            f = discord.File(savePath)
+                            message = await self.imageLogChannel.send(file=f)
+                            asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
+                            if os.path.exists(savePath): os.remove(savePath)
+                            updates.append('avatar')
+                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
+                    except (TypeError, IndexError):
+                        try:
+                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                            await m.avatar_url_as(size=1024).save(savePath)
+                            f = discord.File(savePath)
+                            message = await self.imageLogChannel.send(file=f)
+                            asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
+                            if os.path.exists(savePath): os.remove(savePath)
+                            updates.append('avatar')
+                        except discord.HTTPException: pass #Filesize is too large
                     except Exception as e: print(f'Avatar error for {m.name}: {e}')
                     #if len(updates) > 0: lightningUsers[m.id] = await database.GetUser(m) #Debating if we even need this line
                     self.memberPermissions[g.id][m.id] = m.guild_permissions
