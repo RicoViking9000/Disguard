@@ -84,7 +84,7 @@ class Birthdays(commands.Cog):
                                             try:
                                                 messages = [a for a in self.bot.lightningUsers[member.id]['birthdayMessages'] if server.id in a['servers']]
                                                 newline = '\n'
-                                                messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m).name}: {m['message']}" for m in messages])}'''
+                                                messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(member.id).name}: {m['message']}" for m in messages])}'''
                                                 if member.id == 247412852925661185: toSend = f"🍰🎊🍨🎈 Greetings {server.name}! It's my developer {member.mention}'s birthday!! Let's wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ''}"
                                                 else: toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
                                                 try: 
