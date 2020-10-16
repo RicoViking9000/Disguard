@@ -942,7 +942,11 @@ async def marvel(ctx):
 @commands.is_owner()
 @bot.command()
 async def test(ctx):
-    await ctx.send((await database.CalculateGeneralChannel(ctx.guild)).mention)
+    status = await ctx.send('Working')
+    for i, server in enumerate(bot.guilds):
+        if i % 5 == 0: await status.edit(content=f'Working on server {i + 1}')
+        await database.ClearMemberMessages(server)
+    await status.edit(content='Done')
 
 
 database.Initialize(secure.token())

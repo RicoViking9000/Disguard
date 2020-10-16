@@ -8,6 +8,7 @@ import Cyberlog
 import asyncio
 import traceback
 import copy
+import collections
 
 filters = {}
 members = {} #serverID_memberID: member
@@ -27,11 +28,13 @@ class Antispam(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
+        self.antispamProcessTimes = [] #stores 5,000 antispam events received in on_message for data evaluation/statistical purposes
+        self.fullAntispamProcessTimes = [] #stores 100 antispam events - full effect (meaning only actions with consequences, be it warnings, bans, mutes, etc)
         self.checkTimedEvents.start()
 
     @tasks.loop(minutes=15)
     async def checkTimedEvents(self):
-        if self.checkTimedEvents.current_loop == 0: await asyncio.sleep(120)
+        if self.checkTimedEvents.current_loop == 0: await asyncio.sleep(300)
         try:
             for g in self.bot.guilds:
                 events = self.bot.lightningLogging.get(g.id).get('antispam').get('timedEvents')
@@ -63,9 +66,14 @@ class Antispam(commands.Cog):
 
 
     async def filterAntispam(self, message: discord.Message, spam):
-        try: person = [m for m in self.bot.lightningLogging[message.guild.id]['members'] if m['id'] == message.author.id][0]
+        received = datetime.datetime.now()
+        try:
+            for person in self.bot.lightningLogging[message.guild.id]['members']:
+                if person['id'] == message.author.id: break #we found our current member
         except: return
+        #dont store quick/last messages in the database - they'll be local only... just figure out how to do this without looping through all the members each time to find the person
         if not person: return
+        warningsAtStart = person['warnings']
 
         '''IMPLEMENT QUICKMESSAGE/LASTMESSAGE MESSAGE ARRAYS'''
         #The following lines of code deal with a member's lastMessages and quickMessages:
@@ -146,48 +154,39 @@ class Antispam(commands.Cog):
             #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
             #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
             #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
-            self.bot.lightningUsers[message.author.id].update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
+            person.update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
-        if spam.get("congruent")[0] != 0 or 0 not in spam.get("quickMessages"): 
+        if spam.get("congruent")[0] != 0: 
             #Checking for lastMessages and quickMessages
             lastMessages = person.get("lastMessages")
-            quickMessages = person.get("quickMessages")
             if spam.get("congruent")[0] != 0:
-                likenessCounter = 1 #How many congruent messages were found while iterating over the list
-                cont = None #Message content to be displayed in detailed log
-                for a in range(len(lastMessages)):
-                    for b in range(len(lastMessages)):
-                        if a < b:
-                            if lastMessages[a].get("content") == lastMessages[b].get("content"):
-                                likenessCounter += 1
-                                cont = lastMessages[a].get("content")
-                                a += 1
-                                break
-                if likenessCounter >= spam.get("congruent")[0]:
+                counter = collections.Counter(msg['content'] for msg in lastMessages)
+                most = counter.most_common(1)[0]
+                if most[1] >= spam['congruent'][0]:
                     flag = True
-                    reason.append("Duplicated messages: **" + cont + "**\n\n" + str(likenessCounter) + " repeats found; " + str(spam.get("congruent")[0]) + " in last " + str(spam.get("congruent")[1]) + " messages tolerated")
-                    short.append("Duplicated messages")
+                    reason.append(f'Duplicated messages: Member sent `{most[0]}` {most[1]} times\n\n(Server flag threshold: {spam["congruent"][0]} duplicates over {spam["congruent"][1]} most recent messages)')
+                    short.append(f'Duplicated messages (`{most[0]}`)')
                     #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': []})
-                    self.bot.lightningUsers[message.author.id].update({'lastMessages': []})
-                    lastMessages = []
+                    person['lastMessages'] = []
                     #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
-            if 0 not in spam.get("quickMessages") and len(quickMessages) > 0:
-                timeOne = quickMessages[0].get("created")
-                timeLast = quickMessages[-1].get("created")
-                if (timeLast - timeOne).seconds < spam.get("quickMessages")[1] and len(quickMessages) >= spam.get("quickMessages")[0]:
-                    flag = True
-                    reason.append("Sending too many messages too quickly\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
-                    short.append("Sending messages too fast")
-                    #members[f'{message.guild.id}_{message.author.id}'].update({'quickMessages': []})
-                    self.bot.lightningUsers[message.author.id].update({'quickMessages': []})
-                    quickMessages = []
-                    #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
+        if 0 not in spam.get("quickMessages") and len(quickMessages) > 0:
+            quickMessages = person.get("quickMessages")
+            timeOne = quickMessages[0].get("created")
+            timeLast = quickMessages[-1].get("created")
+            if (timeLast - timeOne).seconds < spam.get("quickMessages")[1] and len(quickMessages) >= spam.get("quickMessages")[0]:
+                flag = True
+                reason.append("Sending too many messages too quickly\n" + str(message.author) + " sent " + str(len(quickMessages)) + " messages in " + str((timeLast - timeOne).seconds) + " seconds")
+                short.append("Sending messages too fast")
+                #members[f'{message.guild.id}_{message.author.id}'].update({'quickMessages': []})
+                #self.bot.lightningUsers[message.author.id].update({'quickMessages': []})
+                person['quickMessages'] = []
+                #await database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages)
         if spam.get('consecutiveMessages')[0] != 0:
             messages = await message.channel.history(limit=spam.get('consecutiveMessages')[0]).flatten()
             if len(messages) >= spam.get('consecutiveMessages')[0] and all([m.author.id == message.author.id for m in messages]) and (messages[0].created_at - messages[-1].created_at).seconds < spam.get('consecutiveMessages')[1]:
                 flag = True
-                reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} messages consecutively over {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages over {spam.get("consecutiveMessages")[1]} seconds)')
+                reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} messages consecutively in under {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages over {spam.get("consecutiveMessages")[1]} seconds)')
                 short.append('Sending too many consecutive messages')
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available
@@ -324,14 +323,15 @@ class Antispam(commands.Cog):
                             reason.append("Profanity: " + parsed + "\n\nMessage is " + str(round(censorCount / (len(filtered) - spaces) * 100)) + "% profanity; " + str(spam.get('profanityTolerance') * 100) + "% tolerated")
                             short.append("Profanity")
             except TypeError: pass
-        if not flag: return
+        if not flag:
+            if len(self.antispamProcessTimes) > 5000: self.antispamProcessTimes.pop(0)
+            self.antispamProcessTimes.append((datetime.datetime.now() - received).seconds)
+            return
         #    if person != self.bot.lightningUsers[message.author.id]:
         #        if person.get('lastMessages') != self.bot.lightningUsers.get('lastMessages'): asyncio.create_task(database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages))
         #        if person.get('quickMessages') != self.bot.lightningUsers.get('quickMessages'): asyncio.create_task(database.UpdateMemberQuickMessages(message.guild.id, message.author.id, quickMessages))
         #    return
         await message.channel.trigger_typing()
-        if spam.get("action") in [1, 4] and not GetRoleManagementPermissions(message.guild.me):
-            return await message.channel.send("I flagged user `" + str(message.author) + "`, but need Manage Role permissions for the current consequence to be given. There are two solutions:\n  •Add the Manage Role permissions to me\n  •Enter your server's web dashboard and change the punishment for being flagged")
         if spam.get("delete"):
             try:
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(message)
@@ -347,7 +347,8 @@ class Antispam(commands.Cog):
             try:
                 #await database.UpdateMemberWarnings(message.guild, message.author, person.get("warnings") - 1)
                 #members[f'{message.guild.id}_{message.author.id}'].update({'warnings': person.get('warnings') - 1})
-                self.bot.lightningUsers[message.author.id].update({'warnings': person['warnings'] - 1})
+                #self.bot.lightningUsers[message.author.id].update({'warnings': person['warnings'] - 1})
+                person['warnings'] -= 1
                 successful = True
                 warned = True
             except:
@@ -419,7 +420,7 @@ class Antispam(commands.Cog):
         for a in short:
             shorter.description += "• " + a + "\n"
         if person.get("warnings") >= 0 and warned:
-            shorter.add_field(name="Your consequence",value="Warning (" + str(person.get("warnings") - 1) + " left)")
+            shorter.add_field(name="Your consequence",value="Warning (" + str(person.get("warnings")) + " left)")
         else:
             if spam.get("action") == 0:
                 shorter.add_field(name="Your consequence",value="Nothing :)")
@@ -444,13 +445,13 @@ class Antispam(commands.Cog):
                 whispered = 1
         if not spam.get("whisper") or whispered != 2:
             await message.channel.send(embed=shorter)
-        if person.get('warnings') != self.bot.lightningUsers[message.author.id].get('warnings'): asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, person.get('warnings') - 1))
+        if person.get('warnings') != warningsAtStart: asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, warningsAtStart - 1))
         if None not in spam.get("log"):
             longer = discord.Embed(title=message.author.name + " was flagged for spam",description=message.author.mention + " was flagged for **" + str(len(short)) + " reasons**, details below",timestamp=datetime.datetime.utcnow(),color=0xFF00FF)
             for a in range(len(reason)):
                 longer.add_field(name="Reason " + str(a + 1),value=reason[a],inline=False)
             if warned:
-                longer.add_field(name="Member's consequence",value="Warning (" + str(person.get("warnings") - 1) + " / " + str(spam.get("warn")) + " left)")
+                longer.add_field(name="Member's consequence",value="Warning (" + str(person.get("warnings")) + " / " + str(spam.get("warn")) + " left)")
             else:
                 if spam.get("action") == 0:
                     longer.add_field(name="Member's consequence",value="Nothing :)")
@@ -471,6 +472,8 @@ class Antispam(commands.Cog):
             if whispered == 1:
                 longer.set_footer(text="Also, I was unable to DM this user")
             await message.guild.get_channel(spam.get("log")[1]).send(embed=longer)
+        if len(self.fullAntispamProcessTimes) > 100: self.fullAntispamProcessTimes.pop(0)
+        self.fullAntispamProcessTimes.append((datetime.datetime.now() - received).seconds)
         if not roled:
             return
         await asyncio.sleep(spam.get("muteTime"))
@@ -589,6 +592,13 @@ class Antispam(commands.Cog):
                 embed.description = ''
         else: embed.description = f'Updated warnings for {len(configured)} members\n> Set to {setTo} warnings'
         await status.edit(embed=embed)
+
+    @commands.is_owner()
+    @commands.command()
+    async def antispamStats(self, ctx):
+        averageSecondsPartial = sum(self.antispamProcessTimes) / len(self.antispamProcessTimes)
+        averageSecondsFull = sum(self.fullAntispamProcessTimes) / len(self.fullAntispamProcessTimes)
+        await ctx.send(f'Partial avg: {averageSecondsPartial}\nFull average: {averageSecondsFull}\nLast 20 partial: {self.antispamProcessTimes[-20:]}\nLast 20 full: {self.fullAntispamProcessTimes[-20:]}')
 
     @commands.command()
     async def warnings(self, ctx):

@@ -266,13 +266,9 @@ async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
     return s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel")) if (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("channel") is not None else s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
 
-async def SetLogChannel(s: discord.Guild, mod: str, channel: int):
+async def SetSubLogChannel(s: discord.Guild, mod: str, channel: int):
     '''Sets the log channel associated with <mod> module. Not configured for beta data management revision.'''
     await servers.update_one({'server_id': s.id}, {'$set': {f'cyberlog.{mod}.channel': channel}})
-
-async def SetMainLogChannel(s: discord.Guild, channel: int):
-    '''Sets the default log channel associated with <mod> module'''
-    await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.defaultChannel': channel}})
 
 async def GetMainLogChannel(s: discord.Guild):
     '''Returns the log channel associated with the server (general one), if one is set'''
@@ -685,6 +681,11 @@ async def UnduplicateHistory(u: discord.User):
     for c in ah:
         await users.update_one({'user_id': u.id}, {'$pull': {'avatarHistory': {'discordURL': c.get('discordURL')}}})
         await users.update_one({'user_id': u.id}, {'$push': {'avatarHistory': c}})
+
+async def ClearMemberMessages(s: discord.Guild):
+    '''Empties the lastMessage and quickMessage lists belonging to members of the specified server'''
+    bulkUpdates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': m.id}, {'$set': {'members.$.lastMessages': [], 'members.$.quickMessages': []}}) for m in s.members]
+    if bulkUpdates: await servers.bulk_write(bulkUpdates)
 
 async def SetLastActive(u: discord.User, timestamp, reason):
     '''Updates the last active attribute'''

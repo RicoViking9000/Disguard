@@ -64,3 +64,224 @@ legend {text-align: center; font-size: 40px; color: rgb(202, 66, 66);}
 .breadcrumbs a {color: gray;}
 span.breadcrumbCurrent{font-size: 35px; color: white;}
 a.breadcrumbCurrent {color: white;}
+
+
+.birthdayAnnouncement {color: green; font-family: cursive; text-align: center; font-size: 60px;}
+.birthdayMessage {align-self: center; margin:0 20%; display: block}
+.birthdayMessage p {text-align: justify; text-justify: inter-word; word-wrap: break-word; color: rgb(139, 245, 183); font-family: cursive; font-size: 20px; margin: 50px 0;}
+.birthdayHeadline {margin: 150px 0;}
+.birthdayHeadline *{text-align: center; font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;}
+.birthdayHeadline h2 {font-size: 55px; color: yellow;}
+.birthdayHeadline h4 {font-size: 30px; color: yellowgreen;}
+.birthdayHeadline h3 {font-size: 20px; color: green;}
+.birthdayHeadline h5 {font-size: 15px; color: yellowgreen;}
+.birthdayHeadline ul {margin: 0 20%}
+.birthdayHeadline li {font-size: 20px; color: green; text-align: justify}
+.albumPod {display: block;  background-color:  rgba(0, 128, 0, 0.150); border-radius: 25px; height: 25%; align-self: center; margin: 2.5% 20%;}
+.albumPod * {background-color:  rgba(0, 128, 0, 0.150)}
+.albumLink {appearance: button; width: 100%; height: 100%; background-color: transparent; transition: 0.7s;}
+.albumLink:link {text-decoration: none;}
+.albumLink:hover {text-decoration: none; background-color: rgba(0, 128, 0, 0.5); border-radius: 25px;}
+.albumLink:active {text-decoration: none;}
+.albumLink h1 {font-size: 30px; color: green; margin: 0 5%;  background-color: transparent;}
+.albumLink p {font-size: 20px; color: yellowgreen; margin: 0 5%; background-color: transparent;}
+.albumCover {max-height: 300px; max-width: 300px; margin: 2% 0; background-color: transparent;}
+.googleDriveLink {appearance: button; background-color: transparent; width: 100%; transition: 0.7s;}
+.googleDriveLink:link {text-decoration: none;}
+.googleDriveLink:hover {background-color: rgba(0, 128, 0, 0.5); text-decoration: none; border-radius: 25px;}
+.googleDriveLink p {background-color: transparent; color: yellowgreen;}
+.gDriveLogo {height: 50px; width: 50px; float: right; display: inline; background-color: transparent;}
+.credits h3 {text-align: left; margin: 2% 20%;}
+.content h2 {color: yellow; font-family: cursive;}
+.content p {color: yellowgreen;}
+.content p .em {color: yellowgreen; font-style: italic;}
+.backToTop {width: 80%; height: 30px; margin: 0 10%; background-color: rgba(0, 128, 0, 0.150); transition: 0.7s; border-radius: 25px; border: none;}
+.backToTop:hover {background-color: rgba(0, 128, 0, 0.5);}
+.birthdayTimeline * {box-sizing: border-box;}
+.em {font-style: italic; color: inherit;}
+
+
+/* The actual timeline (the vertical ruler) */
+.birthdayTimeline {
+  position: relative;
+  max-width: 90%;
+  margin: 0 auto;
+}
+
+/* The actual timeline (the vertical ruler) */
+.birthdayTimeline::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  background-color: rgb(139, 245, 183);
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  margin-left: -3px;
+}
+
+/* Container around content */
+.container {
+  padding: 10px 40px;
+  position: relative;
+  background-color: inherit;
+  width: 50%;
+}
+
+.container *{
+  background-color: inherit;
+}
+
+/* The circles on the timeline */
+.container::after {
+  content: '';
+  position: absolute;
+  width: 25px;
+  height: 25px;
+  right: -17px;
+  background-color:green;
+  border: 4px solid rgb(1, 78, 1);
+  top: 15px;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+/* Place the container to the left */
+.left {
+  left: 0;
+}
+
+/* Place the container to the right */
+.right {
+  left: 50%;
+}
+
+/* Add arrows to the left container (pointing right) */
+.left::before {
+  content: " ";
+  height: 0;
+  position: absolute;
+  top: 22px;
+  width: 0;
+  z-index: 1;
+  right: 30px;
+  border: medium solid white;
+  border-width: 10px 0 10px 10px;
+  border-color: transparent transparent transparent white;
+}
+
+/* Add arrows to the right container (pointing left) */
+.right::before {
+  content: " ";
+  height: 0;
+  position: absolute;
+  top: 22px;
+  width: 0;
+  z-index: 1;
+  left: 30px;
+  border: medium solid white;
+  border-width: 10px 10px 10px 0;
+  border-color: transparent white transparent transparent;
+}
+
+/* Fix the circle for containers on the right side */
+.right::after {
+  left: -16px;
+}
+
+/* The actual content */
+.content {
+  padding: 20px 30px;
+  position: relative;
+  border-radius: 15px;
+  background-color: rgb(100, 100, 100);
+}
+
+/* Media queries - Responsive timeline on screens less than 600px wide */
+@media screen and (max-width: 600px) {
+/* Place the timelime to the left */
+  .timeline::after {
+    left: 31px;
+  }
+
+/* Full-width containers */
+  .container {
+    width: 100%;
+    padding-left: 70px;
+    padding-right: 25px;
+  }
+
+/* Make sure that all arrows are pointing leftwards */
+  .container::before {
+    left: 60px;
+    border: medium solid white;
+    border-width: 10px 10px 10px 0;
+    border-color: transparent white transparent transparent;
+  }
+
+/* Make sure all circles are at the same spot */
+  .left::after, .right::after {
+    left: 15px;
+  }
+
+/* Make all right containers behave like the left ones */
+  .right {
+    left: 0%;
+  }
+}
+
+#balloonBody { margin:20px;  text-align:center; margin-bottom: 250px;}
+
+.balloon {
+  display:inline-block;
+   width:120px;
+  height:145px;
+  background:hsl(215,50%,65%);
+  border-radius:80%;
+  position:relative;
+  box-shadow:inset -10px -10px 0 rgba(0,0,0,0.07);
+  margin:20px 30px;
+  transition:transform 0.5s ease;
+  z-index:10;
+  animation:balloons 4s ease-in-out infinite;
+  transform-origin:bottom center;
+}
+
+@keyframes balloons {
+  0%,100%{ transform:translateY(0) rotate(-4deg); }
+  50%{ transform:translateY(-25px) rotate(4deg); }
+}
+
+
+.balloon:before {
+  content:"▲";
+  font-size:20px;
+  display:block;
+  text-align:center;
+  width:100%;
+  position:absolute;
+  bottom:-12px;
+  z-index:-100;
+}
+
+.balloon:after {
+ display:inline-block; top:153px;
+  position:absolute;
+  height:250px;
+  width:1px;
+  margin:0 auto;
+  content:"";
+  background:rgba(0,0,0,0.2); 
+}
+
+.balloon:nth-child(2){ animation-duration:3.5s; }
+
+.balloon:nth-child(3){ animation-duration:3s; }
+
+.balloon:nth-child(4){ animation-duration:4.5s; }
+
+.balloon:nth-child(5){ animation-duration:5s; }
+
+.balloon:nth-child(even) {background: yellow;}
+.balloon:nth-child(odd) {background: green;}
+

@@ -153,7 +153,7 @@ def server(id):
         if dt > d: difference = round((dt - d).seconds/3600)
         else: difference = round((dt - d).seconds/3600) - 24
         servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz, 'jumpContext': r.get('jumpContext').lower() == 'true', 'birthday': int(bd), 'birthdate': dt2,
-        'birthdayMode': int(r.get('birthdayMode')), 'generalChannel': int(r.get('generalChannel')), 'announcementsChannel': int(r.get('announcementsChannel')), 'moderatorChannel': int(r.get('moderatorChannel'))}})
+        'birthdayMode': int(r.get('birthdayMode'))}})
         return redirect(url_for('server', id=id)) 
     return render_template('general.html', servObj=serv, date=d, date2=d2, id=id)
 
@@ -321,6 +321,18 @@ def cyberlog(id):
             "advanced": c.get('voice').get('advanced')}}}})
         return redirect(url_for('cyberlog', id=id))
     return render_template('cyberlog.html', servid=id, server=servObj, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
+
+@app.route('/special/<string:landing>')
+def specialLanding(landing):
+    variables = {}
+    disguard = db.disguard.find_one({})
+    discord = make_session(token=session.get('oauth2_token'))
+    if 'user_id' in session and discord.get(API_BASE_URL + '/users/@me').json().get('id'):
+        if landing == 'kaileyBirthday2020':
+            variables['kailey'] = int(session['user_id']) in [596381991151337482, 247412852925661185]
+    else: return redirect(ReRoute(request.url))
+    return render_template(f'{landing}.html', disguard=disguard, vars=variables)
+
 
 if __name__ == '__main__':
     app.run()

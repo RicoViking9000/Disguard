@@ -71,14 +71,15 @@ class Moderation(commands.Cog):
         await status.edit(content=f'{member.name} is now unlocked and can access channels again.{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
 
     @commands.guild_only()
+    @commands.has_guild_permissions(manage_messages=True)
     @commands.command()
     async def purge(self, ctx, *args):
         '''Purge messages'''
         global filters
         current = copy.deepcopy(PurgeObject())
         filters[ctx.guild.id] = current
-        if not (GetManageMessagePermissions(ctx.author) and GetManageMessagePermissions(ctx.guild.me)) and ('purge:true' in args or len(args) == 1):
-            return await ctx.send("Both you and I must have Manage Message permissions to utilize the purge command")
+        if not GetManageMessagePermissions(ctx.guild.me) and ('purge:true' in args or len(args) == 1):
+            return await ctx.send('I am unable to execute the purge command as I don\'t have manage message permissions')
             #await ctx.send('Temporarily bypassing permission restrictions')
         if len(args) < 1:
             timeout=discord.Embed(title='Purge command',description='Timed out')

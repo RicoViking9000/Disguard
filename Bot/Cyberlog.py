@@ -16,6 +16,7 @@ import json
 import shutil
 import aiohttp
 import math
+import gc
 
 bot = None
 serverPurge = {}
@@ -285,6 +286,7 @@ class Cyberlog(commands.Cog):
                     print(f'Full post-verification done in {(datetime.datetime.now() - started).seconds}s')
                 for g in self.bot.guilds:
                     await verifyLogChannel(g)
+                gc.collect()
             started = datetime.datetime.now()                
             memberList = self.bot.get_all_members()
             await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in memberList if m.status != discord.Status.offline])               
@@ -3285,12 +3287,12 @@ async def verifyLogChannel(s: discord.Guild):
                 if final:
                     try: await final.send(embed=discord.Embed(description=f'⚠Your configured log channel (ID `{modular}`) for the `{mod}` module is invalid and has been reset to no value.\n[Edit settings online](http://disguard.herokuapp.com/manage/{s.id}/cyberlog)'))
                     except: pass
-                await database.SetLogChannel(s, mod, None)
+                await database.SetSubLogChannel(s, mod, None)
     if not default:
         if not final and type(default) is int:
             try: await (await database.CalculateModeratorChannel(s, False)).send(embed=discord.Embed(description=f'⚠Your configured default log channel (ID `{default}`) is invalid and has been reset to no value.\n[Edit settings online](http://disguard.herokuapp.com/manage/{s.id}/cyberlog)'))
             except: pass
-            await database.SetMainLogChannel(s, None)
+            await database.SetLogChannel(s, None)
 
 def logExclusions(channel: discord.TextChannel, member: discord.Member):
     return not any([channel.id in lightningLogging.get(channel.guild.id).get('cyberlog').get('channelExclusions'),
