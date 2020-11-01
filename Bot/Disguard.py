@@ -948,6 +948,19 @@ async def test(ctx):
         await database.ClearMemberMessages(server)
     await status.edit(content='Done')
 
+@commands.is_owner()
+@bot.command()
+async def daylight(ctx):
+    status = await ctx.send(loading)
+    for s in bot.guilds:
+        if await database.AdjustDST(s):
+            defaultLogchannel = bot.get_channel(bot.lightningLogging[s.id]['cyberlog'].get('defaultChannel'))
+            if defaultLogchannel:
+                e = discord.Embed(title='🕰 Server Time Zone update', color=yellow)
+                e.description = 'Your server\'s time zone offset from UTC setting via Disguard has automatically been decremented, as it appears your time zone is in the USA & Daylight Savings Time has ended.\n\nTo revert this, you may enter your server\'s general settings page on my web dashboard (use the `config` command to retrieve a quick link).'
+                await defaultLogchannel.send(embed=e)
+    await status.edit(content='Done')
+
 
 database.Initialize(secure.token())
 bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot

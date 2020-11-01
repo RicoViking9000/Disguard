@@ -843,3 +843,14 @@ async def SetSchedule(u: discord.User, schedule):
 async def SetWarnings(members, warnings):
     bulkUpdates = [pymongo.UpdateOne({'server_id': members[0].guild.id, 'members.id': member.id}, {'$set': {'members.$.warnings': warnings}}) for member in members]
     await servers.bulk_write(bulkUpdates)
+
+async def AdjustDST(s: discord.Guild):
+    server = await GetServer(s)
+    offset = server['offset']
+    tzname = server['tzname']
+    if offset in [-4, -5, -6, -7]:
+        if not (offset == -5 and tzname == 'EST'): 
+            await servers.update_one({'server_id': s.id}, {'$inc': {'offset': -1}})
+            return True
+    return False
+

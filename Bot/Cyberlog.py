@@ -1990,7 +1990,7 @@ class Cyberlog(commands.Cog):
             content = None
             f = None
             embed=discord.Embed(title='🚩✏Role was updated (React ℹ to view role details)', description=f'🚩Role: {after.mention}{f" ({after.name})" if after.name == before.name else ""}', color=blue, timestamp=datetime.datetime.utcnow())
-            if after.name != before.name: embed.description += f'Name: {before.name} → **{after.name}**'
+            if after.name != before.name: embed.description += f'\nName: {before.name} → **{after.name}**'
             if readPerms(before.guild, "role"):
                 try:
                     log = (await after.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_update).flatten())[0]
