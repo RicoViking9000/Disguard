@@ -943,9 +943,15 @@ async def marvel(ctx):
 @bot.command()
 async def test(ctx):
     status = await ctx.send('Working')
-    for i, server in enumerate(bot.guilds):
-        if i % 5 == 0: await status.edit(content=f'Working on server {i + 1}')
-        await database.ClearMemberMessages(server)
+    
+
+    for g in bot.guilds:
+        if bot.lightningLogging[g.id]['cyberlog']['voice']['read']: #12/10 daytime: carry old settings into new settings, based on audit log reading setting
+            await database.getDatabase().disguard.servers.update_one({'server_id': g.id}, {'$set': {'cyberlog.onlyVCForceActions': True}})
+        else: 
+            await database.getDatabase().disguard.servers.update_one({'server_id': g.id}, {'$set': {'cyberlog.voice.read': True}})
+
+
     await status.edit(content='Done')
 
 @commands.is_owner()

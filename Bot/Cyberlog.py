@@ -200,7 +200,7 @@ class Cyberlog(commands.Cog):
             if self.summarize.current_loop % 4 == 0:
                 if self.summarize.current_loop == 0:
                     asyncio.create_task(self.synchronizeDatabase(True))
-                    await database.VerifyServers(self.bot, True, True)
+                    await database.VerifyServers(self.bot, False, True)
                     def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                     await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 else: asyncio.create_task(self.synchronizeDatabase())
