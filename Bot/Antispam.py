@@ -49,7 +49,10 @@ class Antispam(commands.Cog):
                                 await member.remove_roles(g.get_role(e.get('role')))
                                 await member.add_roles(*[g.get_role(r) for r in e.get('roleList')])
                                 for p in e.get('permissionsTaken'): await g.get_channel(p.get('id')).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(p.get('overwrites')[0]), discord.Permissions(p.get('overwrites')[1])))
-                            except discord.Forbidden as e: print(f'Timed mute error: {e.text}')
+                            except discord.Forbidden as e: 
+                                try: await self.bot.get_channel(self.bot.lightningLogging[g.id]['cyberlog']['defaultChannel']).send(f'Unable to unmute {member} because {e.text}')
+                                except: pass
+                                print(f'Timed mute error: {e.text}')
                         await database.RemoveTimedEvent(g, e)
         except: traceback.print_exc()
 
@@ -159,17 +162,19 @@ class Antispam(commands.Cog):
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)
         if spam.get("congruent")[0] != 0: 
             #Checking for lastMessages and quickMessages
-            lastMessages = person.get("lastMessages")
-            if spam.get("congruent")[0] != 0:
-                counter = collections.Counter(msg['content'] for msg in lastMessages)
-                most = counter.most_common(1)[0]
-                if most[1] >= spam['congruent'][0]:
-                    flag = True
-                    reason.append(f'Duplicated messages: Member sent `{most[0]}` {most[1]} times\n\n(Server flag threshold: {spam["congruent"][0]} duplicates over {spam["congruent"][1]} most recent messages)')
-                    short.append(f'Duplicated messages (`{most[0]}`)')
-                    #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': []})
-                    person['lastMessages'] = []
-                    #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+            try:
+                lastMessages = person.get("lastMessages")
+                if spam.get("congruent")[0] != 0:
+                    counter = collections.Counter(msg['content'] for msg in lastMessages)
+                    most = counter.most_common(1)[0]
+                    if most[1] >= spam['congruent'][0]:
+                        flag = True
+                        reason.append(f'Duplicated messages: Member sent `{most[0]}` {most[1]} times\n\n(Server flag threshold: {spam["congruent"][0]} duplicates over {spam["congruent"][1]} most recent messages)')
+                        short.append(f'Duplicated messages (`{most[0]}`)')
+                        #members[f'{message.guild.id}_{message.author.id}'].update({'lastMessages': []})
+                        person['lastMessages'] = []
+                        #await database.UpdateMemberLastMessages(message.guild.id, message.author.id, lastMessages)
+            except IndexError: pass
         if 0 not in spam.get("quickMessages") and len(quickMessages) > 0:
             quickMessages = person.get("quickMessages")
             timeOne = quickMessages[0].get("created")

@@ -170,7 +170,9 @@
                         {%endfor%}
                         </select><br>
                     Send this module's logs in embed form <select name=voiceEmbed disabled><option value=True {%if cyberlog.voice.embed%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.embed%}selected{%endif%}>Disabled</option></select><br>
-                    Only log moderator enforced mutes/deafens <select name=voiceRead><option value=True {%if cyberlog.voice.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.read%}selected{%endif%}>Disabled</option></select><br>
+                    Read server's audit log to send which mods mute/deafen members <select name=voiceRead><option value=True {%if cyberlog.voice.read%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voice.read%}selected{%endif%}>Disabled</option></select><br>
+                    Log which events? <select name=voiceSpecial><option value=0 {%if cyberlog.onlyVCJoinLeave%}selected{%endif%}>Only members joining or leaving voice channels</option><option value=1 {%if cyberlog.onlyVCForceActions%}selected{%endif%}>Only moderator-enforced mutes and deafens</option><option value=2 {%if not cyberlog.onlyVCJoinLeave and not cyberlog.onlyVCForceActions%}selected{%endif%}>All voice channel events</option></select><br>
+                    Send voice activity log after users disconnect from voice channel <select name=voiceRecaps><option value=True {%if cyberlog.voiceChatLogRecaps%}selected{%endif%}>Enabled</option><option value=False {%if not cyberlog.voiceChatLogRecaps%}selected{%endif%}>Disabled</option></select><br>
                     Custom embed color <select name=voiceColor disabled><option value=None selected>Currently N/A</option></select><br>
                     Use advanced embed viewer mode <select name=voiceAdvanced disabled><option value=False selected>Currently N/A</option></select><br>
                 </fieldset>

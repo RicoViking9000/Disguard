@@ -8,6 +8,7 @@ import dns
 import oauth
 import database
 import datetime
+import json
 
 OAUTH2_CLIENT_ID = Oauth.client_id
 OAUTH2_CLIENT_SECRET = Oauth.client_secret
@@ -236,6 +237,9 @@ def cyberlog(id):
         "defaultChannel": None if r.get('defaultChannel').lower() == 'none' or r.get('defaultChannel') is None else int(r.get('defaultChannel')),
         'memberGlobal': int(r.get('memberGlobal')),
         #'summarize': int(r.get('summarize')),
+        'onlyVCJoinLeave': True if r.get('voiceSpecial') == '0' else False,
+        'onlyVCForceActions': True if r.get('voiceSpecial') == '1' else False,
+        'voiceChatLogRecaps': r.get('voiceRecaps').lower() == 'true',
         "channelExclusions": cex,
         "roleExclusions": rex,
         "memberExclusions": mex,
@@ -325,13 +329,31 @@ def cyberlog(id):
 @app.route('/special/<string:landing>')
 def specialLanding(landing):
     variables = {}
-    disguard = db.disguard.find_one({})
-    discord = make_session(token=session.get('oauth2_token'))
-    if 'user_id' in session and discord.get(API_BASE_URL + '/users/@me').json().get('id'):
-        if landing == 'kaileyBirthday2020':
-            variables['kailey'] = int(session['user_id']) in [596381991151337482, 247412852925661185]
-    else: return redirect(ReRoute(request.url))
-    return render_template(f'{landing}.html', disguard=disguard, vars=variables)
+    #disguard = db.disguard.find_one({})
+    disguard = mongo.disguard.disguard.find_one({})
+    if landing == 'kaileyBirthday2020': #When multiple pages requiring verification exist, change to a tuple. This if statement forces user verification for those navigating to the page.
+        discord = make_session(token=session.get('oauth2_token'))
+        if 'user_id' in session and discord.get(API_BASE_URL + '/users/@me').json().get('id'):
+            if landing == 'kaileyBirthday2020':
+                variables['kailey'] = int(session['user_id']) in [596381991151337482, 247412852925661185]
+        else: return redirect(ReRoute(request.url))
+    del disguard['_id']
+    d = json.loads(json.dumps(disguard, default=jsonFormatter))
+    if landing == 'timeKeeper': 
+        variables['keeperData'] = d['keeperData']
+        variables['time'] = time(disguard['keeperData'])
+    return render_template(f'{landing}.html', disguard=d, vars=variables)
+
+def jsonFormatter(o):
+    if type(o) is datetime.datetime: return o.isoformat()
+
+def time(data):
+    '''Returns the time in sped-up terms (TIMEKEEPER)'''
+    return (data["virtualEpoch"] + elapsed(data) + datetime.timedelta(hours=data["hoursFromUTC"])).isoformat()
+
+def elapsed(data):
+    '''Returns time elapsed since the epoch (return type: datetime.timedelta) (TIMEKEEPER)'''
+    return ((datetime.datetime.utcnow() - data['epoch'] - datetime.timedelta(seconds=data['pausedDuration'])) - (datetime.datetime.utcnow() - data['pausedTimestamp'] if data['paused'] else datetime.timedelta(seconds=0))) * data['timeMultiplier']
 
 
 if __name__ == '__main__':

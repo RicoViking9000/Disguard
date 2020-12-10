@@ -69,12 +69,12 @@ async def Verification(b: commands.Bot):
     await VerifyUsers(b)
     #await VerifyUsers(b)
 
-async def VerifyServers(b: commands.Bot, newOnly = False):
+async def VerifyServers(b: commands.Bot, newOnly=False, full=False):
     '''Ensures all servers have database entries; adding and removing as necessary'''
     '''First: Index all bot servers, and verify them'''
-    await asyncio.gather(*[VerifyServer(s, b) for s in b.guilds])
+    await asyncio.gather(*[VerifyServer(s, b, newOnly, full) for s in b.guilds])
 
-async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly = False):
+async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=False):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
@@ -97,7 +97,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly = False):
     for c in s.categories:
         serverChannels.append({'name': f'-----{c.name.upper()}-----', 'id': c.id})
         for channel in c.text_channels: serverChannels.append({'name': channel.name, 'id': channel.id})
-    if not serv: 
+    if not serv or full: 
         await servers.update_one({'server_id': s.id}, {"$set": { #add entry for new servers
         "name": s.name,
         "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
@@ -154,6 +154,9 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly = False):
             "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
             "image": False if log is None or log.get('image') is None else log.get('enabled'),
             "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
+            'onlyVCJoinLeave': False if log is None or log.get('defaultChannel') is None else log.get('onlyVCJoinLeave'),
+            'onlyVCForceActions': True if log is None or log.get('onlyVCForceActions') is None else log.get('onlyVCForceActions'),
+            'voiceChatLogRecaps': True if log is None or log.get('voiceChatLogRecaps') is None else log.get('voiceChatLogRecaps'),
             'memberGlobal': 2 if log is None or log.get('memberGlobal') is None else log.get('memberGlobal'),
             "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
             'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),

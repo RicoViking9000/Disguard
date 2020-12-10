@@ -147,6 +147,7 @@ class Cyberlog(commands.Cog):
         self.categories = {}
         self.invites = {}
         self.memberPermissions = {}
+        self.memberVoiceLogs = {}
         self.rawMessages = {}
         self.pauseDelete = []
         self.resumeToken = None
@@ -199,7 +200,7 @@ class Cyberlog(commands.Cog):
             if self.summarize.current_loop % 4 == 0:
                 if self.summarize.current_loop == 0:
                     asyncio.create_task(self.synchronizeDatabase(True))
-                    await database.VerifyServers(self.bot, True)
+                    await database.VerifyServers(self.bot, True, True)
                     def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                     await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 else: asyncio.create_task(self.synchronizeDatabase())
@@ -296,7 +297,7 @@ class Cyberlog(commands.Cog):
             lightningUsers = self.bot.lightningUsers
             await self.imageLogChannel.send('Completed')
         except Exception as e: 
-            print('Summarize error: {}'.format(e))
+            print('Summarize error: {}'.format(traceback.format_exc()))
             traceback.print_exc()
         print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
 
@@ -383,7 +384,7 @@ class Cyberlog(commands.Cog):
         if enabled:
             words = message.content.split(' ')
             for w in words:
-                if 'https://discordapp.com/channels/' in w: #This word is a hyperlink to a message
+                if 'https://discord.com/channels/' in w: #This word is a hyperlink to a message
                     context = await self.bot.get_context(message)
                     messageConverter = commands.MessageConverter()
                     result = await messageConverter.convert(context, w)
@@ -1180,14 +1181,7 @@ class Cyberlog(commands.Cog):
             targetInvite = None
             reactions = ['🔽', 'ℹ', '🤐', '🔒', '👢', '🔨']
             count = len(member.guild.members)
-            ageDelta = datetime.datetime.utcnow() - member.created_at
-            units = ['second', 'minute', 'hour', 'day']
-            hours, minutes, seconds = ageDelta.seconds // 3600, (ageDelta.seconds // 60) % 60, ageDelta.seconds - (ageDelta.seconds // 3600) * 3600 - ((ageDelta.seconds // 60) % 60)*60
-            ageTimes = [seconds, minutes, hours, ageDelta.days]
-            ageDisplay = []
-            for i in range(len(ageTimes) - 1, -1, -1):
-                if ageTimes[i] != 0: ageDisplay.append(f'{ageTimes[i]} {units[i]}{"s" if ageTimes[i] != 1 else ""}')
-            if len(ageDisplay) == 0: ageDisplay = ['0 seconds']
+            ageDisplay = elapsedDuration(datetime.datetime.utcnow() - member.created_at, False)
             embed=discord.Embed(title=f"👤{self.greenPlus}New member {self.loading}",timestamp=datetime.datetime.utcnow(),color=0x008000)
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
             try: await member.avatar_url_as(size=1024).save(savePath)
@@ -1423,19 +1417,15 @@ class Cyberlog(commands.Cog):
                         sendTo = await database.CalculateGeneralChannel(member.guild, True)
                         if sendTo.permissions_for(member).read_messages: await sendTo.send(sendString) #If the member can read messages in the server's general channel, then we'll send it there
             if len(joinLogs) >= rj[0]:
+                joinSpanDisplay = elapsedDuration(joinLogs[-1] - joinLogs[0])
                 joinSpan = (joinLogs[-1] - joinLogs[0])
-                jH, jM, jS = joinSpan.seconds // 3600, (joinSpan.seconds // 60) % 60, joinSpan.seconds - (joinSpan.seconds // 3600) * 3600 - ((joinSpan.seconds // 60) % 60) * 60
-                joinSpanTimes = [jS, jM, jH, joinSpan.days]
-                joinSpanDisplay = []
-                for i in range(len(joinSpanTimes) - 1, -1, -1):
-                    if joinSpanTimes[i] != 0: joinSpanDisplay.append(f'{joinSpanTimes[i]} {units[i]}{"s" if joinSpanTimes[i] != 1 else ""}')
                 if len(joinSpanDisplay) == 0: joinSpanDisplay = ['0 seconds']
                 if joinSpan.seconds < rj[1]:
                     unbanAt = datetime.datetime.utcnow() + datetime.timedelta(seconds=rj[2])
                     timezoneUnbanAt = unbanAt + datetime.timedelta(hours=timeZone(member.guild))
                     try: await member.send(f'You have been banned from `{member.guild.name}` until {timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)} for repeatedly joining and leaving the server.')
                     except: pass
-                    try: await member.ban(reason=f'''[Antispam: repeatedJoins] {member.name} joined the server {len(joinLogs)} times in {f"{', '.join(joinSpanDisplay[:-1])} and {joinSpanDisplay[-1]}" if len(joinSpanDisplay) > 1 else joinSpanDisplay[0]}, and will remain banned until {f"{timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}" if rj[2] > 0 else "the ban is manually revoked"}.''')
+                    try: await member.ban(reason=f'''[Antispam: repeatedJoins] {member.name} joined the server {len(joinLogs)} times in {joinSpanDisplay}, and will remain banned until {f"{timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}" if rj[2] > 0 else "the ban is manually revoked"}.''')
                     except discord.Forbidden: 
                         try: await logChannel(member.guild, "doorguard").send(f'Unable to ban {member.name} for [ageKick: repeatedJoins] module')
                         except: pass
@@ -1482,13 +1472,7 @@ class Cyberlog(commands.Cog):
             content=None
             f = None
             embed=discord.Embed(title=f'👤❌Member left ({self.loading}Finalizing log)', description=f'{member.mention} ({member.name})', timestamp=datetime.datetime.utcnow(), color=red)
-            span = datetime.datetime.utcnow() - member.joined_at
-            hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
-            times = [seconds, minutes, hours, span.days]
-            hereForDisplay = []
-            for i in range(len(times) - 1, -1, -1):
-                if times[i] != 0: hereForDisplay.append(f'{times[i]} {units[i]}{"s" if times[i] != 1 else ""}')            
-            if len(hereForDisplay) == 0: hereForDisplay = ['0 seconds']
+            hereForDisplay = elapsedDuration(datetime.datetime.utcnow() - member.joinedAt)
             embed.add_field(name='Post count',value=self.loading)
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
             try: await member.avatar_url_as(size=1024).save(savePath)
@@ -1512,7 +1496,7 @@ class Cyberlog(commands.Cog):
                 except Exception as e: content=f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             try:
                 embed.description+=f"\n[Hover for more details]({message.jump_url} 'Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}"
-                embed.description+=f'''\nLeft at: {received}\nHere for: {f"{', '.join(hereForDisplay[:-1])} and {hereForDisplay[-1]}" if len(hereForDisplay) > 1 else hereForDisplay[0]}'''
+                embed.description+=f'''\nLeft at: {received}\nHere for: {hereForDisplay}'''
                 sortedMembers = sorted(members.get(member.guild.id), key=lambda x: x.joined_at)
                 memberJoinPlacement = sortedMembers.index(member) + 1
                 embed.description+=f'\nWas the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}'
@@ -1545,15 +1529,9 @@ class Cyberlog(commands.Cog):
                     async for log in guild.audit_logs(limit=None): #Attempt to find the ban audit log to pull ban details
                         if log.action == discord.AuditLogAction.ban:
                             if log.target.id == user.id:
-                                span = datetime.datetime.utcnow() - log.created_at
-                                hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
-                                times = [seconds, minutes, hours, span.days]
-                                bannedForDisplay = []
-                                for i in range(len(times) - 1, -1, -1):
-                                    if times[i] != 0: bannedForDisplay.append(f'{times[i]} {units[i]}{"s" if times[i] != 1 else ""}')
-                                if len(bannedForDisplay) == 0: bannedForDisplay = ['0 seconds']                                
+                                bannedForDisplay = elapsedDuration(datetime.datetime.utcnow() - log.created_at)
                                 embed.add_field(name="Ban details",value='React ℹ to expand', inline=False)
-                                longString = f'''Banned by: {log.user.name} ({log.user.mention})\nBanned because: {log.reason if log.reason is not None else '<No reason specified>'}\nBanned at: {(log.created_at + datetime.timedelta(hours=timeZone(guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(guild)}\nUnbanned at: {received}\nBanned for: {f"{', '.join(bannedForDisplay[:-1])} and {bannedForDisplay[-1]}" if len(bannedForDisplay) > 1 else bannedForDisplay[0]}'''
+                                longString = f'''Banned by: {log.user.name} ({log.user.mention})\nBanned because: {log.reason if log.reason is not None else '<No reason specified>'}\nBanned at: {(log.created_at + datetime.timedelta(hours=timeZone(guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(guild)}\nUnbanned at: {received}\nBanned for: {bannedForDisplay}'''
                                 break
                 except Exception as e: content=f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not user.is_avatar_animated() else 'gif'))
@@ -1802,7 +1780,7 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
-        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(after.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(after.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
         if logEnabled(before, 'server'):
             embed=discord.Embed(title='✏Server updated (React ℹ to view server details)', timestamp=datetime.datetime.utcnow(), color=blue)
             content = None
@@ -1986,7 +1964,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is updated'''
         received = (datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(after.guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
-        if logEnabled(before.guild, "role"):
+        if logEnabled(before.guild, 'role'):
             content = None
             f = None
             embed=discord.Embed(title='🚩✏Role was updated (React ℹ to view role details)', description=f'🚩Role: {after.mention}{f" ({after.name})" if after.name == before.name else ""}', color=blue, timestamp=datetime.datetime.utcnow())
@@ -2129,100 +2107,221 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild: discord.Guild, before, after):
         '''[DISCORD API METHOD] Called when emoji list is updated (creation, update, deletion)'''
-        if not logEnabled(guild, "emoji"):
-            return
-        content=None
-        embed=None
-        data = {'server': guild.id}
-        if len(before) > len(after):
-            embed=discord.Embed(title=" ",description=" ",timestamp=datetime.datetime.utcnow(),color=0xff0000)
-        elif len(after) > len(before):
-            embed=discord.Embed(title=" ",description=" ",timestamp=datetime.datetime.utcnow(),color=0x008000)
-        else:
-            embed=discord.Embed(title=" ",description=" ",timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-        if readPerms(guild, "emoji"):
-            try:
-                async for log in guild.audit_logs(limit=1):
-                    if log.action == discord.AuditLogAction.emoji_delete or log.action==discord.AuditLogAction.emoji_create or log.action==discord.AuditLogAction.emoji_update:
-                        embed.description = "By: "+log.user.mention+" ("+log.user.name+")"
-                        embed.set_thumbnail(url=log.user.avatar_url)
-                        await updateLastActive(log.user, datetime.datetime.now(), 'updated emojis somewhere')
-            except Exception as e: content=f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
-        if len(before) > len(after): #Emoji was removed
-            embed.title="❌Emoji removed"
-            data['removed'] = [{'emoji': a.id, 'name': a.name} for a in before if a not in after]
-            for emoji in before:
-                if emoji not in after:
-                    embed.add_field(name=emoji.name,value=str(emoji))
-                    embed.set_footer(text="Emoji ID: "+str(emoji.id))
-                    embed.set_image(url=emoji.url)
-        elif len(after) > len(before): #Emoji was added
-            embed.title="{}Emoji created".format(self.whitePlus)
-            data['added'] = [{'emoji': a.id, 'name': a.name} for a in after if a not in before]
-            for emoji in after:
-                if emoji not in before:
-                    embed.add_field(name=emoji.name,value=str(emoji))
-                    embed.set_footer(text="Emoji ID: "+str(emoji.id))
-                    embed.set_image(url=emoji.url)
-        else: #Emoji was updated
-            embed.title="✏Emoji list updated"
-            data['updated'] = [{'emoji': before[a].id, 'oldName': before[a].name, 'newName': after[a].name} for a in range(len(before))]
-            embed.set_footer(text="")
-            for a in range(len(before)):
-                if before[a].name != after[a].name:
-                    embed.add_field(name=before[a].name+" → "+after[a].name,value=str(before[a]))
-                    embed.set_footer(text=embed.footer.text+"Emoji ID: "+str(before[a].id))
-                    embed.set_image(url=before[a].url)
-        if len(embed.fields)>0:
-            #if await database.SummarizeEnabled(guild, 'emoji'):
-            #    summaries.get(str(guild.id)).add('emoji', 14, datetime.datetime.now(), data, embed,content=content)
-            #else:
-            msg = await (logChannel(guild, "emoji")).send(content=content,embed=embed)
-            await VerifyLightningLogs(msg, 'emoji')
+        received = (datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(guild.id).get('offset'))).strftime('%b %d, %Y • %I:%M:%S %p')
+        if logEnabled(guild, 'emoji'):
+            content = None
+            f = None
+            minion = discord.utils.get(bot.get_guild(495263898002522144).emojis, name='minion')
+            embed = discord.Embed(title=f'{minion}{self.greenPlus}Emoji created', description = '', timestamp=datetime.datetime.utcnow(), color=green)
+            logType = discord.AuditLogAction.emoji_create
+            if len(before) > len(after): #Emoji was deleted
+                embed.title = f'{minion}❌Emoji deleted'
+                embed.color = red
+                logType = discord.AuditLogAction.emoji_delete
+            elif len(after) == len(before):
+                embed.title = f'{minion}✏Emoji list updated'
+                embed.color = blue
+                logType = discord.AuditLogAction.emoji_update
+            #utilize dictionaries for speed purposes, to prevent necessity of nested loops
+            beforeDict = {}
+            afterDict = {}
+            footerIDList = []
+            for emoji in before: beforeDict.update({emoji.id: {'name': emoji.name, 'url': emoji.url, 'raw': str(emoji)}})
+            for emoji in after: afterDict.update({emoji.id: {'name': emoji.name, 'url': emoji.url, 'raw': str(emoji)}})
+            for eID, emoji in beforeDict.items():
+                if eID not in afterDict: #emoji removed
+                    embed.add_field(name=f'❌{emoji["name"]}', value=f'{emoji["raw"]} • [View image]({emoji["url"]})')
+                    if embed.image.url is embed.Empty: embed.set_image(url=emoji['url'])
+                    footerIDList.append(eID)
+            for eID, emoji in afterDict.items():
+                if eID not in beforeDict: #emoji created
+                    embed.add_field(name=f'{self.greenPlus}{emoji["name"]}', value=f'{emoji["raw"]} • [View image]({emoji["url"]})')
+                    if embed.image.url is embed.Empty: embed.set_image(url=emoji['url'])
+                    footerIDList.append(eID)
+                elif eID in beforeDict and beforeDict[eID]['name'] != emoji['name']: #name updated
+                    embed.add_field(name=f'{beforeDict[eID]["name"]} → **{emoji["name"]}**', value=emoji['raw'])
+                    if embed.image.url is embed.Empty: embed.set_image(url=emoji['url'])
+                    footerIDList.append(eID)
+            if readPerms(guild, "emoji"):
+                try:
+                    log = (await guild.audit_logs(limit=1, action=logType).flatten())[0]
+                    embed.description = f'👮‍♂️Updated by: {log.user.mention} ({log.user.name})'
+                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
+                    try: await log.user.avatar_url_as(size=1024).save(savePath)
+                    except discord.HTTPException: pass
+                    f = discord.File(savePath)
+                    embed.set_author(icon_url=f'attachment://{f.filename}', name=log.user.name)
+                    await updateLastActive(log.user, datetime.datetime.now(), 'updated emojis somewhere')
+                except Exception as e: content=f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+            embed.set_footer(text=f'Relevant emoji IDs: {" • ".join(str(f) for f in footerIDList)}' if len(footerIDList) > 1 else f'Emoji ID: {footerIDList[0]}')
+            embed.description += f'\n🕰Timestamp: {received}'
+            if len(embed.fields) > 0:
+                #if await database.SummarizeEnabled(guild, 'emoji'):
+                #    summaries.get(str(guild.id)).add('emoji', 14, datetime.datetime.now(), data, embed,content=content)
+                #else:
+                msg = await (logChannel(guild, "emoji")).send(content=content,embed=embed)
+                await VerifyLightningLogs(msg, 'emoji')
     
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        '''[DISCORD API METHOD] Called whenever a voice channel event is triggered - join/leave, mute/deafen, etc'''
+        rawReceived = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(member.guild.id).get('offset'))
+        received = rawReceived.strftime('%b %d, %Y • %I:%M:%S %p')
         if not logEnabled(member.guild, 'voice'):
             return
-        embed=discord.Embed(title="Voice Channel update",description=member.mention,timestamp=datetime.datetime.utcnow(),color=0x0000FF)
-        data = {'server': member.guild.id, 'member': member.id, 'name': member.name}
-        data['oldChannel'] = before.channel.id if before.channel is not None else None
-        data['newChannel'] = after.channel.id if after.channel is not None else None
+        embed=discord.Embed(title = '🎙Voice Channel Update', description=f'👤: {member.mention} ({member.name})\n', timestamp=datetime.datetime.utcnow(), color=blue)
+        #Variables: log: declared up here because flashText will utilize the log variable which may not have otherwise been initialized, space saving compared to try/except
+        flashText = None
+        f = []
+        log = None
+        onlyModActions = self.bot.lightningLogging[member.guild.id]['cyberlog']['onlyVCForceActions']
+        onlyJoinLeave = self.bot.lightningLogging[member.guild.id]['cyberlog']['onlyVCJoinLeave'] #Make sure to do a full server verification every day to make sure this key exists
+        logRecapsEnabled = self.bot.lightningLogging[member.guild.id]['cyberlog']['voiceChatLogRecaps']
+        try: eventHistory = self.memberVoiceLogs[member.id]
+        except KeyError:
+            eventHistory = []
+            self.memberVoiceLogs[member.id] = eventHistory
+            eventHistory = self.memberVoiceLogs[member.id]
+        #Use an if/else structure for AFK/Not AFK because AFK involves switching channels - this prevents duplicates of AFK & Channel Switch logs
         if before.afk != after.afk:
-            if after.afk: embed.add_field(name="😴",value="Went AFK (was in "+before.channel.name+")")
-            else: embed.add_field(name='🚫😴',value='No longer AFK; currently in {}'.format(after.channel.name))
-        else: #that way, we don't get duplicate logs with AFK and changing channels
-            if before.deaf != after.deaf:
-                if before.deaf: #member is no longer force deafened
-                    embed.add_field(name="🔨 🔊",value="Force undeafened")
-                else:
-                    embed.add_field(name="🔨 🔇",value="Force deafened")
-            if before.mute != after.mute:
-                if before.mute: #member is no longer force muted
-                    embed.add_field(name="🔨 🗣",value="Force unmuted")
-                else:
-                    embed.add_field(name="🔨 🤐",value="Force muted")
-            if not readPerms(member.guild, 'voice'): #the readPerms variable is used here to determine mod-only actions for variable convenience since audit logs aren't available
+            if after.afk: 
+                flashText = f'😴{member} went AFK from 🎙{before.channel}'
+                eventHistory.append(f'😴[{received} {nameZone(member.guild)}] Went AFK')
+                embed.add_field(name='😴Went AFK', value=f'📤Left: 🎙{before.channel}\n📥Joined: 🎙{after.channel}')
+            else: 
+                flashText = f'🚫😴{member} rejoined 🎙{after.channel} & is no longer AFK'
+                eventHistory.append(f'🚫😴[{received} {nameZone(member.guild)}] Returned from AFK')
+                embed.add_field(name='🚫😴Left AFK', value=f'📤Left: 🎙{before.channel}\n📥Rejoined: 🎙{after.channel}')
+        else:
+            #method that calculates how long a member was muted or deafened for
+            def sanctionedFor(mode):
+                '''Returns a timespan string in standard Disguard format (x seconds or y minutes, etc) representing how long a member was muted or deafened, passed via the mode arg'''
+                i = len(eventHistory) - 1
+                e = eventHistory[-1]
+                #while loop will iterate through eventHistory in reverse order until it either hits the beginning or finds the most recent mute/deafen
+                while i > 0:
+                    e = eventHistory[i]
+                    if mode == 'mute' and '🎙🤐' in e[1]: break
+                    elif mode == 'modMute' and '🎙🔨🤐' in e[1]: break
+                    elif mode == 'deafen' and '🔇' in e[1]: break
+                    elif mode == 'modDeafen' and '🔨🔇' in e[1]: break
+                    else: i -= 1
+                #If we hit the end without finding a match, then the member probably unmuted before joining the voice channel, which the API doesn't do anything with until they join
+                if i > 0:
+                    return elapsedDuration(rawReceived - e[0])
+                else: return f'Special case: Member is on browser & had to accept microphone permissions or member toggled {mode} while outside of voice channel'
+            #Member switched force-deafen or force-mute status - master if branch is for space-saving purposes when handing audit log retrieval
+            if (before.deaf != after.deaf) or (before.mute != after.mute):
+                #Audit log retrieval - check if audit log reading is enabled (fix this elsewhere to make sure the bot actually checks this setting)
+                if readPerms(member.guild, 'voice'):
+                    try:
+                        #Fetch the most recent audit log
+                        log = (await member.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update).flatten())[0]
+                        #Retrieve the additional attributes necessary to verify this audit log entry applies to a mute/deafen
+                        i = iter(log.before)
+                        #Check to make sure that if the audit log represents a mute, our event is a mute, and same for deafen
+                        if ('mute' in i and before.mute != after.mute) or ('deafen' in i and before.deaf != after.deaf):
+                            #See message edit for documentation on this segment
+                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
+                            try: await log.user.avatar_url_as(size=1024).save(savePath)
+                            except discord.HTTPException: pass
+                            f.append(discord.File(savePath))
+                            embed.set_author(icon_url=f'attachment://{f[0].filename}', name=log.user)
+                            await updateLastActive(log.user, datetime.datetime.now(), 'moderated a user in voice chat')
+                    except Exception as e: flashText=f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+            if not onlyJoinLeave:
+                if before.mute != after.mute:
+                    #Member is no longer force muted
+                    if before.mute:
+                        flashText = f'🎙🔨🗣{log.user if log else "[Moderator]"} unmuted {member}'
+                        eventHistory.append((rawReceived, f'🎙🔨🗣Unmuted by {log.user if log else "a moderator"}'))
+                        embed.add_field(name='🎙🔨🗣Unmuted by moderator', value=f'👮‍♂️: {log.user.mention} ({log.user.name})\n(Was muted for {sanctionedFor("modMute")})')
+                    #Member became force muted
+                    else:
+                        flashText = f'🎙🔨🤐{log.user if log else "[Moderator]"} muted {member}'
+                        eventHistory.append((rawReceived, f'🎙🔨🤐Muted by {log.user if log else "a moderator"}'))
+                        embed.add_field(name='🎙🔨🤐Muted by moderator', value=f'👮‍♂️: {log.user.mention} ({log.user.name})')
+                if before.deaf != after.deaf:
+                    #If member was previously deafened, then they are no longer deafened
+                    if before.deaf:
+                        flashText = f'🔨🔊{log.user if log else "[Moderator]"} undeafened {member}'
+                        eventHistory.append((rawReceived, f'🔨🔊Undeafened by {log.user if log else "a moderator"}'))
+                        embed.add_field(name='🔨🔊Undeafened by moderator', value=f'👮‍♂️: {log.user.mention} ({log.user.name})\n(Was deafened for {sanctionedFor("modDeafen")})')
+                    #Otherwise, they were just deafened by a moderator
+                    else:
+                        flashText = f'🔨🔇{log.user if log else "[Moderator]"} deafened {member}'
+                        eventHistory.append((rawReceived, f'🔨🔇Deafened by {log.user if log else "a moderator"}'))
+                        embed.add_field(name='🔨🔇Deafened by moderator', value=f'👮‍♂️: {log.user.mention} ({log.user.name})')
+            if not onlyModActions:
                 await updateLastActive(member, datetime.datetime.now(), 'voice channel activity')
-                if before.self_deaf != after.self_deaf:
-                    if before.self_deaf:
-                        embed.add_field(name="🔊",value="Undeafened")
-                    else:
-                        embed.add_field(name="🔇",value="Deafened")
-                if before.self_mute != after.self_mute:
-                    if before.self_mute:
-                        embed.add_field(name="🗣",value="Unmuted")
-                    else:
-                        embed.add_field(name="🤐",value="Muted")
+                if not onlyJoinLeave:
+                    #Member changed self-deafen status
+                    if before.self_deaf != after.self_deaf:
+                        if before.self_deaf:
+                            flashText = f'🔊{member} undeafened themselves'
+                            eventHistory.append((rawReceived, '🔊Undeafened themselves'))
+                            embed.add_field(name="🔊Undeafened",value=f'(Was deafened for {sanctionedFor("deafen")})')
+                        else:
+                            flashText = f'🔇{member} deafened themselves'
+                            eventHistory.append((rawReceived, '🔇Deafened themselves'))
+                            embed.add_field(name='🔇Deafened', value='_ _')
+                    if before.self_mute != after.self_mute:
+                        if before.self_mute:
+                            flashText = f'🎙🗣{member} unmuted themselves'
+                            eventHistory.append((rawReceived, '🎙🗣Unmuted themselves'))
+                            embed.add_field(name='🎙🗣Unmuted',value=f'(Was muted for {sanctionedFor("mute")})')
+                        else:
+                            flashText = f'🎙🤐{member} muted themselves'
+                            eventHistory.append((rawReceived, '🎙🤐Muted themselves'))
+                            embed.add_field(name='🎙🤐Muted',value='_ _')
                 if before.channel != after.channel:
-                    b4 = "(Disconnected)" if before.channel is None else before.channel.name
-                    af = "(Disconnected)" if after.channel is None else after.channel.name
-                    embed.add_field(name="🔀",value="Channel: "+b4+" → "+af)
+                    if not before.channel:
+                        flashText = f'📥{member} connected to 🎙{after.channel.name}'
+                        #self.memberVoiceLogs.update({member.id: []}) #When the member joins a channel, we clear their history log from before, if it exists, to start a new one
+                        eventHistory = []
+                        self.memberVoiceLogs[member.id] = eventHistory
+                        eventHistory = self.memberVoiceLogs[member.id]
+                        eventHistory.append((rawReceived, f'📥Connected to 🎙{after.channel.name}'))
+                        embed.add_field(name='📥Connected', value=f'To 🎙{after.channel.name}')
+                    elif not after.channel:
+                        flashText = f'📤{member} disconnected from 🎙{before.channel.name}'
+                        eventHistory.append((rawReceived, f'📤Disconnected from 🎙{before.channel.name}'))
+                        embed.add_field(name='📤Disconnected', value=f'From 🎙{before.channel.name}')
+                    else:
+                        flashText = f'🔀{member} switched from 🎙{before.channel.name} to 🎙{after.channel.name}'
+                        eventHistory.append((rawReceived, f'🔀Switched from 🎙{before.channel.name} to 🎙{after.channel.name}'))
+                        embed.add_field(name=f'🔀Switched voice channels', value=f'🎙{before.channel.name} → **{after.channel.name}**')
         if len(embed.fields) < 1: return
-        #if await database.SummarizeEnabled(member.guild, 'voice'):
-        #    summaries.get(str(member.guild.id)).add('voice', 15, datetime.datetime.now(), data, embed)
-        #else:
-        msg = await (logChannel(member.guild, 'voice')).send(embed=embed)
+        #Method to build voice channel history embed
+        def buildHistoryLog(eventHistory):
+            logEmbed = discord.Embed(title='Member Voice Log Recap • ', description='', color=blue)
+            maxNumberOfEntries = 30 #Max number of log entries to display in the embed
+            start, end = eventHistory[0 if len(eventHistory) < 30 else eventHistory[-1 * maxNumberOfEntries]], eventHistory[-1]
+            #Set embed title based on the distance span between the start and end of voice log history
+            if start[0].day == end[0].day: logEmbed.title += f'{start[0]:%I:%M %p} - {end[0]:%I:%M %p}' #Member began & ended voice session on the same day, so least amount of contextual date information
+            elif (end[0] - start[0]).days < 1: logEmbed.title += f'{start[0]:%I:%M %p} yesterday - {end[0]:%I:%M %p} today' #Member began & ended voice session one day apart - so use yesterday & today
+            else: logEmbed.title += f'{start[0]:%I:%M %p %b %d}  - {end[0]:%I:%M %p} today' #More than one day apart
+            if len(eventHistory) > 30: logEmbed.title += f'(Last {maxNumberOfEntries} entries)'
+            #Join the formatted log, last [maxNumberOfEntries] entries
+            for e in eventHistory[-1 * maxNumberOfEntries:]:
+                logEmbed.description += f'[{e[0]:%b %d %I:%M:%S %p}] {e[1]}\n'
+            logEmbed.add_field(name='Voice Session Duration', value=elapsedDuration(eventHistory[-1][0] - eventHistory[0][0]))
+            logFile = discord.File(savePath)
+            logEmbed.set_author(name=member.name, icon_url=f'attachment://{logFile.filename}')
+            eventHistory = []
+            return logEmbed, logFile
+        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
+        try: await member.avatar_url_as(size=1024).save(savePath)
+        except discord.HTTPException: pass
+        f.append(discord.File(savePath))
+        embed.set_thumbnail(url=f'attachment://{f[-1].filename}')
+        lc = logChannel(member.guild, 'voice')
+        msg = await lc.send(content=flashText, embed=embed, files=f)
+        #We send the flashMessage for people with notifications on, so they'll get a curated, contextual message, then remove the text since the embed tells the full story
+        if 'audit log' not in msg.content: await msg.edit(content=None)
+        if not after.channel and logRecapsEnabled:
+            resultEmbed, fle = buildHistoryLog(eventHistory)
+            await lc.send(embed=resultEmbed, file=fle)
         await VerifyLightningLogs(msg, 'voice')
 
     '''The following listener methods are used for lastActive tracking; not logging right now'''
@@ -3356,6 +3455,16 @@ def suffix(count: int):
     elif count%10==3:
         sfx='rd'
     return sfx
+
+def elapsedDuration(timeSpan, joinString=True):
+    hours, minutes, seconds = timeSpan.seconds // 3600, (timeSpan.seconds // 60) % 60, timeSpan.seconds - (timeSpan.seconds // 3600) * 3600 - ((timeSpan.seconds // 60) % 60)*60
+    timeList = [seconds, minutes, hours, timeSpan.days]
+    display = []
+    for i, v in reversed(tuple(enumerate(timeList))): #v stands for value
+        if v != 0: display.append(f'{v} {units[i]}{"s" if v != 1 else ""}')
+    if len(display) == 0: display = ['0 seconds']
+    if joinString: return f"{', '.join(display[:-1])} and {display[-1]}" if len(display) > 1 else display[0]
+    else: return display #This is a list that will be joined as appropriate at my discretion in the parent method, if I don't want to use the default joiner above
 
 
 def setup(Bot):
