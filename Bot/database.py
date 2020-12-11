@@ -154,7 +154,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
             "image": False if log is None or log.get('image') is None else log.get('enabled'),
             "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
-            'onlyVCJoinLeave': False if log is None or log.get('defaultChannel') is None else log.get('onlyVCJoinLeave'),
+            'onlyVCJoinLeave': False if log is None or log.get('onlyVCJoinLeave') is None else log.get('onlyVCJoinLeave'),
             'onlyVCForceActions': True if log is None or log.get('onlyVCForceActions') is None else log.get('onlyVCForceActions'),
             'voiceChatLogRecaps': True if log is None or log.get('voiceChatLogRecaps') is None else log.get('voiceChatLogRecaps'),
             'memberGlobal': 2 if log is None or log.get('memberGlobal') is None else log.get('memberGlobal'),
