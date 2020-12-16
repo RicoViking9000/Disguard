@@ -38,7 +38,11 @@
                     <option value=720 {%if cyberlog.summarize==720%}selected{%endif%}>Every 12 hours</option>
                     <option value=1440 {%if cyberlog.summarize==1440%}selected{%endif%}>Every day</option>
                     <option value=10080 {%if cyberlog.summarize==10080%}selected{%endif%}>Every week</option></select> -->
-                <br>Default logging channel
+                    <div class=masterSwitch>
+                        Logging module<br><input type="radio" name="enabled" value=True {%if cyberlog.enabled%}checked{%endif%}>Enabled
+                        <br><input type="radio" name="enabled" value=False {%if not cyberlog.enabled%}checked{%endif%}>Disabled
+                    </div>
+                    <br>Default logging channel
                     <select name=defaultChannel><option value=None {%if not cyberlog.defaultChannel%}selected{%endif%}>--Select a channel--</option>
                     {%for channel in channels%}
                         <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.defaultChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>

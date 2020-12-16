@@ -697,7 +697,7 @@ async def _schedule(ctx, *, desiredDate=None):
     elif type(desiredDate) is str: 
         dt = Birthdays.calculateDate(ctx.message, datetime.datetime.now())
         if not dt:
-            contentLog.append(f"⚠Unable to calculate a date from `{desiredDate}`, switching to today's schedule")
+            contentLog.append(f"⚠Unable to calculate a date from `{desiredDate}`; switching to today's schedule")
             date = today
             desiredDate = today
         else: 
@@ -754,7 +754,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if result[0] > 0: return f'> {string} in {result[0]}h {result[1]}m'
             else: return f'> {string} in {result[1]} minutes'
         embed.add_field(name=f'{classStatus()}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
-            value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1]) else ""}', inline=False)
+            value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1]) else ""}{f"{newline}A lunch: 11:00-11:25{newline}B lunch: 11:30-11:55{newline}C lunch: 12:00-12:25{newline}D lunch: 12:30-12:55" if i == 2 else ""}', inline=False)
     return await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
 
 @bot.command()
