@@ -292,7 +292,7 @@ async def support(ctx, *, opener=''):
     await ctx.trigger_typing()
     def navigationCheck(r, u): return str(r) in reactions and r.message.id == status.id and u.id == ctx.author.id
     if not opener:
-        embed=discord.Embed(title='Disguard Support Menu', description=f'Welcome to Disguard support!\n\nIf you would easily like to get support, you may join my official server: https://discord.gg/xSGujjz\n\nIf you would like to get in touch with my developer without joining servers, react 🎟 to open a support ticket\n\nIf you would like to view your support tickets, type `{prefixes.get(ctx.guild.id) if ctx.guild else "."}tickets` or react 📜', color=yellow)
+        embed=discord.Embed(title='Disguard Support Menu', description=f"Welcome to Disguard support!\n\nIf you would easily like to get support, you may join my official server: https://discord.gg/xSGujjz\n\nIf you would like to get in touch with my developer without joining servers, react 🎟 to open a support ticket\n\nIf you would like to view your support tickets, type `{bot.lightningLogging[ctx.guild.id]['prefix'] if ctx.guild else '.'}tickets` or react 📜", color=yellow)
         status = await ctx.send(embed=embed)
         reactions = ['🎟', '📜']
         for r in reactions: await status.add_reaction(r)
@@ -333,7 +333,7 @@ async def support(ctx, *, opener=''):
     await database.CreateSupportTicket(ticket)
     whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
     embed.title = f'🎟 Disguard Ticket System / {whiteCheck} Support Ticket Created!'
-    embed.description = f'''Your support ticket has been created\n\nTicket {ticket['number']}\nAuthor: {ctx.author.name}\nMessage: {opener}\n\nTo view this ticket, react 🎟 or type `{prefixes.get(ctx.guild.id) if ctx.guild else "."}tickets {ticket['number']}`\nThat will allow you to add members to the support thread if desired, disable notifications, reply, and more.'''
+    embed.description = f'''Your support ticket has been created\n\nTicket {ticket['number']}\nAuthor: {ctx.author.name}\nMessage: {opener}\n\nTo view this ticket, react 🎟 or type `{bot.lightningLogging[ctx.guild.id]['prefix'] if ctx.guild else "."}tickets {ticket['number']}`\nThat will allow you to add members to the support thread if desired, disable notifications, reply, and more.'''
     await status.edit(embed=embed)
     reactions = ['🎟']
     await status.add_reaction('🎟')
@@ -386,7 +386,7 @@ async def ticketsCommand(ctx, number:int = None):
     sortDescriptions = ['Recently Active (Newest first)', 'Recently Active (Oldest first)', 'Ticket Number (Descending)', 'Ticket Number (Ascending)']
     filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
     if len(filtered) == 0:
-        embed.description = f'There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{prefixes.get(ctx.guild.id) if ctx.guild else "."}ticket`'
+        embed.description = f"There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{bot.lightningLogging[ctx.guild.id]['prefix'] if ctx.guild else '.'}ticket`"
         return await message.edit(embed=embed)
     def optionNavigation(r, u): return r.emoji in reactions and r.message.id == message.id and u.id == ctx.author.id and not u.bot
     def messageCheck(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
