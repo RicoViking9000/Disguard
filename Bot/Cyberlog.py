@@ -1472,7 +1472,7 @@ class Cyberlog(commands.Cog):
             content=None
             f = None
             embed=discord.Embed(title=f'👤❌Member left ({self.loading}Finalizing log)', description=f'{member.mention} ({member.name})', timestamp=datetime.datetime.utcnow(), color=red)
-            hereForDisplay = elapsedDuration(datetime.datetime.utcnow() - member.joinedAt)
+            hereForDisplay = elapsedDuration(datetime.datetime.utcnow() - member.joined_at)
             embed.add_field(name='Post count',value=self.loading)
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
             try: await member.avatar_url_as(size=1024).save(savePath)
