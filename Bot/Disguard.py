@@ -245,14 +245,22 @@ async def broadcast(ctx):
     def patchCheck(m): return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
     try: message = await bot.wait_for('message', check=patchCheck, timeout=300)
     except asyncio.TimeoutError: return
-    embed = discord.Embed(title=message.content[:message.content.find('\n')], description=message.content[message.content.find('\n'):], color=yellow)
-    await ctx.send(content='Config - step 1: Servers\n\nType `all` to send to all servers, a comma-separated list of IDs to select specific servers, or an equation (eq: <statement>)', embed=embed)
+    query = await ctx.send('Embed?')
+    for r in ('❌', '☑'): await query.add_reaction(r)
+    def rCheck(r, u): return str(r) in ('❌', '☑') and r.message.id == query.id and u.id == ctx.author.id
+    try: reaction = await bot.wait_for('reaction_add', check=rCheck, timeout=300)
+    except asyncio.TimeoutError: return
+    if str(reaction[0]) == '☑': embedForm = True
+    else: embedForm = False
+    if embedForm: embed = discord.Embed(title=message.content[:message.content.find('\n')], description=message.content[message.content.find('\n'):], color=yellow)
+    else: embed = message.content
+    await ctx.send(content=f'Config - step 1: Servers\n\nType `all` to send to all servers, a comma-separated list of IDs to select specific servers, or an equation (eq: <statement>)\n\n{embed if not embedForm else ""}', embed=embed if embedForm else None)
     try: message = await bot.wait_for('message', check=patchCheck, timeout=300)
     except asyncio.TimeoutError: return
     servers = []
     if message.content.lower() == 'all': servers = bot.guilds
     elif message.content.startswith('eq:'):
-        print(message.content[message.content.find('eq')+4:])
+        print(message.content[message.content.find('eq')+4:]) #I guess this is here to ensure my eval part works lol
         servers = [g for g in bot.guilds if eval(f'bot.lightningLogging.get(g.id).{message.content[message.content.find("eq")+4:]}')]
     else: servers = [bot.get_guild(int(g)) for g in message.content.split(', ')]
     await ctx.send(f'Broadcast will be sent to {", ".join([g.name for g in servers])} - {len(servers)} / {len(bot.guilds)} servers\n\nWhat specific destination to send the broadcast?\nA: default log channel\nB: moderator channel\nC: announcement channel\nD: general channel\nE: owner DMs')
@@ -276,7 +284,7 @@ async def broadcast(ctx):
     for d in destinations:
         if d:
             try:
-                await d.send(embed=embed)
+                await d.send(content = embed if not embedForm else None, embed=embed if embedForm else None)
                 successfulList.append(d.name)
             except: await ctx.send(f'Error with destination {d.name}')
     await status.edit(content=f'Successfully sent broadcast to {len(successfulList)} / {len(destinations)} destinations')
@@ -894,6 +902,41 @@ async def unduplicate(ctx):
 async def nameVerify(ctx):
     await database.NameVerify(ctx.guild)
     await ctx.send('Successful')
+
+@commands.is_owner()
+@bot.command(aliases=['status'])
+async def _status(ctx):
+    '''Owner-only command to manually set Disguard's status'''
+    global presence
+    m = await ctx.send('React with what you would like my desired status to be')
+    for e in bot.get_cog('Cyberlog').emojis.values(): print(type(e))
+    emojis = [e for e in bot.get_cog('Cyberlog').emojis.values() if e.name in ['online', 'idle', 'dnd', 'offline', 'streaming', 'reload']]
+    for r in emojis: await m.add_reaction(r)
+    def reacCheck(r, m): return r.emoji in emojis and m.id == ctx.author.id
+    r = await bot.wait_for('reaction_add', check=reacCheck)
+    if r[0].emoji.name == 'online': status = discord.Status.online
+    elif r[0].emoji.name == 'idle': status = discord.Status.idle
+    elif r[0].emoji.name == 'dnd': status = discord.Status.dnd
+    elif r[0].emoji.name == 'offline': status = discord.Status.invisible
+    elif r[0].emoji.name == 'streaming': status = discord.Status.online
+    else:
+        presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
+        await UpdatePresence()
+        return await ctx.send('Successfully reset')
+    m = await ctx.send('Type the word: Playing, Watching, Listening, Streaming')
+    def msgCheck1(m): return m.author.id == ctx.author.id
+    r = await bot.wait_for('message', check=msgCheck1)
+    if r.content.lower() == 'playing': mode = discord.ActivityType.playing
+    elif r.content.lower() == 'watching': mode = discord.ActivityType.watching
+    elif r.content.lower() == 'listening': mode = discord.ActivityType.listening
+    elif r.content.lower() == 'streaming': mode = discord.ActivityType.streaming
+    else: return await ctx.send('Invalid type')
+    m = await ctx.send('Type the name of the activity') 
+    r = await bot.wait_for('message', check=msgCheck1)
+    name = r.content
+    presence = {'status': status, 'activity': discord.Activity(name=name, type=mode)}
+    await UpdatePresence()
+    await ctx.send('Successfully set')
 
 def fileAbstraction(e, p, n):
     '''

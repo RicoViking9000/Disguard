@@ -287,7 +287,7 @@ class Cyberlog(commands.Cog):
                     print(f'Full post-verification done in {(datetime.datetime.now() - started).seconds}s')
                 for g in self.bot.guilds:
                     await verifyLogChannel(g)
-                gc.collect()
+                print(f'Garbage collection: {gc.collect()} objects')
             started = datetime.datetime.now()                
             memberList = self.bot.get_all_members()
             await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in memberList if m.status != discord.Status.offline])               
