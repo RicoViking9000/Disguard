@@ -909,8 +909,9 @@ async def _status(ctx):
     '''Owner-only command to manually set Disguard's status'''
     global presence
     m = await ctx.send('React with what you would like my desired status to be')
-    for e in bot.get_cog('Cyberlog').emojis.values(): print(type(e))
-    emojis = [e for e in bot.get_cog('Cyberlog').emojis.values() if e.name in ['online', 'idle', 'dnd', 'offline', 'streaming', 'reload']]
+    #emojis = [e for e in bot.get_cog('Cyberlog').emojis.values() if e.name in ['online', 'idle', 'dnd', 'offline', 'streaming', 'reload']]
+    cog = bot.get_cog('Cyberlog')
+    emojis = (cog.online, cog.idle, cog.dnd, cog.offline, cog.streaming, discord.utils.get(bot.get_guild(403327720714665994).emojis, name='reload'))
     for r in emojis: await m.add_reaction(r)
     def reacCheck(r, m): return r.emoji in emojis and m.id == ctx.author.id
     r = await bot.wait_for('reaction_add', check=reacCheck)
