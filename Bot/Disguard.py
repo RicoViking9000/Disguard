@@ -988,12 +988,23 @@ async def marvel(ctx):
 async def test(ctx):
     status = await ctx.send('Working')
     
+    serverIDs = [s.id for s in bot.guilds]
+    for path in os.listdir(indexes):
+        try: 
+            path = int(path)
+            if path in serverIDs:
+                for channelIndexFolder in os.listdir(f'{indexes}/{path}'):
+                    try:
+                        channelIndexFolder = int(channelIndexFolder)
+                        os.rmdir(f'{indexes}/{path}/{channelIndexFolder}')
+                        print(f'Removed old index data for {channelIndexFolder}')
+                    except: pass
+            else:
+                shutil.rmtree(f'{indexes}/{path}')
+                print(f'Removed directory for {path}')
+        except Exception as e:
+            print(f'Index data removal error: {e}')
 
-    for g in bot.guilds:
-        if bot.lightningLogging[g.id]['cyberlog']['voice']['read']: #12/10 daytime: carry old settings into new settings, based on audit log reading setting
-            await database.getDatabase().disguard.servers.update_one({'server_id': g.id}, {'$set': {'cyberlog.onlyVCForceActions': True}})
-        else: 
-            await database.getDatabase().disguard.servers.update_one({'server_id': g.id}, {'$set': {'cyberlog.voice.read': True}})
 
 
     await status.edit(content='Done')
