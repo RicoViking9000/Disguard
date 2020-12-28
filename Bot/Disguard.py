@@ -996,7 +996,7 @@ async def test(ctx):
                 for channelIndexFolder in os.listdir(f'{indexes}/{path}'):
                     try:
                         channelIndexFolder = int(channelIndexFolder)
-                        os.rmdir(f'{indexes}/{path}/{channelIndexFolder}')
+                        shutil.rmtree(f'{indexes}/{path}/{channelIndexFolder}')
                         print(f'Removed old index data for {channelIndexFolder}')
                     except: pass
             else:
