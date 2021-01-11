@@ -3456,12 +3456,14 @@ def suffix(count: int):
         sfx='rd'
     return sfx
 
-def elapsedDuration(timeSpan, joinString=True):
+def elapsedDuration(timeSpan, joinString=True, fullUnits=True, *, onlyTimes=False):
+    '''Returns a list of string representing elapsed time, given a dateTime. joinString determines return type'''
     hours, minutes, seconds = timeSpan.seconds // 3600, (timeSpan.seconds // 60) % 60, timeSpan.seconds - (timeSpan.seconds // 3600) * 3600 - ((timeSpan.seconds // 60) % 60)*60
     timeList = [seconds, minutes, hours, timeSpan.days]
+    if onlyTimes: return list(reversed(timeList))
     display = []
     for i, v in reversed(tuple(enumerate(timeList))): #v stands for value
-        if v != 0: display.append(f'{v} {units[i]}{"s" if v != 1 else ""}')
+        if v != 0: display.append(f'{v} {units[i] if fullUnits else units[i][0]}{"s" if v != 1 and fullUnits else ""}')
     if len(display) == 0: display = ['0 seconds']
     if joinString: return f"{', '.join(display[:-1])} and {display[-1]}" if len(display) > 1 else display[0]
     else: return display #This is a list that will be joined as appropriate at my discretion in the parent method, if I don't want to use the default joiner above

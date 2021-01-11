@@ -843,6 +843,14 @@ async def SetSchedule(u: discord.User, schedule):
     '''Updates a member's school schedule'''
     await users.update_one({'user_id': u.id}, {'$set': {'schedule': schedule}}, True)
 
+async def SetHSDaysOff(days):
+    '''Updates the listing under the RicoViking9000 user entry for the custom schedule command for my friends at the high school I went to'''
+    await users.update_one({'user_id': 247412852925661185}, {'$set': {'highSchoolDaysOffSpring2021': days}})
+
+async def SetHSEventDays(days):
+    '''Updates the listing under the RicoViking9000 user entry for the custom schedule command for my friends at the high school I went to'''    
+    await users.update_one({'user_id': 247412852925661185}, {'$set': {'highSchoolEventDaysSpring2021': days}})
+
 async def SetWarnings(members, warnings):
     bulkUpdates = [pymongo.UpdateOne({'server_id': members[0].guild.id, 'members.id': member.id}, {'$set': {'members.$.warnings': warnings}}) for member in members]
     await servers.bulk_write(bulkUpdates)

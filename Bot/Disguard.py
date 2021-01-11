@@ -29,6 +29,7 @@ cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays']
 print("Booting...")
 prefixes = {}
 variables = {}
+emojis = {}
 newline = '\n'
 qlf = '  ' #Two special characters to represent quoteLineFormat
 qlfc = ' '
@@ -44,6 +45,12 @@ def prefix(bot, message):
     try: p = bot.lightningLogging[message.guild.id]['prefix']
     except (AttributeError, KeyError): return '.'
     return p if p is not None else '.'
+
+def getData(bot):
+    return bot.lightningLogging
+
+def getUserData(bot):
+    return bot.lightningUsers
 
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)) #Make sure bot doesn't tag everyone/mass roles people unless I specify
 bot.remove_command('help')
@@ -72,6 +79,34 @@ campMax = 'G:/My Drive/Other/M A X'
 #             try: await (await database.CalculateAnnouncementsChannel(server, True)).send('🐰🥚✝ Happy Easter! ✝🥚🐰\n\nWishing every one of you a happy and blessed day filled with new life no matter what the state of the world may be right now,\nRicoViking9000, the developer of Disguard')
 #             except: pass
 
+@tasks.loop(minutes=5)
+async def scheduleDeliveryLoop():
+    n = datetime.datetime.now()
+    desiredDate = n
+    if int(f'{n:%H%M}') > 1450: desiredDate += datetime.timedelta(days=1)
+    if int(f'{desiredDate:%W}') in (0, 6): return
+    timeOfDay = 'morning' if int(f'{n:%H}') in range(3, 12) else 'afternoon' if int(f'{n:%H}') in range(12, 17) else 'evening'
+    users = [u for u in getUserData(bot).values() if u.get('schedule') and type(u.get('schedule')) is dict and u.get('schedule').get('daily')]
+    try: noClasses = getUserData(bot)[247412852925661185]['highSchoolDaysOffSpring2021'] #dict of days when there aren't classes - MM-DD-YYYY
+    except: noClasses = {}
+    for u in users:
+        daily = u['schedule']['daily']
+        try: user = bot.get_user(u['user_id'])
+        except Exception as e: print(f'Error for {u["username"]}: {e}')
+        if (n - datetime.datetime(n.year, n.month, n.day, daily.hour, daily.minute)).seconds // 60 < 5: #Announce in increments of 5 mins
+            if f'{n:%m-%d-%Y}' in noClasses.keys():
+                day = noClasses[f'{n:%m-%d-%Y}']
+                embed=discord.Embed(title=f'{n:%A, %B %d}: No school', description=f"{'❄️' if day['snowDay'] else ''}Reason: {day['reason']}", color=0x66ccff if day['snowDay'] else 0xffff66)
+                content = f'Good {timeOfDay}, today there is no school. See the embed for an explanation.'
+            else:
+                schedule = u['schedule']
+                embed = (await buildSchedule(None, '', user, None, schedule))[0]
+                content = f'Good {timeOfDay}, here is your schedule for the day.'
+            #try: await user.send(content=content, embed=embed)
+            #except: pass
+            await user.send(content=content, embed=embed)
+        
+
 async def UpdatePresence():
     await bot.change_presence(status=presence['status'], activity=presence['activity'])
 
@@ -85,6 +120,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     global booted
     global presence
     global loading
+    global emojis
     if not booted:
         booted=True
         #updatePrefixes.start()
@@ -101,6 +137,10 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         #await bot.get_cog('Birthdays').updateBirthdays()
         # easterAnnouncement.start()
         #Cyberlog.ConfigureSummaries(bot)
+        scheduleDeliveryLoop.start()
+        print('Fetching emojis...')
+        for server in [560457796206985216, 403327720714665994, 495263898002522144]:
+            for e in bot.get_guild(server).emojis: emojis[e.name] = e
         def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478 and m.content == 'Completed'
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
@@ -640,130 +680,842 @@ async def ticketsCommand(ctx, number:int = None):
 
 @bot.command(aliases = ['schedule'])
 async def _schedule(ctx, *, desiredDate=None):
-    pRoles = [619514236736897024, 739597955178430525, 615002577007804416, 668263236214456320, 623685383489585163, 565694432494485514]
+    await ctx.trigger_typing()
+    yellow = (0xffff00, 0xffff66)
+    pRoles = [619514236736897024, 739597955178430525, 615002577007804416, 668263236214456320, 623685383489585163, 565694432494485514] #List of roles able to use this command
+    wantsToEdit = False
+    statusMessage = None
+    reactions = []
+    #emojis = bot.get_cog('Cyberlog').emojis
+    schedule = {}
+    initialSchedule = {}
+    initialPassedDate = ''
+    global emojis
+    def reactionCheck(r, u): 
+        nonlocal statusMessage
+        return r.emoji in reactions and r.message.id == statusMessage.id and u.id == ctx.author.id and not u.bot
+    def messageCheck(m): 
+        return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
+    def bold(x, comparison): return f'**{x}**' if x != comparison else x
+    async def lastNameInput(breakAfter = False):
+        nonlocal reactions
+        nonlocal statusMessage
+        reactions = [emojis['next']]
+        if schedule['lastInitial']: lastInitial = schedule['lastInitial']
+        else: lastInitial = 'Waiting for input'
+        string = f"Welcome to schedule setup! Since you're setting up a new schedule, let's go over the basics:\n{qlf}• Your schedule is private and only accessible to you, unless you use this command in a server and allow me to post your schedule after a confirmation prompt"
+        string += f'\n{qlf}• This command may be expanded with new features as time goes on. By default, you\'ll be DMd about important changes, but this can be turned off.\n{qlf}• If you make a mistake during setup, you can always type a new value or reset the current step\n{qlf}• If you are resetting an existing schedule, the old one will not be overwritten until you save your changes at the end of setup\n{qlf}• To edit settings at a later date, use `{getData(bot)[ctx.guild.id]["prefix"] if ctx.guild else "."}schedule edit` or the reaction attached to schedules to edit parts as needed, or `{getData(bot)[ctx.guild.id]["prefix"] if ctx.guild else "."}schedule set` to go through the full setup process\n\n{qlf}If you wish to exit setup at any time, type `cancel`.\n{qlf}During the entirety of setup, use {emojis["previous"]} and {emojis["next"]} to navigate through the steps.\n{qlf}Please note that the general flow of the data editing features of the schedule module work best in servers due to DM limitations (removing reactions from messages)\n\n(Required) Step 1/5: Let\'s get started with you entering your last name, due to the current alphabet split. (Only the first letter will be stored)\n\nLast initial: `{lastInitial}`'
+        if ctx.guild and statusMessage: 
+            statusMessage = await ctx.channel.fetch_message(statusMessage.id)
+            if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
+            await statusMessage.edit(content=string, embed=None)
+        else: 
+            if breakAfter and statusMessage: oldPrompt = statusMessage
+            statusMessage = await ctx.send(string)
+        for r in reactions: await statusMessage.add_reaction(r)
+        while True:
+            d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+            try: result = d.pop().result()
+            except: pass
+            for f in p: f.cancel()
+            if type(result) is discord.Message:
+                if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
+                lastInitial = result.content[0].upper()
+                await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('Last initial') + 14] + f'`{lastInitial}`')
+                if ctx.guild:
+                    bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                    await result.delete()
+            else:
+                if ctx.guild: await statusMessage.remove_reaction(*result)
+                break
+        schedule['lastInitial'] = lastInitial
+        if breakAfter: 
+            try: await oldPrompt.delete()
+            except: pass
+            return lastInitial, statusMessage
+        else: await classesInput()
+
+    async def classesInput(breakAfter = False):
+        nonlocal reactions
+        nonlocal statusMessage
+        reactions = [emojis['previous'], emojis['reload'], emojis['next']]
+        if breakAfter: reactions.pop(0)
+        if schedule['classes']: classes = schedule['classes']
+        else: 
+            classes = [None, 'Advisory', None, None, None, None, None, None, None]
+            initialSchedule['classes'] = copy.deepcopy(classes)
+        def buildClassString():
+            s = ''
+            for i, c in enumerate(classes):
+                s += f'''{str(emojis['arrowForward']) if str(emojis['arrowForward']) not in s and None in classes and c == None else qlf}{f"P{1 if i == 0 else i + 1}" if i != 1 else f"Advisory"}{f": {bold(c, initialSchedule['classes'][i]) if c else '<Waiting for input>'}"}\n'''
+            if None not in classes: s += f"\n\n{emojis['greenCheck']} All classes are set. {'Next step: teachers' if not breakAfter else ''}"
+            return s
+        string = f'(Required) Step 2/5: Class Periods\nYou may enter your class periods in the following ways:\n•Type a single message, and the class represented by the arrow will be set with your input\n•Type multiple classes, each on their own lines, or separated by a comma and a space - classes starting from the arrow will be filled by your input\n•Type `p1: <classname>` to set or overwrite a certain class\n•Do not enter advisory on this page\nUse {emojis["reload"]} to reset the class list.\n\n{buildClassString()}'
+        if ctx.guild and statusMessage: 
+            statusMessage = await ctx.channel.fetch_message(statusMessage.id)
+            if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
+            await statusMessage.edit(content=string, embed=None)
+        else: 
+            if breakAfter and statusMessage: oldPrompt = statusMessage
+            statusMessage = await ctx.send(string)
+        for r in reactions: await statusMessage.add_reaction(r)
+        while True:
+            d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+            try: result = d.pop().result()
+            except: pass
+            for f in p: f.cancel()
+            if type(result) is discord.Message:
+                if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
+                if ':' in result.content:
+                    classIndex = int(result.content[result.content.find(':') - 1])
+                    if classIndex == 1: classIndex = 0
+                    else: classIndex -= 1
+                    toWrite = result.content[result.content.find(':') + 1:].strip()
+                    classes[classIndex] = toWrite if 'skip' not in toWrite.lower() else 0
+                else:
+                    if ',' in result.content or '\n' in result.content:
+                        if ',' in result.content: classesToWrite = result.content.split(', ')
+                        else: classesToWrite = result.content.split('\n')
+                    else: classesToWrite = [result.content]
+                    classIndex = classes.index(None)
+                    while len(classesToWrite) > 0:
+                        if classIndex != 1:
+                            classes[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
+                            classesToWrite.pop(0)
+                        classIndex += 1
+                        if classIndex == 9: classIndex = 0
+                await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildClassString())
+                if ctx.guild:
+                    bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                    await result.delete()
+            else:
+                if ctx.guild: await statusMessage.remove_reaction(*result)
+                if result[0].emoji == emojis['reload']:
+                    classes = [None, 'Advisory', None, None, None, None, None, None, None]
+                    await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildClassString())
+                elif result[0].emoji == emojis['previous']:
+                    schedule['classes'] = classes
+                    return await lastNameInput()
+                else: break
+        schedule['classes'] = classes
+        if breakAfter: 
+            try: await oldPrompt.delete()
+            except: pass
+            return classes, statusMessage
+        else: await teachersInput()
+
+    async def teachersInput(breakAfter = False):
+        nonlocal reactions
+        nonlocal statusMessage
+        reactions = [emojis['previous'], emojis['reload'], emojis['next']]
+        if breakAfter: reactions.pop(0)
+        if schedule['teachers']: teachers = schedule['teachers']
+        else: 
+            teachers = [None, None, None, None, None, None, None, None, None]
+            initialSchedule['teachers'] = copy.deepcopy(teachers)
+        def buildTeacherString():
+            s = ''
+            for i, c in enumerate(teachers):
+                s += f'''{str(emojis['arrowForward']) if str(emojis['arrowForward']) not in s and None in teachers and c == None else qlf}{f"P{1 if i == 0 else i + 1}" if i != 1 else f"Advisory"}{f": {bold(c, initialSchedule['teachers'][i]) if type(c) is str else '<Skipped>' if c == 0 else '<Not specified>'}"}\n'''
+            if None not in teachers: s += f"\n\n{emojis['greenCheck']} All teachers are set. {'Next step: room numbers' if not breakAfter else ''}"
+            return s
+        string = f'(Optional) Step 3/5: Teachers\nIf you would like to add the teacher for your classes, you may do so now. Enter data in the same manner as the classes page (go back to see the guide again - your data will save). To skip a teacher for a class, type `skip` for their name leave their field blank.\n\n{buildTeacherString()}'
+        if ctx.guild and statusMessage: 
+            statusMessage = await ctx.channel.fetch_message(statusMessage.id)
+            if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
+            await statusMessage.edit(content=string, embed=None)
+        else: 
+            if breakAfter and statusMessage: oldPrompt = statusMessage
+            statusMessage = await ctx.send(string)
+        for r in reactions: await statusMessage.add_reaction(r)
+        while True:
+            d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+            try: result = d.pop().result()
+            except: pass
+            for f in p: f.cancel()
+            if type(result) is discord.Message:
+                if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
+                if ':' in result.content:
+                    try: 
+                        classIndex = int(result.content[result.content.find(':') - 1])
+                        if classIndex == 1: classIndex = 0
+                        else: classIndex -= 1
+                    except ValueError: classIndex = 1
+                    toWrite = result.content[result.content.find(':') + 1:].strip()
+                    teachers[classIndex] = toWrite if 'skip' not in toWrite.lower() else 0
+                else:
+                    if ',' in result.content or '\n' in result.content:
+                        if ',' in result.content: classesToWrite = result.content.split(', ')
+                        else: classesToWrite = result.content.split('\n')
+                    else: classesToWrite = [result.content]
+                    classIndex = teachers.index(None)
+                    while len(classesToWrite) > 0:
+                        teachers[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
+                        classesToWrite.pop(0)
+                        classIndex += 1
+                        if classIndex == 9: classIndex = 0 
+                await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildTeacherString())
+                if ctx.guild:
+                    bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                    await result.delete()
+            else:
+                if ctx.guild: await statusMessage.remove_reaction(*result)
+                if result[0].emoji == emojis['reload']:
+                    teachers = [None, None, None, None, None, None, None, None, None]
+                    await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildTeacherString())
+                elif result[0].emoji == emojis['previous']:
+                    for i, t in enumerate(teachers):
+                        if t == 0: teachers[i] = None
+                    schedule['teachers'] = teachers
+                    return await classesInput()
+                else: break
+        for i, t in enumerate(teachers):
+            if t == 0: teachers[i] = None
+        schedule['teachers'] = teachers
+        if breakAfter: 
+            try: await oldPrompt.delete()
+            except: pass
+            return teachers, statusMessage
+        else: await roomsInput()
+
+    async def roomsInput(breakAfter = False):
+        nonlocal reactions
+        nonlocal statusMessage
+        reactions = [emojis['previous'], emojis['reload'], emojis['next']]
+        if breakAfter: reactions.pop(0)
+        if schedule['rooms']: rooms = schedule['rooms']
+        else: 
+            rooms = [None, None, None, None, None, None, None, None, None]
+            initialSchedule['rooms'] = copy.deepcopy(rooms)
+        def buildRoomsString():
+            s = ''
+            for i, c in enumerate(rooms):
+                s += f'''{str(emojis['arrowForward']) if str(emojis['arrowForward']) not in s and None in rooms and c == None else qlf}{f"P{1 if i == 0 else i + 1}" if i != 1 else "Advisory"}{f": {bold(c, initialSchedule['rooms'][i]) if type(c) is str else '<Skipped>' if c == 0 else '<Not specified>'}"}\n'''
+            if None not in rooms: s += f"\n\n{emojis['greenCheck']} All rooms are set. {'Next step: lunches' if not breakAfter else ''}"
+            return s
+        string = f'(Optional) Step 4/5: Room numbers\nIf you would like to add the room number for your classes, you may do so now. Perform this in a similar manner to adding teachers. To skip a room number for a class, type `skip` for its class period or leave its field blank.\n\n{buildRoomsString()}'
+        if ctx.guild and statusMessage: 
+            statusMessage = await ctx.channel.fetch_message(statusMessage.id)
+            if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
+            await statusMessage.edit(content=string, embed=None)
+        else: 
+            if breakAfter and statusMessage: oldPrompt = statusMessage
+            statusMessage = await ctx.send(string)
+        for r in reactions: await statusMessage.add_reaction(r)
+        while True:
+            d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+            try: result = d.pop().result()
+            except: pass
+            for f in p: f.cancel()
+            if type(result) is discord.Message:
+                if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
+                if ':' in result.content:
+                    try: 
+                        classIndex = int(result.content[result.content.find(':') - 1])
+                        if classIndex == 1: classIndex = 0
+                        else: classIndex -= 1
+                    except ValueError: classIndex = 1
+                    toWrite = result.content[result.content.find(':') + 1:].strip()
+                    rooms[classIndex] = toWrite if 'skip' not in toWrite.lower() else 0
+                else:
+                    if ',' in result.content or '\n' in result.content:
+                        if ',' in result.content: classesToWrite = result.content.split(', ')
+                        else: classesToWrite = result.content.split('\n')
+                    else: classesToWrite = [result.content]
+                    classIndex = rooms.index(None)
+                    while len(classesToWrite) > 0:
+                        rooms[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
+                        classesToWrite.pop(0)
+                        classIndex += 1
+                        if classIndex == 9: classIndex = 0
+                await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildRoomsString())
+                if ctx.guild:
+                    bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                    await result.delete()
+            else:
+                if ctx.guild: await statusMessage.remove_reaction(*result)
+                if result[0].emoji == emojis['reload']:
+                    rooms = [None, None, None, None, None, None, None, None, None]
+                    await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildRoomsString())
+                elif result[0].emoji == emojis['previous']:
+                    for i, t in enumerate(rooms):
+                        if t == 0: rooms[i] = None
+                    schedule['rooms'] = rooms
+                    return await teachersInput()
+                else: break
+        for i, t in enumerate(rooms):
+            if t == 0: rooms[i] = None #variable T b/c copy and paste
+        schedule['rooms'] = rooms
+        if breakAfter: 
+            try: await oldPrompt.delete()
+            except: pass
+            return rooms, statusMessage
+        else: await lunchInput()
+
+    async def lunchInput(breakAfter = False):
+        nonlocal reactions
+        nonlocal statusMessage
+        reactions = [emojis['previous'], emojis['reload'], emojis['next']]
+        if breakAfter: reactions.pop(0)
+        if schedule['lunches']: lunches = schedule['lunches']
+        else: 
+            lunches = [None, 'N/A', None, None, None, None, None, None, None]
+            initialSchedule['lunches'] = copy.deepcopy(lunches)
+        def buildLunchesString():
+            s = ''
+            for i, c in enumerate(lunches):
+                s += f'''{str(emojis['arrowForward']) if str(emojis['arrowForward']) not in s and None in lunches and c == None else qlf}{f"P{1 if i == 0 else i + 1}" if i != 1 else "Advisory"}{f": {bold(c, initialSchedule['lunches'][i]) if type(c) is str else '<Skipped>' if c == 0 else '<Not specified>'}"}\n'''
+            if None not in lunches: s += f"\n\n{emojis['greenCheck']} All lunch periods are set. {'Next step: Save & view your completed schedule' if not breakAfter else ''}"
+            return s
+        string = f'(Optional) Step 5/5: Lunch periods\nIf you would like to add the lunch period for your classes, you may do so now. Type a single letter for each period (it will automatically be capitalized). To skip a lunch for a class, type `skip` for its class period or leave its field blank.\n\n{buildLunchesString()}'
+        if ctx.guild and statusMessage: 
+            statusMessage = await ctx.channel.fetch_message(statusMessage.id)
+            if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
+            await statusMessage.edit(content=string, embed=None)
+        else: 
+            if breakAfter and statusMessage: oldPrompt = statusMessage
+            statusMessage = await ctx.send(string)
+        for r in reactions: await statusMessage.add_reaction(r)
+        while True:
+            d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+            try: result = d.pop().result()
+            except: pass
+            for f in p: f.cancel()
+            if type(result) is discord.Message:
+                if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
+                if ':' in result.content:
+                    try: 
+                        classIndex = int(result.content[result.content.find(':') - 1])
+                        if classIndex == 1: classIndex = 0
+                        else: classIndex -= 1
+                    except ValueError: classIndex = 1
+                    toWrite = result.content[result.content.find(':') + 1:].strip()
+                    lunches[classIndex] = toWrite if 'skip' not in toWrite.lower() else 0
+                else:
+                    if ',' in result.content or '\n' in result.content:
+                        if ',' in result.content: classesToWrite = result.content.split(', ')
+                        else: classesToWrite = result.content.split('\n')
+                    else: classesToWrite = [result.content]
+                    classIndex = lunches.index(None)
+                    while len(classesToWrite) > 0:
+                        if classIndex != 1:
+                            lunches[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
+                            classesToWrite.pop(0)
+                        classIndex += 1
+                        if classIndex == 9: classIndex = 0
+                await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildLunchesString())
+                if ctx.guild:
+                    bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                    await result.delete()
+            else:
+                if ctx.guild: await statusMessage.remove_reaction(*result)
+                if result[0].emoji == emojis['reload']:
+                    lunches = [None, None, None, None, None, None, None, None, None]
+                    await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n') + 2] + buildLunchesString())
+                elif result[0].emoji == emojis['previous']:
+                    for i, t in enumerate(lunches):
+                        if t == 0: lunches[i] = None
+                    schedule['lunches'] = lunches
+                    return await roomsInput()
+                else: break
+        for i, t in enumerate(lunches):
+            if t == 0: lunches[i] = None
+        schedule['lunches'] = lunches
+        if breakAfter: 
+            try: await oldPrompt.delete()
+            except: pass
+            return lunches, statusMessage
+        else: await saveSchedule()
+    
+    async def saveSchedule():
+        nonlocal reactions
+        nonlocal statusMessage
+        await statusMessage.edit(content=f'{loading} Saving schedule...')
+        await database.SetSchedule(ctx.author, schedule)
+        await statusMessage.edit(content=f'Schedule setup complete!\n{qlf}To reset your schedule, type `{getData(bot)[ctx.guild.id]["prefix"] if ctx.guild else "."}schedule set`\n{qlf}To edit your schedule or other settings, type `{getData(bot)[ctx.guild.id]["prefix"] if ctx.guild else "."}schedule edit` or use the reaction attached to the schedule\n{qlf}You may type a day after the command (such as "tomorrow," "Friday," or "September 21") to view the schedule for that day\n\nReact {emojis["details"]} or use the schedule command again to view your schedule')
+        reactions = [emojis['details']]
+        if ctx.guild: await statusMessage.clear_reactions()
+        for r in reactions: await statusMessage.add_reaction(r)
+        await bot.wait_for('reaction_add', check=reactionCheck, timeout=None)
+        if ctx.guild: await statusMessage.clear_reactions()
+
+    async def bulkEdit():
+        nonlocal reactions
+        nonlocal statusMessage
+        nonlocal schedule
+        reactions = ['❌', emojis['greenCheck']]
+        def buildClassesString():
+            s = ''
+            for i in range(9):
+                c = (schedule['classes'][i], initialSchedule['classes'][i])
+                t = (schedule['teachers'][i], initialSchedule['teachers'][i])
+                r = (schedule['rooms'][i], initialSchedule['rooms'][i])
+                l = (schedule['lunches'][i], initialSchedule['lunches'][i])
+                s += f'''{f"P{i + 1}" if i != 1 else "Advisory"}: {f"{bold(*c)}"}{f" • {bold(*t)}" if t[0] else ' • <No teacher specified>'}{f" • Rm {bold(*r)}" if r[0] else ' • <No room number specified>'}{f" • {bold(*l)} lunch" if l[0] else ' • <No lunch specified>'}\n'''
+            return s
+        string = f"Here you can quickly edit multiple attributes for a single class at once. Type messages following this pattern (editing multiple classes, with each edit on its own line is allowed) until the data is how you want it, then react ❌ to cancel without saving, or {emojis['greenCheck']} to save your changes:\n\n`P<periodNumber>: <class name> <teacher name> <room number> <lunch>`\n\n•To edit advisory, type 'Advisory' instead of P<number>, and any class name will be ignored\n•Follow this order exactly. To skip updating one of the attributes of a class, type a dash `-` in its place. To clear optional data for an attribute of a class, type `clear` in its place\n\nExample of me updating my government class, where I leave the class name alone but clear the teacher: `P9: - clear 104A C`\nYour schedule is below:\n\n\n{buildClassesString()}"
+        if ctx.guild and statusMessage: 
+            statusMessage = await ctx.channel.fetch_message(statusMessage.id)
+            if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
+            await statusMessage.edit(content=string, embed=None)
+        else: 
+            oldPrompt = statusMessage
+            statusMessage = await ctx.send(string)
+        for r in reactions: await statusMessage.add_reaction(r)
+        while True:
+            d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+            try: result = d.pop().result()
+            except: pass
+            for f in p: f.cancel()
+            if type(result) is discord.Message:
+                if '\n' in result.content: rawData = result.content.replace('`', '').split('\n')
+                else: rawData = [result.content.replace('`', '')]
+                for line in rawData:
+                    rawPeriod, className, teacherName, roomNumber, lunch = line.split(' ')
+                    period = int(rawPeriod[1]) if 'advisory' not in rawPeriod.lower() else 2 #Index 1 of something like `P1:`
+                    if '-' != className: schedule['classes'][period - 1] = className if period != 2 else 'Advisory' #This is required, so we don't check for clearing this value
+                    if '-' != teacherName: schedule['teachers'][period - 1] = None if teacherName.lower() == 'clear' else teacherName
+                    if '-' != roomNumber: schedule['rooms'][period - 1] = None if roomNumber.lower() == 'clear' else roomNumber
+                    if '-' != lunch: schedule['lunches'][period - 1] = None if roomNumber.lower() == 'clear' else lunch if period != 2 else 'N/A'
+                await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find('\n\n\n') + 3] + buildClassesString())
+                if ctx.guild:
+                    bot.get_cog('Cyberlog').AvoidDeletionLogging(r)
+                    await result.delete()
+            else:
+                if result[0].emoji == emojis['greenCheck']:
+                    await database.SetSchedule(ctx.author, schedule)
+                elif result[0].emoji == '❌':
+                    schedule = initialSchedule
+                if ctx.guild: await statusMessage.clear_reactions()
+                break
+        try: await oldPrompt.delete()
+        except: pass
+        return statusMessage
+
+    async def editMode():
+        nonlocal statusMessage
+        nonlocal schedule
+        nonlocal initialSchedule
+        nonlocal reactions
+        try: await statusMessage.edit(content=f'{loading}Preparing settings...')
+        except: statusMessage = await ctx.send(f'{loading}Preparing settings...')
+        slide = {False: emojis['slideToggleOff'], True: emojis['slideToggleOn']}
+        while True:
+            def truncate(l, cutoff=4):
+                return ', '.join([f'{entry[:cutoff]}…' if entry and len(entry) > cutoff else str(entry) for entry in l])
+            reactions = [emojis['member'], emojis['details'], emojis['members'], emojis['greyCompass'], emojis['apple'], emojis['edit'], emojis['hiddenVoiceChannel'], emojis['bell'], emojis['newsChannel'], '❌', emojis['greenCheck']]
+            embed = discord.Embed(title=f'Schedule Management: {ctx.author.name}', description=f"React with the emoji corresponding to a data field to edit that data, and react with {emojis['greenCheck']} when you're done to save your data or ❌ to cancel without saving.\n\n", color=yellow[1])
+            embed.description += f"{'SCHEDULE SETTINGS':-^70}\n{emojis['member']}Last initial: {schedule['lastInitial']}\n{emojis['details']}Classes: [{truncate(schedule['classes'])}]\n{emojis['members']}Teachers: [{truncate(schedule['teachers'])}]\n{emojis['greyCompass']}Rooms: {truncate(schedule['rooms'], 5)}\n{emojis['apple']}Lunches: {truncate(schedule['lunches'])}\n\n{emojis['edit']}: Bulk edit multiple attributes for any class period at once\n\n"
+            embed.description += f'''{'OTHER SETTINGS':-^70}\n{slide[schedule['guard']]}{emojis['hiddenVoiceChannel']}Enable confirmation prompt when viewing schedule outside of DMs\n{slide[schedule['announce']]}{emojis['bell']}DM announcements for special school closures like snow\n{emojis['slideToggleOn'] if schedule['daily'] else emojis['slideToggleOff']}{emojis['newsChannel']}Daily schedule delivery{f": {schedule['daily']:%I:%M %p}" if schedule['daily'] else ''}'''
+            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url_as(format='png', size=1024))
+            await statusMessage.edit(content=f'{loading} Please wait for all reactions to be added...', embed=embed)
+            for r in reactions: await statusMessage.add_reaction(r)
+            await statusMessage.edit(content=None)
+            result = await bot.wait_for('reaction_add', check=reactionCheck)
+            if result[0].emoji == emojis['member']: schedule['lastInitial'], oldMessage = await lastNameInput(True)
+            elif result[0].emoji == emojis['details']: schedule['classes'], oldMessage = await classesInput(True)
+            elif result[0].emoji == emojis['members']: schedule['teachers'], oldMessage = await teachersInput(True)
+            elif result[0].emoji == emojis['greyCompass']: schedule['rooms'], oldMessage = await roomsInput(True)
+            elif result[0].emoji == emojis['apple']: schedule['lunches'], oldMessage = await lunchInput(True)
+            elif result[0].emoji == emojis['hiddenVoiceChannel']: schedule['guard'] = not schedule['guard']
+            elif result[0].emoji == emojis['bell']: schedule['announce'] = not schedule['announce']
+            elif result[0].emoji == emojis['newsChannel']:
+                dailySetupEmbed = discord.Embed(title='Configure daily announcements', description=f'Type the time you would like to receive your daily schedule (`HH:MM AM/PM`)\n\nTyping a time after 2:50PM will have me send you the schedule for the next day at the time you specify\n\nFor optimization purposes, the delivery loop code only checks the time every 5 minutes\n\nYou can save or cancel changes on the previous page. Type `disable` to turn off this setting.', color=yellow[1])
+                dailySetupEmbed.description += f'''\n\nCurrent value: {f"{schedule['daily']:%I:%M %p}" if schedule['daily'] else '<Disabled>'}'''
+                reactions = [emojis['arrowLeft']]
+                if ctx.guild:
+                    await statusMessage.edit(embed=dailySetupEmbed)
+                    await statusMessage.clear_reactions()
+                else:
+                    await statusMessage.delete()
+                    statusMessage = await ctx.send(embed=dailySetupEmbed)
+                for reaction in reactions: await statusMessage.add_reaction(reaction)
+                while True:
+                    d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+                    try: result = d.pop().result()
+                    except: pass
+                    for f in p: f.cancel()
+                    if type(result) is discord.Message:
+                        try: 
+                            if 'disable' in result.content: schedule['daily'] = False
+                            else:
+                                schedule['daily'] = datetime.datetime.strptime(result.content.upper(), '%I:%M %p')
+                            d = dailySetupEmbed.description
+                            d = d[:d.find('Current value:') + 15] + (f"{schedule['daily']:%I:%M %p}" if schedule['daily'] else '<Disabled>')
+                            dailySetupEmbed.description = d
+                            if ctx.guild:
+                                bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                                await result.delete()
+                            await statusMessage.edit(embed=dailySetupEmbed)
+                        except ValueError:
+                            await ctx.send(f'{emojis["alert"]}Invalid format, please use `HH:MM AM/PM`')
+                            continue
+                    else:
+                        if not ctx.guild: await statusMessage.delete()
+                        else: await statusMessage.clear_reactions()
+                        break #Out of this double-waiting while loop
+            elif result[0].emoji == emojis['edit']: #By far... the longest module
+                oldMessage = await bulkEdit()
+            elif result[0].emoji in ['❌', emojis['greenCheck']]:
+                if result[0].emoji == '❌':
+                    schedule = initialSchedule
+                elif result[0].emoji == emojis['greenCheck']:
+                    await statusMessage.edit(content=f'{loading}Saving...')
+                    await database.SetSchedule(ctx.author, schedule)
+                if not ctx.guild: await statusMessage.delete()
+                else: await statusMessage.clear_reactions()
+                break
+            if not ctx.guild and result[0].emoji in reactions[:6] + emojis['edit']:
+                try: await oldMessage.delete()
+                except: pass
+                await statusMessage.delete()
+            elif ctx.guild:
+                statusMessage = await ctx.channel.fetch_message(statusMessage.id)
+                if reactions != [r.emoji for r in statusMessage.reactions]: await statusMessage.clear_reactions()
+                else: await statusMessage.remove_reaction(*result)
+        return await scheduleHandler()
+
     try:
-        if 'set' == desiredDate: raise KeyError
-        schedule = bot.lightningUsers[ctx.author.id]['schedule']
+        schedule = getUserData(bot)[ctx.author.id]['schedule']
+        initialSchedule = copy.deepcopy(schedule)
+        if desiredDate:
+            if 'set' == desiredDate.lower(): raise KeyError
+            elif 'edit' == desiredDate.lower(): wantsToEdit = True
+        if type(schedule) is list: #User has not built their schedule after the update rework, so ask them what they would like to do
+            choiceEmbed=discord.Embed(title='Schedule Module', description=f"Since this is your first time using the command since the rework and new features [(Patch notes here)]({'https://youtu.be/dQw4w9WgXcQ'}), please choose your desired option by reacting:\n\n{emojis['edit']}: Migrate old data (last name, core classes), walk through the new options (teacher names, room numbers, lunches, get schedule delivered daily, and other settings), then view your schedule\n{emojis['next']}: Migrate old data only, view your schedule now, and explore the new options later\n\n{'Note that if you choose the first option, Privacy Guard will not block your schedule from showing up in this server, due to code structure' if ctx.guild else ''}", color=yellow[1])
+            statusMessage = await ctx.send(embed=choiceEmbed)
+            reactions = [emojis['edit'], emojis['next']]
+            for r in reactions: await statusMessage.add_reaction(r)
+            result = await bot.wait_for('reaction_add', check=reactionCheck)
+            statusMessage = await ctx.send(f'{loading}Migrating data...')
+            oldSchedule = (await database.GetUser(ctx.author))['schedule']
+            schedule = {'classes': [oldSchedule[0]] + ['Advisory'] + oldSchedule[1:-1], 'teachers': [], 'rooms': [], 'lunches': [], 'lastInitial': oldSchedule[-1], 'guard': True, 'announce': True, 'daily': False}
+            for k in ('teachers', 'rooms', 'lunches'):
+                for i in range(9): schedule[k].append('N/A' if i == 1 and k == 'lunches' else None)
+            initialSchedule = copy.deepcopy(schedule)
+            await database.SetSchedule(ctx.author, schedule)
+            if result[0].emoji == emojis['next']: pass
+            else: 
+                if not ctx.guild: await statusMessage.delete()
+                raise KeyError
     except KeyError:
-        #memberRoles = [[r.id for r in m.roles for m in [g.members for g in bot.guilds] if m.id == ctx.author.id]]
-        # unlock = False
-        # for g in [server for server in bot.guilds if ctx.author in server.members]:
-        #     for r in [member for member in g.members if member.id == ctx.author.id][0].roles:
-        #         if r.id in pRoles: 
-        #             unlock = True
-        #             break
+        desiredDate = None
+        if not schedule: schedule = getUserData(bot)[ctx.author.id].get('schedule')
+        if type(schedule) is list or not schedule: 
+            schedule = {'classes': [], 'teachers': [], 'rooms': [], 'lunches': [], 'lastInitial': '', 'guard': True, 'announce': True, 'daily': False}
+            for k in ('teachers', 'rooms', 'lunches'):
+                for i in range(9): schedule[k].append('N/A' if i == 1 and k == 'lunches' else None)
         memberRoleList = [m.roles for m in bot.get_all_members() if ctx.author.id == m.id]
         totalRoleList = []
         for roleList in memberRoleList: totalRoleList.extend(roleList)
         if not any([r.id in pRoles for r in totalRoleList]):
-            locked = await ctx.send('🔒This is a private command, and you don\'t have a permitted role. If you believe this is a mistake, please wait patiently - Google verification will be available soon')
+            locked = await ctx.send('🔒This is a private command, and you don\'t have a permitted role. If you believe this is a mistake, use this command in the presence of my developer and he can bypass this lock')
             def unlock(r, u): return str(r) == '🔓' and r.message.id == locked.id and u.id == 247412852925661185
             await bot.wait_for('reaction_add', check=unlock)
             await ctx.send('🔓My developer has unlocked this command for you')
-        string = f"Welcome to schedule setup! Since you're setting up a new schedule, let's go over the basics:\n{qlf}• Your schedule is private and only accessible to you, unless you use this command in a server"
-        string += f'\n{qlf}• This command will be expanded with new features as time goes on, such as Google Account verification, sending you your schedule every morning, lunch schedules, website viewer, and more\n{qlf}• If you make a mistake during setup, type `cancel`\n{qlf}• If you are resetting an existing schedule, the old one will not be overwritten until this setup is complete\n\nLet\'s get started with your last name, due to the alphabet split. What\'s your last name? (Only the first letter will be stored)'
-        await ctx.send(string)
-        def rChecker(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
-        response = await bot.wait_for('message', check=rChecker)
-        if response.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
-        lastName = response.content
-        await ctx.send(f'Now to enter your classes: Enter all 8 of your classes (excluding advisory), each on its own line (no indents), P1 first, P9 last. On desktop, use shift+enter to create a newline. Example:\n{qlf}Math\n{qlf}English\n{qlf}History\n{qlf}Theology\n{qlf}Band\n{qlf}PE\n{qlf}Spanish\n{qlf}Biology')
-        response = await bot.wait_for('message', check=rChecker)
-        if response.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
-        classes = response.content.split('\n') + [lastName[0]]
-        statusMessage = await ctx.send(f'{loading}')
-        await database.SetSchedule(ctx.author, classes)
-        await statusMessage.edit(content=f'Schedule setup complete!\n{qlf}To reset your schedule, type `{bot.lightningLogging[ctx.guild.id]["prefix"]}schedule set`\n{qlf}You may type a day after the command (such as "tomorrow," "Friday," or "September 21") to view the schedule for that day\n\nReact 📅 or use the schedule command to view your schedule')
-        await statusMessage.add_reaction('📅')
-        def calendarChecker(r, u): return str(r) == '📅' and r.message.id == statusMessage.id and u.id == ctx.author.id
-        await bot.wait_for('reaction_add', check=calendarChecker, timeout=None)
-        desiredDate = None
-        schedule = bot.lightningUsers[ctx.author.id]['schedule']
+        await lastNameInput() #Starts the editing cycle if a keyError is raised
+    
+    async def scheduleHandler():
+        nonlocal desiredDate
+        nonlocal initialPassedDate
+        nonlocal statusMessage
+        nonlocal reactions
+        nonlocal schedule
+        try: await statusMessage.edit(content=f'{loading}Building schedule...')
+        except: statusMessage = await ctx.send(f'{loading}Building schedule...')
+        withAdvisory = copy.deepcopy(schedule)
+        embed, contentLog = await buildSchedule(desiredDate, initialPassedDate, ctx.author, ctx.message, schedule)
+        await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
+        reactions = [emojis['settings']]
+        for r in reactions: await statusMessage.add_reaction(r)
+        await bot.wait_for('reaction_add', check=reactionCheck)
+        if ctx.guild: await statusMessage.clear_reactions()
+        else: await statusMessage.delete()
+        schedule = withAdvisory
+        return await editMode()
+
+    #Main segment of the command; not inside of any methods        
     if ctx.guild:
-        statusMessage = await ctx.send("🔒You're using this command publicly in a server. By 🔓unlocking your schedule, you're aware that others may view your schedule. Alternatively, react 🔒 and I'll DM you your schedule")
-        def lockedOut(r, u): return str(r) in ('🔓', '🔒') and r.message.id == statusMessage.id and u.id == ctx.author.id
-        for r in ('🔓', '🔒'): await statusMessage.add_reaction(r)
-        result = await bot.wait_for('reaction_add', check=lockedOut)
-        if str(result[0]) == '🔒':
-            if not ctx.author.dm_channel: await ctx.author.create_dm()
-            ctx.channel = ctx.author.dm_channel
-            statusMessage = None #to trigger the error
-        else: await statusMessage.clear_reactions()
-    try: await statusMessage.edit(content=f'{loading}Building schedule...')
-    except: statusMessage = await ctx.send(f'{loading}Building schedule...')
+        if schedule['guard']: 
+            if statusMessage: await statusMessage.edit(content="🔒You're using this command publicly in a server. By 🔓unlocking your schedule, you're aware that others may view your schedule. Alternatively, react 🔒 and I'll DM you your schedule")
+            else: statusMessage = await ctx.send("🔒You're using this command publicly in a server. By 🔓unlocking your schedule, you're aware that others may view your schedule. Alternatively, react 🔒 and I'll DM you your schedule")
+            def lockedOut(r, u): return str(r) in ('🔓', '🔒') and r.message.id == statusMessage.id and u.id == ctx.author.id
+            for r in ('🔓', '🔒'): await statusMessage.add_reaction(r)
+            result = await bot.wait_for('reaction_add', check=lockedOut)
+            if str(result[0]) == '🔒':
+                if not ctx.author.dm_channel: await ctx.author.create_dm()
+                ctx.channel = ctx.author.dm_channel
+                statusMessage = None #to trigger the error, causing the bot to send a new message instead of trying to edit one
+            else: await statusMessage.clear_reactions()
+    if wantsToEdit: await editMode()
+    else: await scheduleHandler()
+
+async def buildSchedule(desiredDate, initialPassedDate, author, message, schedule):
+    '''Returns an embed'''
     contentLog = []
-    firstDay = datetime.date(2020, 8, 31) #First day of classes
-    noClasses = ['09-04', '09-07', '09-23', '10-12', '10-14', '10-30', '11-25', '11-26', '11-27'] #list of days when there aren't classes - MM-DD
+    firstDay = datetime.date(2021, 1, 4) #First day of classes
+    #firstLetter = 'T' If this is to be uncommented, do something complicated with rotating the schedule
+    try: noClasses = getUserData(bot)[247412852925661185]['highSchoolDaysOffSpring2021'] #dict of days when there aren't classes - MM-DD-YYYY
+    except: noClasses = {}
+    try: dailyEvents = getUserData(bot)[247412852925661185]['highSchoolEventDaysSpring2021']
+    except: dailyEvents = {}
     today = datetime.date.today()
+    if initialPassedDate == '': initialPassedDate = desiredDate
+    else: desiredDate = initialPassedDate
     if not desiredDate:
         desiredDate = today
-        if datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50) and int(f'{today:%w}') not in (0, 6):  #If it's later than 2:50PM and it's not a weekend, pull up tomorrow's schedule
-            contentLog.append("ℹIt's after 2:50PM, so tomorrow's schedule will be displayed")
+        if datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50) and int(f'{today:%w}') not in (0, 5, 6):  #If it's later than 2:50PM and it's not a weekend, pull up tomorrow's schedule
+            contentLog.append(f"{emojis['information']}It's after 2:50PM, so tomorrow's schedule will be displayed")
             date = today + datetime.timedelta(days=1)
         else:
             date = today
     elif type(desiredDate) is str: 
-        dt = Birthdays.calculateDate(ctx.message, datetime.datetime.now())
+        dt = Birthdays.calculateDate(message, datetime.datetime.now())
         if not dt:
-            contentLog.append(f"⚠Unable to calculate a date from `{desiredDate}`; switching to today's schedule")
+            contentLog.append(f"{emojis['alert']} Unable to calculate a date from `{desiredDate}`; switching to today's schedule")
             date = today
             desiredDate = today
         else: 
             date = datetime.date(dt.year, dt.month, dt.day)
             desiredDate = date
-    while int(f'{date:%w}') in (0, 6) or f'{date:%m-%d}' in noClasses or date < firstDay: #If it's not a weekend, there are classes today, or it's not the first day of classes yet
+    while int(f'{date:%w}') in (0, 6) or (int(f'{date:%w}') == 5 and datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50)) or f'{date:%m-%d-%Y}' in noClasses.keys() or date < firstDay: #If it's not a weekend, there are classes today, or it's not the first day of classes yet
+        dateAtStart = date
         date += datetime.timedelta(days=1) #If the provided date is a weekend day, or a day without classes, we jump ahead to the next available day
-        if int(f'{today:%w}') != 5: contentLog.append(f'ℹClasses are not in session during the date you provided ({desiredDate:%A, %B %d}), so the next date with classes ({date:%A, %B %d}) will be displayed') #If it's not Friday
-        else: contentLog.append(f"ℹThis school week is over, so the next date with classes ({date:%A, %B %d}) will be displayed") #If it's friday - this may get passed from 'if not desiredDate'
-    lastInitial = schedule[-1] #Last initial of user
-    schedule = copy.deepcopy(schedule)
-    schedule.pop(-1) #Remove the last initial since it's not part of the schedule and was simply placed there for convenience
-    letters = 'PANTHERS'
+        if f'{dateAtStart:%m-%d-%Y}' in noClasses.keys():  contentLog.append(f"{emojis['information']}Classes are not in session during the date you provided ({desiredDate:%A, %B %d}) because {noClasses[f'{dateAtStart:%m-%d-%Y}']['reason']}. \n\nThe next date with classes ({date:%A, %B %d}) will be displayed") #Manually-defined days off
+        elif dateAtStart < firstDay: contentLog.append(f"{emojis['information']}School hasn't started on the provided date ({desiredDate:%A, %B %d}), so the first day of class ({date:%A, %B %d}) will be displayed.")
+        elif int(f'{dateAtStart:%w}') in (0, 6) or (int(f'{dateAtStart:%w}') == 5 and datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50)): contentLog.append(f"{emojis['information']}It's the weekend, so the next date with classes ({date:%A, %B %d}) will be displayed.")
+    lastInitial = schedule['lastInitial'] #Last initial of user
+    #schedule = copy.deepcopy(schedule)
+    #schedule.pop(-1) #Remove the last initial since it's not part of the schedule and was simply placed there for convenience
+    #letters = 'PANTHERS'
+    letters = 'THERSPAN'
     onlineLetters = 'PAHE' if lastInitial.lower() > 'k' else 'NTRS'
     daySpan = []
     daysSince = (date - firstDay).days
-    while daysSince > 0:
+    while daysSince > 0: #This is used to calculate the current letter day. First, just go through every day, backwards, from now to the start of the year/semester, adding every day
         if len(daySpan) == 0: daySpan.append(date - datetime.timedelta(days=1))
         else: daySpan.append(daySpan[-1] - datetime.timedelta(days=1))
         daysSince -= 1
-    daySpan = [d for d in daySpan if int(f'{d:%w}') not in (0, 6) and f'{d:%m-%d}' not in noClasses] #get the days that are not weekend days or days without classes
+    daySpan = [d for d in daySpan if int(f'{d:%w}') not in (0, 6) and f'{d:%m-%d-%Y}' not in noClasses.keys()] #get the days that are not weekend days or days without classes
     currentDayLetter = letters[len(daySpan) % len(letters)]
     online = currentDayLetter in onlineLetters
-    dailyClasses = schedule[:4] if letters.index(currentDayLetter) % 2 == 0 else schedule[4:] #take either the first or last half of classes depending on letter day
+    if letters.index(currentDayLetter) % 2 == 1: #Periods 1, 3, 4, 5
+        start, stop = 0, 4
+    else: #Periods 6, 7, 8, 9
+        start, stop = 4, 8
+    fullClassList = [{'class': schedule['classes'][i], 'teacher': schedule['teachers'][i], 'room': schedule['rooms'][i], 'lunch': schedule['lunches'][i]} for i in range(9)]
+    for k in ['classes', 'teachers', 'rooms', 'lunches']:
+        schedule[k].pop(1) #Remove advisory
+    dailyClasses = [{'class': schedule['classes'][i], 'teacher': schedule['teachers'][i], 'room': schedule['rooms'][i], 'lunch': schedule['lunches'][i]} for i in range(start, stop)] #take either the first or last half of classes depending on letter day
     try: rotationFactor = letters.index(currentDayLetter) // 2
     except ZeroDivisionError: rotationFactor = 0
+    #A series of rotations to determine the proper schedule
     rotatedClasses = collections.deque(copy.deepcopy(dailyClasses))
     rotatedClasses.rotate(rotationFactor)
     rotatedClasses = list(rotatedClasses) #the four daily classes, rotated depending on the schedule
-    rotatedClasses.insert(3, 'Advisory')
-    schedule.insert(1, 'Advisory')
-    def time(s): return datetime.time(int(s[:s.find(':')]), int(s[s.find(':') + 1:]))
-    def fTime(t): return f'{t:%I:%M %p}'
+    rotatedClasses.insert(3, {'class': 'Advisory', 'teacher': fullClassList[1]['teacher'], 'room': fullClassList[1]['room']}) #Insert advisory back at the right spot
+    #schedule.insert(1, 'Advisory')
+    lunchIndexDict = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
+    def time(s): return datetime.time(int(s[:s.find(':')]), int(s[s.find(':') + 1:])) #String to datetime.time
+    def fTime(t): return f'{t:%I:%M %p}' #Format time in 10:00 AM format
     nowTime = datetime.datetime.now()
-    times = [(time('7:45'), time('9:20')), (time('9:25'), time('10:55')), (time('11:00'), time('12:55')), (time('13:00'), time('13:15')), (time('13:20'), time('14:50'))]
-    dateTimes = [(datetime.datetime(nowTime.year, nowTime.month, nowTime.day, t[0].hour, t[0].minute), datetime.datetime(nowTime.year, nowTime.month, nowTime.day, t[1].hour, t[1].minute)) for t in times]
-    dayDescription = f'{"Today" if date == datetime.date.today() else "Tomorrow" if date == datetime.date.today() + datetime.timedelta(days=1) else f"{date:%A, %B %d}"}'
-    embed = discord.Embed(title=f'{date:%B %d} - {currentDayLetter} day', color=yellow)
-    embed.description=f'''{"💻" if online else "👥"}{"Today" if date == datetime.date.today() else "Tomorrow" if date == datetime.date.today() + datetime.timedelta(days=1) else f"On {date:%A, %B %d}, "} your classes are {"online" if online else "in person"}\n\n{f"{f'{dayDescription.upper()}'}'S SCHEDULE":-^70}'''
+    dayDescription = f'{"Today" if date == today else "Tomorrow" if date == today + datetime.timedelta(days=1) else "Yesterday" if date == today - datetime.timedelta(days=1) else f"{date:%A}" if 1 < (date - today).days < 7 else f"{date:%A, %B %d}"}' #Embed header, based on if desired date is today, tomorrow, or another day
+    eventsToday = dailyEvents.get(f'{date:%m-%d-%Y}', [])
+    if len(eventsToday) > 0: 
+        todaysEvents = '\n'.join([f'•{event}' for event in dailyEvents[f'{date:%m-%d-%Y}']])
+        embedFlavor = f'''\n\n{f"{dayDescription.upper()}'S EVENTS":-^70}\n{todaysEvents}'''
+    else: embedFlavor = ''
+    liturgyDay = any(['liturgy' in e.lower() for e in eventsToday])
+    if liturgyDay:
+        times = [(time('7:45'), time('9:00')), (time('9:05'), time('10:10')), (time('10:20'), time('11:35')), (time('11:40'), time('13:35')), (time('13:40'), time('14:50'))] #The times classes start and end on liturgy days
+        lunchTimes = [(time('11:40'), time('12:05')), (time('12:10'), time('12:35')), (time('12:40'), time('13:05')), (time('13:10'), time('13:35'))] #The times lunches start and end on liturgy days
+    else:
+        times = [(time('7:45'), time('9:20')), (time('9:25'), time('10:55')), (time('11:00'), time('12:55')), (time('13:00'), time('13:15')), (time('13:20'), time('14:50'))] #The times classes start and end
+        lunchTimes = [(time('11:00'), time('11:25')), (time('11:30'), time('11:55')), (time('12:00'), time('12:25')), (time('12:30'), time('12:55'))] #The times lunches start and end on normal days
+    dateTimes = [(datetime.datetime(date.year, date.month, date.day, t[0].hour, t[0].minute), datetime.datetime(date.year, date.month, date.day, t[1].hour, t[1].minute)) for t in times] #Times list, but datetime format for comparisons (of current real day, not current schedule day)
+    dateLunchTimes = [(datetime.datetime(date.year, date.month, date.day, t[0].hour, t[0].minute), datetime.datetime(date.year, date.month, date.day, t[1].hour, t[1].minute)) for t in lunchTimes] #Times list, but datetime format for comparisons (of current real day, not current schedule day)
+    embed = discord.Embed(title=f'{date:%B %d} - {currentDayLetter} day', color=yellow[1])
+    embed.description=f'''{emojis["pc"] if online else emojis["members"]}{dayDescription if any([w in dayDescription for w in ("Today", "Tomorrow", "Yesterday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday")]) else f"On {f'{date:%A}' if (datetime.date(nowTime.year, nowTime.month, nowTime.day) - date).days > 0 else f'{date:%A, %B %d}'},"}  your classes are {"online" if online else "in person"}'''
+    if liturgyDay:
+        haveLink = False
+        for e in eventsToday:
+            if 'https://' in e:
+                eventsToday.remove(e)
+                haveLink = e
+                break
+        embed.description += f"\n**{emojis['cross']} Liturgy Schedule**"
+        if haveLink: embed.description += f"\n{'⌛' if nowTime < datetime.datetime(nowTime.year, nowTime.month, nowTime.day, 9, 20) else '🔴' if datetime.datetime(nowTime.year, nowTime.month, nowTime.day, 9, 20) <= nowTime < datetime.datetime(nowTime.year, nowTime.month, nowTime.day, 11, 25) else emojis['camera']} {haveLink}"
+    embed.description += f'''{embedFlavor}\n\n{f"{f'{dayDescription.upper()}'}'S SCHEDULE":-^70}'''
     for i, period in enumerate(rotatedClasses):
-        compareTime = (datetime.datetime(date.year, date.month, date.day, times[i][0].hour, times[i][0].minute), datetime.datetime(date.year, date.month, date.day, times[i][1].hour, times[i][1].minute))
-        def classStatus():
-            return '✅' if nowTime > compareTime[1] else discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online') if nowTime > compareTime[0] else ''
-        def timeUntil():
-            string = ''
-            if dateTimes[i][0] > nowTime:
-                hours = (dateTimes[i][0] - nowTime) // datetime.timedelta(hours=1)
-                result = (hours, (dateTimes[i][0] - nowTime) // datetime.timedelta(minutes=1) - 60*hours)
+        compareTime = (datetime.datetime(date.year, date.month, date.day, times[i][0].hour, times[i][0].minute), datetime.datetime(date.year, date.month, date.day, times[i][1].hour, times[i][1].minute)) #Start and end of the current period
+        def classStatus(): #Emoji if a class is complete or currently in progress, otherwise blank
+            return emojis['greenCheck'] if nowTime > compareTime[1] else emojis['online'] if nowTime > compareTime[0] else ''
+        def timeUntil(lunch=False):
+            if lunch: 
+                useTimes = dateLunchTimes
+                index = lunchIndexDict[period['lunch']]
+            else: 
+                useTimes = dateTimes
+                index = i
+            if useTimes[index][0] > nowTime: #This class hasn't started yet
+                display = Cyberlog.elapsedDuration(useTimes[index][0] - nowTime, False, onlyTimes=True)
                 string = 'Begins'
             else: 
-                hours = (dateTimes[i][1] - nowTime) // datetime.timedelta(hours=1)
-                result = (hours, (dateTimes[i][1] - nowTime) // datetime.timedelta(minutes=1) - 60*hours)
+                display = Cyberlog.elapsedDuration(useTimes[index][1] - nowTime, False, onlyTimes=True)
                 string = 'Ends'
-            if result[0] > 0: return f'> {string} in {result[0]}h {result[1]}m'
-            else: return f'> {string} in {result[1]} minutes'
-        embed.add_field(name=f'{classStatus()}{"P" if i != 3 else ""}{schedule.index(period) + 1 if period != "Advisory" else period}{" & lunch" if i == 2 else ""} • {fTime(times[i][0])} - {fTime(times[i][1])}',
-            value=f'> {period}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1]) else ""}{f"{newline}A lunch: 11:00-11:25{newline}B lunch: 11:30-11:55{newline}C lunch: 12:00-12:25{newline}D lunch: 12:30-12:55" if i == 2 else ""}', inline=False)
-    return await statusMessage.edit(content=contentLog[-1] if len(contentLog) > 0 else None, embed=embed)
+            if display[0] > 0 or display[1] > 0: return f"{'> ' if not lunch else ''}{string} in {f'{display[0]}d' if display[0] > 0 else ''} {f'{display[1]}h' if display[1] > 0 else ''} {f'{display[2]}m' if display[2] > 0 else ''}" #Starts or ends in over an hour
+            else: return f"{'> ' if not lunch else ''}{string} in {display[2]} minutes"
+        def lunchFiller():
+            lunchPeriod = period['lunch']
+            lunchString = f"> {period['lunch']} Lunch: {lunchTimes[lunchIndexDict[period['lunch']]][0]:%I:%M} - {lunchTimes[lunchIndexDict[period['lunch']]][1]:%I:%M}"
+            classString = f'''> {period['class']}{f" • {period['teacher']}" if period['teacher'] else ''}{f" • Rm {period['room']}" if period['room'] else ''}: <StartEndTime>'''
+            if lunchPeriod == 'A':
+                #ordering: between end of last class & end of A lunch, then between end of A lunch and end of D lunch
+                string = f'''
+                    {lunchString}{f" • {timeUntil(True)}" if dateTimes[2][1] < nowTime < dateLunchTimes[0][1] else ""}
+                    {classString.replace('<StartEndTime>', f'{dateLunchTimes[1][0]:%I:%M} - {dateLunchTimes[3][1]:%I:%M}')}{f" • {timeUntil()}" if dateLunchTimes[0][1] < nowTime < dateLunchTimes[3][1] else ""}
+                '''
+            elif lunchPeriod == 'B':
+                #ordering: between end of last class & end of A lunch, then between end of A lunch and end of B lunch, then between end of B lunch and end of D lunch
+                string = f'''
+                    {classString.replace('<StartEndTime>', f'{dateLunchTimes[0][0]:%I:%M} - {dateLunchTimes[0][1]:%I:%M}')}{f" • {timeUntil()}" if dateTimes[2][1] < nowTime < dateLunchTimes[0][1] else ""}
+                    {lunchString}{f" • {timeUntil(True)}" if dateLunchTimes[0][1] < nowTime < dateLunchTimes[1][1] else ""}
+                    {classString.replace('<StartEndTime>', f'{dateLunchTimes[2][0]:%I:%M} - {dateLunchTimes[3][1]:%I:%M}')}{f" • {timeUntil()}" if dateLunchTimes[1][1] < nowTime < dateLunchTimes[3][1] else ""}
+                '''
+            elif lunchPeriod == 'C':
+                #ordering: between end of last class & end of B lunch, then between end of B lunch and end of C lunch, then between end of C lunch and end of D lunch
+                string = f'''
+                    {classString.replace('<StartEndTime>', f'{dateLunchTimes[0][0]:%I:%M} - {dateLunchTimes[1][1]:%I:%M}')}{f" • {timeUntil()}" if dateTimes[2][1] < nowTime < dateLunchTimes[1][1] else ""}
+                    {lunchString}{f" • {timeUntil(True)}" if dateLunchTimes[1][1] < nowTime < dateLunchTimes[2][1] else ""}
+                    {classString.replace('<StartEndTime>', f'{dateLunchTimes[3][0]:%I:%M} - {dateLunchTimes[3][1]:%I:%M}')}{f" • {timeUntil()}" if dateLunchTimes[2][1] < nowTime < dateLunchTimes[3][1] else ""}
+                '''
+            else: #D lunch
+                #ordering: between end of last class & end of C lunch, then between end of C lunch and end of D lunch
+                string = f'''
+                    {classString.replace('<StartEndTime>', f'{dateLunchTimes[0][0]:%I:%M} - {dateLunchTimes[2][1]:%I:%M}')}{f" • {timeUntil()}" if dateTimes[2][1] < nowTime < dateLunchTimes[2][1] else ""}
+                    {lunchString}{f" • {timeUntil(True)}" if dateLunchTimes[2][1] < nowTime < dateLunchTimes[3][1] else ""}
+                '''
+            return string
+        value = f'''> {period['class']}{f" • {period['teacher']}" if period['teacher'] else ''}{f" • Rm {period['room']}" if period['room'] else ''}\n{timeUntil() if (nowTime < dateTimes[i][0] and i == 0) or (dateTimes[i][0] < nowTime < dateTimes[i][1] and i == 0) or (dateTimes[i - 1][1] < nowTime < dateTimes[i][1] and i != 0) else ''}''' if i != 2 else lunchFiller() if period['lunch'] else '<To see lunch schedule breakdown, configure a lunch for this class>'
+        if liturgyDay: value += f'\n\nMass Group 1:\n> Mass: 9:20 - 10:10\n> Class: 10:20 - 11:35\n\nMass Group 2:\n> Class: 9:05 - 10:15\nMass: 10:30 - 11:25'
+        embed.add_field(
+            name=f'''{classStatus()}{"P" if i != 3 or liturgyDay else ""}{fullClassList.index(period) + 1 if period['class'] != "Advisory" else period['class']}{" & lunch" if i == 2 else "& Mass" if liturgyDay and i == 1 else f" • {fTime(times[i][0])} - {fTime(times[i][1])}"}''',
+            value=value,
+            inline=False)
+    embed.set_author(name=author.name, icon_url=author.avatar_url_as(format='png', size=1024))
+    return embed, contentLog
+
+@commands.is_owner()
+@bot.command()
+async def scheduleManagement(ctx, mode='events'):
+    blue = (0x0000FF, 0x6666ff)
+    snowBlue = 0x66ccff
+    yellow = (0xffff00, 0xffff66)
+    daysOff = getUserData(bot)[247412852925661185].get('highSchoolDaysOffSpring2021')
+    if not daysOff: daysOff = {}
+    
+    #emojis = bot.get_cog('Cyberlog').emojis
+    global emojis
+
+    def messageCheck(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
+    def reactionCheck(r, u): return r.emoji in reactions and r.message.id == prompt.id and u.id == ctx.author.id
+    def calculateDatePrompt(i):
+        temp = copy.deepcopy(i)
+        while temp.month == i.month:
+            d = data.get(f"{temp:%m-%d-%Y}")
+            off = daysOff.get(f"{temp:%m-%d-%Y}")
+            if not d and not off and temp > datetime.date.today() and not int(f'{temp:%w}') in (0, 6): return temp
+            temp += datetime.timedelta(days=1)
+        return temp
+
+    if 'd' in mode:
+        prompt = await ctx.send('Please enter the list of days off you wish to add to the system (MM/DD/YY)')
+        m = await bot.wait_for('message', check=messageCheck)
+        if ',' in m.content: split = m.content.split(', ')
+        else: split = m.content.split('\n')
+        for d in split:
+            try: date = datetime.datetime.strptime(d, '%m/%d/%y')
+            except:
+                await ctx.send(f'Date parsing error for input `{d}`')
+                continue
+            prompt = await ctx.send(f'Enter the reason for there being no classes on {date:%b %d}')
+            m = await bot.wait_for('message', check=messageCheck)
+            prompt = await ctx.channel.fetch_message(prompt.id)
+            data = {'reason': m.content, 'snowDay': len(prompt.reactions) > 0 and '❄️' in [r.emoji for r in prompt.reactions], 'announce': len(prompt.reactions) > 0 and ('❄️' in [r.emoji for r in prompt.reactions] or '🔔'in [r.emoji for r in prompt.reactions])}
+            daysOff[f'{date:%m-%d-%Y}'] = data
+            if data['announce']:
+                await m.add_reaction(loading)
+                for u in getUserData(bot).values():
+                    try:
+                        notifications = u['schedule']['announce']
+                        if notifications:
+                            embed=discord.Embed(title=f"{'❄️' if data['snowDay'] else ''}No school on {date:%B %d}", description=f"Reason: {data['reason']}\n\n(Reason for DM: {emojis['slideToggleOn']} DM notifications • PANTHERS schedule module)", color=snowBlue if data['snowDay'] else yellow[1])
+                            try:
+                                user = bot.get_user(u['user_id'])
+                                await user.send(embed=embed)
+                            except: pass
+                    except KeyError: pass
+                await m.remove_reaction(loading, bot.user)
+            await m.add_reaction(emojis['greenCheck'])
+        status = await ctx.send('Pushing to database...')
+        await database.SetHSDaysOff(daysOff)
+        await status.edit(content='Done!')
+    elif 'e' in mode:
+        prompt = await ctx.send(f'{loading} Building calendar...')
+        data = getUserData(bot)[247412852925661185].get('highSchoolEventDaysSpring2021')
+        if not data: data = {}
+        t = datetime.date.today()
+        i = datetime.date(t.year, t.month, 1)
+        datePrompt = None
+        while True:
+            embed = discord.Embed(title=f'HS Schedule - Events', description = f'{i:%B}\n\n', color = blue[1])
+            temp = copy.deepcopy(i)
+            datePrompt = calculateDatePrompt(i)
+            while temp.month == i.month:
+                d = data.get(f"{temp:%m-%d-%Y}")
+                embed.description += f'{emojis["arrowForward"] if temp == datePrompt else "❌" if daysOff.get(f"{temp:%m-%d-%Y}") else qlf}{temp:%m/%d}: {"Weekend" if int(f"{temp:%w}") in (0, 6) else ", ".join([event[:50] + ("..." if len(event) > 50 else "") for event in d]) if d else "----"}\n'
+                temp += datetime.timedelta(days=1)
+            await prompt.edit(content = None, embed = embed)
+            reactions = [emojis['previous'], emojis['next'], '❌', emojis['greenCheck']]
+            for r in reactions: await prompt.add_reaction(r)
+            d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+            try: result = d.pop().result()
+            except: pass
+            for f in p: f.cancel()
+            if type(result) is discord.Message:
+                if ':' in result.content[:5]: 
+                    day = datetime.date(i.year, i.month, int(result.content[:result.content.find(':')]))
+                    description = result.content[result.content.find(':') + 1:].split(', ')
+                else:
+                    day = datePrompt
+                    description = result.content.split(', ')
+                events = data.get(f"{day:%m-%d-%Y}")
+                if not events: events = []
+                events += description
+                data[f"{day:%m-%d-%Y}"] = events
+                if ctx.guild: 
+                    bot.get_cog('Cyberlog').AvoidDeletionLogging(r)
+                    await result.delete()
+            else:
+                if result[0].emoji in (emojis['previous'], emojis['next']):
+                    n = result[0].emoji == emojis['next']
+                    newMonth = i.month + (1 if n else -1)
+                    newYear = i.year
+                    if newMonth == 0:
+                        newMonth = 12
+                        newYear -= 1
+                    elif newMonth == 13:
+                        newMonth = 0
+                        newYear += 1
+                    i = datetime.date(newYear, newMonth, 1)
+                    if ctx.guild: await prompt.remove_reaction(*result)
+                elif result[0].emoji == emojis['greenCheck']:
+                    break
+                else:
+                    return await prompt.edit(content=f'Cancelled', embed=None)
+        await prompt.edit(content=f'{loading} Saving...')
+        await database.SetHSEventDays(data)
+        await prompt.edit(content=f'{emojis["greenCheck"]} Saved!')
 
 @bot.command()
 async def data(ctx):
@@ -982,6 +1734,19 @@ async def marvel(ctx):
     if not any([ctx.author in bot.get_guild(g).members for g in [611301150129651763]]): return
     r = fileAbstraction(bot.get_emoji(726991924086702121), 'M A R V E L', 'Marvel Characters')
     await ctx.send(embed=r[0],file=r[1])
+
+@commands.is_owner()
+@bot.command()
+async def scheduleAnnounce(ctx):
+    status = await ctx.send(f'{loading}Working...')
+    users = [u for u in getUserData(bot).values() if u.get('schedule')]
+    for u in users:
+        user = bot.get_user(u['user_id'])
+        embed = discord.Embed(title='PANTHERS schedule module: Major update', color=0xffff66)
+        embed.description = f'Hello {user.name}, since you have a PVI schedule saved in my database, this announcement is letting you know that my schedule feature got a major rework including new features and improvements. Some of the biggest features include adding teachers, room numbers, and lunch periods to your classes, and an option to have your schedule delivered to you each school day.\n\n[View the update patch notes here](https://pastebin.com/URySgHaM)\n\nUse the `.schedule` command to check out the new features.\n\nP.S. If you know anyone who would be interested in the schedule feature, please spread the word - I enjoy putting work into fun features to serve my friends.'
+        try: await user.send(embed=embed)
+        except: pass
+    await status.edit(content=f'Done!')
 
 @commands.is_owner()
 @bot.command()
