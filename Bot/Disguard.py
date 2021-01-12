@@ -1291,6 +1291,7 @@ async def buildSchedule(desiredDate, initialPassedDate, author, message, schedul
     #schedule.pop(-1) #Remove the last initial since it's not part of the schedule and was simply placed there for convenience
     #letters = 'PANTHERS'
     letters = 'THERSPAN'
+    lettersFromStart = 'PANTHERS'
     onlineLetters = 'PAHE' if lastInitial.lower() > 'k' else 'NTRS'
     daySpan = []
     daysSince = (date - firstDay).days
@@ -1301,7 +1302,7 @@ async def buildSchedule(desiredDate, initialPassedDate, author, message, schedul
     daySpan = [d for d in daySpan if int(f'{d:%w}') not in (0, 6) and f'{d:%m-%d-%Y}' not in noClasses.keys()] #get the days that are not weekend days or days without classes
     currentDayLetter = letters[len(daySpan) % len(letters)]
     online = currentDayLetter in onlineLetters
-    if letters.index(currentDayLetter) % 2 == 1: #Periods 1, 3, 4, 5
+    if lettersFromStart.index(currentDayLetter) % 2 == 0: #Periods 1, 3, 4, 5
         start, stop = 0, 4
     else: #Periods 6, 7, 8, 9
         start, stop = 4, 8
@@ -1309,7 +1310,7 @@ async def buildSchedule(desiredDate, initialPassedDate, author, message, schedul
     for k in ['classes', 'teachers', 'rooms', 'lunches']:
         schedule[k].pop(1) #Remove advisory
     dailyClasses = [{'class': schedule['classes'][i], 'teacher': schedule['teachers'][i], 'room': schedule['rooms'][i], 'lunch': schedule['lunches'][i]} for i in range(start, stop)] #take either the first or last half of classes depending on letter day
-    try: rotationFactor = letters.index(currentDayLetter) // 2
+    try: rotationFactor = lettersFromStart.index(currentDayLetter) // 2
     except ZeroDivisionError: rotationFactor = 0
     #A series of rotations to determine the proper schedule
     rotatedClasses = collections.deque(copy.deepcopy(dailyClasses))
@@ -1426,7 +1427,7 @@ async def scheduleManagement(ctx, mode='events'):
         while temp.month == i.month:
             d = data.get(f"{temp:%m-%d-%Y}")
             off = daysOff.get(f"{temp:%m-%d-%Y}")
-            if not d and not off and temp > datetime.date.today() and not int(f'{temp:%w}') in (0, 6): return temp
+            if not d and not off and temp > datetime.date.today() and not int(f'{temp:%w}') in (0, 6) and f'{temp:%m-%d-%y}' not in skipped: return temp
             temp += datetime.timedelta(days=1)
         return temp
 
@@ -1469,6 +1470,7 @@ async def scheduleManagement(ctx, mode='events'):
         t = datetime.date.today()
         i = datetime.date(t.year, t.month, 1)
         datePrompt = None
+        skipped = []
         while True:
             embed = discord.Embed(title=f'HS Schedule - Events', description = f'{i:%B}\n\n', color = blue[1])
             temp = copy.deepcopy(i)
@@ -1491,10 +1493,12 @@ async def scheduleManagement(ctx, mode='events'):
                 else:
                     day = datePrompt
                     description = result.content.split(', ')
-                events = data.get(f"{day:%m-%d-%Y}")
-                if not events: events = []
-                events += description
-                data[f"{day:%m-%d-%Y}"] = events
+                if 'skip' in description[0].lower(): skipped.append(f'{day:%m-%d-%y}')
+                else:
+                    events = data.get(f"{day:%m-%d-%Y}")
+                    if not events: events = []
+                    events += description
+                    data[f"{day:%m-%d-%Y}"] = events
                 if ctx.guild: 
                     bot.get_cog('Cyberlog').AvoidDeletionLogging(r)
                     await result.delete()
