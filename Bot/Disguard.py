@@ -1097,6 +1097,7 @@ async def _schedule(ctx, *, desiredDate=None):
         nonlocal schedule
         nonlocal initialSchedule
         nonlocal reactions
+        nonlocal yellow
         try: await statusMessage.edit(content=f'{loading}Preparing settings...')
         except: statusMessage = await ctx.send(f'{loading}Preparing settings...')
         slide = {False: emojis['slideToggleOff'], True: emojis['slideToggleOn']}
@@ -1252,6 +1253,7 @@ async def _schedule(ctx, *, desiredDate=None):
 
 async def buildSchedule(desiredDate, initialPassedDate, author, message, schedule):
     '''Returns an embed'''
+    yellow = (0xffff00, 0xffff66)
     contentLog = []
     firstDay = datetime.date(2021, 1, 4) #First day of classes
     #firstLetter = 'T' If this is to be uncommented, do something complicated with rotating the schedule
