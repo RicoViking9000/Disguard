@@ -2345,6 +2345,7 @@ class Cyberlog(commands.Cog):
         if isinstance(error, commands.CommandNotFound): return
         m = await ctx.send(f'⚠ {error}')
         #traceback.print_exception(type(error), error, error.__traceback__)
+        traceback.print_exception(type(error), error, error.__traceback__)
         while True:
             await m.add_reaction('ℹ')
             def iCheck(r,u): return str(r) == 'ℹ' and u.id == ctx.author.id and r.message.id == m.id
