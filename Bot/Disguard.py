@@ -777,7 +777,8 @@ async def _schedule(ctx, *, desiredDate=None):
                         if ',' in result.content: classesToWrite = result.content.split(', ')
                         else: classesToWrite = result.content.split('\n')
                     else: classesToWrite = [result.content]
-                    classIndex = classes.index(None)
+                    try: classIndex = classes.index(None)
+                    except ValueError: classIndex = 0
                     while len(classesToWrite) > 0:
                         if classIndex != 1:
                             classes[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
@@ -848,7 +849,8 @@ async def _schedule(ctx, *, desiredDate=None):
                         if ',' in result.content: classesToWrite = result.content.split(', ')
                         else: classesToWrite = result.content.split('\n')
                     else: classesToWrite = [result.content]
-                    classIndex = teachers.index(None)
+                    try: classIndex = teachers.index(None)
+                    except ValueError: classIndex = 0
                     while len(classesToWrite) > 0:
                         teachers[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
                         classesToWrite.pop(0)
@@ -922,7 +924,8 @@ async def _schedule(ctx, *, desiredDate=None):
                         if ',' in result.content: classesToWrite = result.content.split(', ')
                         else: classesToWrite = result.content.split('\n')
                     else: classesToWrite = [result.content]
-                    classIndex = rooms.index(None)
+                    try: classIndex = rooms.index(None)
+                    except ValueError: classIndex = 0
                     while len(classesToWrite) > 0:
                         rooms[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
                         classesToWrite.pop(0)
@@ -996,7 +999,8 @@ async def _schedule(ctx, *, desiredDate=None):
                         if ',' in result.content: classesToWrite = result.content.split(', ')
                         else: classesToWrite = result.content.split('\n')
                     else: classesToWrite = [result.content]
-                    classIndex = lunches.index(None)
+                    try: classIndex = lunches.index(None)
+                    except ValueError: classIndex = 0
                     while len(classesToWrite) > 0:
                         if classIndex != 1:
                             lunches[classIndex] = classesToWrite[0] if 'skip' not in classesToWrite[0].lower() else 0
@@ -1166,7 +1170,7 @@ async def _schedule(ctx, *, desiredDate=None):
                 if not ctx.guild: await statusMessage.delete()
                 else: await statusMessage.clear_reactions()
                 break
-            if not ctx.guild and result[0].emoji in reactions[:6] + emojis['edit']:
+            if not ctx.guild and result[0].emoji in reactions[:6] + [emojis['edit']]:
                 try: await oldMessage.delete()
                 except: pass
                 await statusMessage.delete()
