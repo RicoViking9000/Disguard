@@ -353,7 +353,18 @@ def time(data):
 
 def elapsed(data):
     '''Returns time elapsed since the epoch (return type: datetime.timedelta) (TIMEKEEPER)'''
-    return ((datetime.datetime.utcnow() - data['epoch'] - datetime.timedelta(seconds=data['pausedDuration'])) - (datetime.datetime.utcnow() - data['pausedTimestamp'] if data['paused'] else datetime.timedelta(seconds=0))) * data['timeMultiplier']
+    #Jan 19, 2021: Changed this approach from being single-line math to being start at a point & add it linearly, based on the new data type system. This eliminates the need for the pauseCompensation method.
+    result = 0
+    speedSectors = data['speedSectors']
+    if len(speedSectors) < 2: return datetime.timedelta(seconds=0)
+    for i, s in enumerate(speedSectors, 1):
+        lastIndex = speedSectors[i - 1]['timestamp']
+        multiplier = speedSectors[i - 1]['multiplier']
+        if i == len(speedSectors): currentIndex = datetime.datetime.utcnow()
+        else: currentIndex = s['timestamp']
+        result += (currentIndex - lastIndex).seconds * multiplier
+    return datetime.timedelta(seconds=result)
+    #return ((datetime.datetime.utcnow() - data['epoch'] - datetime.timedelta(seconds=data['pausedDuration'])) - (datetime.datetime.utcnow() - data['pausedTimestamp'] if data['paused'] else datetime.timedelta(seconds=0))) * data['timeMultiplier']
 
 
 if __name__ == '__main__':
