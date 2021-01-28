@@ -186,8 +186,8 @@ class Cyberlog(commands.Cog):
                         print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=4):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
             except Exception as e: 
                 print(f'Tracking error: {e}')
-                if str(e) == 'username': traceback.print_exc()
-
+                traceback.print_exc()
+    
     @tasks.loop(hours = 6)
     async def summarize(self):
         global lightningUsers
