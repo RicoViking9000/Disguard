@@ -4142,7 +4142,7 @@ class Cyberlog(commands.Cog):
     async def uploadFiles(self, f):
         #if type(f) is not list: f = [f]
         message = await self.imageLogChannel.send(file=f if type(f) is not list else None, files=f if type(f) is list else None)
-        return [attachment.url for attachment in message.attachments] if len(f) > 1 else message.attachments[0].url
+        return [attachment.url for attachment in message.attachments] if type(f) is list else message.attachments[0].url
 
     def PermissionChanges(self, membersInput, message, embed, mod='role'):
         members = {}
