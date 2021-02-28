@@ -73,12 +73,53 @@ class LogModule(object):
         template = NewLogModule(entry.get('name'), entry.get('description'))
         template.update(entry)
 
+
+class NewLogModule(object):
+    '''
+    Used for consistent controlling of logging
+    
+    One of these is kept for each individual log type, giving users insane flexibility over customization options
+
+    1:08 AM 12/29 thought: Make a new object (or dict) for HTML form settings: enabled would be an object or dict, etc, they would all be in a list attached to each module
+    '''
+    def __init__(self, name, description, audit=True, enabled=True, channelID=None, tts=False, customMessage=None, customEmbed=None):
+        self.name = name #name of module
+        self.description = description #description of module
+        self.read = audit #read audit logs to post who did the action (such as who created the channel)? [ENABLED BY DEFAULT]
+        self.enabled = enabled #is this module enabled?
+        self.channel = channelID #which channel is this sent to?
+        self.tts = tts #Use text to speech for logging?
+        self.useDefault = True #Use the default settings for embed/message apperance? Enabled by default
+        self.customMessage = customMessage #The message content for custom logging, if enabled
+        self.customEmbed = customEmbed #The embed for custom logging, if enabled
+        self.children = [] #Children NewLogModule objects. Settings for this are applied to the children unless overwritten in the children. Children are displayed in a subcategory online.
+        self.customSettings = [] #A dict of custom settings. These are formatted online as appropriate. Format is HTML form style.
         self.lastUpdate = datetime.datetime.utcnow()
     def update(self, entry): #Shorten database code line - input data from database, return updated object, updated object goes into database
         self.read = entry.get('read')
         self.enabled = entry.get('enabled')
-        self.summarize = entry.get('summarize')
         self.channel = entry.get('channel')
+        self.tts = entry.get('tts', False)
+        self.useDefault = entry.get('default', True)
+        self.customMessage = entry.get('customMessage')
+        self.customEmbed = entry.get('customEmbed')
+        self.children = entry.get('children', [])
+        self.customSettings = entry.get('customSettings', [])
+        return self
+    def createEmbed(self, *, title=None, description=None, authName=None, authURL=None, authImg=None, URL=None, timestamp=True, color=0x000000, footText=None, footImg=None, image=None, thumbnail=None, fields=[]):
+        e = discord.Embed(title=title, description=description, timestamp=datetime.datetime.utcnow() if timestamp else None, color=color)
+        e.set_author(name=authName, url=authURL, icon_url=authImg)
+        e.set_image(url=image)
+        e.set_thumbnail(url=thumbnail)
+        e.set_footer(text=footText, icon_url=footImg)
+        e.url = URL
+        for f in fields: e.add_field(name=f.get('name'), value=f.get('value'), inline=f.get('inline'))
+        return e
+    def configureDefault(self, t): #Configure the default customMessage and customEmbed parameters for log types specified by [type]
+        if t == 'messageEdit':
+            self.defaultCustomMessage = '<<after.message.author.name>> edited their message from **<<before>>** to **<<after.content>>**'
+            self.defaultCustomEmbed = Embeds.defaultMessageEditEmbed().to_dict()
+        
         return self
 
 def Initialize(token):
