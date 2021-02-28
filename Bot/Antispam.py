@@ -453,7 +453,6 @@ class Antispam(commands.Cog):
             else: flavorText = f'{message.guild.name} has set their antispam notice to DM members upon being flagged.'
             try:
                 directShorter = copy.deepcopy(shorter)
-                directShorter.description += f'\n\n*You are receiving this DM because {flavorText}**'
                 directShorter.description += f'\n\n*You are receiving this DM because {flavorText}*'
                 await message.author.send(embed=directShorter)
                 whispered = 2
