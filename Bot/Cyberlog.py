@@ -608,7 +608,7 @@ class Cyberlog(commands.Cog):
             content = f'{u} removed the {rawEmoji} reaction from their message in #{c.name} {seconds} seconds after adding it' #There is a zero-width space in this line, after the first colon
             emojiLine = f'{self.emojis["emoji"] if settings["context"][1] > 0 else ""}{"Reaction" if settings["context"][1] < 2 else ""}: {p.emoji} ({rawEmoji})'
             userLine = f'{(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Member" if settings["context"][1] < 2 else ""}: {u.mention} ({u.name})'
-            channelLine = f'''{self.emojis["hashtag"] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {c.mention} ({c.name}) {f'{self.emojis["reply"]}[Jump]({result.jump_url})' if result else ""}'''
+            channelLine = f'''{self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {c.mention} ({c.name}) {f'{self.emojis["reply"]}[Jump]({result.jump_url})' if result else ""}'''
             ghostTimeLine = f'{self.emojis["slowmode"] if settings["context"][1] > 0 else ""}{"Timespan" if settings["context"][1] < 2 else ""}: Removed {seconds}s after being added'
             timeLine = f'{(clockEmoji(rawReceived) if settings["library"] > 0 else "🕰") if settings["context"][1] > 0 else ""}{"Timestamp" if settings["context"][1] < 2 else ""}: {received} {nameZone(g)}'
             embed = discord.Embed(
@@ -1136,7 +1136,7 @@ class Cyberlog(commands.Cog):
             keytypes = {discord.Member: '👤', discord.Role: '🚩'}
             content = f'A moderator created a new {channel.type[0]} channel called {channel.name}'
             embed=discord.Embed(
-                title=f'''{self.channelEmoji(channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["greenPlus"]) if settings["context"][0] > 0 else ""}{f"{channel.type[0][0].upper() + channel.type[0][1:]} Channel was created" if settings["context"][0] < 2 else ""}''',
+                title=f'''{self.channelEmoji(channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["darkGreenPlus"]) if settings["context"][0] > 0 else ""}{f"{channel.type[0][0].upper() + channel.type[0][1:]} Channel was created" if settings["context"][0] < 2 else ""}''',
                 description=f'{self.channelKeys[channel.type[0] if settings["context"][1] > 0 else ""]}{"Channel" if settings["context"][1] < 2 else ""}: {f"{channel.mention} ({channel.name})" if channel.type[0] == "text" else channel.name}',
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
@@ -1548,7 +1548,7 @@ class Cyberlog(commands.Cog):
             count = len(member.guild.members)
             ageDisplay = elapsedDuration(datetime.datetime.utcnow() - member.created_at, False)
             embed=discord.Embed(
-                title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['greenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'}"} {self.loading}''',
+                title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'}"} {self.loading}''',
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
             if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
@@ -1661,7 +1661,7 @@ class Cyberlog(commands.Cog):
         except: pass
         if msg:
             if member.id in [m.id for m in member.guild.members]:
-                embed.title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['greenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'} (React ℹ for member info viewer)" if settings['context'][0] < 2 else ''}'''
+                embed.title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'} (React ℹ for member info viewer)" if settings['context'][0] < 2 else ''}'''
                 await msg.edit(content=msg.content, embed=embed if not settings['plainText'] else None)
                 final = copy.deepcopy(embed)
                 memberInfoEmbed = None
@@ -1825,7 +1825,7 @@ class Cyberlog(commands.Cog):
                         await msg.clear_reactions()
                         if editEmbed: await msg.edit(embed=final)
             else:
-                embed.title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['greenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'}" if settings['context'][0] < 2 else ''} (Left the server)'''
+                embed.title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'}" if settings['context'][0] < 2 else ''} (Left the server)'''
                 await msg.edit(embed=embed)
 
     async def doorguardHandler(self, member: discord.Member):
@@ -2100,7 +2100,7 @@ class Cyberlog(commands.Cog):
                     #print(f'{datetime.datetime.now()} Member update - role for {after.name} in server {after.guild.name}')
                     br = len(before.roles)
                     ar = len(after.roles)
-                    embed.title = f'''{f"{self.emojis['member']}🚩{self.emojis['greenPlus']}" if settings['context'][0] > 0 else ''}{f'Member gained {"roles" if ar - br > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar > br else f'''{f"{self.emojis['member']}🚩❌" if settings['context'][0] > 0 else ''}{f'Member lost {"roles" if br - ar > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar < br else f'''{f"{self.emojis['member']}🚩✏" if settings['context'][0] > 0 else ''}{'Member roles moodified' if settings['context'][0] < 2 else ''}'''
+                    embed.title = f'''{f"{self.emojis['member']}🚩{self.emojis['darkGreenPlus']}" if settings['context'][0] > 0 else ''}{f'Member gained {"roles" if ar - br > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar > br else f'''{f"{self.emojis['member']}🚩❌" if settings['context'][0] > 0 else ''}{f'Member lost {"roles" if br - ar > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar < br else f'''{f"{self.emojis['member']}🚩✏" if settings['context'][0] > 0 else ''}{'Member roles moodified' if settings['context'][0] < 2 else ''}'''
                     try:
                         log = (await before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update).flatten())[0]
                         if log.target.id == before.id: 
@@ -2316,7 +2316,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_join(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot joins a server'''
         await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
-        embed = discord.Embed(title=f'{self.emojis["greenPlus"]}Joined server', description=f'{guild.name}\n{guild.member_count} Members\nCreated {guild.created_at:%b %d, %Y • %I:%M %p} EDT', color=green[1])
+        embed = discord.Embed(title=f'{self.emojis["darkGreenPlus"]}Joined server', description=f'{guild.name}\n{guild.member_count} Members\nCreated {guild.created_at:%b %d, %Y • %I:%M %p} EDT', color=green[1])
         embed.set_footer(text=guild.id)
         await self.globalLogChannel.send(embed=embed)
         asyncio.create_task(database.VerifyServer(guild, bot))
@@ -2489,7 +2489,7 @@ class Cyberlog(commands.Cog):
             settings = getCyberAttributes(role.guild, 'role')
             color = green[colorTheme(role.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed=discord.Embed(
-                title=f'''{(self.emojis['roleCreate'] if settings['library'] > 1 else f"🚩{self.emojis['greenPlus']}") if settings['context'][0] > 0 else ''}{'Role created' if settings['context'][0] < 2 else ''}''',
+                title=f'''{(self.emojis['roleCreate'] if settings['library'] > 1 else f"🚩{self.emojis['darkGreenPlus']}") if settings['context'][0] > 0 else ''}{'Role created' if settings['context'][0] < 2 else ''}''',
                 description=f'''{(self.emojis["richPresence"] if settings['library'] > 0 else '📄') if settings['context'][1] > 0 else ''}{'Name' if settings['context'][1] < 2 else ''}: {role.name}''' if role.name != 'new role' else '',
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
@@ -2736,7 +2736,7 @@ class Cyberlog(commands.Cog):
             settings = getCyberAttributes(guild, 'emoji')
             color = green[colorTheme(guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed = discord.Embed(
-                title=f'''{(f'{self.emojis["emojiCreate"]}' if settings['library'] == 2 else f"{self.emojis['emoji']}{self.emojis['greenPlus']}" if settings['library'] == 1 else f"{self.emojis['minion']}{self.emojis['greenPlus']}") if settings['context'][0] > 0 else ""}{'Emoji created' if settings['context'][0] < 2 else ''}''',
+                title=f'''{(f'{self.emojis["emojiCreate"]}' if settings['library'] == 2 else f"{self.emojis['emoji']}{self.emojis['darkGreenPlus']}" if settings['library'] == 1 else f"{self.emojis['minion']}{self.emojis['darkGreenPlus']}") if settings['context'][0] > 0 else ""}{'Emoji created' if settings['context'][0] < 2 else ''}''',
                 description = '',
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
@@ -2762,7 +2762,7 @@ class Cyberlog(commands.Cog):
                     footerIDList.append(eID)
             for eID, emoji in afterDict.items():
                 if eID not in beforeDict: #emoji created
-                    embed.add_field(name=f'{self.emojis["greenPlus"]}{emoji["name"]}', value=f'{emoji["raw"]} • [View image]({emoji["url"]})')
+                    embed.add_field(name=f'{self.emojis["darkGreenPlus"]}{emoji["name"]}', value=f'{emoji["raw"]} • [View image]({emoji["url"]})')
                     if embed.image.url is embed.Empty and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
                     footerIDList.append(eID)
                 elif eID in beforeDict and beforeDict[eID]['name'] != emoji['name']: #name updated
