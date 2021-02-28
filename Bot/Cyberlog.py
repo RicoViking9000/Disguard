@@ -384,8 +384,8 @@ class Cyberlog(commands.Cog):
     async def redditFeedHandler(self, server):
         '''Handles starting/stopping of reddit feeds for servers, along with ensuring there are no duplicates, etc.'''
         runningFeeds = self.redditThreads.get(server.id) or []
-        proposedFeeds = [entry['subreddit'] for entry in self.bot.lightningLogging[server.id].get('redditFeeds') or [] if self.bot.get_channel(entry['channel'])]
-        feedsToCreate = [entry for entry in self.bot.lightningLogging[server.id].get('redditFeeds') or [] if entry['subreddit'] not in runningFeeds and self.bot.get_channel(entry['channel']) and not (await self.bot.reddit.subreddit(entry['subreddit'], fetch=True)).over18]
+        proposedFeeds = [entry['subreddit'] for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if self.bot.get_channel(entry['channel'])]
+        feedsToCreate = [entry for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if entry['subreddit'] not in runningFeeds and self.bot.get_channel(entry['channel']) and not (await self.bot.reddit.subreddit(entry['subreddit'], fetch=True)).over18]
         feedsToDelete = [entry for entry in runningFeeds if entry['subreddit'] not in proposedFeeds]
         for feed in feedsToCreate: asyncio.create_task(self.createRedditStream(server, feed))
         for feed in feedsToDelete: self.redditThreads[server.id].remove(feed['subreddit'])

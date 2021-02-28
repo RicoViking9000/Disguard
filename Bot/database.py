@@ -222,7 +222,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(log.get('emoji')),
             "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else LogModule("server", "Send logs when server is updated, such as thumbnail").update(log.get('server')),
             "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice')),
-            "misc": vars(LogModule('misc', "Logging for various bonus features that don't fit into an above category (currently only ghost reaction logging)")) if log is None or log.get('voice') is None else LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc'))
+            "misc": vars(LogModule('misc', "Logging for various bonus features that don't fit into an above category (currently only ghost reaction logging)")) if log is None or log.get('misc') is None else LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc'))
             }}}, upsert=True)
             # 'modules': [
             #     vars(messageContainer),
