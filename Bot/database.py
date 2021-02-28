@@ -130,100 +130,199 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
     for c in s.categories:
         serverChannels.append({'name': f'-----{c.name.upper()}-----', 'id': c.id})
         for channel in c.text_channels: serverChannels.append({'name': channel.name, 'id': channel.id})
-    if not serv or full: 
-        await servers.update_one({'server_id': s.id}, {"$set": { #add entry for new servers
-        "name": s.name,
-        "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
-        "thumbnail": str(s.icon_url),
-        'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
-        'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
-        'jumpContext': True if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
-        'undoSuppression': True or serv.get('undoSuppression'), #Whether to enable the undo functionality after a message's embed was collapsed
-        'redditComplete': serv.get('redditComplete') or 1, #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
-        'redditEnhance': serv.get('redditEnhance') or 3, #0: all off, 1: subreddit links, 2: submission links, 3: all on
-        'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
-        'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
-        'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
-        'colorTheme': 0 if not serv or not serv.get('colorTheme') else serv.get('colorTheme'), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
-        "channels": serverChannels,
-        'server_id': s.id,
-        "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
-        'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
-        "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
-            "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
-            "whisper": False if serv is None or spam.get('whisper') is None else spam.get('whisper'), #when a member is flagged, whisper a notice to them in DM instead of current channel?
-            "log": [None, None] if serv is None or spam.get('log') is None or not b.get_channel(spam.get('log')[1]) else spam.get('log'), #display detailed message to server's log channel? if None, logging is disabled, else, Name | ID of log channel
-            "warn": 3 if serv is None or spam.get('warn') is None else spam.get('warn'), #number of warnings before the <action> is imposed
-            "delete": True if serv is None or spam.get('delete') is None else spam.get('delete'), #if a message is flagged, delete it?
-            "muteTime": 300 if serv is None or spam.get('muteTime') is None else spam.get('muteTime'), #if action is <1> or <4>, this is the length, in seconds, to keep that member with the role
-            "action": 1 if serv is None or spam.get('action') is None else spam.get('action'), #action imposed upon spam detection: 0=nothing, 1=automute, 2=kick, 3=ban, 4=custom role
-            "customRoleID": None if serv is None or spam.get('customRoleID') is None or not b.get_guild(s.id).get_role(spam.get('customRoleID')) else spam.get('customRoleID'), #if action is 4 (custom role), this is the ID of that role
-            "congruent": [4, 7, 300] if serv is None or spam.get('congruent') is None else spam.get('congruent'), #flag if [0]/[1] of user's last messages sent in [2] seconds contain equivalent content
-            "profanityThreshold": 0 if serv is None or spam.get('profanityThreshold') is None else spam.get('profanityThreshold'), #Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message
-            "emoji": 0 if serv is None or spam.get('emoji') is None else spam.get('emoji'), #Emoji to tolerate - 0=no filter, int=value, double=percentage
-            "mentions": 3 if serv is None or spam.get('mentions') is None else spam.get('mentions'), #max @<user> mentions allowed
-            "selfbot": True if serv is None or spam.get('selfbot') is None else spam.get('selfbot'), #Detect possible selfbots or spam advertisers?
-            "caps": 0.0 if serv is None or spam.get('caps') is None else spam.get('caps'), #Caps to tolerate - 0=no filter, int=value, double=percentage
-            "links": True if serv is None or spam.get('links') is None else spam.get('links'), #URLs allowed?
-            'attachments': [False, False, False, False, False, False, False, False, False] if serv is None or spam.get('attachments') is None else spam.get('attachments'), #[All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
-            "invites": True if serv is None or spam.get('invites') is None else spam.get('invites'), #Discord.gg invites allowed?
-            "everyoneTags": 2 if serv is None or spam.get('everyoneTags') is None else spam.get('everyoneTags'), #Max number of @everyone, if it doesn't actually tag; 0=anything tolerated
-            "hereTags": 2 if serv is None or spam.get('hereTags') is None else spam.get('hereTags'), #Max number of @here, if it doesn't actually tag; 0=anything tolerated
-            "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
-            "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
-            'consecutiveMessages': [10, 120] if serv is None or spam.get('consecutiveMessages') is None else spam.get('consecutiveMessages'), #If this many messages in a row are sent by the same person, flag them
-            'repeatedJoins': [0, 300, 86400] if serv is None or spam.get('repeatedJoins') is None else spam.get('repeatedJoins'), #If user joins [0] times in [1] seconds, ban them for [2] seconds
-            "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
-            "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
-            "channelExclusions": await DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
-            "roleExclusions": await DefaultRoleExclusions(s) if serv is None or spam.get('roleExclusions') is None else spam.get('roleExclusions'), #Don't filter messages sent by members with a role in this list
-            "memberExclusions": await DefaultMemberExclusions(s) if serv is None or spam.get('memberExclusions') is None else spam.get('memberExclusions'), #Don't filter messages sent by a member in this list
-            "profanityEnabled": False if serv is None or spam.get("profanityEnabled") is None else spam.get('profanityEnabled'), #Is the profanity filter enabled
-            "profanityTolerance": 0.25 if serv is None or spam.get('profanityTolerance') is None else spam.get('profanityTolerance'), #% of message to be profanity to be flagged
-            "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter"), #Profanity filter list
-            'ageKick': None if serv is None or spam.get('ageKick') is None else spam.get('ageKick'), #NEED TO REDO DATABASE ALGORITHM SO ON DEMAND VARIABLES ARENT OVERWRITTEN
-            'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
-            'ageKickOwner': False if serv is None or spam.get('ageKickOwner') is None else spam.get('ageKickOwner'),
-            'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist'),
-            'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents')}, #Bans, mutes, etc
-        "cyberlog": {
-            # 'globalSettings': vars(loggingHome),
-            "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
-            'ghostReactionEnabled': log.get('ghostReactionEnabled') or True,
-            "image": False if log is None or log.get('image') is None else log.get('enabled'),
-            "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
-            'library': 1 if not log or not log.get('library') else log.get('library'), #0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
-            'thumbnail': 1 if not log or not log.get('thumbnail') else log.get('thumbnail'), #0: off, 1: target or none, 2: target or moderator, 3: moderator or none, 4: moderator or target
-            'author': 3 if not log or not log.get('author') else log.get('author'), #0: off, 1: target or none, 2: target or moderator 3: moderator or none, 4: moderator or target
-            'context': (1, 1) if not log or not log.get('context') else log.get('context'), #0 = no emojis, 1 = emojis and descriptions, 2 = just emojis. index 0 = title, index 1 = description
-            'hoverLinks': 1 if not log or not log.get('hoverLinks') else log.get('hoverLinks'), #0: data hidden, 1: data under hover links, 2: data under hover links & option to expand, 3: data visible. LATER
-            'embedTimestamp': 3 if not log or not log.get('embedTimestamp') else log.get('embedTimestamp'), #0: All off, 1: Just footer, 2: Just description, 3: All on
-            'botLogging': log.get('botLogging') or 1,                                                       #0: Disabled, 1: Plaintext, 2: Embeds
-            'color': ['auto', 'auto', 'auto'] if not log or not log.get('color') else log.get('color'),
-            'plainText': False if not log or not log.get('plainText') else log.get('plainText'),
-            'read': True if not log or not log.get('read') else log.get('read'),
-            'flashText': False if not log or not log.get('flashText') else log.get('flashText'),
-            'tts': False if not log or not log.get('tts') else log.get('tts'),
-            'onlyVCJoinLeave': False if log is None or log.get('onlyVCJoinLeave') is None else log.get('onlyVCJoinLeave'),
-            'onlyVCForceActions': True if log is None or log.get('onlyVCForceActions') is None else log.get('onlyVCForceActions'),
-            'voiceChatLogRecaps': True if log is None or log.get('voiceChatLogRecaps') is None else log.get('voiceChatLogRecaps'),
-            'ghostReactionTime': 10 if not log or not log.get('ghostReactionTime') else log.get('ghostReactionTime'),
-            'memberGlobal': 2 if log is None or log.get('memberGlobal') is None else log.get('memberGlobal'),
-            "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
-            'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
-            'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
-            'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
-            'lastUpdate': datetime.datetime.utcnow() if serv is None or serv.get('lastUpdate') is None else serv.get('lastUpdate'),
-            "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else LogModule("message", "Send logs when a message is edited or deleted").update(log.get('message')),
-            "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else LogModule("doorguard", "Send logs when a member joins or leaves server").update(log.get('doorguard')),
-            "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else LogModule("channel", "Send logs when channel is created, edited, or deleted").update(log.get('channel')),
-            "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(log.get('member')),
-            "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else LogModule("role", "Send logs when a role is created, edited, or deleted").update(log.get('role')),
-            "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(log.get('emoji')),
-            "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else LogModule("server", "Send logs when server is updated, such as thumbnail").update(log.get('server')),
-            "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice')),
-            "misc": vars(LogModule('misc', "Logging for various bonus features that don't fit into an above category (currently only ghost reaction logging)")) if log is None or log.get('misc') is None else LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc'))
-            }}}, upsert=True)
+    if not serv or full:
+        testDict = { #add entry for new servers
+            "name": s.name,
+            "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
+            "thumbnail": str(s.icon_url),
+            'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
+            'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
+            'jumpContext': True if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
+            'undoSuppression': True or serv.get('undoSuppression'), #Whether to enable the undo functionality after a message's embed was collapsed
+            'redditComplete': serv.get('redditComplete') or 1, #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
+            'redditEnhance': serv.get('redditEnhance') or 3, #0: all off, 1: subreddit links, 2: submission links, 3: all on
+            'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
+            'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
+            'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
+            'colorTheme': 0 if not serv or not serv.get('colorTheme') else serv.get('colorTheme'), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
+            "channels": serverChannels,
+            'server_id': s.id,
+            "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
+            'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
+            "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
+                "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
+                "whisper": False if serv is None or spam.get('whisper') is None else spam.get('whisper'), #when a member is flagged, whisper a notice to them in DM instead of current channel?
+                "log": [None, None] if serv is None or spam.get('log') is None or not b.get_channel(spam.get('log')[1]) else spam.get('log'), #display detailed message to server's log channel? if None, logging is disabled, else, Name | ID of log channel
+                "warn": 3 if serv is None or spam.get('warn') is None else spam.get('warn'), #number of warnings before the <action> is imposed
+                "delete": True if serv is None or spam.get('delete') is None else spam.get('delete'), #if a message is flagged, delete it?
+                "muteTime": 300 if serv is None or spam.get('muteTime') is None else spam.get('muteTime'), #if action is <1> or <4>, this is the length, in seconds, to keep that member with the role
+                "action": 1 if serv is None or spam.get('action') is None else spam.get('action'), #action imposed upon spam detection: 0=nothing, 1=automute, 2=kick, 3=ban, 4=custom role
+                "customRoleID": None if serv is None or spam.get('customRoleID') is None or not b.get_guild(s.id).get_role(spam.get('customRoleID')) else spam.get('customRoleID'), #if action is 4 (custom role), this is the ID of that role
+                "congruent": [4, 7, 300] if serv is None or spam.get('congruent') is None else spam.get('congruent'), #flag if [0]/[1] of user's last messages sent in [2] seconds contain equivalent content
+                "profanityThreshold": 0 if serv is None or spam.get('profanityThreshold') is None else spam.get('profanityThreshold'), #Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message
+                "emoji": 0 if serv is None or spam.get('emoji') is None else spam.get('emoji'), #Emoji to tolerate - 0=no filter, int=value, double=percentage
+                "mentions": 3 if serv is None or spam.get('mentions') is None else spam.get('mentions'), #max @<user> mentions allowed
+                "selfbot": True if serv is None or spam.get('selfbot') is None else spam.get('selfbot'), #Detect possible selfbots or spam advertisers?
+                "caps": 0.0 if serv is None or spam.get('caps') is None else spam.get('caps'), #Caps to tolerate - 0=no filter, int=value, double=percentage
+                "links": True if serv is None or spam.get('links') is None else spam.get('links'), #URLs allowed?
+                'attachments': [False, False, False, False, False, False, False, False, False] if serv is None or spam.get('attachments') is None else spam.get('attachments'), #[All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
+                "invites": True if serv is None or spam.get('invites') is None else spam.get('invites'), #Discord.gg invites allowed?
+                "everyoneTags": 2 if serv is None or spam.get('everyoneTags') is None else spam.get('everyoneTags'), #Max number of @everyone, if it doesn't actually tag; 0=anything tolerated
+                "hereTags": 2 if serv is None or spam.get('hereTags') is None else spam.get('hereTags'), #Max number of @here, if it doesn't actually tag; 0=anything tolerated
+                "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
+                "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
+                'consecutiveMessages': [10, 120] if serv is None or spam.get('consecutiveMessages') is None else spam.get('consecutiveMessages'), #If this many messages in a row are sent by the same person, flag them
+                'repeatedJoins': [0, 300, 86400] if serv is None or spam.get('repeatedJoins') is None else spam.get('repeatedJoins'), #If user joins [0] times in [1] seconds, ban them for [2] seconds
+                "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
+                "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
+                "channelExclusions": await DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
+                "roleExclusions": await DefaultRoleExclusions(s) if serv is None or spam.get('roleExclusions') is None else spam.get('roleExclusions'), #Don't filter messages sent by members with a role in this list
+                "memberExclusions": await DefaultMemberExclusions(s) if serv is None or spam.get('memberExclusions') is None else spam.get('memberExclusions'), #Don't filter messages sent by a member in this list
+                "profanityEnabled": False if serv is None or spam.get("profanityEnabled") is None else spam.get('profanityEnabled'), #Is the profanity filter enabled
+                "profanityTolerance": 0.25 if serv is None or spam.get('profanityTolerance') is None else spam.get('profanityTolerance'), #% of message to be profanity to be flagged
+                "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter"), #Profanity filter list
+                'ageKick': None if serv is None or spam.get('ageKick') is None else spam.get('ageKick'), #NEED TO REDO DATABASE ALGORITHM SO ON DEMAND VARIABLES ARENT OVERWRITTEN
+                'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
+                'ageKickOwner': False if serv is None or spam.get('ageKickOwner') is None else spam.get('ageKickOwner'),
+                'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist'),
+                'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents')}, #Bans, mutes, etc
+            "cyberlog": {
+                # 'globalSettings': vars(loggingHome),
+                "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
+                'ghostReactionEnabled': log.get('ghostReactionEnabled') or True,
+                "image": False if log is None or log.get('image') is None else log.get('enabled'),
+                "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
+                'library': 1 if not log or not log.get('library') else log.get('library'), #0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
+                'thumbnail': 1 if not log or not log.get('thumbnail') else log.get('thumbnail'), #0: off, 1: target or none, 2: target or moderator, 3: moderator or none, 4: moderator or target
+                'author': 3 if not log or not log.get('author') else log.get('author'), #0: off, 1: target or none, 2: target or moderator 3: moderator or none, 4: moderator or target
+                'context': (1, 1) if not log or not log.get('context') else log.get('context'), #0 = no emojis, 1 = emojis and descriptions, 2 = just emojis. index 0 = title, index 1 = description
+                'hoverLinks': 1 if not log or not log.get('hoverLinks') else log.get('hoverLinks'), #0: data hidden, 1: data under hover links, 2: data under hover links & option to expand, 3: data visible. LATER
+                'embedTimestamp': 3 if not log or not log.get('embedTimestamp') else log.get('embedTimestamp'), #0: All off, 1: Just footer, 2: Just description, 3: All on
+                'botLogging': log.get('botLogging') or 1,                                                       #0: Disabled, 1: Plaintext, 2: Embeds
+                'color': ['auto', 'auto', 'auto'] if not log or not log.get('color') else log.get('color'),
+                'plainText': False if not log or not log.get('plainText') else log.get('plainText'),
+                'read': True if not log or not log.get('read') else log.get('read'),
+                'flashText': False if not log or not log.get('flashText') else log.get('flashText'),
+                'tts': False if not log or not log.get('tts') else log.get('tts'),
+                'onlyVCJoinLeave': False if log is None or log.get('onlyVCJoinLeave') is None else log.get('onlyVCJoinLeave'),
+                'onlyVCForceActions': True if log is None or log.get('onlyVCForceActions') is None else log.get('onlyVCForceActions'),
+                'voiceChatLogRecaps': True if log is None or log.get('voiceChatLogRecaps') is None else log.get('voiceChatLogRecaps'),
+                'ghostReactionTime': 10 if not log or not log.get('ghostReactionTime') else log.get('ghostReactionTime'),
+                'memberGlobal': 2 if log is None or log.get('memberGlobal') is None else log.get('memberGlobal'),
+                "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
+                'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
+                'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
+                'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
+                'lastUpdate': datetime.datetime.utcnow() if serv is None or serv.get('lastUpdate') is None else serv.get('lastUpdate'),
+                "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else LogModule("message", "Send logs when a message is edited or deleted").update(log.get('message')),
+                "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else LogModule("doorguard", "Send logs when a member joins or leaves server").update(log.get('doorguard')),
+                "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else LogModule("channel", "Send logs when channel is created, edited, or deleted").update(log.get('channel')),
+                "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(log.get('member')),
+                "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else LogModule("role", "Send logs when a role is created, edited, or deleted").update(log.get('role')),
+                "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(log.get('emoji')),
+                "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else LogModule("server", "Send logs when server is updated, such as thumbnail").update(log.get('server')),
+                "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice')),
+                "misc": vars(LogModule('misc', "Logging for various bonus features that don't fit into an above category (currently only ghost reaction logging)")) if log is None or log.get('misc') is None else LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc'))
+        }}
+        print(testDict) 
+        try:
+            await servers.update_one({'server_id': s.id}, {"$set": { #add entry for new servers
+            "name": s.name,
+            "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
+            "thumbnail": str(s.icon_url),
+            'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
+            'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
+            'jumpContext': True if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
+            'undoSuppression': True or serv.get('undoSuppression'), #Whether to enable the undo functionality after a message's embed was collapsed
+            'redditComplete': serv.get('redditComplete') or 1, #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
+            'redditEnhance': serv.get('redditEnhance') or 3, #0: all off, 1: subreddit links, 2: submission links, 3: all on
+            'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
+            'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
+            'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
+            'colorTheme': 0 if not serv or not serv.get('colorTheme') else serv.get('colorTheme'), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
+            "channels": serverChannels,
+            'server_id': s.id,
+            "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
+            'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
+            "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
+                "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
+                "whisper": False if serv is None or spam.get('whisper') is None else spam.get('whisper'), #when a member is flagged, whisper a notice to them in DM instead of current channel?
+                "log": [None, None] if serv is None or spam.get('log') is None or not b.get_channel(spam.get('log')[1]) else spam.get('log'), #display detailed message to server's log channel? if None, logging is disabled, else, Name | ID of log channel
+                "warn": 3 if serv is None or spam.get('warn') is None else spam.get('warn'), #number of warnings before the <action> is imposed
+                "delete": True if serv is None or spam.get('delete') is None else spam.get('delete'), #if a message is flagged, delete it?
+                "muteTime": 300 if serv is None or spam.get('muteTime') is None else spam.get('muteTime'), #if action is <1> or <4>, this is the length, in seconds, to keep that member with the role
+                "action": 1 if serv is None or spam.get('action') is None else spam.get('action'), #action imposed upon spam detection: 0=nothing, 1=automute, 2=kick, 3=ban, 4=custom role
+                "customRoleID": None if serv is None or spam.get('customRoleID') is None or not b.get_guild(s.id).get_role(spam.get('customRoleID')) else spam.get('customRoleID'), #if action is 4 (custom role), this is the ID of that role
+                "congruent": [4, 7, 300] if serv is None or spam.get('congruent') is None else spam.get('congruent'), #flag if [0]/[1] of user's last messages sent in [2] seconds contain equivalent content
+                "profanityThreshold": 0 if serv is None or spam.get('profanityThreshold') is None else spam.get('profanityThreshold'), #Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message
+                "emoji": 0 if serv is None or spam.get('emoji') is None else spam.get('emoji'), #Emoji to tolerate - 0=no filter, int=value, double=percentage
+                "mentions": 3 if serv is None or spam.get('mentions') is None else spam.get('mentions'), #max @<user> mentions allowed
+                "selfbot": True if serv is None or spam.get('selfbot') is None else spam.get('selfbot'), #Detect possible selfbots or spam advertisers?
+                "caps": 0.0 if serv is None or spam.get('caps') is None else spam.get('caps'), #Caps to tolerate - 0=no filter, int=value, double=percentage
+                "links": True if serv is None or spam.get('links') is None else spam.get('links'), #URLs allowed?
+                'attachments': [False, False, False, False, False, False, False, False, False] if serv is None or spam.get('attachments') is None else spam.get('attachments'), #[All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
+                "invites": True if serv is None or spam.get('invites') is None else spam.get('invites'), #Discord.gg invites allowed?
+                "everyoneTags": 2 if serv is None or spam.get('everyoneTags') is None else spam.get('everyoneTags'), #Max number of @everyone, if it doesn't actually tag; 0=anything tolerated
+                "hereTags": 2 if serv is None or spam.get('hereTags') is None else spam.get('hereTags'), #Max number of @here, if it doesn't actually tag; 0=anything tolerated
+                "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
+                "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
+                'consecutiveMessages': [10, 120] if serv is None or spam.get('consecutiveMessages') is None else spam.get('consecutiveMessages'), #If this many messages in a row are sent by the same person, flag them
+                'repeatedJoins': [0, 300, 86400] if serv is None or spam.get('repeatedJoins') is None else spam.get('repeatedJoins'), #If user joins [0] times in [1] seconds, ban them for [2] seconds
+                "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
+                "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
+                "channelExclusions": await DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
+                "roleExclusions": await DefaultRoleExclusions(s) if serv is None or spam.get('roleExclusions') is None else spam.get('roleExclusions'), #Don't filter messages sent by members with a role in this list
+                "memberExclusions": await DefaultMemberExclusions(s) if serv is None or spam.get('memberExclusions') is None else spam.get('memberExclusions'), #Don't filter messages sent by a member in this list
+                "profanityEnabled": False if serv is None or spam.get("profanityEnabled") is None else spam.get('profanityEnabled'), #Is the profanity filter enabled
+                "profanityTolerance": 0.25 if serv is None or spam.get('profanityTolerance') is None else spam.get('profanityTolerance'), #% of message to be profanity to be flagged
+                "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter"), #Profanity filter list
+                'ageKick': None if serv is None or spam.get('ageKick') is None else spam.get('ageKick'), #NEED TO REDO DATABASE ALGORITHM SO ON DEMAND VARIABLES ARENT OVERWRITTEN
+                'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
+                'ageKickOwner': False if serv is None or spam.get('ageKickOwner') is None else spam.get('ageKickOwner'),
+                'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist'),
+                'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents')}, #Bans, mutes, etc
+            "cyberlog": {
+                # 'globalSettings': vars(loggingHome),
+                "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
+                'ghostReactionEnabled': log.get('ghostReactionEnabled') or True,
+                "image": False if log is None or log.get('image') is None else log.get('enabled'),
+                "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
+                'library': 1 if not log or not log.get('library') else log.get('library'), #0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
+                'thumbnail': 1 if not log or not log.get('thumbnail') else log.get('thumbnail'), #0: off, 1: target or none, 2: target or moderator, 3: moderator or none, 4: moderator or target
+                'author': 3 if not log or not log.get('author') else log.get('author'), #0: off, 1: target or none, 2: target or moderator 3: moderator or none, 4: moderator or target
+                'context': (1, 1) if not log or not log.get('context') else log.get('context'), #0 = no emojis, 1 = emojis and descriptions, 2 = just emojis. index 0 = title, index 1 = description
+                'hoverLinks': 1 if not log or not log.get('hoverLinks') else log.get('hoverLinks'), #0: data hidden, 1: data under hover links, 2: data under hover links & option to expand, 3: data visible. LATER
+                'embedTimestamp': 3 if not log or not log.get('embedTimestamp') else log.get('embedTimestamp'), #0: All off, 1: Just footer, 2: Just description, 3: All on
+                'botLogging': log.get('botLogging') or 1,                                                       #0: Disabled, 1: Plaintext, 2: Embeds
+                'color': ['auto', 'auto', 'auto'] if not log or not log.get('color') else log.get('color'),
+                'plainText': False if not log or not log.get('plainText') else log.get('plainText'),
+                'read': True if not log or not log.get('read') else log.get('read'),
+                'flashText': False if not log or not log.get('flashText') else log.get('flashText'),
+                'tts': False if not log or not log.get('tts') else log.get('tts'),
+                'onlyVCJoinLeave': False if log is None or log.get('onlyVCJoinLeave') is None else log.get('onlyVCJoinLeave'),
+                'onlyVCForceActions': True if log is None or log.get('onlyVCForceActions') is None else log.get('onlyVCForceActions'),
+                'voiceChatLogRecaps': True if log is None or log.get('voiceChatLogRecaps') is None else log.get('voiceChatLogRecaps'),
+                'ghostReactionTime': 10 if not log or not log.get('ghostReactionTime') else log.get('ghostReactionTime'),
+                'memberGlobal': 2 if log is None or log.get('memberGlobal') is None else log.get('memberGlobal'),
+                "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
+                'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
+                'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
+                'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
+                'lastUpdate': datetime.datetime.utcnow() if serv is None or serv.get('lastUpdate') is None else serv.get('lastUpdate'),
+                "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else LogModule("message", "Send logs when a message is edited or deleted").update(log.get('message')),
+                "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else LogModule("doorguard", "Send logs when a member joins or leaves server").update(log.get('doorguard')),
+                "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else LogModule("channel", "Send logs when channel is created, edited, or deleted").update(log.get('channel')),
+                "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(log.get('member')),
+                "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else LogModule("role", "Send logs when a role is created, edited, or deleted").update(log.get('role')),
+                "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(log.get('emoji')),
+                "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else LogModule("server", "Send logs when server is updated, such as thumbnail").update(log.get('server')),
+                "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice')),
+                "misc": vars(LogModule('misc', "Logging for various bonus features that don't fit into an above category (currently only ghost reaction logging)")) if log is None or log.get('misc') is None else LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc'))
+                }}}, upsert=True)
+        except:
+            print(f'Exception for {s.id} / {s.name}')
+            import traceback
+            traceback.print_exc()
             # 'modules': [
             #     vars(messageContainer),
             #     vars(doorguardContainer),
