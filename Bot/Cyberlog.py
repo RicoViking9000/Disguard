@@ -539,8 +539,7 @@ class Cyberlog(commands.Cog):
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not message.author.is_avatar_animated() else 'gif'))
             try: await message.author.avatar_url_as(size=1024).save(savePath)
             except discord.HTTPException: pass
-            f = discord.File(savePath)
-            url = await self.uploadFiles(f)
+            url = await self.uploadFiles(savePath)
             if settings['thumbnail'] > 1 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
             if settings['author'] > 1 and embed.author.name == discord.Embed.Empty: embed.set_author(name=message.author.name, icon_url=url)
         embed.add_field(name='Message', value=pinned.content)
@@ -624,8 +623,7 @@ class Cyberlog(commands.Cog):
                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not u.is_avatar_animated() else 'gif'))
                 try: await u.avatar_url_as(size=1024).save(savePath)
                 except discord.HTTPException: pass
-                f = discord.File(savePath)
-                url = await self.uploadFiles(f)
+                url = await self.uploadFiles(savePath)
                 if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=u.name, icon_url=url)
             try: 
@@ -761,16 +759,15 @@ class Cyberlog(commands.Cog):
                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
                 try: await after.author.avatar_url_as(size=1024).save(savePath)
                 except discord.HTTPException: pass
-                f = discord.File(savePath)
-                url = await self.uploadFiles(f)
+                url = await self.uploadFiles(savePath)
                 if settings['thumbnail'] > 1 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                 if settings['author'] > 1 and embed.author.name == discord.Embed.Empty: embed.set_author(name=after.author.name, icon_url=url)
             embed.add_field(name=f'Message', value=after.content)
             embed.set_footer(text=f'Unpinned message ID: {after.id}')
             plainText = f'{eventMessage.author if eventMessage else "Someone"} unpinned a message from #{after.channel.name}'
             #m = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, file=f, tts=settings['tts'], reference=after if settings['plainText'] else None, allowed_mentions=discord.AllowedMentions.none())
-            m = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
-            if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await m.edit(content=None)
+            msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
             self.pins[channel.id].remove(after.id)
             while True:
                 result = await self.bot.wait_for('reaction_add', check=reactionCheck)
@@ -813,8 +810,7 @@ class Cyberlog(commands.Cog):
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
             try: await author.avatar_url_as(size=1024).save(savePath)
             except discord.HTTPException: pass
-            f = discord.File(savePath)
-            url = await self.uploadFiles(f)
+            url = await self.uploadFiles(savePath)
             if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=after.author.name, icon_url=url)
         path = f'{indexes}/{after.guild.id}/{after.channel.id}.json'
@@ -827,7 +823,7 @@ class Cyberlog(commands.Cog):
         try: 
             #msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, file=f, tts=settings['tts'], reference=after if settings['plainText'] else None, allowed_mentions=discord.AllowedMentions(users=False))
             msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
-            await msg.add_reaction(self.emojis['threeDots'])
+            if not settings['plainText']: await msg.add_reaction(self.emojis['threeDots'])
         except discord.HTTPException as e: return await c.send(f'Message edit log error: {e}')
         with open(path, 'w+') as fl:
             fl.write(indexData) #push the changes to the json file
@@ -992,14 +988,14 @@ class Cyberlog(commands.Cog):
         path = 'Attachments/{}/{}/{}'.format(payload.guild_id,payload.channel_id, payload.message_id) #Where to retrieve message attachments from
         try:
             for directory in os.listdir(path):
-                f = discord.File(f'{path}/{directory}')
+                savePath = f'{path}/{directory}'
                 try: 
                     if any([ext in directory.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]):
-                        URL = await self.uploadFiles(f)
+                        URL = await self.uploadFiles(savePath)
                         embed.set_image(url=URL)
-                    else: attachments.append(f)
+                    else: attachments.append(discord.File(savePath))
                 except discord.HTTPException:
-                    fileError += f"\n{self.emojis['alert']} | This message's attachment ({f.filename}) is too large to be sent ({round(os.stat(f.fp).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
+                    fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
         except OSError: pass
         if message is not None:
             author = self.bot.get_user(message.author.id)
@@ -1074,8 +1070,7 @@ class Cyberlog(commands.Cog):
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
             try: await author.avatar_url_as(size=1024).save(savePath)
             except discord.HTTPException: pass
-            f = discord.File(savePath)
-            url = await self.uploadFiles(f)
+            url = await self.uploadFiles(savePath)
             if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=author.name, icon_url=url)
         modDelete = False
@@ -1092,8 +1087,7 @@ class Cyberlog(commands.Cog):
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not message.author.is_avatar_animated() else 'gif'))
                             try: await message.author.avatar_url_as(size=1024).save(savePath)
                             except discord.HTTPException: pass
-                            f = discord.File(savePath)
-                            url = await self.uploadFiles(f)
+                            url = await self.uploadFiles(savePath)
                             if settings['thumbnail'] in (3, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                             if settings['author'] in (3, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=author.name, icon_url=url)
                     else: await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
@@ -1157,8 +1151,7 @@ class Cyberlog(commands.Cog):
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                             try: await log.user.avatar_url_as(size=1024).save(savePath)
                             except discord.HTTPException: pass
-                            f = discord.File(savePath)
-                            url = await self.uploadFiles(f)
+                            url = await self.uploadFiles(savePath)
                             if settings['thumbnail'] > 1 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                             if settings['author'] > 1 and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
                             content = f'{log.user} created a new {channel.type[0]} channel called {channel.name}'
@@ -1266,8 +1259,7 @@ class Cyberlog(commands.Cog):
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                             try: await log.user.avatar_url_as(size=1024).save(savePath)
                             except discord.HTTPException: pass
-                            f = discord.File(savePath)
-                            url = await self.uploadFiles(f)
+                            url = await self.uploadFiles(savePath)
                             if settings['thumbnail'] > 1 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                             if settings['author'] > 1 and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
                             content = f'{log.user} updated the {after.type[0]} channel called {before.name}'
@@ -1393,7 +1385,8 @@ class Cyberlog(commands.Cog):
                     if before.overwrites != after.overwrites: embed.description+='\nPermissions were updated, but no members were affected'
                 if settings['embedTimestamp'] > 1: embed.description+=f'''\n{(clockEmoji(rawReceived) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {received} {nameZone(after.guild)}'''
                 await msg.edit(content = content if settings['plainText'] else None, embed=None if settings['plainText'] else embed)
-                for reaction in reactions: await msg.add_reaction(reaction)
+                if not settings['plainText']:
+                    for reaction in reactions: await msg.add_reaction(reaction)
                 try: 
                     if os.path.exists(savePath): os.remove(savePath)
                 except: pass
@@ -1479,8 +1472,7 @@ class Cyberlog(commands.Cog):
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.author.is_avatar_animated() else 'gif'))
                             try: await log.user.author.avatar_url_as(size=1024).save(savePath)
                             except discord.HTTPException: pass
-                            f = discord.File(savePath)
-                            url = await self.uploadFiles(f)
+                            url = await self.uploadFiles(savePath)
                             if settings['thumbnail'] > 1 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                             if settings['author'] > 1 and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
                             content = f'{log.user} deleted the {channel.type[0]} channel named {channel.name}'
@@ -1563,8 +1555,7 @@ class Cyberlog(commands.Cog):
                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
                 try: await member.avatar_url_as(size=1024).save(savePath)
                 except discord.HTTPException: pass
-                f = discord.File(savePath)
-                url = await self.uploadFiles(f)
+                url = await self.uploadFiles(savePath)
                 if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=member.name, icon_url=url)
             try:
@@ -1607,8 +1598,7 @@ class Cyberlog(commands.Cog):
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.author.is_avatar_animated() else 'gif'))
                             try: await log.user.author.avatar_url_as(size=1024).save(savePath)
                             except discord.HTTPException: pass
-                            f = discord.File(savePath)
-                            url = await self.uploadFiles(f)
+                            url = await self.uploadFiles(savePath)
                             if settings['thumbnail'] > 2 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                             if settings['author'] > 2 and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
                             content = f'{log.user} added {member.name} to the server'
@@ -1642,11 +1632,9 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not targetInvite.inviter.is_avatar_animated() else 'gif'))
                         try: await targetInvite.inviter.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         if settings['thumbnail'] > 2 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                         if settings['author'] > 2 and embed.author.name == discord.Embed.Empty: embed.set_author(name=targetInvite.inviter.name, icon_url=url)
-                        content = f'{log.user} added {member.name} to the server'
                     inviteString = [ #First: plaintext version, second: hover-links hybrid version
                         f'''
                             {"👮‍♂️" if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
@@ -1679,7 +1667,7 @@ class Cyberlog(commands.Cog):
                 memberInfoEmbed = None
                 reactions = [self.emojis['expand'], 'ℹ', '🤐', '🔒', '👢', '🔨']
                 while True:
-                    if len(msg.embeds) > 0:
+                    if not settings['plainText']:
                         for r in reactions: await msg.add_reaction(r)
                     embed = copy.deepcopy(final)
                     def navigationCheck(r, u): return not u.bot and r.message.id == msg.id
@@ -1938,8 +1926,7 @@ class Cyberlog(commands.Cog):
                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
                 try: await member.avatar_url_as(size=1024).save(savePath)
                 except discord.HTTPException: pass
-                f = discord.File(savePath)
-                url = await self.uploadFiles(f)
+                url = await self.uploadFiles(savePath)
                 if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=member.name, icon_url=url)
             if readPerms(member.guild, 'doorguard'):
@@ -1959,8 +1946,7 @@ class Cyberlog(commands.Cog):
                             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
                             try: await member.avatar_url_as(size=1024).save(savePath)
                             except discord.HTTPException: pass
-                            f = discord.File(savePath)
-                            url = await self.uploadFiles(f)
+                            url = await self.uploadFiles(savePath)
                             if settings['thumbnail'] > 2 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                             if settings['author'] > 2 and embed.author.name == discord.Embed.Empty: embed.set_author(name=member.name, icon_url=url)
                 except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
@@ -2020,8 +2006,7 @@ class Cyberlog(commands.Cog):
                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not user.is_avatar_animated() else 'gif'))
                 try: await user.avatar_url_as(size=1024).save(savePath)
                 except discord.HTTPException: pass
-                f = discord.File(savePath)
-                url = await self.uploadFiles(f)
+                url = await self.uploadFiles(savePath)
                 if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=user.name, icon_url=url)
             if readPerms(guild, 'doorguard'):
@@ -2032,8 +2017,7 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                         try: await log.user.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         if settings['thumbnail'] > 2 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                         if settings['author'] > 2 and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
                     await updateLastActive(log.user, datetime.datetime.now(), 'unbanned a user')
@@ -2087,13 +2071,13 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
-        '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with this bot'''
+        '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with logging'''
         try: 
             rawReceived = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(after.guild.id).get('offset'))
             received = rawReceived.strftime('%b %d, %Y • %I:%M:%S %p')
         except (KeyError, AttributeError): return
         msg = None
-        if logEnabled(after.guild, 'member'):
+        if logEnabled(after.guild, 'member') and any([before.nick != after.nick, before.roles != after.roles]):
             f = []
             content=''
             auditLogFail = False
@@ -2105,8 +2089,7 @@ class Cyberlog(commands.Cog):
                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not after.is_avatar_animated() else 'gif'))
                 try: await after.avatar_url_as(size=1024).save(savePath)
                 except discord.HTTPException: pass
-                f = discord.File(savePath)
-                url = await self.uploadFiles(f)
+                url = await self.uploadFiles(savePath)
                 if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=after.name, icon_url=url)
             if (before.nick != after.nick or before.roles != after.roles) and logEnabled(before.guild, "member") and memberGlobal(before.guild) != 1:
@@ -2128,8 +2111,7 @@ class Cyberlog(commands.Cog):
                                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                                 try: await log.user.avatar_url_as(size=1024).save(savePath)
                                 except discord.HTTPException: pass
-                                f = discord.File(savePath)
-                                url = await self.uploadFiles(f)
+                                url = await self.uploadFiles(savePath)
                                 content = f"{log.user} updated {before}'s server attributes"
                                 if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                                 if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
@@ -2178,8 +2160,7 @@ class Cyberlog(commands.Cog):
                                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                                 try: await log.user.avatar_url_as(size=1024).save(savePath)
                                 except discord.HTTPException: pass
-                                f = discord.File(savePath)
-                                url = await self.uploadFiles(f)
+                                url = await self.uploadFiles(savePath)
                                 content = f"{log.user} updated {before}'s server attributes"
                                 if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                                 if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
@@ -2323,8 +2304,7 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not message.author.is_avatar_animated() else 'gif'))
                         try: await after.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         if settings['thumbnail'] > 0 and embed.thumbnail.url == discord.Embed.Empty: newEmbed.set_thumbnail(url=url)
                         if settings['author'] > 0 and embed.author.name == discord.Embed.Empty: newEmbed.set_author(name=after.name, icon_url=url)
                     msg = await logChannel(server, 'member').send(content = newContent if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=newEmbed if not settings['plainText'] else None, files=f if not settings['plainText'] else [], tts=settings['tts'])
@@ -2396,8 +2376,7 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                         try: await log.user.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         if settings['thumbnail'] > 2 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                         if settings['author'] > 2 and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
                         content = f'{log.user} updated server settings'
@@ -2449,7 +2428,8 @@ class Cyberlog(commands.Cog):
                 content += embedToPlaintext(embed)
                 message = await logChannel(before, 'server').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'], allowed_mentions=discord.AllowedMentions(users=[after.owner]))
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await message.edit(content=None)
-                for r in reactions: await message.add_reaction(r)
+                if not settings['plainText']:
+                    for r in reactions: await message.add_reaction(r)
                 final = copy.deepcopy(embed)
                 while True:
                     def reactionCheck(r, u): return r.message.id == message.id and not u.bot
@@ -2524,8 +2504,7 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                         try: await log.user.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         content = f'{log.user} created the role "{role.name}"'
                         if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                         if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
@@ -2578,8 +2557,7 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                         try: await log.user.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         content = f'{log.user} deleted the role "{role.name}"'
                         if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                         if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
@@ -2598,7 +2576,8 @@ class Cyberlog(commands.Cog):
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await message.edit(content=None)
             if not settings['plainText']: await message.edit(embed=embed)
             reactions = ['ℹ']
-            for r in reactions: await message.add_reaction(r)
+            if not settings['plainText']:
+                for r in reactions: await message.add_reaction(r)
             final, roleInfo = copy.deepcopy(embed), None
         self.roles.pop(role.id, None)
         await self.CheckDisguardServerRoles(roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions')
@@ -2661,8 +2640,7 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                         try: await log.user.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         content = f'{log.user} updated the role "{before.name}"'
                         if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                         if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=log.user.name, icon_url=url)
@@ -2689,7 +2667,8 @@ class Cyberlog(commands.Cog):
             if len(embed.fields) > 0 or before.name != after.name:
                 content += embedToPlaintext(embed)
                 message = await logChannel(after.guild, 'role').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
-                for reac in reactions: await message.add_reaction(reac)
+                if not settings['plainText']:
+                    for reac in reactions: await message.add_reaction(reac)
                 embed = self.PermissionChanges(after.members, message, embed)
                 if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(rawReceived) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(after.guild)}"
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await message.edit(content=None)
@@ -2801,8 +2780,7 @@ class Cyberlog(commands.Cog):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                         try: await log.user.avatar_url_as(size=1024).save(savePath)
                         except discord.HTTPException: pass
-                        f = discord.File(savePath)
-                        url = await self.uploadFiles(f)
+                        url = await self.uploadFiles(savePath)
                         content = f'{log.user} updated the server emoji list'
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
@@ -2859,8 +2837,7 @@ class Cyberlog(commands.Cog):
             savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
             try: await member.avatar_url_as(size=1024).save(savePath)
             except discord.HTTPException: pass
-            f = discord.File(savePath)
-            url = await self.uploadFiles(f)
+            url = await self.uploadFiles(savePath)
             if settings['thumbnail'] in (1, 2, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4) and embed.author.name == discord.Embed.Empty: embed.set_author(name=member.name, icon_url=url)
         #Use an if/else structure for AFK/Not AFK because AFK involves switching channels - this prevents duplicates of AFK & Channel Switch logs
@@ -2919,8 +2896,7 @@ class Cyberlog(commands.Cog):
                                 savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
                                 try: await log.user.avatar_url_as(size=1024).save(savePath)
                                 except discord.HTTPException: pass
-                                f = discord.File(savePath)
-                                url = await self.uploadFiles(f)
+                                url = await self.uploadFiles(savePath)
                                 if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                                 if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
                             await updateLastActive(log.user, datetime.datetime.now(), 'moderated a user in voice chat')
@@ -4143,7 +4119,7 @@ class Cyberlog(commands.Cog):
 
     async def uploadFiles(self, f):
         #if type(f) is not list: f = [f]
-        message = await self.imageLogChannel.send(file=f if type(f) is not list else None, files=f if type(f) is list else None)
+        message = await self.imageLogChannel.send(file=discord.File(f) if type(f) is not list else None, files=[discord.File(fi) for fi in f] if type(f) is list else None)
         return [attachment.url for attachment in message.attachments] if type(f) is list else message.attachments[0].url
 
     def PermissionChanges(self, membersInput, message, embed, mod='role'):
@@ -4369,7 +4345,10 @@ def cyberAttribute(s: discord.Guild, mod, a):
     '''Returns common attribute: cyberlog <--> cyberlog module. Not coded for beta datasystem'''
     default = lightningLogging[s.id]['cyberlog'][a]
     specific = lightningLogging[s.id]['cyberlog'][mod][a]
-    return specific or default
+    def boolEval(i):
+        if type(i) is list: return all(a is not None for a in i)
+        else: return bool(i)
+    return specific if boolEval(specific) else default
 
 def getCyberAttributes(s: discord.Guild, mod):
     result = {}
