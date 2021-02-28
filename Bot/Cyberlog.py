@@ -1969,7 +1969,7 @@ class Cyberlog(commands.Cog):
             await message.edit(content = None if any((settings['flashText'], settings['tts'])) and not settings['plainText'] else content, embed=embed if not settings['plainText'] else None)
             embed.set_field_at(-1, name='**Post count**', value=await asyncio.create_task(self.MemberPosts(member)))
             await message.edit(embed=embed if not settings['plainText'] else None)
-            if any((settings['flashText'], settings['tts']) and not settings['plainText']): await message.edit(content=None)
+            if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
         members[member.guild.id] = member.guild.members
         try: 
             if os.path.exists(savePath): os.remove(savePath)
