@@ -349,8 +349,8 @@ class Cyberlog(commands.Cog):
                 self.bot.lightningUsers[u['user_id']] = u
                 lightningUsers[u['user_id']] = u
             else: await database.DeleteUser(u['user_id'], self.bot)
-        print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s', notify)
         if notify: await self.imageLogChannel.send('Synchronized')
+        print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s', notify)
 
     @tasks.loop(hours=24)
     async def DeleteAttachments(self):
@@ -1242,7 +1242,7 @@ class Cyberlog(commands.Cog):
         f = None
         msg = None
         channelPosFlag = False
-        channelPosTimekey = f'{datetime.datetime.now():%m%d%Y%H%M%S%}'
+        channelPosTimekey = f'{datetime.datetime.now():%m%d%Y%H%M%S}'
         if logEnabled(before.guild, "channel"):
             content=f'A moderator updated the {after.type[0]} channel called {before.name}'
             savePath = None
