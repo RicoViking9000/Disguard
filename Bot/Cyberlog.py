@@ -283,12 +283,16 @@ class Cyberlog(commands.Cog):
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
                 indexesPath = f'{indexes}/{g.id}'
-                for p in os.listdir(indexesPath):
-                    if 'json' in p and not self.bot.get_channel(int(p[:p.find('.')])):
-                        os.remove(f'{indexes}/{g.id}/{p}')
-                for p in os.listdir(attachmentsPath):
-                    if not self.bot.get_channel(int(p)):
-                        shutil.rmtree(f'Attachments/{g.id}/{p}')
+                try:
+                    for p in os.listdir(indexesPath):
+                        if 'json' in p and not self.bot.get_channel(int(p[:p.find('.')])):
+                            os.remove(f'{indexes}/{g.id}/{p}')
+                except FileNotFoundError: pass
+                try:
+                    for p in os.listdir(attachmentsPath):
+                        if not self.bot.get_channel(int(p)):
+                            shutil.rmtree(f'Attachments/{g.id}/{p}')
+                except FileNotFoundError: pass
                 print(f'Local file management done in {(datetime.datetime.now() - started).seconds}s')
                 started = datetime.datetime.now()
                 try:
@@ -467,7 +471,8 @@ class Cyberlog(commands.Cog):
     
     async def redditAutocomplete(self, message: discord.Message):
         if 'r/' not in message.content: return
-        config = self.bot.lightningLogging[message.guild.id]['redditComplete']
+        try: config = self.bot.lightningLogging[message.guild.id]['redditComplete']
+        except KeyError: return
         if config == 0: return #Feature is disabled
         if message.author.id == self.bot.user.id: return
         for w in message.content.split(' '):
@@ -480,7 +485,8 @@ class Cyberlog(commands.Cog):
                 except: pass
 
     async def redditEnhance(self, message: discord.Message):
-        config = self.bot.lightningLogging[message.guild.id]['redditEnhance']
+        try: config = self.bot.lightningLogging[message.guild.id]['redditEnhance']
+        except KeyError: return
         if ('https://www.reddit.com/r/' not in message.content and 'https://old.reddit.com/r/' not in message.content) or config == (False, False): return
         if message.author.id == self.bot.user.id: return
         for w in message.content.split(' '):
@@ -4134,8 +4140,8 @@ class Cyberlog(commands.Cog):
                         if not any([s.get_member(m.id).guild_permissions.manage_guild for s in memberServers]) and m.id in alphaMembers: await disguardMember.remove_roles(disguardAlphaTester, reason=f'Automatic Scan: {reason}')
 
     async def uploadFiles(self, f):
-        if type(f) is not list: f = [f]
-        message = await self.imageLogChannel.send(files=f)
+        #if type(f) is not list: f = [f]
+        message = await self.imageLogChannel.send(file=f if type(f) is not list else None, files=f if type(f) is list else None)
         return [attachment.url for attachment in message.attachments] if len(f) > 1 else message.attachments[0].url
 
     def PermissionChanges(self, membersInput, message, embed, mod='role'):
