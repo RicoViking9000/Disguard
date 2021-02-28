@@ -4,7 +4,13 @@
     <head>
         <title>Dashboard: Disguard</title>
         <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
-        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
+        {%if redesign%}
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        {%else%}
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldCss.css') }}">
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldDesign.css') }}">
+        {%endif%}
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
         <script type="text/javascript">
             $(window).load(function() {

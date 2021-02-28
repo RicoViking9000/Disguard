@@ -144,19 +144,44 @@ def server(id):
         r = request.form
         d = datetime.datetime.utcnow()
         o = r.get('offset')
-        bd = r.get('birthday')
+        #bd = r.get('birthday')
         bdt = r.get('birthdate')
-        nz = r.get('tzname')
+        #nz = r.get('tzname')
         dt = datetime.datetime(int(o[:o.find('-')]), int(o[o.find('-')+1:o.find('-')+3]), int(o[o.find('-')+4:o.find('-')+6]), int(o[o.find('T')+1:o.find(':')]), int(o[o.find(':')+1:]))
         decrement = int(bdt[bdt.find(':')+1:])
         while decrement % 5 != 0: decrement -= 1
         dt2 = datetime.datetime(2020, 1, 1, int(bdt[:bdt.find(':')]), decrement)
         if dt > d: difference = round((dt - d).seconds/3600)
         else: difference = round((dt - d).seconds/3600) - 24
-        servers.update_one({"server_id": id}, {"$set": {"prefix": r.get('prefix'), 'offset': difference, 'tzname': nz, 'jumpContext': r.get('jumpContext').lower() == 'true', 'birthday': int(bd), 'birthdate': dt2,
-        'birthdayMode': int(r.get('birthdayMode'))}})
-        return redirect(url_for('server', id=id)) 
-    return render_template('general.html', servObj=serv, date=d, date2=d2, id=id)
+        servers.update_one({"server_id": id}, {"$set": {
+            "prefix": r.get('prefix'),
+            'offset': difference,
+            'tzname': r.get('tzname'),
+            'jumpContext': r.get('jumpContext').lower() == 'true',
+            'undoSuppression': r.get('undoSuppression').lower() == 'true',
+            'redditComplete': r.get('redditComplete').lower() == 'true',
+            'redditEnhance': int(r.get('redditEnhance')),
+            'colorTheme': int(r.get('colorTheme')),
+            'birthday': int(r.get('birthday')),
+            'birthdate': dt2,
+            'birthdayMode': int(r.get('birthdayMode')),
+            'generalChannel': (int(r.get('generalChannel')), int(r.get('generalChannel')) != 0),
+            'announcementsChannel': (int(r.get('announcementsChannel')), int(r.get('announcementsChannel')) != 0),
+            'moderatorChannel': (int(r.get('moderatorChannel')), int(r.get('moderatorChannel')) != 0),
+            'redditFeeds': [{
+                'subreddit': r.getlist('subName')[i],
+                'channel': int(r.getlist('subChannel')[i]),
+                'truncateTitle': int(r.getlist('subTruncateTitle')[i]),
+                'truncateText': int(r.getlist('subTruncateText')[i]),
+                'media': int(r.getlist('subMedia')[i]),
+                'creditAuthor': int(r.getlist('subCreditAuthor')[i]),
+                'color': r.getlist('subColor')[i],
+                'timestamp': r.getlist('subTimestamp')[i].lower() == 'true',
+            } for i in range(len(r.getlist('subName'))) if not r.getlist('delete')[i] == '1' and i != 0]
+            }})
+        return redirect(url_for('server', id=id))
+    feeds = [{'template': True, 'subreddit': 'placeholder', 'channel': serv['channels'][1]['id'], 'truncateTitle': 100, 'truncateText': 400, 'media': 3, 'creditAuthor': 3, 'color': 'colorCode', 'timestamp': True}] + serv['redditFeeds']
+    return render_template('general.html', servObj=serv, redditFeeds=feeds, date=d, date2=d2, id=id, redesign=True)
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
 @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.antispam', 'Antispam')
@@ -211,7 +236,7 @@ def antispam(id):
             "profanityTolerance": float(r.get("profanityTolerance")) / 100,
             "filter": profane}}})
         return redirect(url_for('antispam', id=id))
-    return render_template('antispam.html', servid = id, servObj=servObj, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
+    return render_template('antispam.html', servid = id, servObj=servObj, automod = servObj.get("antispam"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"), redesign=False)
 
 @app.route('/manage/<int:id>/moderation')
 @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.moderation', 'Moderation')
@@ -231,100 +256,54 @@ def cyberlog(id):
         rex = list(map(int, r.getlist('roleExclusions'))) #rex = (R)ole(Ex)clusions
         mex = list(map(int, r.getlist('memberExclusions')))
         c = servObj.get("cyberlog")
+        def boolConverter(input): return None if input == None else bool(input)
+        moduleDict = {}
+        for w in ['message', 'doorguard', 'server', 'channel', 'member', 'role', 'emoji', 'voice', 'misc']:
+            moduleDict[w] = {
+                'name': c[w]['name'], 'description': c[w]['description'], 'enabled': r.get(w) == 'True', 'channel': r.get(f'{w}Channel', type=int),
+                'read': boolConverter(r.get(f'{w}read', None, type=int)),'library': r.get(f'{w}Library', None, type=int),
+                'thumbnail': r.get(f'{w}Thumbnail', None, type=int), 'author': r.get(f'{w}Author', None, type=int),
+                'context': (r.get(f'{w}TitleContext', None, type=int), r.get(f'{w}DescContext', None, type=int)), 'hoverLinks': None,
+                'embedTimestamp': r.get(f'{w}EmbedTimestamp', None, type=int), 'botLogging': r.get(f'{w}BotLogging', None, type=int),
+                'color': None if r.get(f'{w}Color') == 'default' else ['auto', 'auto', 'auto'] if r.get(f'{w}Color') == 'auto' else [r.get(f'{w}CreateColor'), r.get(f'{w}UpdateColor'), r.get(f'{w}DeleteColor')],
+                'plainText': boolConverter(r.get(f'{w}PlainText', None, type=int)), 'flashText': boolConverter(r.get(f'{w}FlashText', None, type=int)),
+                'tts': boolConverter(r.get(f'{w}TTS', None, type=int))}
         servers.update_one({"server_id": id}, {"$set": {"cyberlog": {
         "enabled": r.get('enabled').lower() == 'true',
+        'ghostReactionEnabled': r.get('ghostReactionEnabled') == '1',
         "image": r.get('imageLogging').lower() == 'true',
-        "defaultChannel": None if r.get('defaultChannel').lower() == 'none' or r.get('defaultChannel') is None else int(r.get('defaultChannel')),
-        'memberGlobal': int(r.get('memberGlobal')),
-        #'summarize': int(r.get('summarize')),
+        "defaultChannel": r.get('defaultChannel', None, type=int),
+        'library': r.get('defaultLibrary', type=int),
+        'thumbnail': r.get('defaultThumbnail', type=int),
+        'author': r.get('defaultAuthor', type=int),
+        'context': (r.get('defaultTitleContext', type=int), r.get('defaultDescContext', type=int)),
+        'hoverLinks': c.get('hoverlinks'),
+        'embedTimestamp': r.get('defaultEmbedTimestamp', type=int),
+        'botLogging': r.get('defaultBotLogging', type=int),
+        'color': ['auto', 'auto', 'auto'] if r.get('defaultColor') == 'auto' else [r.get('defaultCreateColor'), r.get('defaultUpdateColor'), r.get('defaultDeleteColor')],
+        'plainText': r.get('defaultPlainText') == '1',
+        'read': r.get('read') == '1',
+        'flashText': r.get('defaultFlashText') == '1',
+        'tts': r.get('defaultTTS') == '1',
+        'memberGlobal': r.get('memberGlobal', type=int),
         'onlyVCJoinLeave': True if r.get('voiceSpecial') == '0' else False,
         'onlyVCForceActions': True if r.get('voiceSpecial') == '1' else False,
         'voiceChatLogRecaps': r.get('voiceRecaps').lower() == 'true',
+        'ghostReactionTime': r.get('ghostReactionTime', type=int),
         "channelExclusions": cex,
         "roleExclusions": rex,
         "memberExclusions": mex,
-        "message": {
-            "name": c.get('message').get('name'),
-            "description": c.get('message').get('description'),
-            "embed": c.get('message').get('embed'),
-            "read": r.get('messageRead').lower() == 'true',
-            "enabled": r.get('message').lower() == 'true',
-            "channel": None if r.get('messageChannel').lower() == 'none' or r.get('messageChannel') is None else int(r.get('messageChannel')),
-            #'summarize': int(r.get('messageSummarize')),
-            "color": c.get('message').get('color'),
-            "advanced": c.get('message').get('advanced')},
-        "doorguard": {
-            "name": c.get('doorguard').get('name'),
-            "description": c.get('doorguard').get('description'),
-            "embed": c.get('doorguard').get('embed'),
-            "read": r.get('doorRead').lower() == 'true',
-            "enabled": r.get('doorguard').lower() == 'true',
-            "channel": None if r.get('doorChannel').lower() == 'none' or r.get('doorChannel') is None else int(r.get('doorChannel')),
-            #'summarize': int(r.get('doorSummarize')),
-            "color": c.get('doorguard').get('color'),
-            "advanced": c.get('doorguard').get('advanced')},
-        "server": {
-            "name": c.get('server').get('name'),
-            "description": c.get('server').get('description'),
-            "embed": c.get('server').get('embed'),
-            "read": r.get('serverRead').lower() == 'true',
-            "enabled": r.get('server').lower() == 'true',
-            "channel": None if r.get('serverChannel').lower() == 'none' or r.get('serverChannel') is None else int(r.get('serverChannel')),
-            #'summarize': int(r.get('serverSummarize')),
-            "color": c.get('server').get('color'),
-            "advanced": c.get('server').get('advanced')},
-        "channel": {
-            "name": c.get('channel').get('name'),
-            "description": c.get('channel').get('description'),
-            "embed": c.get('channel').get('embed'),
-            "read": r.get('channelRead').lower() == 'true',
-            "enabled": r.get('channel').lower() == 'true',
-            "channel": None if r.get('channelChannel').lower() == 'none' or r.get('channelChannel') is None else int(r.get('channelChannel')),
-            #'summarize': int(r.get('channelSummarize')),
-            "color": c.get('channel').get('color'),
-            "advanced": c.get('channel').get('advanced')},
-        "member": {
-            "name": c.get('member').get('name'),
-            "description": c.get('member').get('description'),
-            "embed": c.get('member').get('embed'),
-            "read": r.get('memberRead').lower() == 'true',
-            "enabled": r.get('member').lower() == 'true',
-            "channel": None if r.get('memberChannel').lower() == 'none' or r.get('memberChannel') is None else int(r.get('memberChannel')),
-            #'summarize': int(r.get('memberSummarize')),
-            "color": c.get('member').get('color'),
-            "advanced": c.get('member').get('advanced')},
-        "role": {
-            "name": c.get('role').get('name'),
-            "description": c.get('role').get('description'),
-            "embed": c.get('role').get('embed'),
-            "read": r.get('roleRead').lower() == 'true',
-            "enabled": r.get('role').lower() == 'true',
-            "channel": None if r.get('roleChannel').lower() == 'none' or r.get('roleChannel') is None else int(r.get('roleChannel')),
-            #'summarize': int(r.get('roleSummarize')),
-            "color": c.get('role').get('color'),
-            "advanced": c.get('role').get('advanced')},
-        "emoji": {
-            "name": c.get('emoji').get('name'),
-            "description": c.get('emoji').get('description'),
-            "embed": c.get('emoji').get('embed'),
-            "read": r.get('emojiRead').lower() == 'true',
-            "enabled": r.get('emoji').lower() == 'true',
-            "channel": None if r.get('emojiChannel').lower() == 'none' or r.get('emojiChannel') is None else int(r.get('emojiChannel')),
-            #'summarize': int(r.get('emojiSummarize')),
-            "color": c.get('emoji').get('color'),
-            "advanced": c.get('emoji').get('advanced')},
-        "voice": {
-            "name": c.get('voice').get('name'),
-            "description": c.get('voice').get('description'),
-            "embed": c.get('voice').get('embed'),
-            "read": r.get('voiceRead').lower() == 'true',
-            "enabled": r.get('voice').lower() == 'true',
-            "channel": None if r.get('voiceChannel').lower() == 'none' or r.get('voiceChannel') is None else int(r.get('voiceChannel')),
-            #'summarize': int(r.get('voiceSummarize')),
-            "color": c.get('voice').get('color'),
-            "advanced": c.get('voice').get('advanced')}}}})
+        "message": moduleDict['message'],
+        'doorguard': moduleDict['doorguard'],
+        'server': moduleDict['server'],
+        'channel': moduleDict['channel'],
+        'member': moduleDict['member'],
+        'role': moduleDict['role'],
+        'emoji': moduleDict['emoji'],
+        'voice': moduleDict['voice'],
+        'misc': moduleDict['misc']}}})
         return redirect(url_for('cyberlog', id=id))
-    return render_template('cyberlog.html', servid=id, server=servObj, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"))
+    return render_template('cyberlog.html', servid=id, server=servObj, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"), redesign=False)
 
 @app.route('/special/<string:landing>')
 def specialLanding(landing):
@@ -352,19 +331,22 @@ def time(data):
     return (data["virtualEpoch"] + elapsed(data) + datetime.timedelta(hours=data["hoursFromUTC"])).isoformat()
 
 def elapsed(data):
-    '''Returns time elapsed since the epoch (return type: datetime.timedelta) (TIMEKEEPER)'''
+    '''Returns time elapsed since the epoch (return type: datetime.timedelta)'''
     #Jan 19, 2021: Changed this approach from being single-line math to being start at a point & add it linearly, based on the new data type system. This eliminates the need for the pauseCompensation method.
     result = 0
-    speedSectors = data['speedSectors']
+    speedSectors = data.get('speedSectors')
     if len(speedSectors) < 2: return datetime.timedelta(seconds=0)
     for i, s in enumerate(speedSectors, 1):
-        lastIndex = speedSectors[i - 1]['timestamp']
-        multiplier = speedSectors[i - 1]['multiplier']
+        try: lastIndex = datetime.datetime.fromisoformat(s['timestamp'])
+        except TypeError: lastIndex = s['timestamp']
+        multiplier = s['multiplier']
         if i == len(speedSectors): currentIndex = datetime.datetime.utcnow()
-        else: currentIndex = s['timestamp']
-        result += (currentIndex - lastIndex).seconds * multiplier
+        else: 
+            try: currentIndex = datetime.datetime.fromisoformat(speedSectors[i]['timestamp'])
+            except TypeError: currentIndex = speedSectors[i]['timestamp']
+        result += (currentIndex - lastIndex).total_seconds() * multiplier
     return datetime.timedelta(seconds=result)
-    #return ((datetime.datetime.utcnow() - data['epoch'] - datetime.timedelta(seconds=data['pausedDuration'])) - (datetime.datetime.utcnow() - data['pausedTimestamp'] if data['paused'] else datetime.timedelta(seconds=0))) * data['timeMultiplier']
+    #return ((datetime.datetime.utcnow() - bot.data['epoch'] - datetime.timedelta(seconds=bot.data['pausedDuration'])) - (datetime.datetime.utcnow() - bot.data['pausedTimestamp'] if bot.data['paused'] else datetime.timedelta(seconds=0))) * bot.data['timeMultiplier']
 
 
 if __name__ == '__main__':

@@ -70,15 +70,21 @@
 .pad div > ul > li {color: rgb(161, 161, 161); font-size: 25px;}
 .pad div > img {padding-left: 16%;}
 .active {color: inherit; border-bottom: 3px solid rgb(66, 66, 248);}
-.pageHeader *{padding-top: 25px; padding-left: 2%;}
+.header, .header *, .subheader, .subheader * {padding-top: 35px; font-size: 35px; text-align: center;}
+.header, .header * {font-size: 70px; text-align: center;}
 .commandsHeader p {font-size: 25px; color: rgb(202, 66, 66); padding-top: 10px; padding-bottom: 10px;}
 .grayed {color: rgb(161, 161, 161); padding: 0px;}
+.lgray {color: lightgray;}
 .white {color: white; padding: 0px;}
 .red {color: rgb(202, 66, 66);}
 .blue {color: rgb(66, 66, 248); padding: 0px;}
 .blueUnderline {text-decoration: underline; text-decoration-color: rgb(66, 66, 248); color: inherit;}
 .center {text-align: center}
 .sticky th {position: -webkit-sticky; position: sticky; top: 0;}
+.justify80 {text-align: justify; text-justify: inter-word; word-wrap: break-word; margin: 0 20%;}
+.justify80 * {padding: 0;}
+.largeText {font-size: 20px;}
+.incSpaced, .incSpaced * {line-height: 1.5em;}
 #navig li a:hover:not(.active) {border-bottom: 3px solid rgb(202, 66, 66);}
 #mainbullethead {font-size: 40px}
 #comTable {width: 100%; padding-top: 60px;}
@@ -115,3 +121,5 @@ nav *{padding-bottom: 10px;}
 hr {margin-top: 30px; border: 1px solid rgb(66, 66, 248);}
 hr.argSeparator {border: 0.5px dashed rgb(202, 66, 66); width: 78%; margin-left: 16%;}
 table {border-collapse: collapse;}
+a {color: inherit;}
+li {color: lightgray;}

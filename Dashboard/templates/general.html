@@ -3,60 +3,562 @@
 <html>
     <head>
         <title>Dashboard: Disguard</title>
-        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
-        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
+        {%if redesign%}
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        {%else%}
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldCss.css') }}">
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldDesign.css') }}">
+        {%endif%}
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
         <script type="text/javascript">
+            var data = {}
+            var start;
+
             $(window).load(function() {
-                $(".loader").fadeOut("slow");
+                // $(".loader").fadeOut("slow");
+                // $('.loadingBar').stop(true, true)
+                // setTimeout(function() {
+                //     $('.loadingBar').fadeOut(400)
+                // }, 500)
+                $('select').each(function() {
+                    data[this.id] = this.value;
+                });
+                $("button").each(function() {
+                    this.addEventListener("click", function(event) {event.preventDefault()})
+                });
+                var duration = (window.performance.now() - start);
+                var time = parseInt((duration/1000)%60)*100;
+                document.cookie = "loadTime="+time
+                
             });
+            $(document).ready(function(){
+                start = window.performance.now();
+                var cookie = document.cookie;
+                if (cookie != "") {
+                    var loadTime = parseInt(document.cookie.substring(document.cookie.indexOf('=') + 1))
+                    if (loadTime < 600) {
+                        loadTime = 600;
+                    }
+                    $('.loadingBar.blue').animate({
+                        width: '100%'
+                    }, loadTime);
+                }
+                else {var loadTime = 600;}
+                timer = setTimeout(function() {
+                    setTimeout(function() {
+                        $('.loadingBar.blue').fadeOut(400);
+                    }, 250)
+                }, loadTime);
+
+                // CSS adjustments //
+                var tabs = $('.tabs').children()
+                tabs.each(function() {
+                    $(this).css({"width": 90 / tabs.length + "%", "margin": "0 " + 9.4 / (tabs.length * 2) + "%"});
+                })
+
+                $('input, select').each(function() {
+                    if ($(this).attr('type') != 'SUBMIT') {
+                        $(this).attr('id', $(this).siblings('label').first().attr('for'));
+                    }
+                    ensureRelevance($(this));
+                })
+
+                $('input, select').change(function() {
+                    checkChanges($(this).attr('id'))
+                })
+
+                $(".threeDots").hover(function() {
+                    $(this).siblings(".hoverDescBox").fadeIn(100);
+                    if (!$(this).siblings("input, select").first().is(":focus")) {
+                        if ($(this).siblings('.inputOptions').css('display') == 'none') {
+                            $(this).children().each(function() {
+                                $(this).css("border", "5px solid white");
+                            });
+                        }
+                    }
+                }, function() {
+                    $(this).siblings('.hoverDescBox').fadeOut(100);
+                    if (!$(this).siblings("input, select").first().is(":focus")) {
+                        if ($(this).siblings('.inputOptions').css('display') == 'none') {
+                            $(this).children().each(function() {
+                                $(this).css("border", "5px solid darkgray");
+                            });
+                        }
+                    }
+                });
+
+                $(".threeDots").click(function() {
+                    $(this).children().each(function() {
+                        $(this).css("border", "5px solid rgb(24, 25, 28)");
+                    });
+                    $(this).siblings(".inputOptions").fadeIn(100);
+                    $(this).siblings("input, select").focus();
+                    $(this).siblings(".hoverDescBox").fadeOut(100);
+
+                })
+
+                $(".redX").hover(function() {
+                    if ($(this).next().val() != '1') {
+                        $(this).parent().css("opacity", "0.5");
+                    }
+                }, function() {
+                    if ($(this).next().val() != '1') {
+                        $(this).parent().css("opacity", "1");
+                    }
+                });
+
+                $('.redX').click(function() {
+                    var subName = $(this).siblings('.inputPod').first().children('input').val();
+                    var channel = $(this).siblings('.inputPod').first().next().children('select').val();
+                    var needToHide = subName == '' && channel == '';
+                    var checked = $(this).next().val() == 1;
+                    if (checked && !needToHide) {
+                        $(this).next().val('0');
+                        $(this).parent().css({'opacity': '1', 'border': '2px solid rgb(24, 25, 28)'});
+                        $(this).siblings('.inputPod').children('input, select').prop('disabled', false);
+                    }
+                    else {
+                        $(this).next().val('1');
+                        if (needToHide) {$(this).parent().remove();}
+                        else {
+                            $(this).parent().css({'opacity': '0.33', 'border': '2px solid rgb(202, 66, 66)'});
+                            $(this).siblings('.inputPod').children('input, select').prop('disabled', true);
+                        }
+                    }
+                })
+
+                $('#redditAddPod').click(function() {
+                    addRedditPod($(this));
+                })
+
+                $(".revertSingle").click(function() {
+                    var element = $(this).parents().siblings('input, select').first();
+                    if (element.prop('tagName') == 'INPUT') {
+                        element.val(element.prop('defaultValue'))
+                    }
+                    else {
+                        element.val(data[element.attr("id")]);
+                    }
+                    checkChanges(element.attr('id'));
+                    redLoadingBar(600);
+                })
+
+                $(".resetSingle").click(function() {
+                    var element = $(this).parents().siblings('input, select').first();
+                    element.val(element.attr('default'));
+                    checkChanges(element.attr('id'));
+                    redLoadingBar(600);
+                })
+
+                $(".tab").click(function() {
+                    var clicked = $(this).attr('id');
+                    $(".tab").each(function() {
+                        if ($(this).attr('id') == clicked || $(this).attr('class').includes('selected')) {
+                            if ($(this).attr('class').includes('selected')) {
+                                $('fieldset#' + $(this).attr('id') + 'Settings').toggleClass('selected');
+                            }
+                            if (!($(this).attr('id') == clicked && $(this).attr('class').includes('selected'))) {
+                                $(this).toggleClass('selected');
+                            }
+                        }
+                    })
+                    $('fieldset#' + clicked + 'Settings').toggleClass('selected');
+                })
+
+                $(document).mousedown(function() {
+                        $("input, select").blur();
+                        $(".inputOptions").fadeOut(100);
+                        $(".threeDots").children().each(function() {
+                            $(this).css("border", "5px solid darkgray");
+                        });
+                })
+
+                $(":button").click(function() {
+                    if ($(this).attr("id") == "revert") {
+                        $('select, input').each(function() {
+                            checkChanges($(this).attr("id"));
+                    })}
+                });
+
+                $("#settings").submit(function() {
+                    $("div:not(.loader)").css("opacity", "0.5");
+                    $(".loader").fadeIn();
+                })
+            });
+
+            function redLoadingBar(duration) {
+                $('.loadingBar.red').css({'display': 'block', 'width': '0%'});
+                $('.loadingBar.red').animate({
+                        width: '100%'
+                    }, duration);
+                timer = setTimeout(function() {
+                    setTimeout(function() {
+                        $('.loadingBar.red').fadeOut(400);
+                    }, 250)
+                }, duration);
+            }
+
+            function defaultVal(id) {
+                var element = document.getElementById(id);
+                if (element.tagName != "SELECT") {
+                    var defaultValue = element.defaultValue;
+                }
+                else {
+                    var defaultValue = data[id];
+                }
+                return defaultValue;
+            }
+
+            function checkChanges(id) {
+                var element = document.getElementById(id);
+                var $element = $('#' + element.id)
+                var $pp = $element.parent().parent();
+                if (element.type == 'submit') {return;}
+                var defaultValue = defaultVal(id);
+                if (element.value != defaultValue) {
+                    $element.parent().css("border-left", "5px solid rgb(89, 89, 248)");
+                    if ($pp.attr('class') == 'redditFeedPod' && $pp.css('border-left') == '2px solid rgb(24, 25, 28)') { //PP (parent parent) element, or the redditFeedPod, gets highlighted as well if it isn't already
+                        $pp.css('border-left', '5px solid rgb(89, 89, 248)');
+                    }
+                }
+                else {
+                    $element.parent().css("border-left", "5px solid transparent");
+                    //Line below this = troublesome
+                    if ($pp.attr('class') == 'redditFeedPod' && $pp.css('border-left') != '2px solid rgb(24, 25, 28)' && $pp.find('input, select').filter(function() {
+                        return !['submit', 'checkbox'].includes($element.attr('type')) && $element.val() != defaultVal($element.attr('id'));
+                    }).length == 0) {
+                        $pp.css('border-left', '2px solid rgb(24, 25, 28)');
+                    } 
+                }
+                //Now, poof away anything that relies on this element being active//
+                ensureRelevance($element);
+                
+            }
+
+            function ensureRelevance($element) {
+                //Hides elements that are irrelevant due to disabled options. This method is also highly ineffecient.//
+                $('.inputPod').each(function() {
+                    if ($(this).attr('reliesOn') == $element.attr('name') && $(this).parent()[0] == $element.parent().parent()[0]) {
+                        if ([0, '0', '', 'False', 'false', 'colorCode'].includes($element.val()) && $(this).css('display') != 'none') {
+                            $(this).fadeOut(400);
+                        }
+                        else {
+                            $(this).fadeIn(400);
+                        }
+                    }
+                })}
+
+            function addRedditPod($element) {
+                var redditPod = $element.parent().children().first();
+                var newPod = redditPod.clone(true);
+                newPod.css('display', 'block');
+                configureRedditPod(newPod);
+                $element.before(newPod);
+            }
+
+            function configureRedditPod($pod) {
+                var d = {'subName': '', 'subChannel': '', 'subTruncateTitle': 100, 'subTruncateText': 400, 'subMedia': 3, 'subCreditAuthor': 3, 'subColor': 'colorCode', 'subTimestamp': 'true'};
+                var existingPodCount = $('.redditFeedPod').length + 1;
+                $pod.children('.inputPod').each(function() {
+                    $(this).children('input, select').filter(function() {return $(this).attr('tagName') == 'SELECT' || $(this).attr('type') != 'checkbox'}).each(function() {
+                        $(this).val(d[$(this).attr('name')]);
+                        var base = $(this).attr('id');
+                        for (var i = 0; i < base.length; i++) {
+                            if (['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].includes(base.substring(i, i+1))) {
+                                var numbIndex = i;
+                                break;
+                            }
+                        }
+                        $(this).attr('id', base.substring(0, numbIndex) + existingPodCount);
+                    }) 
+                    $(this).children('label').each(function() {
+                        $(this).attr('for', $(this).siblings('input, select').filter(function() {return $(this).attr('tagName') == 'SELECT' || $(this).attr('type') != 'checkbox'}).first().attr('id'));
+                    })
+                })
+            }
+
+            function revertChanges() {
+                redLoadingBar(600);
+                document.getElementById('settings').reset();
+            }
         </script>
     </head>
     <body>
+        <div class="loadingBar blue"></div>
+        <div class="loadingBar red"></div>
         <div class='loader'>
-            <div class="bg"></div>
-            <div class='circle'></div>
-            <div class='circle'></div>
-            <div class='circle'></div>
-            <div class='circle'></div>
-            <div class='circle'></div>
+            <div class="bg"></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div>
+            <p id=loadText>Saving</p>
         </div>
-        <a href="{{url_for('manageServer', id=id)}}"><h2 class=goBack>Back</h2></a>
-        <h1 class=mod-header>General server settings</h1>
-            <form class=mod-main method="POST">
-                Server prefix: <input type="text" name=prefix value={{servObj.prefix}}><br>
-                Server time (minutes don't matter): <input type="datetime-local" name=offset value={{date}}><br>
-                Server time zone name <input type='text' name='tzname' value={{servObj.tzname}}><br>
-                Birthday announcements
-                    <select name=birthday><option value=0 {%if servObj.birthday == 0%}selected{%endif%}>--Disabled--</option>
-                    {%for channel in servObj.channels%}
-                        <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.birthday == channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
-                Automatic birthday configuration detection from messages: If date/age detected in message, ask if user wants to set that as their birthday/age <select name=birthdayMode> 
-                    <option value=0 {%if servObj.birthdayMode == 0%}selected{%endif%}>Don't auto detect; users configure only through birthday command</option>
-                    <option value=1 {%if servObj.birthdayMode == 1%}selected{%endif%}>Automatically detect and user reacts with cake to configure</option>
-                    <option value=2 {%if servObj.birthdayMode == 2%}selected{%endif%}>Automatically detect and bot replies to messages for user to configure</option>
-                </select><br>
-                Announce birthdays at what time (Increments of 5 minutes) <input type="time" name=birthdate value={{date2}}><br>
-                Quote message content of posted jump URLs <select name=jumpContext><option value=True {%if servObj.jumpContext%}selected{%endif%}>Enabled</option><option value=False {%if not servObj.jumpContext%}selected{%endif%}>Disabled</option></select><br>
-                Server announcements channel
-                    <select name=announcementsChannel disabled><option value=0 {%if servObj.announcementsChannel == 0 or not servObj.announcementsChannel%}selected{%endif%}>--Select a channel--</option>
-                    {%for channel in servObj.channels%}
-                        <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.announcementsChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
-                Server moderator channel
-                    <select name=moderatorChannel disabled><option value=0 {%if servObj.moderatorChannel == 0 or not servObj.moderatorChannel%}selected{%endif%}>--Select a channel--</option>
-                    {%for channel in servObj.channels%}
-                        <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.moderatorChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
-                Server general channel
-                    <select name=generalChannel disabled><option value=0 {%if servObj.generalChannel == 0 or not servObj.generalChannel%}selected{%endif%}>--Select a channel--</option>
-                    {%for channel in servObj.channels%}
-                        <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.generalChannel == channel.id%}selected{%endif%}>{{channel.name}}</option>
-                    {%endfor%}
-                    </select><br>
-                <input type="submit" value="Save">
-            </form>
+        <div class=breadcrumbs>
+            {%for breadcrumb in breadcrumbs%}
+                <a {%if loop.last%}class=breadcrumbCurrent{%endif%} href='{{breadcrumb.url}}'><span {%if loop.last%}class=breadcrumbCurrent{%endif%}>{{breadcrumb.text}}</span></a>
+                {{'>' if not loop.last}}
+            {%endfor%}
+        </div>
+        <form id=settings method="POST" autocomplete="off">
+            <div class=tabs>
+                <div class="tab selected" id=configuration><p class=tabLabel>Server Settings</p></div>
+                <div class=tab id=utility><p class=tabLabel>Utility Features</p></div>
+                <div class=tab id=reddit><p class=tabLabel>Reddit Feeds</p></div>
+            </div>
+            <fieldset class=selected id=configurationSettings>
+                <div class=inputPod>
+                    <label for=prefix>Commands prefix</label>
+                    <input type="text" id=prefix name=prefix value={{servObj.prefix}} default="." required>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>The character(s) used before typing the name of a command in order to activate the bot's commands</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for=offset>Server time</label>
+                    <input type="datetime-local" id=offset name=offset value={{date}} required>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>The current time, used to configure distance from UTC time. The Dashboard will not take exact minutes into account at all.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for=tzname>Server time zone name</label>
+                    <input type='text' id=tzname name='tzname' value={{servObj.tzname}} default="EST">
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>The name of your server's time zone, displayed when applicable</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for=colorTheme>Embed color theme</label>
+                    <select id=colorTheme name=colorTheme default=1> 
+                        <option value=0 {%if servObj.colorTheme == 0%}selected{%endif%}>Classic</option>
+                        <option value=1 {%if servObj.colorTheme == 1%}selected{%endif%}>Modern</option>
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>New in 0.2.25. Which color theme Disguard should use when sending embeds with colored borders in the main modules. Classic refers to the same pastel colors Disguard always used, whereas Modern is a new theme that is easier on the eyes (less oversaturation). Applies to orange, purple, yellow, red, blue, and green borders.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="birthday">Announce birthdays</label>
+                    <select id=birthday name=birthday default=0>
+                        <option value=0 {%if servObj.birthday == 0%}selected{%endif%}>--Disabled--</option>
+                        {%for channel in servObj.channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.birthday == channel.id%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
+                        {%endfor%}
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Whether to announce birthdays members have configured, and if so, to which channel</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod" reliesOn="birthday">
+                    <label for="birthdate">Announce birthdays at</label>
+                    <input type="time" id=birthdate name=birthdate value={{date2}} step="300" default="07:00">
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>What time to announce birthdays at. Must be an increment of 5 minutes (ending in 5 or 0)</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="birthdayMode">Birthday Auto-detect</label>
+                    <select id=birthdayMode name=birthdayMode default=2> 
+                        <option value=0 {%if servObj.birthdayMode == 0%}selected{%endif%}>Disabled</option>
+                        <option value=1 {%if servObj.birthdayMode == 1%}selected{%endif%}>Enabled - React if birthday detected in message</option>
+                        <option value=2 {%if servObj.birthdayMode == 2%}selected{%endif%}>Enabled - Send embed if birthday detected in message</option>
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Whether to allow Disguard to scan all server messages for members stating when their birthdays are. If enabled, Disguard will create an event handler when it detects a birthay or age in proper context in a message. For the middle option, Disguard will react to the message when this happens, and for the last option, Disguard will send an embed when this happens.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="announcementsChannel">Server's announcements channel</label>
+                    <select id=announcementsChannel name=announcementsChannel default=0>
+                        <option value=0 {%if not servObj.announcementsChannel or servObj.announcementsChannel is not sequence or not servObj.announcementsChannel[1]%}selected{%endif%}>Auto-detect</option>
+                        {%for channel in servObj.channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.announcementsChannel[0] == channel.id and servObj.announcementsChannel[1]%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
+                        {%endfor%}
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Leaving this on auto-detect means Disguard will calculate the most relevant channel, otherwise fill out the best match</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="moderatorChannel">Server's moderator channel</label>
+                    <select id=moderatorChannel name=moderatorChannel  default=0>
+                        <option value=0 {%if not servObj.moderatorChannel or servObj.moderatorChannel is not sequence or not servObj.moderatorChannel[1]%}selected{%endif%}>Auto-detect</option>
+                        {%for channel in servObj.channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.moderatorChannel[0] == channel.id and servObj.moderatorChannel[1]%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
+                        {%endfor%}
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Leaving this on auto-detect means Disguard will calculate the most relevant channel, otherwise fill out the best match</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="generalChannel">Server's general channel</label>
+                    <select id=generalChannel name=generalChannel  default=0>
+                        <option value=0 {%if not servObj.generalChannel or servObj.generalChannel is not sequence or not servObj.generalChannel[1]%}selected{%endif%}>Auto-detect</option>
+                        {%for channel in servObj.channels%}
+                            <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if servObj.generalChannel[0] == channel.id and servObj.generalChannel[1]%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
+                        {%endfor%}
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Leaving this on auto-detect means Disguard will calculate the most relevant channel, otherwise fill out the best match</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+            </fieldset>
+            <fieldset id=utilitySettings>
+                <div class="inputPod">
+                    <label for="jumpContext">Message Jump URL enhancements</label>
+                    <select id=jumpContext name=jumpContext default=true>
+                        <option value=true {%if servObj.jumpContext%}selected{%endif%}>Enabled</option>
+                        <option value=false {%if not servObj.jumpContext%}selected{%endif%}>Disabled</option>
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If enabled, Disguard will post an embed containing the content (including images/embeds) of the message a posted jump URL goes to - This is essentially a message sharing feature for servers with Disguard</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="undoSuppression">Allow undoing of embed supressions</label>
+                    <select id=undoSuppression name=undoSuppression default=true>
+                        <option value=true {%if servObj.undoSuppression%}selected{%endif%}>Enabled</option>
+                        <option value=false {%if not servObj.undoSuppression%}selected{%endif%}>Disabled</option>
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If enabled, upon a moderator suppressing embeds to a message, Disguard will react to that message with a ∨ reaction. Clicking it will return the embed to the message. This feature is useful due to it not being available from the Discord GUI, yet it's a part of the API bots use.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="redditComplete">Link to r/subreddit messages</label>
+                    <select id=redditComplete name=redditComplete default=true>
+                        <option value=true {%if servObj.redditComplete%}selected{%endif%}>Enabled</option>
+                        <option value=false {%if not servObj.redditComplete%}selected{%endif%}>Disabled</option>
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If enabled, Disguard will post an embed containing information (and a link to) subreddits posted in the chat in the form of r/subreddit. Made possible by PRAW & the Reddit API.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod">
+                    <label for="redditEnhance">Reddit URL enhancements</label>
+                    <select id=redditEnhance name=redditEnhance default=true>
+                        <option value=0 {%if servObj.redditEnhance == 0%}selected{%endif%}>Disabled</option>
+                        <option value=1 {%if servObj.redditEnhance == 1%}selected{%endif%}>Only subreddit URLs</option>
+                        <option value=2 {%if servObj.redditEnhance == 2%}selected{%endif%}>Only submission URLs</option>
+                        <option value=3 {%if servObj.redditEnhance == 3%}selected{%endif%}>Both subreddit and submission URLs</option>
+                    </select>
+                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If enabled, Disguard will remove any auto-generated embeds attached to messages with reddit URLs, and send a message containing a more informative embed about the subreddit or submission. Made possible by PRAW & the Reddit API.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset id=redditSettings>
+                {%for feed in redditFeeds%}
+                    <div class=redditFeedPod {%if feed.template%}style="display: none"{%endif%}>
+                        <div class=redX><div class=posSlopeLine></div><div class=negSlopeLine></div></div>
+                        <select class=hidden name=delete><option value=0>No</option><option value=1>Yes</option></select>
+                        <div class=inputPod>
+                            <label for={{"subName" ~ loop.index}}>Subreddit name</label>
+                            <input type="text" name=subName value="{{feed.subreddit}}" placeholder="Must not be NSFW" required>
+                        </div>
+                        <div class=inputPod>
+                            <label for={{"subChannel" ~ loop.index}}>Deliver to</label>
+                            <select name=subChannel required>
+                                <option value="" {%if feed.channel == 0 or not feed.channel%}selected{%endif%}>--Select a channel--</option>
+                                {%for channel in servObj.channels%}
+                                    <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if feed.channel == channel.id%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
+                                {%endfor%}
+                            </select>
+                        </div>
+                        <div class=inputPod>
+                            <label for={{"subTruncateTitle" ~ loop.index}}>Submission title max length</label>
+                            <input type="number" name=subTruncateTitle min=0 max=256 value={{feed.truncateTitle}} placeholder="Disguard will truncate to this number (0 <= x <= 256)">
+                        </div>
+                        <div class=inputPod>
+                            <label for={{"subTruncateText" ~ loop.index}}>Text post preview max length</label>
+                            <input type="number" name=subTruncateText min=0 max=1950 value={{feed.truncateText}} placeholder="Disguard will truncate to this number (0 <= x <= 1950)">
+                        </div>
+                        <div class=inputPod>
+                            <label for={{"subMedia" ~ loop.index}}>Include submission media</label>
+                            <select name=subMedia>
+                                <option value=0 {%if feed.media == 0%}selected{%endif%}>Disabled</option>
+                                <option value=1 {%if feed.media == 1%}selected{%endif%}>Only embed thumbnail (subreddit logo)</option>
+                                <option value=2 {%if feed.media == 2%}selected{%endif%}>Only embed image (submission media, when applicable)</option>
+                                <option value=3 {%if feed.media == 3%}selected{%endif%}>Both subreddit logo and submission media</option>
+                            </select>
+                        </div>
+                        <div class=inputPod>
+                            <label for={{"subCreditAuthor" ~ loop.index}}>Include submission author & avatar</label>
+                            <select name=subCreditAuthor>
+                                <option value=0 {%if feed.creditAuthor == 0%}selected{%endif%}>Disabled</option>
+                                <option value=1 {%if feed.creditAuthor == 1%}selected{%endif%}>Only author's username</option>
+                                <option value=2 {%if feed.creditAuthor == 2%}selected{%endif%}>Only author avatar</option>
+                                <option value=3 {%if feed.creditAuthor == 3%}selected{%endif%}>Both author's username and avatar</option>
+                            </select>
+                        </div>
+                        <div class=inputPod>
+                            <label for={{"subColor" ~ loop.index}}>Embed color</label>
+                            <select name=subColor>
+                                <option value="colorCode" {%if feed.color == "colorCode"%}selected{%endif%}>Automatic (subreddit color theme)</option>
+                                <option value="custom" {%if feed.color != "colorCode"%}selected{%endif%}>Custom color</option>
+                            </select>
+                        </div>
+                        <div class=inputPod reliesOn=subColor>
+                            <label for={{"subCustomColor" ~ loop.index}}>Custom color</label>
+                            <input type="color" name=subCustomColor {%if feed.color != "colorCode"%}value=feed.color{%else%}value=#000000{%endif%}>
+                        </div>
+                        <div class=inputPod>
+                            <label for={{"subTimestamp" ~ loop.index}}>Include submission timestamp</label>
+                            <select name=subTimestamp>
+                                <option value=false {%if not feed.timestamp%}selected{%endif%}>Disabled</option>
+                                <option value=true {%if feed.timestamp%}selected{%endif%}>Enabled</option>
+                            </select>
+                        </div>
+                    </div>
+                {%endfor%}
+                <div id=redditAddPod class=addPod>
+                    <div class=plusSign><div class=horizontalLine></div><div class=verticalLine></div></div>
+                    <span class=inputOptionText>Add a Reddit feed</span>
+                </div>
+            </fieldset>
+            <button id=revert onclick="revertChanges()">Revert</button>
+            <input id=submit type="submit" value="Save">
+        </form>
+    </body>
+</html>

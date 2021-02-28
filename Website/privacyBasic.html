@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Privacy Policy - Short</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
+                </ul>
+            </nav>
+        </header>
+        <div class=header>
+            <p>Disguard Privacy Policy</p>
+        </div>
+        <div class="justify80 largeText incSpaced">
+            <p class="subheader" id="preface">Introduction</p>
+            <p class="lgray">
+                This page holds Disguard's privacy policy. A longer version can be accessed at <a href="privacy.html">this link</a> - the short version exists to communicate things without overloading people with information.
+                Disguard as an umbrella includes the bot (running on Discord), the web Dashboard, and its website (this site) as being developed by me. Throughout the Privacy Policy ("Policy"),
+                "Disguard" will represent the bot, "Website" will represent the website, "Dashboard" will represent the configuration web dashboard, and "Database" will represent a third-party
+                database provider used by Disguard. "We" represents me (the solo developer of Discord), Disguard itself, and anything developed by me (such as the Website & Database).
+            </p>
+            <p class="subheader" id="preface">Contact & Disclaimers</p>
+            <p class="lgray">
+                I (the developer of Disguard) can be contacted through Discord (join the support server or create a support ticket through the bot). We are not affiliated with Discord Inc. in any way.
+            </p>
+            <p class="subheader" id="preface">Disguard's Providers</p>
+            <p class="lgray">
+                    • Disguard's Dashboard provider is Heroku. View Heroku's security policy <a href="https://www.heroku.com/compliance">here</a>.
+                <br>• Disguard's Database provider is MongoDB. View MongoDB's security policy <a href="https://www.mongodb.com/cloud/trust">here</a>.
+                <br>• Disguard's Website provider is Netlify. View Netlify's security policy <a href="https://www.netlify.com/security/">here</a>.
+                <br>• Disguard itself is self-hosted on a laptop running at my house as of patch 0.2.25. Thus, the bot itself is not subject to third party regulations from a VPS.
+            </p>
+            <p class="subheader" id="preface">Data We Collect</p>
+            <p class="lgray">
+                Disguard's Dashboard does not track system information (like IP addresses) as of now, but does stores a cookie to manage the Discord session. This cookie includes your User ID in order to perform database
+                operations. This cookie is necessary due to the Oauth2 flow (logging in via Discord). When you connect your account to Disguard for the first time, Disguard only needs to know
+                your Username & ID. Traffic through this site is subject to Heroku's policies.<br><br>
+                Disguard's website is static unlike the Dashboard, so no data transfers are performed here on my end. Traffic through this site is subject to Netlify's policies.<br><br>
+                Disguard's database does not collect data in-and-of itself, but this data rather is created from either the bot itself or the web Dashboard. The database stores long-term
+                configuration or customization data for every server Disguard is in and every User who shares at least one server with Disguard. For an outline of data that is stored here,
+                see this page for server data, and this page for user data.<br><br>
+                The bot itself collects data that powers its operations in some way. The following list is not exhaustive, as it will not include many database settings - that can be
+                viewed above. "Cache" represents data only existing within the bot's memory. "Temporary" means this data will be purged after a definite amount of time. "Database"
+                means this data is stored in the Database. "Local" means this data is stored on the hard drive of Disguard's host machine. Listings without a prefix just mean the bot
+                may access this data for features that use it. Any specific questions about usage can be directed to me.<br>
+                <br>• Local - Message Index Data (message content, author, ID, and timestamp)
+                <br>• Local - Message Attachments - only if enabled by the server moderators under logging settings for purposes of restoring upon message deletion
+                <br>• Database - Your username, user ID, and avatar
+                <br>• Database - History of your username, avatar, and custom status.
+                <br>• Database - Timestamps you were last online & last active. This feature will be disabled as of patch 0.2.25 until further notice.
+                <br>• Database - Auto-calculated "general channel", "moderator channel", and "announcement channel" per server
+                <br>• Cache - listing of Message IDs of all pinned messages
+                <br>• Cache - listing of all channels
+                <br>• Cache - listing of all server invites
+                <br>• Cache - listing of all server roles
+                <br>• Cache - listing of all members' permissions
+                <br>• Cache - Database server & user configuration data for quick lookups
+                <br>• Temporary cache - timestamps of when a member joins your server if antispam's repeated joins feature is enabled
+                <br>• Temporary cache - reaction data if ghost reaction logging is enabled
+                <br>• Server audit-log data for logging (if applicable)
+                <br>• Server data as a whole (including roles, etc.)
+                <br>• Message data as a whole - especially for events that trigger for each message sent in a server (such as antispam)
+            </p>
+            <p class="subheader" id="preface">Manage your Data</p>
+            <p class="lgray">
+                You may access all data that Disguard stores outside of its cache using the .data command. Data that is not customizable by the end user is deemed necessary to the
+                bot's normal functionality, and in most cases, can't be removed while you actively use the bot, but contact me about this first.<br><br>Disguard only stores data as
+                long as it is necessary to. Upon Disguard leaving a server, that server's data (database & local storage) will be purged. Upon users no longer sharing any mutual
+                servers with the bot, that user's data will be purged. In the future, people may be able to 'deactivate' themselves from Disguard, removing data yet surrendering all
+                functionality with the bot other than server-enforcement data (like antispam, logging, etc.)
+            </p>
+            <p class="lgray">Last updated: Feb 27, 2021</p>
+        </div>
+    </body>
+</html>

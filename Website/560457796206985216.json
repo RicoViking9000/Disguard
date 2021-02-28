@@ -1,0 +1,220 @@
+{
+    "README": "Some additional keys may exist for your server that won't be displayed here due to new features & dynamic key generation for some features. Use the .data command to see your server data",
+    "server_id": "The ID of the server this data entry applies to",
+    "antispam": {
+        "DESCRIPTION": "Holds antispam config data for a server",
+        "enabled": "[Bool] Whether the antispam configuration is enabled",
+        "whisper": "[Bool] Whether to DM users upon them being flagged by the antispam system (as opposed to sending a message in the current channel)",
+        "log": [
+            "[String] Name of channel, if applicable, to send detailed logs to upon member being flagged by the antispam system",
+            "[Int] ID of channel, if applicable"
+        ],
+        "warn": "[Int] Max number of warnings members have before receiving the configured consequence",
+        "delete": "[Bool] Whether to delete flagged messages",
+        "muteTime": "[Int] Number of seconds members should remain muted for",
+        "action": "[Int] Desired consequence upon member being flagged - 0: Nothing, 1: Mute, 2: Kick, 3: Ban, 4: Give custom role",
+        "customRoleID": "[Int] ID of desired custom role to give member upon being flagged",
+        "congruent": [
+            "Array of 3 elements: If [0] messages out of the last [1] messages by this author sent over the past [2] seconds have the same content, flag this member."
+        ],
+        "profanityThreshold": "[Int] This value is currently unused",
+        "emoji": "[Int] Maximum number of emojis tolerated in a message before being flagged",
+        "mentions": "[Int] Maximum number of user mentions tolerated in a message before being flagged",
+        "selfbot": "[Bool] Whether to flag users who appear to be using a selfbot program",
+        "caps": "[Double] If a message is {this}% capital letters, flag it",
+        "links": "[Bool] Whether to flag messages containing URLs",
+        "attachments": [
+            "Array of 9 elements defining which categories of message attachments to flag, if applicable"
+        ],
+        "invites": "[Bool] Whether to flag messages containing discord invites",
+        "everyoneTags": "[Int] Maximum number of unsuccessful @everyone mentions before flagging a message",
+        "hereTags": "[Int] Maximum number of unsuccessful @here mentions before flagging a message",
+        "roleTags": "[Int] Maximum number of successful @role mentions in a message before flagging a message",
+        "quickMessages": [
+            "Array of 2 elements. If [0] messages by the same author are sent in [1] seconds, flag them"
+        ],
+        "consecutiveMessages": [
+            "Array of 2 elements. If a member sends [0] consecutive messages over [1] seconds, flag them"
+        ],
+        "repeatedJoins": [
+            "Array of 3 elements. If a member joins a server [0] times over [1] seconds, ban them for [2] seconds"
+        ],
+        "ignoreRoled": "[Bool] Whether to exempt members with a role from the antispam filter",
+        "exclusionMode": "[Int] Defines how Disguard processes exclusions - 0 is a blacklist mode, and 1 is a whitelist mode",
+        "channelExclusions": [
+            "Array of n elements, variable length. Contains a list of channel IDs configured online to be excluded from the antispam filter"
+        ],
+        "roleExclusions": [
+            "Same as channelExclusions, but with roles"
+        ],
+        "memberExclusions": [
+            "Same as channelExclusions, but with members"
+        ],
+        "profanityEnabled": "[Bool] Whether the profanity filter is enabled for this server",
+        "profanityTolerance": "[Int] If the profanity filter is enabled, and {this}% of the message is profane, then flag the message",
+        "filter": [
+            "Array of words considered profane for your server"
+        ],
+        "ageKick": "[Int] If a member joins your server & their account age is less than {this} days old, kick them",
+        "ageKickDM": "[String] Custom text to DM a user upon them being kicked from a server due to the ageKick feature, if applicable",
+        "ageKickOwner": "[Bool] Whether the ageKick configuration (from the bot, not from the dashboard) can only be edited by the server owner",
+        "ageKickWhitelist": [
+            "Array of user IDs if they have been whitelisted manually from the ageKick filter"
+        ],
+        "timedEvents": [
+            "Array of dictionaries holding various data if Disguard enforces a timed event (e.g. user mute, ban that will last for a finite duration) so Disguard can reverse this later on if it loses the timer running in the cache"
+        ]
+    },
+    "channels": [
+        "Array of dictionaries with each dict containing the name & ID of each text & category channel in your server. This is used only to generate the channel selector dropdown menus on the web dashboard."
+    ],
+    "cyberlog": {
+        "DESCRIPTION": "Contains logging module config data",
+        "enabled": "[Bool] Whether the logging module is enabled",
+        "ghostReactionEnabled": "[Bool] Whether the ghost reactions logging feature is enabled",
+        "image": "[Bool] Whether image & attachment logging is enabled",
+        "defaultChannel": "[Int] ID of default logging channel",
+        "library": "[Int] Config number of emoji library. For descriptions on this and similar data introduced in v0.2.25, see the database.py file on Disguard's Github Repo > Bot > database.py",
+        "thumbnail": "[Int] Config number of embed thumbnail mode",
+        "author": "[Int] Config number of embed author mode",
+        "context": [
+            "Array of 2 elements - [0] holds embed title display mode (only emoji, emoji and text, or only text), and [1] holds the display mode for the embed description"
+        ],
+        "hoverLinks": "[Int] Config number of embed hover links mode. Currently not used due to time restrictions during development",
+        "embedTimestamp": "[Int] Config number of embed timestamp mode",
+        "botLogging": "[Int] Config number of whether to log actions performed by bots",
+        "color": [
+            "Array of 3 elements representing embed border colors. [0] = create events, [1] = update events, [2] = delete events"
+        ],
+        "plainText": "[Bool] Whether to log in plaintext rather than fancy embeds",
+        "read": "[Bool] Whether to read server's audit log to enhance log data",
+        "flashText": "[Bool] Whether to send plaintext with logs (then immediately retract the text to reduce clutter) to work with push notifications",
+        "tts": "[Bool] Whether to use the TTS feature with log messages",
+        "onlyVCJoinLeave": "[Bool] Whether to only log members joining & leaving voice channels within the voice module",
+        "onlyVCForceActions": "[Bool] Whether to only log voice actions enforced by moderators within the voice module",
+        "voiceChatLogRecaps": "[Bool] Whether to enable a summary log of a member's voice channel history during this session upon them disconnecting from a channel",
+        "ghostReactionTime": "[Int] How many seconds to consider a reaction to be a ghost reaction (aka log reactions if they were added & removed within {this} seconds)",
+        "memberGlobal": "[Int] Configuration number on which member logging features to enable - 0 being only member updates, 1 being only user updates, 2 being both",
+        "channelExclusions": [
+            "Array of channel IDs to not log message edits or deletions for"
+        ],
+        "roleExclusions": [
+            "Same as channelExclusions, but with roles"
+        ],
+        "memberExclusions": [
+            "Same as channelExclusions, but with members"
+        ],
+        "summarize": "The summarize feature is currently disabled until further notice, so this key is not used and is harcoded as 0 for all servers",
+        "lastUpdate": "[Timestamp] Due to improper code implementation, this key really just represents when your server config data was created. This will be expanded on in the future.",
+        "message": {
+            "README": "Contains data specific to message edit/delete functionality of the logging module. If these settings are anything other than null, they overwrite the applicable default setting of the same name for this module",
+            "name": "message",
+            "description": "Send logs when a message is edited or deleted",
+            "plainText": null,
+            "read": null,
+            "enabled": true,
+            "summarize": 0,
+            "channel": null,
+            "color": null,
+            "advanced": null,
+            "library": null,
+            "thumbnail": null,
+            "author": null,
+            "context": null,
+            "hoverLinks": null,
+            "embedTimestamp": null,
+            "botLogging": 0,
+            "flashText": null,
+            "tts": null,
+            "lastUpdate": "2021-02-25T04:33:30.641000"
+        },
+        "doorguard": {
+            "description": "Send logs when a member joins or leaves server. This & all subsequent similarly-named entries behave the exact same as message, so I will only leave the description key intact."
+        },
+        "channel": {
+            "description": "Send logs when channel is created, edited, or deleted"
+        },
+        "member": {
+            "description": "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator"
+        },
+        "role": {
+            "description": "Send logs when a role is created, edited, or deleted"
+        },
+        "emoji": {
+            "description": "Send logs when emoji is created, edited, or deleted"
+        },
+        "server": {
+            "description": "Send logs when server is updated, such as thumbnail"
+        },
+        "voice": {
+            "description": "Send logs when members' voice chat attributes change"
+        },
+        "misc": {
+            "description": "Logging for various bonus features that don't fit into an above category"
+        }
+    },
+    "members": [
+        {
+            "id": 247412852925661185,
+            "name": "RicoViking9000",
+            "warnings": 7,
+            "quickMessages": [],
+            "lastMessages": []
+        },
+        {
+            "README": "And one of these entries exists for each member in your server. Note that Disguard no longer stores quickMessages and lastMessages data in the database, so those keys are never used in this manner."
+        }
+    ],
+    "name": "[String] The name of your server",
+    "roles": [
+        {
+            "name": "Dev",
+            "id": 565694432494485514
+        },
+        {
+            "README":"And one of these entries exists for each role in your server. This is only to provide information for the web dashboard."
+        }
+    ],
+    "thumbnail": "[String] URL for your server's current thumbnail, in webp or gif format, 1024x1024. PNG will be used at a future point.",
+    "prefix": "[String] Your server's commands prefix",
+    "offset": "[Int] Your server time zone is UTC-{this}. For example, -5 means your server's time zone is 5 hours behind UTC time, or EST time.",
+    "tzname": "[String] The name of your server's time zone",
+    "lastUpdate": "[Timestamp] Likewise, this key doesn't work properly.",
+    "allChannels": [
+        {
+            "name": "general",
+            "id": 560457796206985200,
+            "updated": null,
+            "oldUpdate": null
+        },
+        {
+            "README": "One of these entries exists for each channel in your server, with usage coming in the future. For now, only name and ID of each channel gets stored. This key may not exist, as it is obsolete currently."
+        }
+    ],
+    "birthdate": "[Timestamp] The time of day for Disguard to announce server birthdays",
+    "birthday": "[Int] The ID of the channel to send birthday announcements to",
+    "birthdayMode": "[Int] Config number for how Disguard is allowed to detect birthdays - for explanation on this, see the web Dashboard",
+    "jumpContext": "[Bool] Whether to enable the message URL sharing utility feature - if enabled, Disguard will attempt to obtain message data from a posted jump URL, and will send an embed with that data",
+    "generalChannel": "[Int] ID of server's general channel, auto-detected by Disguard, if applicable",
+    "moderatorChannel": "[Int] Same as above, except for server's moderator channel",
+    "announcementsChannel": "[Int] Same as above, except for server's announcements channel",
+    "colorTheme": "[Int] Color theme for the server. 0 represents classic colors, and 1 represents modern colors",
+    "undoSuppression": "[Bool] Whether to enable the undo embed suppression utility feature (see web Dashboard for more information on this)",
+    "redditComplete": "[Bool] Whether to enable the reddit autocomplete utility feature",
+    "redditEnhance": "[Int] Configuration number for the reddit URL enhancement utility feature",
+    "redditFeeds": [
+        {
+            "subreddit": "nintendo",
+            "channel": 603757563137359903,
+            "truncateTitle": 100,
+            "truncateText": 400,
+            "media": 3,
+            "creditAuthor": 3,
+            "color": "colorCode",
+            "timestamp": true
+        }
+        {
+            "README": "One of these entries will exist for any reddit feeds you add online through the web Dashboard"
+        }
+    ]
+}

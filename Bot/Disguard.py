@@ -20,20 +20,25 @@ import json
 import copy
 import codecs
 import shutil
+import asyncpraw
 
 
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
 cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays']
-print("Booting...")
+
+print("Connecting...")
+
 prefixes = {}
 variables = {}
 emojis = {}
 newline = '\n'
 qlf = '  ' #Two special characters to represent quoteLineFormat
 qlfc = ' '
-yellow = 0xffff00
+
+yellow = (0xffff00, 0xffff66)
+blue = (0x0000FF, 0x6666ff)
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
@@ -55,14 +60,12 @@ def getUserData(bot):
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)) #Make sure bot doesn't tag everyone/mass roles people unless I specify
 bot.remove_command('help')
 
+bot.reddit = asyncpraw.Reddit(user_agent = 'Portal for Disguard - Auto link functionality. --RV9k--')
+
 indexes = 'Indexes'
 oPath = 'G:/My Drive/Other'
 urMom = 'G:/My Drive/Other/ur mom'
 campMax = 'G:/My Drive/Other/M A X'
-
-# @tasks.loop(minutes=1)
-# async def updatePrefixes():
-#     for server in bot.guilds: prefixes[server.id] = await database.GetPrefix(server)
 
 # @tasks.loop(minutes=1)
 # async def anniversaryDayKickoff():
@@ -92,7 +95,9 @@ async def scheduleDeliveryLoop():
     for u in users:
         daily = u['schedule']['daily']
         try: user = bot.get_user(u['user_id'])
-        except Exception as e: print(f'Error for {u["username"]}: {e}')
+        except Exception as e: 
+            print(f'Error for {u["username"]}: {e}')
+            continue
         if (n - datetime.datetime(n.year, n.month, n.day, daily.hour, daily.minute)).seconds // 60 < 5: #Announce in increments of 5 mins
             if f'{n:%m-%d-%Y}' in noClasses.keys():
                 day = noClasses[f'{n:%m-%d-%Y}']
@@ -105,7 +110,6 @@ async def scheduleDeliveryLoop():
             #try: await user.send(content=content, embed=embed)
             #except: pass
             await user.send(content=content, embed=embed)
-        
 
 async def UpdatePresence():
     await bot.change_presence(status=presence['status'], activity=presence['activity'])
@@ -123,15 +127,14 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     global emojis
     if not booted:
         booted=True
-        #updatePrefixes.start()
+        print('Booting...')
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening)
         await UpdatePresence()
         for cog in cogs:
             try:
                 bot.load_extension(cog)
-            except:
-                pass
+            except Exception as e: print(f'Cog load error: {e}')
         #await database.Verification(bot)
         #await Antispam.PrepareMembers(bot)
         #await bot.get_cog('Birthdays').updateBirthdays()
@@ -141,7 +144,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         print('Fetching emojis...')
         for server in [560457796206985216, 403327720714665994, 495263898002522144]:
             for e in bot.get_guild(server).emojis: emojis[e.name] = e
-        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == 534439214289256478 and m.content == 'Completed'
+        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == bot.get_cog('Cyberlog').imageLogChannel.id and m.content == 'Completed'
+        print('Waiting for database callback...')
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
         await UpdatePresence()
@@ -164,6 +168,7 @@ async def indexMessages(server, channel, full=False):
     except AttributeError: return
     if not os.path.exists(path): 
         with open(path, 'w+') as f: f.write('{}')
+        full = True
     with open(path) as f:
         try: indexData = json.load(f)
         except: indexData = {}
@@ -171,7 +176,7 @@ async def indexMessages(server, channel, full=False):
         async for message in channel.history(limit=None, oldest_first=full):
             if str(message.id) in indexData.keys() and not full:
                 break
-            indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
+            indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
             if not message.author.bot and (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
                 attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
                 try: os.makedirs(attach)
@@ -180,7 +185,7 @@ async def indexMessages(server, channel, full=False):
                     if attachment.size / 1000000 < 8:
                         try: await attachment.save('{}/{}'.format(attach, attachment.filename))
                         except discord.HTTPException: pass
-            if full: await asyncio.sleep(0.05)
+            if full: await asyncio.sleep(0.0025)
         indexData = json.dumps(indexData, indent=4)
         with open(path, "w+") as f:
             f.write(indexData)
@@ -219,7 +224,7 @@ async def index(ctx, t: int = None):
 
 @bot.command()
 async def help(ctx):
-    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands '✔ Verified URL to Disguard website - https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{bot.lightningLogging.get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow)
+    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands '✔ Verified URL to Disguard website - https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{getData(bot).get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow)
     await ctx.send(embed=e)
 
 @bot.command()
@@ -231,7 +236,7 @@ async def invite(ctx):
 async def server(ctx):
     '''Pulls up information about the current server, configuration-wise'''
     g = ctx.guild
-    config = bot.lightningLogging.get(g.id)
+    config = getData(bot).get(g.id)
     cyberlog = config.get('cyberlog')
     antispam = config.get('antispam')
     baseURL = f'http://disguard.herokuapp.com/manage/{ctx.guild.id}'
@@ -308,10 +313,10 @@ async def broadcast(ctx):
     except asyncio.TimeoutError: return
     destinations = []
     letters = message.content.lower().split(', ')
-    if 'a' in letters: destinations += [bot.get_channel(bot.lightningLogging.get(g.id).get('cyberlog').get('defaultChannel')) for g in servers]
-    if 'b' in letters: destinations += [bot.get_channel(bot.lightningLogging.get(g.id).get('moderatorChannel')) for g in servers]
-    if 'c' in letters: destinations += [bot.get_channel(bot.lightningLogging.get(g.id).get('announcementChannel')) for g in servers]
-    if 'd' in letters: destinations += [bot.get_channel(bot.lightningLogging.get(g.id).get('generalChannel')) for g in servers]
+    if 'a' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('cyberlog').get('defaultChannel')) for g in servers]
+    if 'b' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('moderatorChannel')[0]) for g in servers]
+    if 'c' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('announcementsChannel')[0]) for g in servers]
+    if 'd' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('generalChannel')[0]) for g in servers]
     if 'e' in letters: destinations += [g.owner for g in servers]
     destinations = list(dict.fromkeys(destinations))
     waiting = await ctx.send(content='These are the destinations. Ready to send it?', embed=discord.Embed(description='\n'.join(d.name for d in destinations if d)))
@@ -338,14 +343,22 @@ async def support(ctx, *, opener=''):
     2: in progress (dev has replied)
     3: closed'''
     await ctx.trigger_typing()
+    colorTheme = Cyberlog.colorTheme(ctx.guild) if ctx.guild else 1
+    details = bot.get_cog('Cyberlog').emojis['details']
     def navigationCheck(r, u): return str(r) in reactions and r.message.id == status.id and u.id == ctx.author.id
+    #If the user didn't provide a message with the command, prompt them with one here
+    if opener.startsWith('System:'):
+        specialCase = opener[opener.find(':') + 1:].strip()
+        opener = ''
+    else:
+        specialCase = False
     if not opener:
-        embed=discord.Embed(title='Disguard Support Menu', description=f"Welcome to Disguard support!\n\nIf you would easily like to get support, you may join my official server: https://discord.gg/xSGujjz\n\nIf you would like to get in touch with my developer without joining servers, react 🎟 to open a support ticket\n\nIf you would like to view your support tickets, type `{bot.lightningLogging[ctx.guild.id]['prefix'] if ctx.guild else '.'}tickets` or react 📜", color=yellow)
+        embed=discord.Embed(title='Disguard Support Menu', description=f"Welcome to Disguard support!\n\nIf you would easily like to get support, you may join my official server: https://discord.gg/xSGujjz\n\nIf you would like to get in touch with my developer without joining servers, react 🎟 to open a support ticket\n\nIf you would like to view your active support tickets, type `{getData(bot)[ctx.guild.id]['prefix'] if ctx.guild else '.'}tickets` or react {details}", color=yellow[colorTheme])
         status = await ctx.send(embed=embed)
-        reactions = ['🎟', '📜']
+        reactions = ['🎟', details]
         for r in reactions: await status.add_reaction(r)
         result = await bot.wait_for('reaction_add', check=navigationCheck)
-        if str(result[0]) == '📜': 
+        if result[0].emoji == details:
             await status.delete()
             return await ticketsCommand(ctx)
         await ctx.send('Please type the message you would like to use to start the support thread, such as a description of your problem or a question you have')
@@ -353,6 +366,7 @@ async def support(ctx, *, opener=''):
         try: result = await bot.wait_for('message', check=ticketCreateCheck, timeout=300)
         except asyncio.TimeoutError: return await ctx.send('Timed out')
         opener = result.content
+    #If the command was used in DMs, ask the user if they wish to represent one of their servers
     if not ctx.guild:
         await ctx.trigger_typing()
         serverList = [g for g in bot.guilds if ctx.author in g.members] + ['<Prefer not to answer>']
@@ -360,17 +374,24 @@ async def support(ctx, *, opener=''):
             alphabet = '🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿'
             newline = '\n'
             awaitingServerSelection = await ctx.send(f'Because we\'re in DMs, please provide the server you\'re representing by reacting with the corresponding letter\n\n{newline.join([f"{alphabet[i]}: {g}" for i, g in enumerate(serverList)])}')
-            for letter in [l for l in alphabet if l in awaitingServerSelection.content]: await awaitingServerSelection.add_reaction(letter)
-            def selectionCheck(r, u): return str(r) in alphabet and r.message.id == awaitingServerSelection.id and u.id == ctx.author.id
+            possibleLetters = [l for l in alphabet if l in awaitingServerSelection.content]
+            for letter in possibleLetters: await awaitingServerSelection.add_reaction(letter)
+            def selectionCheck(r, u): return str(r) in possibleLetters and r.message.id == awaitingServerSelection.id and u.id == ctx.author.id
             try: selection = await bot.wait_for('reaction_add', check=selectionCheck, timeout=300)
             except asyncio.TimeoutError: return await ctx.send('Timed out')
             server = serverList[alphabet.index(str(selection[0]))]
             if type(server) is str: server = None
+        else: server = serverList[0]
     else: server = ctx.guild
-    embed=discord.Embed(title=f'🎟 Disguard Ticket System / {loading} Creating Ticket...', color=yellow)
+    embed=discord.Embed(title=f'🎟 Disguard Ticket System / {loading} Creating Ticket...', color=yellow[colorTheme])
     status = await ctx.send(embed=embed)
+    #Obtain server permissions for the member to calculate their prestige (rank of power in the server)
     if server: p = server.get_member(ctx.author.id).guild_permissions
-    ticket = {'number': ctx.message.id, 'id': ctx.message.id, 'author': ctx.author.id, 'channel': str(ctx.channel), 'server': server.id if server else None, 'notifications': True, 'prestige': 'N/A' if not server else 'Owner' if ctx.author.id == server.owner.id else 'Administrator' if p.administrator else 'Moderator' if p.manage_server else 'Junior Moderator' if p.kick_members or p.ban_members or p.manage_channels or p.manage_roles or p.manage_members else 'Member', 'status': 0, 'conversation': []}
+    else: p = discord.Permissions.none()
+    #Create ticket dictionary (number here is a placeholder)
+    ticket = {'number': ctx.message.id, 'id': ctx.message.id, 'author': ctx.author.id, 'channel': str(ctx.channel), 'server': server.id if server else None, 'notifications': True, 'prestige': 'N/A' if not server else 'Server Owner' if ctx.author.id == server.owner.id else 'Server Administrator' if p.administrator else 'Server Moderator' if p.manage_server else 'Junior Server Moderator' if p.kick_members or p.ban_members or p.manage_channels or p.manage_roles or p.manage_members else 'Server Member', 'status': 0, 'conversation': []}
+    #If a ticket was created in a special manner, this system message will be the first message
+    if specialCase: ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{specialCase}*'})
     firstEntry = {'author': ctx.author.id, 'timestamp': datetime.datetime.utcnow(), 'message': opener}
     ticket['conversation'].append(firstEntry)
     authorMember, devMember, botMember = {'id': ctx.author.id, 'bio': 'Created this ticket', 'permissions': 2, 'notifications': True}, {'id': 247412852925661185, 'bio': 'Bot developer', 'permissions': 1, 'notifications': True}, {'id': bot.user.id, 'bio': 'System messages', 'permissions': 1, 'notifications': False} #2: Owner, 1: r/w, 0: r 
@@ -381,7 +402,7 @@ async def support(ctx, *, opener=''):
     await database.CreateSupportTicket(ticket)
     whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
     embed.title = f'🎟 Disguard Ticket System / {whiteCheck} Support Ticket Created!'
-    embed.description = f'''Your support ticket has been created\n\nTicket {ticket['number']}\nAuthor: {ctx.author.name}\nMessage: {opener}\n\nTo view this ticket, react 🎟 or type `{bot.lightningLogging[ctx.guild.id]['prefix'] if ctx.guild else "."}tickets {ticket['number']}`\nThat will allow you to add members to the support thread if desired, disable notifications, reply, and more.'''
+    embed.description = f'''Your support ticket has successfully been created\n\nTicket number: {ticket['number']}\nAuthor: {ctx.author.name}\nMessage: {opener}\n\nTo view this ticket, react 🎟 or type `{getData(bot)[ctx.guild.id]['prefix'] if ctx.guild else "."}tickets {ticket['number']}`, which will allow you to add members to the support thread if desired, disable DM notifications, reply, and more.'''
     await status.edit(embed=embed)
     reactions = ['🎟']
     await status.add_reaction('🎟')
@@ -395,35 +416,45 @@ async def ticketsCommand(ctx, number:int = None):
     '''Command to view feedback tickets'''
     g = ctx.guild
     alphabet = [l for l in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-    trashcan = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='trashcan')
+    colorTheme = Cyberlog.colorTheme(ctx.guild) if ctx.guild else 1
+    #emojis = bot.get_cog('Cyberlog').emojis
+    global emojis
+    trashcan = emojis['delete']
     statusDict = {0: 'Unopened', 1: 'Viewed', 2: 'In progress', 3: 'Closed', 4: 'Locked'}
     message = await ctx.send(embed=discord.Embed(description=f'{loading}Downloading ticket data'))
     tickets = await database.GetSupportTickets()
-    embed=discord.Embed(title='🎟 Disguard Ticket System / 🗃 Browse Your Tickets', color=yellow)
+    embed=discord.Embed(title=f"🎟 Disguard Ticket System / {emojis['details']} Browse Your Tickets", color=yellow[colorTheme])
     embed.set_author(name=ctx.author, icon_url=ctx.author.avatar_url_as(static_format='png'))
     if len(tickets) == 0: 
         embed.description = 'There are currently no tickets in the system'
         return await message.edit(embed=embed)
     def organize(sortMode):
-        if sortMode == 0: filtered.sort(key = lambda x: x['conversation'][-1]['timestamp'], reverse=True)
-        elif sortMode == 1: filtered.sort(key = lambda x: x['conversation'][-1]['timestamp'])
-        elif sortMode == 2: filtered.sort(key = lambda x: x['number'], reverse=True)
-        else: filtered.sort(key = lambda x: x['number'])
+        if sortMode == 0: filtered.sort(key = lambda x: x['conversation'][-1]['timestamp'], reverse=True) #Recently active tickets first
+        elif sortMode == 1: filtered.sort(key = lambda x: x['conversation'][-1]['timestamp']) #Recently active tickets last
+        elif sortMode == 2: filtered.sort(key = lambda x: x['number'], reverse=True) #Highest ticket numbers first
+        elif sortMode == 3: filtered.sort(key = lambda x: x['number']) #Lowest ticket numbers first
     def paginate(iterable, resultsPerPage=10):
         for i in range(0, len(iterable), resultsPerPage): yield iterable[i : i + resultsPerPage]
     def populateEmbed(pages, index, sortDescription):
         embed.clear_fields()
-        embed.description = f'''{f'NAVIGATION':-^70}\n{trashcan}: Delete this embed\n🗃: Adjust sort\n◀: Previous page\n🇦 - {alphabet[len(pages[index]) - 1]}: View ticket\n▶: Next page\n{f'Tickets for {ctx.author.name}':-^70}\nPage {index + 1} of {len(pages)}\nViewing {len(pages[index])} of {len(filtered)} results\nSort: {sortDescription}'''
+        embed.description = f'''{f'NAVIGATION':-^70}\n{trashcan}: Delete this embed\n{emojis['details']}: Adjust sort\n◀: Previous page\n🇦 - {alphabet[len(pages[index]) - 1]}: View ticket\n▶: Next page\n{f'Tickets for {ctx.author.name}':-^70}\nPage {index + 1} of {len(pages)}\nViewing {len(pages[index])} of {len(filtered)} results\nSort: {sortDescription}'''
         for i, ticket in enumerate(pages[index]):
-            tg = g
+            tg = g #probably stands for 'ticketGuild'
             if not tg and ticket['server']: tg = bot.get_guild(ticket['server'])
-            embed.add_field(name=f"{alphabet[i]}Ticket {ticket['number']}", value=f'''> Members: {", ".join([bot.get_user(u['id']).name for i, u in enumerate(ticket['members']) if i not in (1, 2)])}\n> Status: {statusDict[ticket['status']]}\n> Latest reply: {bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(bot.lightningLogging[tg.id]['offset'] if tg else -4))):%b %d, %Y • %I:%M %p} {bot.lightningLogging[tg.id]['tzname'] if tg else 'EDT'}\n> {qlf}{ticket['conversation'][-1]['message']}''', inline=False)
+            embed.add_field(
+                name=f"{alphabet[i]}Ticket {ticket['number']}",
+                value=f'''> Members: {", ".join([bot.get_user(u['id']).name for i, u in enumerate(ticket['members']) if i not in (1, 2)])}\n> Status: {statusDict[ticket['status']]}\n> Latest reply: {bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(getData(bot)[tg.id]['offset'] if tg else -5))):%b %d, %Y • %I:%M %p} {getData(bot)[tg.id]['tzname'] if tg else 'EST'}\n> {qlf}{ticket['conversation'][-1]['message']}''',
+                inline=False)
     async def notifyMembers(ticket):
-        e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^70}", color=yellow)
+        e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^70}", color=yellow[ticketColorTheme])
         entry = ticket['conversation'][-1]
         messageAuthor = bot.get_user(entry['author'])
         e.set_author(name=messageAuthor, icon_url=messageAuthor.avatar_url_as(static_format='png'))
-        e.add_field(name=f"{messageAuthor.name} • {(entry['timestamp'] + datetime.timedelta(hours=(bot.lightningLogging[tg.id]['offset'] if tg else -4))):%b %d, %Y • %I:%M %p} {bot.lightningLogging[tg.id]['tzname'] if tg else 'EDT'}", value=f'> {entry["message"]}', inline=False)
+        e.add_field(
+            name=f"{messageAuthor.name} • {(entry['timestamp'] + datetime.timedelta(hours=(getData(bot)[tg.id]['offset'] if tg else -5))):%b %d, %Y • %I:%M %p} {getData(bot)[tg.id]['tzname'] if tg else 'EST'}",
+            value=f'> {entry["message"]}',
+            inline=False)
+        e.set_footer(text=f"You are receiving this DM because you have notifications enabled for ticket {ticket['number']}. View the ticket to disable notifications.")
         for m in ticket['members']:
             if m['notifications'] and m['id'] != entry['author']:
                 try: await bot.get_user(m['id']).send(embed=e)
@@ -434,7 +465,7 @@ async def ticketsCommand(ctx, number:int = None):
     sortDescriptions = ['Recently Active (Newest first)', 'Recently Active (Oldest first)', 'Ticket Number (Descending)', 'Ticket Number (Ascending)']
     filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
     if len(filtered) == 0:
-        embed.description = f"There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{bot.lightningLogging[ctx.guild.id]['prefix'] if ctx.guild else '.'}ticket`"
+        embed.description = f"There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{getData(bot)[ctx.guild.id]['prefix'] if ctx.guild else '.'}ticket`"
         return await message.edit(embed=embed)
     def optionNavigation(r, u): return r.emoji in reactions and r.message.id == message.id and u.id == ctx.author.id and not u.bot
     def messageCheck(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
@@ -445,7 +476,7 @@ async def ticketsCommand(ctx, number:int = None):
         sortDescription = sortDescriptions[sortMode]
         populateEmbed(pages, currentPage, sortDescription)
         if number and number > len(tickets): 
-            await message.edit(content=f'The ticket number you provided ({number}) is invalid. Switching to browse view')
+            await message.edit(content=f'The ticket number you provided ({number}) is invalid. Switching to browse view.')
             number = None
         if not number:
             if ctx.guild: 
@@ -455,8 +486,8 @@ async def ticketsCommand(ctx, number:int = None):
             else:
                 await message.delete()
                 message = await ctx.send(content=message.content, embed=embed)
-            reactions = [trashcan, '🗃', '◀'] + alphabet[:len(pages[currentPage])] + ['▶']
-            for r in reactions: await message.add_reaction(str(r))
+            reactions = [trashcan, emojis['details'], emojis['arrowBackwards']] + alphabet[:len(pages[currentPage])] + [emojis['arrowForwards']]
+            for r in reactions: await message.add_reaction(r)
             destination = await bot.wait_for('reaction_add', check=optionNavigation)
             try: await message.remove_reaction(*destination)
             except: pass
@@ -464,16 +495,17 @@ async def ticketsCommand(ctx, number:int = None):
         async def clearMessageContent():
             await asyncio.sleep(5)
             if datetime.datetime.now() > clearAt: await message.edit(content=None)
-        if str(destination[0]) == str(trashcan): return await message.delete()
-        elif str(destination[0]) == '🗃':
+        clearAt = None
+        if destination[0].emoji == trashcan: return await message.delete()
+        elif destination[0].emoji == emojis['details']:
             clearReactions = False
             sortMode += 1 if sortMode != 3 else -3
             messageContent = '--SORT MODE--\n' + '\n'.join([f'> **{d}**' if i == sortMode else f'{qlfc}{d}' for i, d in enumerate(sortDescriptions)])
             await message.edit(content=messageContent)
             clearAt = datetime.datetime.now() + datetime.timedelta(seconds=4)
             asyncio.create_task(clearMessageContent())
-        elif str(destination[0]) in ['◀', '▶']:
-            if str(destination[0]) == '◀': currentPage -= 1
+        elif destination[0].emoji in (emojis['arrowBackward'], emojis['arrowForward']):
+            if destination[0].emoji == emojis['arrowBackward']: currentPage -= 1
             else: currentPage += 1
             if currentPage < 0: currentPage = 0
             if currentPage == len(pages): currentPage = len(pages) - 1
@@ -484,13 +516,15 @@ async def ticketsCommand(ctx, number:int = None):
                 await message.edit(content=f'The ticket number you provided ({number}) does not include you, and you do not have a pending invite to it.\n\nIf you were invited to this ticket, then either the ticket author revoked the invite, or you declined the invite.\n\nSwitching to browse view')
                 number = None
                 continue
+            #If I view the ticket and it's marked as not viewed yet, mark it as viewed
             if ctx.author.id == 247412852925661185 and ticket['status'] < 1: ticket['status'] = 1
             member = [m for m in ticket['members'] if m['id'] == ctx.author.id][0]
-            if member['permissions'] == 3:
+            if member['permissions'] == 3: #If member has a pending invite to the current ticket
                 embed.clear_fields()
-                whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
-                embed.description=f"You've been invited to this support ticket (Ticket {number})\n\nWhat would you like to do?\n⬅: Go back\n❌: Reject invite\n{whiteCheck}: Accept invite"
-                reactions = ['⬅', '❌', whiteCheck]
+                back = emojis['arrowLeft']
+                greenCheck = emojis['greenCheck']
+                embed.description=f"You've been invited to this support ticket (Ticket {number})\n\nWhat would you like to do?\n{back}: Go back\n❌: Decline invite\n{greenCheck}: Accept invite"
+                reactions = [back, '❌', greenCheck]
                 if ctx.guild: 
                     if clearReactions: await message.clear_reactions()
                     else: clearReactions = True
@@ -500,7 +534,7 @@ async def ticketsCommand(ctx, number:int = None):
                     message = await ctx.send(embed=embed)
                 for r in reactions: await message.add_reaction(str(r))
                 result = await bot.wait_for('reaction_add', check=optionNavigation)
-                if str(result[0]) == str(whiteCheck):
+                if result[0].emoji == greenCheck:
                     ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} accepted their invite*'})
                     member.update({'permissions': 1, 'notifications': True})
                     asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
@@ -508,8 +542,8 @@ async def ticketsCommand(ctx, number:int = None):
                     if str(result[0]) == '❌':
                         ticket['members'].remove(member)
                         ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} declined their invite*'})
+                        asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
                     number = None
-                    asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
                     continue
             conversationPages = list(paginate(ticket['conversation'], 7))
             currentConversationPage = len(conversationPages) - 1
@@ -520,18 +554,18 @@ async def ticketsCommand(ctx, number:int = None):
                 memberIndex = ticket['members'].index(member)
                 tg = g
                 if not tg and ticket['server']: tg = bot.get_guild(ticket['server'])
-                hashtag = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='hashtag')
-                def returnPresence(status): return '🔒' if status == 4 else discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online') if status == 3 else discord.utils.get(bot.get_guild(560457796206985216).emojis, name='idle') if status in (1, 2) else discord.utils.get(bot.get_guild(560457796206985216).emojis, name='dnd')
-                reactions = ['⬅', '👥', '↩']
-                reactions.insert(2, '🔔' if not ctx.guild or not member['notifications'] else '🔕')
+                ticketColorTheme = Cyberlog.colorTheme(tg) if tg else 1
+                def returnPresence(status): return emojis['hiddenVoiceChannel'] if status == 4 else emojis['online'] if status == 3 else emojis['idle'] if status in (1, 2) else emojis['dnd']
+                reactions = [emojis['arrowLeft'], emojis['members'], emojis['reply']]
+                reactions.insert(2, emojis['bell'] if not ctx.guild or not member['notifications'] else emojis['bellMute'])
                 conversationPages = list(paginate(ticket['conversation'], 7))
-                if len(conversationPages) > 0 and currentConversationPage != 0: reactions.insert(reactions.index('👥') + 2, '◀')
-                if len(conversationPages) > 0 and currentConversationPage != len(conversationPages) - 1: reactions.insert(reactions.index('↩') + 1, '▶')
-                if member['permissions'] == 0: reactions.remove('↩')
-                if ctx.author.id == 247412852925661185: reactions.append('🔒')
+                if len(conversationPages) > 0 and currentConversationPage != 0: reactions.insert(reactions.index(emojis['members']) + 2, emojis['arrowBackward'])
+                if len(conversationPages) > 0 and currentConversationPage != len(conversationPages) - 1: reactions.insert(reactions.index(emojis['reply']) + 1, emojis['arrowForward'])
+                if member['permissions'] == 0: reactions.remove(emojis['reply'])
+                if ctx.author.id == 247412852925661185: reactions.append(emojis['hiddenVoiceChannel'])
                 embed.title = f'🎟 Disguard Ticket System / Ticket {number}'
-                embed.description = f'''{'TICKET DATA':-^70}\n👮‍♂️Author: {bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n👥Other members involved: {', '.join([bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else 'None - react 👥 to add'}\n⛓Server: {bot.get_guild(ticket['server'])}\n{hashtag}Channel: {bot.get_channel(ticket['channel']) if type(ticket['channel']) is int else ticket['channel']}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{'🔔' if member['notifications'] else '🔕'}Notifications: {member['notifications']}\n\n{'CONVERSATION - ↩ to reply' if member['permissions'] > 0 else 'CONVERSATION':-^70}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{newline}◀ and ▶ to navigate' if len(conversationPages) > 1 else ''}\n\n'''
-                for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(bot.lightningLogging[tg.id]['offset'] if tg else -4))):%b %d, %Y • %I:%M %p} {bot.lightningLogging[tg.id]['tzname'] if tg else 'EDT'}", value=f'> {entry["message"]}', inline=False)
+                embed.description = f'''{'TICKET DATA':-^70}\n{emojis['member']}Author: {bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{emojis['members']}Other members involved: {', '.join([bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {emojis["members"]} to add'}\n⛓Server: {bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{emojis['bell'] if member['notifications'] else emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^70}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{newline}{emojis["arrowBackward"]} and {emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
+                for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(getData(bot)[tg.id]['offset'] if tg else -4))):%b %d, %Y • %I:%M %p} {getData(bot)[tg.id]['tzname'] if tg else 'EST'}", value=f'> {entry["message"]}', inline=False)
                 if ctx.guild: 
                     if clearReactions: await message.clear_reactions()
                     else: clearReactions = True
@@ -541,17 +575,17 @@ async def ticketsCommand(ctx, number:int = None):
                     message = await ctx.send(embed=embed)
                 for r in reactions: await message.add_reaction(r)
                 result = await bot.wait_for('reaction_add', check=optionNavigation)
-                if str(result[0]) == '⬅': break
-                elif str(result[0]) == '🔒':
+                if result[0].emoji == emojis['arrowBackward']: break
+                elif result[0].emoji == emojis['hiddenVoiceChannel']:
                     ticket['status'] = 3
                     ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*My developer has closed this support ticket. If you still need assistance on this matter, you may reopen it by responding to it. Otherwise, it will silently lock in 7 days.*'})
                     await notifyMembers(ticket)
-                elif str(result[0]) in ['◀', '▶']:
-                    if str(result[0]) == '◀': currentConversationPage -= 1
+                elif result[0].emoji in (emojis['arrowBackward'], emojis['arrowForward']):
+                    if result[0].emoji == emojis['arrowBackward']: currentConversationPage -= 1
                     else: currentConversationPage += 1
                     if currentConversationPage < 0: currentConversationPage = 0
                     if currentConversationPage == len(conversationPages): currentConversationPage = len(conversationPages) - 1
-                elif str(result[0]) == '👥':
+                elif result[0].emoji == emojis['members']:
                     embed.clear_fields()
                     permissionsDict = {0: 'View ticket', 1: 'View and respond to ticket', 2: 'Ticket Owner (View, Respond, Manage Sharing)', 3: 'Invite sent'}
                     memberResults = []
@@ -561,9 +595,9 @@ async def ticketsCommand(ctx, number:int = None):
                         if len(memberResults) == 0: staffMemberResults = [m for m in server.members if any([m.guild_permissions.administrator, m.guild_permissions.manage_guild, m.guild_permissions.manage_channels, m.guild_permissions.manage_roles, m.id == server.owner.id]) and not m.bot and m.id not in [mb['id'] for mb in ticket['members']]][:15]
                         memberFillerText = [f'{bot.get_user(u["id"])}{newline}> {u["bio"]}{newline}> Permissions: {permissionsDict[u["permissions"]]}' for u in ticket['members']]
                         embed.description = f'''**__{'TICKET SHARING SETTINGS':-^85}__\n\n{'Permanently included':-^40}**\n{newline.join([f'👤{f}' for f in memberFillerText[:3]])}'''
-                        embed.description += f'''\n\n**{'Additional members':-^40}**\n{newline.join([f'👤{f}{f"{newline}> {alphabet[i]} to manage" if ctx.author.id == ticket["author"] else ""}' for i, f in enumerate(memberFillerText[3:])]) if len(memberFillerText) > 2 else 'None yet'}'''
-                        if ctx.author.id == ticket['author']: embed.description += f'''\n\n**{'Add a member':-^40}**\nSend a message to search for a member to add, then react with the corresponding letter to add them{f'{newline}{newline}Moderators of {bot.get_guild(ticket["server"])} are listed below as suggestions. You may also react with the letter next to their name to add them quickly, otherwise send a message to search for someone else' if ticket['server'] and len(staffMemberResults) > 0 else ''}'''
-                        reactions = ['⬅']
+                        embed.description += f'''\n\n**{'Additional members':-^40}**\n{newline.join([f'{emojis["member"]}{f}{f"{newline}> {alphabet[i]} to manage" if ctx.author.id == ticket["author"] else ""}' for i, f in enumerate(memberFillerText[3:])]) if len(memberFillerText) > 2 else 'None yet'}'''
+                        if ctx.author.id == ticket['author']: embed.description += f'''\n\n**{'Add a member':-^40}**\nSend a message to search for a member to add, then react with the corresponding letter to add them{f'{newline}{newline}Moderators of {bot.get_guild(ticket["server"])} are listed below as suggestions. You may react with the letter next to their name to quickly add them, otherwise send a message to search for someone else' if ticket['server'] and len(staffMemberResults) > 0 else ''}'''
+                        reactions = [emojis['arrowLeft']]
                         if memberIndex > 2: 
                             embed.description += '\n\nIf you would like to leave the ticket, react 🚪'
                             reactions.append('🚪')
@@ -583,25 +617,25 @@ async def ticketsCommand(ctx, number:int = None):
                         try: result = d.pop().result()
                         except: pass
                         for f in p: f.cancel()
-                        if type(result) is tuple:
+                        if type(result) is tuple: #Meaning a reaction, rather than a message search
                             if str(result[0]) in alphabet:
                                 if not embed.description[embed.description.find(str(result[0])) + 2:].startswith('to manage'):
                                     addMember = memberResults[alphabet.index(str(result[0]))]
-                                    invite = discord.Embed(title='🎟 Invited to ticket', description=f"Hey {addMember.name},\n{ctx.author.name} has invited you to **support ticket {ticket['number']}** with {', '.join([bot.get_user(m['id']).name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}.\n\nThe Disguard support ticket system is a tool for server members to easily get in touch with my developer for issues, help, and questions regarding the bot\n\nTo join the support ticket, type `.tickets {ticket['number']}`", color=yellow)
-                                    invite.set_footer(text=f'You are receiving this DM because {ctx.author} invited you to a support ticket')
+                                    invite = discord.Embed(title='🎟 Invited to ticket', description=f"Hey {addMember.name},\n{ctx.author.name} has invited you to **support ticket {ticket['number']}** with [{', '.join([bot.get_user(m['id']).name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}].\n\nThe Disguard support ticket system is a tool for server members to easily get in touch with my developer for issues, help, and questions regarding the bot\n\nTo join the support ticket, type `.tickets {ticket['number']}`", color=yellow[ticketColorTheme])
+                                    invite.set_footer(text=f'You are receiving this DM because {ctx.author} invited you to a Disguard support ticket')
                                     try: 
                                         await addMember.send(embed=invite)
                                         ticket['members'].append({'id': addMember.id, 'bio': calculateBio(addMember), 'permissions': 3, 'notifications': False})
                                         ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} invited {addMember} to the ticket*'})
                                         memberResults.remove(addMember)
-                                    except Exception as e: await ctx.send(f'Error inviting {addMember} to ticket: {e}.\n\nBTW, error code 50007 means that the recipient disabled DMs from server members - they will need to temporarily allow this in the Server Options > Privacy Settings in order to be invited')
+                                    except Exception as e: await ctx.send(f'Error inviting {addMember} to ticket: {e}.\n\nBTW, error code 50007 means that the recipient disabled DMs from server members - they will need to temporarily allow this in the `Server Options > Privacy Settings` or `User Settings > Privacy & Safety` in order to be invited')
                                 else:
                                     user = bot.get_user([mb['id'] for mb in ticket['members']][2 + len([l for l in alphabet if l in embed.description])]) #Offset - the first three members in the ticket are permanent
                                     while True:
                                         if ctx.author.id != ticket['author']: break #If someone other than the ticket owner gets here, deny them
                                         ticketUser = [mb for mb in ticket['members'] if mb['id'] == user.id][0]
-                                        embed.description=f'''**{f'Manage {user.name}':-^70}**\n{'🔒' if not ctx.guild or ticketUser['permissions'] == 0 else '🔓'}Permissions: {permissionsDict[ticketUser['permissions']]}\n\n📜Responses: {len([r for r in ticket['conversation'] if r['author'] == user.id])}\n\n{f'🔔Notifications: True' if ticketUser['notifications'] else '🔕Notifications: False'}\n\n❌: Remove this member'''
-                                        reactions = ['⬅', '🔓' if ctx.guild and ticketUser['permissions'] == 0 else '🔒', '❌']
+                                        embed.description=f'''**{f'Manage {user.name}':-^70}**\n{'🔒' if not ctx.guild or ticketUser['permissions'] == 0 else '🔓'}Permissions: {permissionsDict[ticketUser['permissions']]}\n\n{emojis['details']}Responses: {len([r for r in ticket['conversation'] if r['author'] == user.id])}\n\n{f'{emojis["bell"]}Notifications: True' if ticketUser['notifications'] else f'{emojis["bellMute"]}Notifications: False'}\n\n❌: Remove this member'''
+                                        reactions = [emojis['arrowLeft'], '🔓' if ctx.guild and ticketUser['permissions'] == 0 else '🔒', '❌'] #The reason we don't use the unlock if the command is used in DMs is because we can't remove user reactions ther
                                         if ctx.guild: 
                                             if clearReactions: await message.clear_reactions()
                                             else: clearReactions = True
@@ -611,18 +645,18 @@ async def ticketsCommand(ctx, number:int = None):
                                             message = await ctx.send(embed=embed)
                                         for r in reactions: await message.add_reaction(r)
                                         result = await bot.wait_for('reaction_add', check=optionNavigation)
-                                        if str(result[0]) == '⬅': break
+                                        if result[0].emoji == emojis['arrowLeft']: break
                                         elif str(result[0]) == '❌':
                                             ticket['members'] = [mbr for mbr in ticket['members'] if mbr['id'] != user.id]
-                                            ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} removed {addMember} from the ticket*'})
+                                            ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} removed {user} from the ticket*'})
                                             break
                                         else:
                                             if str(result[0]) == '🔒':
-                                                if ctx.guild: reactions = ['⬅', '🔓', '❌']
+                                                if ctx.guild: reactions = [emojis['arrowLeft'], '🔓', '❌']
                                                 else: clearReactions = False
                                                 ticketUser['permissions'] = 0
                                             else:
-                                                if ctx.guild: reactions = ['⬅', '🔒', '❌']
+                                                if ctx.guild: reactions = [emojis['arrowLeft'], '🔒', '❌']
                                                 else: clearReactions = False
                                                 ticketUser['permissions'] = 1
                                             ticket['conversation'].append({'author': bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} updated {ticketUser}\'s permissions to `{permissionsDict[ticketUser["permissions"]]}`*'})
@@ -645,9 +679,9 @@ async def ticketsCommand(ctx, number:int = None):
                             memberResults = [r['member'] for r in memberResults if r['member'].id not in [m['id'] for m in ticket['members']]]
                             staffMemberResults = []
                         asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-                elif str(result[0]) == '↩':
-                    embed.description = '**__Please type your response (under 1024 characters) to the conversation, or react ⬅ to cancel__**'
-                    reactions = ['⬅']
+                elif result[0].emoji == emojis['reply']:
+                    embed.description = f'**__Please type your response (under 1024 characters) to the conversation, or react {emojis["arrowLeft"]} to cancel__**'
+                    reactions = [emojis['arrowLeft']]
                     if ctx.guild: 
                         if clearReactions: await message.clear_reactions()
                         else: clearReactions = True
@@ -670,7 +704,7 @@ async def ticketsCommand(ctx, number:int = None):
                         conversationPages = list(paginate(ticket['conversation'], 7))
                         if len(ticket['conversation']) % 7 == 1 and len(ticket['conversation']) > 7 and currentConversationPage + 1 < len(conversationPages): currentConversationPage += 1 #Jump to the next page if the new response is on a new page
                         await notifyMembers(ticket)
-                else: member['notifications'] = not member['notifications']
+                elif result[0].emoji in (emojis['bell'], emojis['bellMute']): member['notifications'] = not member['notifications']
                 ticket['members'] = [member if i == memberIndex else m for i, m in enumerate(ticket['members'])]
                 asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
         number = None #Triggers browse mode
@@ -705,6 +739,7 @@ async def _schedule(ctx, *, desiredDate=None):
         else: lastInitial = 'Waiting for input'
         string = f"Welcome to schedule setup! Since you're setting up a new schedule, let's go over the basics:\n{qlf}• Your schedule is private and only accessible to you, unless you use this command in a server and allow me to post your schedule after a confirmation prompt"
         string += f'\n{qlf}• This command may be expanded with new features as time goes on. By default, you\'ll be DMd about important changes, but this can be turned off.\n{qlf}• If you make a mistake during setup, you can always type a new value or reset the current step\n{qlf}• If you are resetting an existing schedule, the old one will not be overwritten until you save your changes at the end of setup\n{qlf}• To edit settings at a later date, use `{getData(bot)[ctx.guild.id]["prefix"] if ctx.guild else "."}schedule edit` or the reaction attached to schedules to edit parts as needed, or `{getData(bot)[ctx.guild.id]["prefix"] if ctx.guild else "."}schedule set` to go through the full setup process\n\n{qlf}If you wish to exit setup at any time, type `cancel`.\n{qlf}During the entirety of setup, use {emojis["previous"]} and {emojis["next"]} to navigate through the steps.\n{qlf}Please note that the general flow of the data editing features of the schedule module work best in servers due to DM limitations (removing reactions from messages)\n\n(Required) Step 1/5: Let\'s get started with you entering your last name, due to the current alphabet split. (Only the first letter will be stored)\n\nLast initial: `{lastInitial}`'
+        oldPrompt = None
         if ctx.guild and statusMessage: 
             statusMessage = await ctx.channel.fetch_message(statusMessage.id)
             if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
@@ -716,7 +751,7 @@ async def _schedule(ctx, *, desiredDate=None):
         while True:
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
-            except: pass
+            except: result = None
             for f in p: f.cancel()
             if type(result) is discord.Message:
                 if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
@@ -751,6 +786,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if None not in classes: s += f"\n\n{emojis['greenCheck']} All classes are set. {'Next step: teachers' if not breakAfter else ''}"
             return s
         string = f'(Required) Step 2/5: Class Periods\nYou may enter your class periods in the following ways:\n•Type a single message, and the class represented by the arrow will be set with your input\n•Type multiple classes, each on their own lines, or separated by a comma and a space - classes starting from the arrow will be filled by your input\n•Type `p1: <classname>` to set or overwrite a certain class\n•Do not enter advisory on this page\nUse {emojis["reload"]} to reset the class list.\n\n{buildClassString()}'
+        oldPrompt = None
         if ctx.guild and statusMessage: 
             statusMessage = await ctx.channel.fetch_message(statusMessage.id)
             if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
@@ -762,7 +798,7 @@ async def _schedule(ctx, *, desiredDate=None):
         while True:
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
-            except: pass
+            except: result = None
             for f in p: f.cancel()
             if type(result) is discord.Message:
                 if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
@@ -821,6 +857,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if None not in teachers: s += f"\n\n{emojis['greenCheck']} All teachers are set. {'Next step: room numbers' if not breakAfter else ''}"
             return s
         string = f'(Optional) Step 3/5: Teachers\nIf you would like to add the teacher for your classes, you may do so now. Enter data in the same manner as the classes page (go back to see the guide again - your data will save). To skip a teacher for a class, type `skip` for their name leave their field blank.\n\n{buildTeacherString()}'
+        oldPrompt = None
         if ctx.guild and statusMessage: 
             statusMessage = await ctx.channel.fetch_message(statusMessage.id)
             if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
@@ -832,7 +869,7 @@ async def _schedule(ctx, *, desiredDate=None):
         while True:
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
-            except: pass
+            except: result = None
             for f in p: f.cancel()
             if type(result) is discord.Message:
                 if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
@@ -896,6 +933,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if None not in rooms: s += f"\n\n{emojis['greenCheck']} All rooms are set. {'Next step: lunches' if not breakAfter else ''}"
             return s
         string = f'(Optional) Step 4/5: Room numbers\nIf you would like to add the room number for your classes, you may do so now. Perform this in a similar manner to adding teachers. To skip a room number for a class, type `skip` for its class period or leave its field blank.\n\n{buildRoomsString()}'
+        oldPrompt = None
         if ctx.guild and statusMessage: 
             statusMessage = await ctx.channel.fetch_message(statusMessage.id)
             if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
@@ -907,7 +945,7 @@ async def _schedule(ctx, *, desiredDate=None):
         while True:
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
-            except: pass
+            except: result = None
             for f in p: f.cancel()
             if type(result) is discord.Message:
                 if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
@@ -971,6 +1009,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if None not in lunches: s += f"\n\n{emojis['greenCheck']} All lunch periods are set. {'Next step: Save & view your completed schedule' if not breakAfter else ''}"
             return s
         string = f'(Optional) Step 5/5: Lunch periods\nIf you would like to add the lunch period for your classes, you may do so now. Type a single letter for each period (it will automatically be capitalized). To skip a lunch for a class, type `skip` for its class period or leave its field blank.\n\n{buildLunchesString()}'
+        oldPrompt = None
         if ctx.guild and statusMessage: 
             statusMessage = await ctx.channel.fetch_message(statusMessage.id)
             if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
@@ -982,7 +1021,7 @@ async def _schedule(ctx, *, desiredDate=None):
         while True:
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
-            except: pass
+            except: result = None
             for f in p: f.cancel()
             if type(result) is discord.Message:
                 if result.content.lower() == 'cancel': return await ctx.send('Cancelled setup')
@@ -1058,6 +1097,7 @@ async def _schedule(ctx, *, desiredDate=None):
                 s += f'''{f"P{i + 1}" if i != 1 else "Advisory"}: {f"{bold(*c)}"}{f" • {bold(*t)}" if t[0] else ' • <No teacher specified>'}{f" • Rm {bold(*r)}" if r[0] else ' • <No room number specified>'}{f" • {bold(*l)} lunch" if l[0] else ' • <No lunch specified>'}\n'''
             return s
         string = f"Here you can quickly edit multiple attributes for a single class at once. Type messages following this pattern (editing multiple classes, with each edit on its own line is allowed) until the data is how you want it, then react ❌ to cancel without saving, or {emojis['greenCheck']} to save your changes:\n\n`P<periodNumber>: <class name> <teacher name> <room number> <lunch>`\n\n•To edit advisory, type 'Advisory' instead of P<number>, and any class name will be ignored\n•Follow this order exactly. To skip updating one of the attributes of a class, type a dash `-` in its place. To clear optional data for an attribute of a class, type `clear` in its place\n\nExample of me updating my government class, where I leave the class name alone but clear the teacher: `P9: - clear 104A C`\nYour schedule is below:\n\n\n{buildClassesString()}"
+        oldPrompt = None
         if ctx.guild and statusMessage: 
             statusMessage = await ctx.channel.fetch_message(statusMessage.id)
             if [r.emoji for r in statusMessage.reactions] != reactions: await statusMessage.clear_reactions()
@@ -1069,7 +1109,7 @@ async def _schedule(ctx, *, desiredDate=None):
         while True:
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
-            except: pass
+            except: result = None
             for f in p: f.cancel()
             if type(result) is discord.Message:
                 if '\n' in result.content: rawData = result.content.replace('`', '').split('\n')
@@ -1116,6 +1156,7 @@ async def _schedule(ctx, *, desiredDate=None):
             await statusMessage.edit(content=f'{loading} Please wait for all reactions to be added...', embed=embed)
             for r in reactions: await statusMessage.add_reaction(r)
             await statusMessage.edit(content=None)
+            oldMessage = None
             result = await bot.wait_for('reaction_add', check=reactionCheck)
             if result[0].emoji == emojis['member']: schedule['lastInitial'], oldMessage = await lastNameInput(True)
             elif result[0].emoji == emojis['details']: schedule['classes'], oldMessage = await classesInput(True)
@@ -1257,7 +1298,6 @@ async def _schedule(ctx, *, desiredDate=None):
 
 async def buildSchedule(desiredDate, initialPassedDate, author, message, schedule):
     '''Returns an embed'''
-    yellow = (0xffff00, 0xffff66)
     contentLog = []
     firstDay = datetime.date(2021, 1, 4) #First day of classes
     #firstLetter = 'T' If this is to be uncommented, do something complicated with rotating the schedule
@@ -1268,13 +1308,12 @@ async def buildSchedule(desiredDate, initialPassedDate, author, message, schedul
     today = datetime.date.today()
     if initialPassedDate == '': initialPassedDate = desiredDate
     else: desiredDate = initialPassedDate
+    date = today
     if not desiredDate:
         desiredDate = today
         if datetime.datetime.now() > datetime.datetime(today.year, today.month, today.day, 14, 50) and int(f'{today:%w}') not in (0, 5, 6):  #If it's later than 2:50PM and it's not a weekend, pull up tomorrow's schedule
             contentLog.append(f"{emojis['information']}It's after 2:50PM, so tomorrow's schedule will be displayed")
             date = today + datetime.timedelta(days=1)
-        else:
-            date = today
     elif type(desiredDate) is str: 
         dt = Birthdays.calculateDate(message, datetime.datetime.now())
         if not dt:
@@ -1415,15 +1454,10 @@ async def buildSchedule(desiredDate, initialPassedDate, author, message, schedul
 @commands.is_owner()
 @bot.command()
 async def scheduleManagement(ctx, mode='events'):
-    blue = (0x0000FF, 0x6666ff)
     snowBlue = 0x66ccff
-    yellow = (0xffff00, 0xffff66)
     daysOff = getUserData(bot)[247412852925661185].get('highSchoolDaysOffSpring2021')
     if not daysOff: daysOff = {}
-    
-    #emojis = bot.get_cog('Cyberlog').emojis
-    global emojis
-
+    emojis = bot.get_cog('Cyberlog').emojis
     def messageCheck(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
     def reactionCheck(r, u): return r.emoji in reactions and r.message.id == prompt.id and u.id == ctx.author.id
     def calculateDatePrompt(i):
@@ -1461,7 +1495,7 @@ async def scheduleManagement(ctx, mode='events'):
                                 user = bot.get_user(u['user_id'])
                                 await user.send(embed=embed)
                             except: pass
-                    except KeyError: pass
+                    except (KeyError, TypeError): pass
                 await m.remove_reaction(loading, bot.user)
             await m.add_reaction(emojis['greenCheck'])
         status = await ctx.send('Pushing to database...')
@@ -1488,7 +1522,7 @@ async def scheduleManagement(ctx, mode='events'):
             for r in reactions: await prompt.add_reaction(r)
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
-            except: pass
+            except: result = None
             for f in p: f.cancel()
             if type(result) is discord.Message:
                 if ':' in result.content[:5]: 
@@ -1548,8 +1582,6 @@ async def data(ctx):
                 if char != ' ': export += char
                 else: export += '-'
         return export
-    def serializeJson(o):
-        if type(o) is datetime.datetime: return o.isoformat()
     basePath = f'Attachments/Temp/{ctx.message.id}'
     os.makedirs(basePath)
     userData = (await database.GetUser(ctx.author))
@@ -1574,7 +1606,9 @@ async def data(ctx):
         with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
             f.write(dataToWrite)
         for channel in server.text_channels:
-            with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
+            try: 
+                with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
+            except FileNotFoundError: continue
             memberIndexData = {}
             for k, v in indexData.items():
                 if v['author0'] == member.id: 
@@ -1597,7 +1631,7 @@ async def data(ctx):
     readMe += '\n\nThis readME is also saved just inside of the zipped folder. If you do not have a code editor to open .json files and make them look nice, web browsers can open them (drag into new tab area or use ctrl + o in your web browser), along with Notepad or Notepad++ (or any text editor)\n\nA guide on how to interpret the data fields will be available soon on my website. In the meantime, if you have a question about any of the data, contact my developer through the `ticket` command or ask in my support server (`invite` command)'
     with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
         f.write(readMe)
-    fileName = f'Attachments/Temp/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=bot.lightningLogging[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    fileName = f'Attachments/Temp/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=getData(bot)[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
     await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find(str(loading))] + f'{loading}Zipping data...')
     import py7zr
     shutil.register_archive_format('7zip', py7zr.pack_7zarchive, description='7zip archive')
@@ -1636,7 +1670,7 @@ async def retrieveAttachments(ctx, user: discord.User):
                     except FileNotFoundError: pass
     with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
         f.write(f"📁MessageAttachments --> Master Folder\n|-- 📁[Server Name] --> Folder of channel names in this server\n|-- |-- 📁[Channel Name] --> Folder of message attachments sent by you in this channel in the following format: MessageID_AttachmentName.xxx\n\nWhy are message attachments stored? Solely for the purposes of message deletion logging. Additionally, attachment storing is a per-server basis, and will only be done if the moderators of the server choose to tick 'Log images and attachments that are deleted' on the web dashboard. If a message containing an attachment is sent in a channel, I attempt to save the attachment, and if a message containing an attachment is deleted, I attempt to retrieve the attachment - which is then permanently deleted from my records.")
-    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(datetime.datetime.utcnow() + datetime.timedelta(hours=bot.lightningLogging[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(datetime.datetime.utcnow() + datetime.timedelta(hours=getData(bot)[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
     shutil.make_archive(fileName, 'zip', basePath)
     await statusMessage.edit(content=f'{os.path.abspath(fileName)}.zip')
 
@@ -1763,24 +1797,20 @@ async def scheduleAnnounce(ctx):
 async def test(ctx):
     status = await ctx.send('Working')
     
-    serverIDs = [s.id for s in bot.guilds]
-    for path in os.listdir(indexes):
-        try: 
-            path = int(path)
-            if path in serverIDs:
-                for channelIndexFolder in os.listdir(f'{indexes}/{path}'):
-                    try:
-                        channelIndexFolder = int(channelIndexFolder)
-                        shutil.rmtree(f'{indexes}/{path}/{channelIndexFolder}')
-                        print(f'Removed old index data for {channelIndexFolder}')
-                    except: pass
-            else:
-                shutil.rmtree(f'{indexes}/{path}')
-                print(f'Removed directory for {path}')
-        except Exception as e:
-            print(f'Index data removal error: {e}')
+    toRemove = []
+    for s in bot.guilds:
+        for c in s.text_channels:
+            path = f'Attachments/{s.id}/{c.id}'
+            if not os.path.exists(path): continue
+            messages = [m.id for m in (await c.history(limit=None).flatten())]
+            for folder in os.listdir(path):
+                if int(folder) not in messages: toRemove.append(f'path/{folder}')
+    
+    print(f'Captured {len(toRemove)} unnecessary folders, removing now')
 
-
+    for path in toRemove:
+        try: shutil.rmtree(path)
+        except: continue
 
     await status.edit(content='Done')
 
@@ -1790,12 +1820,15 @@ async def daylight(ctx):
     status = await ctx.send(loading)
     for s in bot.guilds:
         if await database.AdjustDST(s):
-            defaultLogchannel = bot.get_channel(bot.lightningLogging[s.id]['cyberlog'].get('defaultChannel'))
+            defaultLogchannel = bot.get_channel(getData(bot)[s.id]['cyberlog'].get('defaultChannel'))
             if defaultLogchannel:
                 e = discord.Embed(title='🕰 Server Time Zone update', color=yellow)
                 e.description = 'Your server\'s time zone offset from UTC setting via Disguard has automatically been decremented, as it appears your time zone is in the USA & Daylight Savings Time has ended.\n\nTo revert this, you may enter your server\'s general settings page on my web dashboard (use the `config` command to retrieve a quick link).'
                 await defaultLogchannel.send(embed=e)
     await status.edit(content='Done')
+
+def serializeJson(o):
+    if type(o) is datetime.datetime: return o.isoformat()
 
 
 database.Initialize(secure.token())

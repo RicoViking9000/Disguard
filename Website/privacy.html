@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Privacy Policy</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
+                </ul>
+            </nav>
+        </header>
+        <div class=header>
+            <p>Disguard Privacy Policy & Statement - Long version</p>
+        </div>
+        <div class="justify80 largeText incSpaced">
+            <p class=subheader id=prologue>Prologue</p>
+            <p class=lgray>
+                In the era of smart technology, and as more and more devices become 'personal' towards a person or group of people, privacy online becomes a very hot topic. Some people
+                don't care about their privacy much at all, whereas some others care very deeply. For developers of technology that plays a part in people's lives, communication is essential.
+                As I continue to develop Disguard and grow its library of tools, uniting Disguard's trademark of customizable features with privacy settings & communication is one of my biggest goals.
+                <br><br>Disguard's code is publicly accessible on GitHub - meaning anybody can view how Disguard uses data. I can also be contacted (in Disguard's official server or through the bot's
+                ticket command) to clear up any questions about Disguard's data management or Disguard's code in general. Some features made earlier in Disguard's development didn't have privacy in
+                mind as much as currentfeatures do - in that case, they will be documented here, and I'll explain what will be done in the future about these cases. 
+            </p>
+            <p class="subheader" id="preface">Preface (Legal)</p>
+            <p class="lgray">
+                Disguard is an independently developed Bot for Discord. I'm RicoViking9000 and I am the developer of Disguard. This Privacy Policy (referred to as "Policy") is written in a mix of first
+                third person point of view. The perspective "I" refers to me as the devloper of Disguard, the perspective "Disguard" refers to the code and Discord Bot, and "We" refers to me as the human
+                developer along with Disguard as the automated code. The term "you" refers to you as an end user, and applies to anybody with access to Disguard.
+                I am located in the United States - all services run by me under the umbrella of Self-Hosting are subject to US regulations. For anything else (Website, Dashboard), regulations will be
+                dependent on the specific platform and its location - see dedicated sections on this (<a href="#database">MongoDB</a>, <a href="#dashboard">Heroku</a>, <a href="#website">Netlify</a>) later on.
+                <br><br>Disguard is an element of a chain of command. I do not have a right to host Disguard on Discord's platform - it is a privilege, as long as I abide by the terms Discord puts forth.
+                Likewise, your ability to use Disguard and enjoy its benefits is a privilege, not a right. Violation of proper guidelines, including Discord's Terms/Privacy, allow me the right to
+                refuse service to a server, and I can withdraw the bot from the offending server. Additionally, server owners accept this Privacy Policy on behalf of users within their servers.
+                <br><br>I can be contacted by <a href="#disguardTicketSystem">Disguard's Ticket System</a> or by joining Disguard's support server at the top of this website.
+                <br><br>Disguard and its related services are not affiliated with Discord inc. in any way.
+            </p>
+            <p class="subheader" id="dataTypes">Types of Data Collected</p>
+            <p class="lgray">
+                Disguard only stores data necessary to power at least one aspect of its services. At present, however, most of the data collected cannot be customized by the end-user, and won't be able to
+                until I implement a privacy suite within the next couple updates. Until this is taken care of in full, you reserve the right to request hiding of any data you deem to be too personal. This only
+                applies to data under the 'Database' umbrella, that can be obtained from the .data command. Specific data collected will be detailed in the coming sections of this Policy.
+            </p>
+            <p class="subheader" id="storageTypes">Types of Data Storage</p>
+            <p class="lgray">
+                The "service" encapsulating Disguard is composed of three components: Disguard as the Discord Bot, the online "Dashboard" where you can edit Disguard's settings, and the "Website"
+                you are viewing this privacy policy on. User data can be stored in three places: The bot's cache (RAM), local files on Disguard's host machine, and Disguard's cloud database service (MongoDB).
+            </p>
+            <p class="subheader" id="database">Cloud Database</p>
+            <p class="lgray">
+                Disguard's cloud database provider is MongoDB Atlas. The database is password protected & secure. If you are concerned about the security of data stored within the database, see
+                <a href="https://www.mongodb.com/cloud/trust" target="_blank">this page</a>. Almost all of the data stored in the cloud database is general information that can be accessible through the Discord API,
+                such as channel IDs, server avatar URLs, and usernames. If you wish to know what data is stored, please see <a href="#appendixB">this section on Data Retrieval</a>. The database's
+                primary purpose is to allow the web Dashboard to read configuration data - as such, most data stored in this manner is limited to settings that can be adjusted online. The other data
+                stored in the database is long-term data that is specific to a server or member, but may not be editable online (yet). In this case, the data can be controlled via commands. Examples
+                of this would include user-defined birthday information (if applicable). For a skeleton of data generally stored within the database, click
+                <a href="560457796206985216.json" target="_blank">this page</a> for server data (independent per server), and
+                <a href="247412852925661185.json" target="_blank">this page</a> for user data (independent per user).
+            </p>
+            <p class="subheader" id="dashboard">Web Dashboard</p>
+            <p class="lgray">
+                Disguard's web Dashboard host is Heroku. Heroku's compliance report can be accessed <a href="https://www.heroku.com/compliance" target="_blank">here</a>. Due to limited (lack of)
+                funding at present, the web Dashboard is on the lowest tier - meaning no HTTPS. No confidential information is procecessed through the Dashboard - the login method is OAuth2 via Discord - and
+                Discord provides the security on that front. The only cookie the Dashboard stores simply allows the website to remember that you're logged in to Discord, and your Discord user ID. Beyond that,
+                the web Dashboard communicates with the Cloud Database to send and receive configuration data. Web Dashboard code can be accessed
+                <a href="https://github.com/RicoViking9000/Disguard/tree/master/Dashboard" target="_blank">here on Github</a>.
+            </p>
+            <p class="subheader" id="website">Website</p>
+            <p class="lgray">
+                Disguard's website host provider is Netlify, and their compliance report can be accessed <a href="https://www.netlify.com/security/" target="_blank">here</a>. This is a static website - meaning no data is
+                transferred between third party providers; it's purely for display purposes. Website code can be accessed <a href="https://github.com/RicoViking9000/Disguard/tree/master/Website" target="_blank">here on
+                Github</a>.
+            </p>
+            <p class="subheader" id="botIntro">Bot - Intro</p>
+            <p class="lgray">
+                Disguard is primarily the bot application running on Discord; this is the heart of the project. This is a reminder that the more useful/personal programs seem to be, the more data they are
+                likely to need. On average, Disguard uses a fair bit of data more than other popular bots to power its powerful and sophisticated services, along with other quality-of-life conveniences.
+                The bot's cache holds most of the data, and anything that is short-term or represents Discord objects (such as full channel objects, or role objects, etc.).
+                Disguard caches all database data to ensure quick lookups and retrievals. This cached data is updated any time the data is updated on the database's end. More specific data will depend on which module
+                it belongs to - the current modules include Disguard's Main file (described at the start of this paragraph), Antispam, Moderation, Logging, and Birthdays.<br><br>Unless you use a command in DMs,
+                Disguard does not in any way listen to messages in DMs. You can DM Disguard images or videos, and the bot will not access those messages.
+            </p>
+            <p class="subheader" id="botBday">Bot - Birthdays</p>
+            <p class="lgray">
+                Disguard's birthday module powers all of the birthday related features for the bot. Data used within this module mostly involves data stored in the database, but common to all modules, this data
+                will be cached in Disguard's RAM. Disguard allows users to set a birthday (in present time, not birth year) and/or age, for purposes of fun & birthday announcements. Configuring your variables is
+                completely optional, but in order to delete these variables, you must contact me (only because there is no way to do this through the bot as present). Birthday & age is stored in the database, per user.
+                If you create/edit your birthday wishlist, it will also be stored in the database, per user. Configuring your birthday and/or age is public information - anybody who shares a server with you can use the 
+                birthday command to access data you store for this command. Note that configuring both your age & birthday can equate to people knowing your date of birth with some basic math. Also note that Disguard
+                does not process this data in any way other than to serve the birthday command. We cannot support you using Discord if under 13, but we also cannot snoop on those saying they're under 13.
+                Members are able to write personal birthday messages to any message that has a birthday configured. Said personal messages can be delivered privately or to various mutual servers - this discetion is up to
+                the one writing the message, but will only be announced publicly if servers they choose have enabled birthday announcements. Personal birthday messages will be stored per user (the receiving one).<br><br>
+            </p>
+            <p class="subheader" id="botMod">Bot - Moderation</p>
+            <p class="lgray">
+                The moderation module is not developed yet, and only includes the purge, lock, and unlock commands. The purge command will read through messages in your server when used, and compare those
+                messages against the conditions of the purge filter that can be given with the command. The lock/unlock commands do not require storage of any data.
+            </p>
+            <p class="subheader" id="botAntispam">Bot - Antispam</p>
+            <p class="lgray">
+                The core code behind the Antispam module is around 3 years old, and needs some renovations in the future. On the data security side, however, there's nothing out of the ordinary. This module implements a
+                message listener - this means code that runs every time a message in a server is sent. If a server does not have the bot's antispam filter on, the loop exits and will not run operations on message content.
+                Otherwise, the code will perform a series of operations on the message that was just sent to determine if it violates the server's antispam filter. This process does include analyzing a message's
+                attachments if the attachment filter is enabled. Disguard will also cache each member's most recent messages - with the exact number of messages stored being dependent on a server's quickMessages
+                or repeatedMessage settings, if this feature is enabled in the first place. This data is only used to check whether a member sent the same message repeatedly, or messages too fast. At the end of
+                the filter scan, the bot determines whether to mute a member, kick them, ban them, or do nothing. Relating to this module, the number of warnings a member has is stored in the database (and cached
+                locally) for each member of each server.
+            </p>
+            <p class="subheader" id="botLog">Bot - Cyberlog</p>
+            <p class="lgray">
+                Cyberlog is the name of the bot's logging module, and is by far the most developed feature of the bot - being developed constantly over the past year. This module uses the most data out of Disguard's modules
+                due to its sophistication. Unless otherwise noted, these features cannot be disabled by the end-user at present, but may be in the future. Below is a listing of instances I remember where Disguard uses
+                data that may be worth pointing out (and this will be updated as I develop new features):<br></p><ul>
+                <li>The bot temporarily stores timestamps of when members join servers if the ageKick:repeatedJoins module is enabled - this allows the bot to kick users who repeatedly attempt
+                to join a server in rapid succession. The timestamp is removed once the configured time threshold passes.</li>
+                <li>The bot temporarily stores a listing of message reaction events (only name of emoji, timestamp, meessage ID, member ID, and server ID are stored) if the ghost reaction feature is enabled - this
+                allows the bot to provide that service</li>
+                <li>The bot stores the message IDs of all pinned messages. This allows the bot to provide message unpin logs, as the Discord API does not keep track of this.</li>
+                <li>The bot stores a listing of all channels in a server. This allows the bot to provide the following features in channel logs: Category trees (including before/after), channel position updates</li>
+                <li>The bot stores a listing of all server invites. This allows the bot to list who invited a member to a server, along with providing details about the invite to invite new members.</li>
+                <li>The bot stores a listing of all server roles. This allows the bot to list the members that (or display how many) lost a role upon its deletion.</li>
+                <li>The bot stores a listing of all member permissions for each server. This allows the bot to list which permissions members gained or lost upon role update events or member gain/lose role events.</li></ul>
+                <p class=lgray>Other cached data that doesn't revolve around Discord data models include a list of running Subreddit loops (if applicable) and member voice log summaries while they are still in a voice channel
+                (if applicable).
+                <br><br>Other notable items stored in the database yet related to this module:</p><ul>
+                <li>Auto-calculated channel listings of what the bot deems to be a server's general channel, moderator channel, and announcements
+                channel. I can choose to send messages to these channels at will (as part of the global broadcast system). These defaults can be overridden from the Web Dashboard with channels of your choosing.</li>
+                <li>Custom status history (emoji & status-text), username history, and avatar history - you or anybody you share a server with can view this under the history command</li>
+                <li>Message indexes & attachments: See the next sections (this feature can be controlled by the end-user)</li>
+                </ul><p class=lgray>
+                <br>The bot accessing your server's audit logs to pull additional information (such as which moderator performed an action) is enabled by default, but can be turned off.
+            </p>
+            <p class="subheader" id="localStorage">Local Storage</p>
+            <p class="lgray">
+                Disguard utlizes local storage for files that would be suboptimal for the database. This is done in the form of three folders in Disguard's code directory on its host machine: Indexes, Attachments, and
+                Temp (which is a folder inside of attachments).
+            </p>
+            <p class="subheader" id="indexes">Local Storage - Indexes</p>
+            <p class="lgray">
+                Disguard creates and stores a series of message indexes for all its servers. This message index data is used to power the following features: Message edit logs for messages sent before the bot's bootup,
+                Message edit history, Message deletion logs for messages sent before the bot's bootup, member message counts, channel message counts, server message counts, and a method to search messages without
+                necessitating many Discord API calls. At present, this feature cannot be disabled or controlled, but in the future, this feature will be expanded on to include 'restoration' of channels and other
+                features. Before that goes live, an option to control and disable message indexing features will be implemented. Your message index data is included under the self-service data retrieval command.
+                Click <a href="567741860559454210.json" target="_blank">here</a> to see an example of what message index data looks like.
+            </p>
+            <p class="subheader" id="attachments">Local Storage - Attachments</p>
+            <p class="lgray">
+                Disguard may download all attachments of messages sent in servers for Message Deletion logging purposes. Whether or not Disguard does this depends on whether this feature is enabled under
+                the web Dashboard (Logging > Message module > "Log images and attachments"). This feature is disabled by default. This feature exists to reupload attachments originally sent with a message if said
+                message is deleted - and these files can be retained for an indefinite amount of time attached to the log message. Downloaded attachments are stored only on Disguard's host machine (see
+                <a href=#disguardHostSystem>this section</a> for more information), and retained until and if its message is deleted. NSFW channels are exempt from this feature. When a message is deleted, any stored
+                attachments are permanently deleted. Otherwise, server moderators or the author of the file attachment have the ability to contact me and request data retrieval or deletion
+                (see <a href=#appendixD>this section</a> for information on data handling).<br><br>
+                To server moderators: Disguard plans to be cybersecurity focused and wants to educate its users on privacy and their data. This feature is very dangerous, and while I
+                cannot enforce the following statement, I highly recommend server admin let their members know if this feature is enabled, as members do have the right to contact me to request deletion of stored
+                files. In the future, I plan on having Disguard be more clear on what it does with user data by sending messages in servers, such as the first time a member uploads an attachment.<br><br>From
+                patch 0.2.25 onward, Disguard will not overstep the legal rights of Discord to retain attachments beyond the lifespan of messages said attachments belong to. This was not the case prior to this
+                patch because I was not aware that I failed to implement simple code to delete attachments on message deletion. Note, however, that common to all social media, keep an eye on your data. As soon
+                as you hit the send button, your content is available to the world, and anybody can permanently save your message attachments forever without telling you. As a responsible bot developer, this
+                section exists to let everybody know of this feature that may be enabled by server administrators. Members may contact me and I can tell them if a particular server has this feature enabled.
+            </p>
+            <p class="subheader" id="temp">Local Storage - Temp</p>
+            <p class="lgray">
+                Some message embeds utilize the displaying of members' avatars in the embed author, thumbnail, or image fields. Disguard's newer features utilize code to allow these avatars to be displayed
+                permanetly, even if a member changes their avatar and the original avatar URL is deleted from Discord's servers. This is done via what I call 'temp' files. Disguard will download avatar data
+                and save it to its host machine for the sole purpose of reuploading it to an embed that uses this feature. At this point, a permanent image link is created by Discord, and is a part of the
+                message containing the embed. Deletion of the message with the embed will result in deletion of this avatar data (consistent with Discord's terms/privacy - they explain how this works
+                <a href="https://support.discord.com/hc/en-us/community/posts/1500000119421-Your-Content-Clause-Explained" target="_blank">here</a>). Disguard's temp folder directory is completely purged
+                no less than once per day.
+            </p>
+            <p class="subheader" id="discordImageHost">Makeshift Image Host service</p>
+            <p class="lgray">
+                In some instances, Disguard will need to create an image URL quickly. This can be done via image hosting services. Disguard uses Discord as an image hosting service, rather than say imgur. How
+                this works is in one of my servers, a private & NSFW channel exists solely for the purpose of Disguard uploading images & retrieving their URLs. While I am theoretically capable of viewing these,
+                this is actually more secure than storing them on Disguard's host machine. I have not provided my age to Discord, and this channel is behind an NSFW wall. As such, it is impossible for me to access
+                items in this channel other than through the bot (I can prove this with screenshots). And the bot does not have code that allows me to scan channels for images at will - the only time the bot will
+                use this channel is for image hosting purposes. Note that this manner is being used to provide images to embeds in logs in patch 0.2.25 forward, due to collapsable logs & incompatibility with files
+                uploaded directly to message embeds. As such, deleting the message encapsulating embeds using this service will not delete the image from Discord's service. Images uploaded using this method are also
+                subject to Discord's policies. If I am able to get my own CDN in the future, I will start using that. But for now, this is my best solution, and has been in play since my first bot, RicoBot.
+            </p>
+            <p class="subheader" id="disguardServer">Disguard Official Server</p>
+            <p class="lgray">
+                Some functions of the bot operate exclusively to Disguard's Discord server. If you are the server owner or server moderator of a server with Disguard in it, Disguard can give you one of two special roles
+                if you are in its official server. Secondly, when the bot joins or leaves a server, its name and ID will be sent in a public log channel. Additionally, when Disguard joins a server, the member count will be
+                included in the log.
+            </p>
+            <p class="subheader" id="disguardTicketSystem">Disguard Ticket System</p>
+            <p class="lgray">
+                The Disguard Ticket System allows users to get in contact with me, without going through the hassle of joining a server. The system holds a conversation along with some other attributes - such as members
+                included in the conversation. The system is secured in a way that only the members in a conversation can read the conversation - so conversations held through this will only be known to you and me by
+                default, unless you add another member. A support ticket can be created through the .ticket command.
+            </p>
+            <p class="subheader" id="disguardHostSystem">Disguard's Host System</p>
+            <p class="lgray">
+                As of patch 0.2.25, Disguard is being run from a laptop at my house. This means self-hosting, and data is not subject to any third parties like Amazon or Microsoft. Data will be processed in
+                compliance with this Privacy Policy. The laptop is only accessible to me, and I connect to it remotely to manage it. Any local files relating to Disguard (indexes, attachments, temp)
+                are stored in the bot's folder directory on this device.
+            </p>
+            <p class="subheader" id="preface">Opt-Out or Removal of Data</p>
+            <p class="lgray">
+                Disguard only stores data for the duration it is necessary to. An entry for your server will remain in the database as long as the bot is in that server. Once Disguard leaves the server,
+                configuration settings will be purged. Local Storage (attachments/indexes) behave in the same manner. An entry for each user account will remain in the database as long as you share at
+                least one server with the bot. When you no longer have any mutual servers with Disguard, that database entry will be purged. You cannot opt-out of necessary data while using the service,
+                but if you are concerned about your data in any way, contact me and we will talk - which may result in you having portions of extraneous data deleted or hidden.
+            </p>
+            <p class="subheader" id="appendixA">Appendix A: Discord Bots & Privacy</p>
+            <p class="lgray">
+                All bots on Discord are supposed to follow guidelines set forth by Discord due to the fact that Discord's API is being accessed, but also to protect the community. Good bot listing sites
+                (such as top.gg/Discord Bots List) verify bots to ensure they follow said guidelines before bots are allowed on their platform. Because of this, as a general rule of thumb, bots listed
+                publicly are safer than bots not listed anywhere online. Also note that Disguard is not listed yet, as I do not feel that it's in a good state to be released yet (though I'm getting there).
+                These guidelines can be accessed on Discord's website - <a href="">here is the page</a> telling developers like me & everyone else what we can, can't, should, and shouldn't do. All
+                verified Discord bots are required to have a Privacy Policy, but Discord developers prefer all bots have one.
+            </p>
+            <p class="subheader" id="appendixB">Appendix B: Access your Data (Data Retrieval)</p>
+            <p class="lgray">
+                You may access data Disguard holds on file (stored in the dabase or in the local filesystem) by using the .data command. This will send you an archive folder containing data for each server
+                you moderate, your user data, and your index data. Instructions for how to obtain message attachment data will be included - that will require personal data handling due to file limits.
+            </p>
+            <p class="subheader" id="appendixC">Appendix C: Disguard & Permissions</p>
+            <p class="lgray">
+                The default URL to invite Disguard will give it Administrator server permissions for the sake of simplicity. If you don't want this, you don't have to enable this. At present, almost
+                all of Disguard's features require Manage Server/Role/Channel/Member permissions, and logging also relies heavily on audit logs.
+            </p>
+            <p class="subheader" id="appendixD">Appendix D: Data Handling</p>
+            <p class="lgray">
+                In some instances, I may be required to personally process data that would otherwise be taken care of by the bot. This will never happen unless I make that specifically clear to somebody. Some
+                circumstances where this would happen include requests of data deletion, support via a support ticket (if there is a problem with server data), and data retrieval for message attachments
+                (due to the 8MB upload limit). 'Process' as used here is described as transferring data from Disguard's host machine to my personal laptop (local storage), or logging into the cloud database
+                & adjusting variables (issues with configuration data). I do not open or look through any data transferred in this method, but this appendix exists to make you aware of this necessity. This is
+                necessary because of the sandboxed environment Disguard runs in or file upload limits.
+            </p>
+            <p class="subheader" id="appendixE">Appendix E: Relations to Discord</p>
+            <p class="lgray">
+                Disguard, being a bot made on the Discord platform, must obligate by Discord's Privacy Policy & Terms of Service. This includes community guidelines & regulations. As such, Disguard will
+                never encourage any behavior that goes against said policies. We cannot/should not spy on what people are doing, if they happen to circumvent this, but if it comes to my attention that a server
+                is not obeying Discord's policies, I reserve the right to retract my bot from that server.
+            </p>
+            <p class="subheader" id="preface">Appendix F: Message Deletion Logging - Attachments</p>
+            <p class="lgray">
+                If you were directed here from the message deletion logs, then Disguard failed to upload an archived attachment to the log message because the one who sent it had nitro at the time, and the
+                file is over 8MB. When this happens, Disguard will make note of which files fail, and move them to the Temp folder instead of deleting them. As long as the Temp data has not been purged yet,
+                you may contact me and I can send you the file that was too large to be sent over Discord. Note that this will fall under Appendix D - the Data Handling note.
+            </p>
+            <p class=center>Last updated: Feb 27, 2021</p>
+        </div>
+    </body>
+</html>

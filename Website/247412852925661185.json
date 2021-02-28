@@ -1,0 +1,56 @@
+{
+    "user_id": 247412852925661185,
+    "birthday": "[Timestamp | null]: Date representing member's birthday, or null if not set",
+    "birthdayMessages": [
+        "Array of dictionaries holding data for a personal birthday message written to this member. Each message will be its own item in the array."
+    ],
+    "lastActive": {
+        "timestamp": "2021-02-26T03:40:59.905000",
+        "reason": "sent a message",
+        "NOTE": "lastActive and lastOnline are disabled from being displayed publicly until I develop controls for this. The data will still be in the database and updated when applicable."
+    },
+    "lastOnline": "2021-02-26T23:45:03.932454",
+    "servers": [
+        {
+            "server_id": 560457796206985216,
+            "name": "Disguard Official Server [ALPHA]",
+            "thumbnail": "https://cdn.discordapp.com/icons/560457796206985216/7a23ec7d84ff204f2dbcf8986992e0e6.webp?size=1024"
+        },
+        {
+            "README": "One array item for each server this member is a moderator in, only used for the server selection page on the web dashboard"
+        }
+    ],
+    "username": "RicoViking9000",
+    "wishList": [
+        "Array of strings, tied to the Birthdays module. Members can add items to a personal wishlist, and this is where they're stired."
+    ],
+    "customStatusHistory": [
+        {
+            "emoji": "\ud83c\udfb5",
+            "name": "A singer in a smoky room, the smell of wine and cheap perfume, for a smile they can share the night, it goes on and on and on...",
+            "timestamp": "2020-06-17T23:56:21.471000"
+        },
+        {
+            "README": "One entry in the array for every time you change your custom status & the bot manages to save it. This information is purely for your viewing pleasure (.history)"
+        }
+    ],
+    "usernameHistory": [
+        {
+            "name": "RicoViking9000",
+            "timestamp": "2020-06-13T18:16:00.747000"
+        },
+        {
+            "README": "Similar to custom status history, but for username history"
+        }
+    ],
+    "avatarHistory": [
+        {
+            "discordURL": "https://cdn.discordapp.com/avatars/247412852925661185/6887c1541a5788ae01708d73eb420fb0.webp?size=1024",
+            "imageURL": "https://cdn.discordapp.com/attachments/567741860559454210/719230255461826560/06072020124412459791.png",
+            "timestamp": "2020-06-07T16:44:17.445000"
+        },
+        {
+            "README":"Similar to custom status history, but for profile picture history. The two images are identical, but the discord one won't change without changing your avatar,so it's used for comparative purposes"
+        }
+    ]
+}

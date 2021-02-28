@@ -13,6 +13,8 @@ filters = {}
 loading = None
 newline = '\n'
 
+blue = (0x0000FF, 0x6666ff)
+
 class PurgeObject(object):
     def __init__(self, message=None, botMessage=None, limit=100, author=[], contains=None, startsWith=None, endsWith=None, links=None, invites=None, images=None, embeds=None, mentions=None, bots=None, channel=[], files=None, reactions=None, appMessages=None, startDate=None, endDate=None, caseSensitive=False, cleanup=False, anyMatch=False):
         self.message = message
@@ -86,7 +88,7 @@ class Moderation(commands.Cog):
             path = 'Indexes/{}/{}'
             cancel=discord.Embed(title='Purge command',description='Cancelled')
             url='https://cdn.discordapp.com/emojis/605060517861785610.gif'
-            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n',timestamp=datetime.datetime.utcnow(),color=discord.Color.blue())
+            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n',timestamp=datetime.datetime.utcnow(),color=blue[colorTheme(ctx.guild)])
             embed.description+='First, what channel(s) are you thinking of purging? Make sure the channel(s) are hyperlinked. To purge from this channel ({}), type `here`, to purge from all text channels, type `all`'.format(ctx.channel.mention)
             embed.set_footer(text='Type cancel to cancel the command. Timeout is 120s')
             embed.set_author(name='Waiting for input')
@@ -568,7 +570,7 @@ class Moderation(commands.Cog):
             count = 0
             async for message in current.channel[0].history(limit=current.limit, before=current.endDate, after=current.startDate):
                 if PurgeFilter(message): count += 1
-            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=discord.Color.blue(), timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=blue[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
             embed.set_footer(text="To actually purge, copy & paste your command message, but add 'purge:true' to the filters")
             embed.description+="\n**"+str(count)+" messages matched the filters**"
             await current.botMessage.edit(content=None,embed=embed)
@@ -581,10 +583,15 @@ class Moderation(commands.Cog):
             await m.delete()
         except: return 1
         return 2
+    
+    def colorTheme(self, s: discord.Guild):
+        return self.bot.lightningLogging[s.id]['colorTheme']
 
 def PurgeFilter(m: discord.Message):
     '''Used to determine if a message should be purged'''
     current = filters.get(m.guild.id)
+    if m.pinned: 
+        return False
     if m.id == current.botMessage.id:
         return False
     if current.contains is not None:

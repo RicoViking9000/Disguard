@@ -13,10 +13,13 @@ import collections
 filters = {}
 members = {} #serverID_memberID: member
 
-yellow=0xffff00
-green=0x008000
-red=0xff0000
-blue=0x0000FF
+green = (0x008000, 0x66ff66)
+blue = (0x0000FF, 0x6666ff)
+red = (0xff0000, 0xff6666)
+orange = (0xD2691E, 0xffc966)
+yellow = (0xffff00, 0xffff66)
+purple = (0xFF00FF, 0xff66ff)
+
 
 class ParodyMessage(object):
     def __init__(self, content, created):
@@ -40,19 +43,25 @@ class Antispam(commands.Cog):
                 events = self.bot.lightningLogging.get(g.id).get('antispam').get('timedEvents')
                 for e in events:
                     if datetime.datetime.utcnow() > e.get('expires'):
-                        if e.get('type') == 'ban':
-                            try: await g.get_member(e.get('target')).unban(reason=f'{e.get("flavor")} Ban duration expired')
-                            except discord.Forbidden as e: print(f'Timed ban error: {e.text}')
-                        elif e.get('type') == 'mute':
-                            member = g.get_member(e.get('target'))
-                            try: 
-                                await member.remove_roles(g.get_role(e.get('role')))
-                                await member.add_roles(*[g.get_role(r) for r in e.get('roleList')])
-                                for p in e.get('permissionsTaken'): await g.get_channel(p.get('id')).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(p.get('overwrites')[0]), discord.Permissions(p.get('overwrites')[1])))
-                            except discord.Forbidden as e: 
-                                try: await self.bot.get_channel(self.bot.lightningLogging[g.id]['cyberlog']['defaultChannel']).send(f'Unable to unmute {member} because {e.text}')
-                                except: pass
-                                print(f'Timed mute error: {e.text}')
+                        try:
+                            if e.get('type') == 'ban':
+                                try: await g.get_member(e.get('target')).unban(reason=f'{e.get("flavor")} Ban duration expired')
+                                except discord.Forbidden as error: print(f'Timed ban error: {error.text}')
+                            elif e.get('type') == 'mute':
+                                member = g.get_member(e.get('target'))
+                                try: 
+                                    await member.remove_roles(g.get_role(e.get('role')))
+                                    await member.add_roles(*[g.get_role(r) for r in e.get('roleList')])
+                                    for p in e.get('permissionsTaken'): await g.get_channel(p.get('id')).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(p.get('overwrites')[0]), discord.Permissions(p.get('overwrites')[1])))
+                                except discord.Forbidden as error: 
+                                    try: await self.bot.get_channel(self.bot.lightningLogging[g.id]['cyberlog']['defaultChannel']).send(f'Unable to unmute {member} because {error.text}')
+                                    except: pass
+                                    print(f'Timed mute error: {error.text}')
+                            elif e.get('type') == 'pause':
+                                g = self.bot.get_guild(e['server'])
+                                await database.ResumeMod(g, e['key'])
+                                self.bot.get_cog('Cyberlog').lightningLogging[g.id][e['key']]['enabled'] = True
+                        except discord.NotFound: await database.RemoveTimedEvent(g, e)
                         await database.RemoveTimedEvent(g, e)
         except: traceback.print_exc()
 
@@ -122,7 +131,7 @@ class Antispam(commands.Cog):
                         if Cyberlog.logEnabled(message.guild, 'message') and self.bot.lightningLogging.get(message.guild.id).get('cyberlog').get('image'): await asyncio.sleep(2) #Wait two seconds if image logging is enabled
                         try: await message.delete()
                         except discord.Forbidden: pass
-                        return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending `{aFlag}`s in this server', color=0xD2691E), delete_after=15)
+                        return await message.channel.send(embed=discord.Embed(description=f'Please avoid sending `{aFlag}`s in this server', color=self.colorTheme(message.guild)), delete_after=15)
         if not (any([spam.get('attachments')[:-1], spam.get('enabled')])): return
         cRE = CheckRoleExclusions(message.author)
         if spam.get('exclusionMode') == 0:
@@ -421,7 +430,8 @@ class Antispam(commands.Cog):
                     desc.append("Unable to ban member")
             if spam.get("action") == 0:
                 successful = True
-        shorter=discord.Embed(title=message.author.name+" got busted",description="Hey " + message.author.mention + ", looks like you got flagged for spam for **" + str(len(short)) + "** reason(s). The reason(s) is/are below, but to see these reasons in detail, please contact a moderator of " + message.guild.name + ".\n\n",timestamp=datetime.datetime.utcnow(),color=0xD2691E)
+        theme = self.colorTheme(message.guild)
+        shorter=discord.Embed(title=message.author.name+" got busted",description="Hey " + message.author.mention + ", looks like you got flagged for spam for **" + str(len(short)) + "** reason(s). The reason(s) is/are below, but to see these reasons in detail, please contact a moderator of " + message.guild.name + ".\n\n",timestamp=datetime.datetime.utcnow(),color=orange[theme])
         for a in short:
             shorter.description += "• " + a + "\n"
         if person.get("warnings") >= 0 and warned:
@@ -444,6 +454,7 @@ class Antispam(commands.Cog):
             try:
                 directShorter = copy.deepcopy(shorter)
                 directShorter.description += f'\n\n*You are receiving this DM because {flavorText}**'
+                directShorter.description += f'\n\n*You are receiving this DM because {flavorText}*'
                 await message.author.send(embed=directShorter)
                 whispered = 2
             except discord.Forbidden:
@@ -452,7 +463,7 @@ class Antispam(commands.Cog):
             await message.channel.send(embed=shorter)
         if person.get('warnings') != warningsAtStart: asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, warningsAtStart - 1))
         if None not in spam.get("log"):
-            longer = discord.Embed(title=message.author.name + " was flagged for spam",description=message.author.mention + " was flagged for **" + str(len(short)) + " reasons**, details below",timestamp=datetime.datetime.utcnow(),color=0xFF00FF)
+            longer = discord.Embed(title=message.author.name + " was flagged for spam",description=message.author.mention + " was flagged for **" + str(len(short)) + " reasons**, details below",timestamp=datetime.datetime.utcnow(),color=orange[theme])
             for a in range(len(reason)):
                 longer.add_field(name="Reason " + str(a + 1),value=reason[a],inline=False)
             if warned:
@@ -487,12 +498,12 @@ class Antispam(commands.Cog):
             except discord.Forbidden: pass
         lcEmbed = None
         if role not in message.guild.get_member(message.author.id).roles:
-            lcEmbed = discord.Embed(title="Mute time is up for "+message.author.name,description="It appears somebody else already removed role **" + role.name + "** from __" + message.author.mention + "__, but I'll make sure the rest of the roles they had before were given back.",timestamp=datetime.datetime.utcnow(),color=0x3fd8e9)
+            lcEmbed = discord.Embed(title="Mute time is up for "+message.author.name,description="It appears somebody else already removed role **" + role.name + "** from __" + message.author.mention + "__, but I'll make sure the rest of the roles they had before were given back.",timestamp=datetime.datetime.utcnow(),color=orange[theme])
         try:
             await message.author.remove_roles(role)
-            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Successfully removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=0x00FF00)
+            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Successfully removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])
         except discord.Forbidden:
-            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Unable to remove role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=0x800000)
+            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Unable to remove role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])
         try: await message.author.add_roles(*memberRolesTaken)
         except discord.Forbidden: lcEmbed.description+=f'Unable to add some roles back to {message.author.name}, make sure they have these roles: {" • ".join([r.name for r in memberRolesTaken])}'
         try:
@@ -512,15 +523,16 @@ class Antispam(commands.Cog):
         if not await database.ManageServer(ctx.author): return await ctx.send('You need manage server, administrator, or server owner permissions to use this')
         config = self.bot.lightningLogging.get(ctx.guild.id).get('antispam')
         wl = config.get('ageKickWhitelist')
+        theme = self.colorTheme(ctx.guild)
         if len(args) == 0:
-            e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get("ageKickDM")}''', color=yellow, timestamp=datetime.datetime.utcnow())
+            e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get("ageKickDM")}''', color=yellow[theme], timestamp=datetime.datetime.utcnow())
             e.add_field(name='Kick Accounts',value=f'Under {config.get("ageKick")} days old')
-            e.add_field(name=f'Manageable by {ctx.guild.owner.name} only',value=config.get('ageKickOwner'))
+            e.add_field(name=f'Manageable by {self.bot.get_cog("Cyberlog").emojis["owner"]}{ctx.guild.owner.name} only',value=config.get('ageKickOwner'))
             await ctx.send(embed=e)
         else:
             if config.get('ageKickOwner') and ctx.author.id != ctx.guild.owner.id: return await ctx.send(f'Only the owner of this server ({ctx.guild.owner.name}) can edit the ageKick configuration.')
             arg = args[0]
-            e = discord.Embed(title='Age Kick Configuration',description='{} Saving...'.format(self.loading),color=yellow,timestamp=datetime.datetime.utcnow())
+            e = discord.Embed(title='Age Kick Configuration',description='{} Saving...'.format(self.loading),color=yellow[theme], timestamp=datetime.datetime.utcnow())
             m = await ctx.send(embed=e)
             if len(args) == 1:
                 try: 
@@ -564,21 +576,21 @@ class Antispam(commands.Cog):
                     await r[0].message.edit(embed=r[0].message.embeds[0])
                 else: e.description='My developer has denied your request on the grounds of security, please try another custom message or join [my support server](https://discord.gg/xSGujjz) for assistance.'
             e.set_author(name='Success')
-            e.set_footer(text='React 🔄 to view ageKick configuration')
+            e.set_footer(text=f'React {self.emojis["loop"]} to view ageKick configuration')
             await m.edit(embed=e)
-            await m.add_reaction('🔄')
+            await m.add_reaction(self.emojis['loop'])
             await Cyberlog.updateServer(ctx.guild)
             config = self.bot.lightningLogging.get(ctx.guild.id).get('antispam')
             wl = config.get('ageKickWhitelist')
-            def configCheck(r, u): return str(r) == '🔄' and r.message.id == m.id and u.id == ctx.author.id
+            def configCheck(r, u): return r.emoji == self.emojis['loop'] and r.message.id == m.id and u.id == ctx.author.id
             await self.bot.wait_for('reaction_add', check=configCheck)
             await m.clear_reactions()
-            return await m.edit(embed=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST IDs":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get('ageKickDM')}''', color=yellow, timestamp=datetime.datetime.utcnow()))
+            return await m.edit(embed=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELISTED USERS":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get('ageKickDM')}''', color=yellow[theme], timestamp=datetime.datetime.utcnow()))
         
     @commands.is_owner()
     @commands.command()
     async def setWarnings(self, ctx, members: commands.Greedy[discord.Member], setTo: int = 0):
-        embed=discord.Embed(title='Set Member Warnings', description=f'{self.loading}Updating member data...', color=yellow)
+        embed=discord.Embed(title='Set Member Warnings', description=f'{self.loading}Updating member data...', color=yellow[self.colorTheme(ctx.guild)])
         if len(members) == 0: members = ctx.guild.members
         if setTo == 0: 
             try: setTo = self.bot.lightningLogging[ctx.guild.id]['antispam']['warn']
@@ -616,6 +628,9 @@ class Antispam(commands.Cog):
         for m in self.bot.lightningLogging[member.guild.id]['members']:
             if m['id'] == member.id: return m['warnings']
         return -1
+
+    def colorTheme(self, s: discord.Guild):
+        return self.bot.lightningLogging[s.id]['colorTheme']
 
 def CheckRoleExclusions(member: discord.Member):
     '''Checks a member's roles to determine if their roles are in the exceptions list

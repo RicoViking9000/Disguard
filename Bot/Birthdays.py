@@ -12,10 +12,10 @@ import nltk
 import os
 
 
-yellow=0xffff00
-green=0x008000
-red=0xff0000
-blue=0x0000FF
+green = (0x008000, 0x66ff66)
+blue = (0x0000FF, 0x6666ff)
+red = (0xff0000, 0xff6666)
+yellow = (0xffff00, 0xffff66)
 loading = None
 
 birthdayCancelled = discord.Embed(title='🍰 Birthdays', description='Timed out')
@@ -23,10 +23,10 @@ birthdayCancelled = discord.Embed(title='🍰 Birthdays', description='Timed out
 class Birthdays(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
-        self.whitePlus = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whitePlus')
-        self.whiteMinus = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteMinus')
-        self.whiteCheck = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='whiteCheck')
+        self.loading = bot.get_cog('Cyberlog').emojis['loading']
+        self.whitePlus = bot.get_cog('Cyberlog').emojis['whitePlus']
+        self.whiteMinus = bot.get_cog('Cyberlog').emojis['whiteMinus']
+        self.whiteCheck = bot.get_cog('Cyberlog').emojis['whiteCheck']
         self.configureDailyBirthdayAnnouncements.start()
         self.configureServerBirthdayAnnouncements.start()
         self.configureDeleteBirthdayMessages.start()
@@ -55,11 +55,11 @@ class Birthdays(commands.Cog):
                             messages = await database.GetBirthdayMessages(member)
                             try: messages = self.bot.lightningUsers[member.id]['birthdayMessages']
                             except KeyError: pass
-                            embed=discord.Embed(title=f'''🍰 Happy {f"{age}{Cyberlog.suffix(age) if age else ''} "}Birthday, {member.name}! 🍰''', timestamp=datetime.datetime.utcnow(), color=yellow)
+                            embed=discord.Embed(title=f'''🍰 Happy {f"{age}{Cyberlog.suffix(age) if age else ''} "}Birthday, {member.name}! 🍰''', timestamp=datetime.datetime.utcnow(), color=yellow[1])
                             if len(messages) > 0: embed.description=f'You have {len(messages)} personal messages that will be sent below this message.'
                             else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
                             await member.send(embed=embed)
-                            for m in messages: await member.send(embed=discord.Embed(title=f'Personal Birthday Message from {m["authName"]}', description=m['message'], timestamp=m['created'], color=yellow))
+                            for m in messages: await member.send(embed=discord.Embed(title=f'Personal Birthday Message from {m["authName"]}', description=m['message'], timestamp=m['created'], color=yellow[1]))
                 except KeyError: pass
         except: traceback.print_exc()
 
@@ -135,7 +135,7 @@ class Birthdays(commands.Cog):
                     new = datetime.datetime(bday.year + 1, bday.month, bday.day)
                     await database.SetBirthday(member, new)
                     updated.append(member)
-        print('Updated birthdays for the following members\n', '\n'.join(['---{}'.format(a) for a in updated]))
+        print(f'Updated birthdays for {len(updated)} members')
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -154,7 +154,8 @@ class Birthdays(commands.Cog):
         except AttributeError: pass
         self.bot.loop.create_task(self.messagehandler(message))
 
-    async def messagehandler(self, message):
+    async def messagehandler(self, message: discord.Message):
+        theme = self.colorTheme(message.guild)
         try: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(message.guild.id).get('offset'))
         except: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(message.guild)) #Use database if local variables aren't available
         birthday = calculateDate(message, adjusted)
@@ -174,7 +175,7 @@ class Birthdays(commands.Cog):
                 if bdays.get(member.id) is not None:
                     if bdays.get(member.id).strftime('%B %d') == birthday.strftime('%B %d'): target.remove(member)
             if len(target) > 0:
-                draft=discord.Embed(title='🍰 Birthdays / 👮‍ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(target[0].name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation')), color=yellow, timestamp=datetime.datetime.utcnow())
+                draft=discord.Embed(title='🍰 Birthdays / 👮‍ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(target[0].name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
                 draft.description='{}, would you like to set your birthday as **{}**?'.format(', '.join([a.name for a in target]), birthday.strftime('%A, %B %d, %Y'))
                 for member in target:
                     if bdays.get(member.id) is not None: draft.description+='\n\n{}I currently have {} as your birthday; reacting with the check will overwrite this.'.format('{}, '.format(member.name) if len(target) > 1 else '', bdays.get(member.id).strftime('%A, %B %d, %Y'))
@@ -196,7 +197,7 @@ class Birthdays(commands.Cog):
                 if currentAge == ages[0]: return
             age = ages[0]
             letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-            draft=discord.Embed(title='🍰 Birthdays / 👮 {:.{diff}} / 🕯 Configure Age / {} Confirmation'.format(message.author.name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍ / 🕯 Configure Age / ✔ Confirmation')), color=yellow, timestamp=datetime.datetime.utcnow())
+            draft=discord.Embed(title='🍰 Birthdays / 👮 {:.{diff}} / 🕯 Configure Age / {} Confirmation'.format(message.author.name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍ / 🕯 Configure Age / ✔ Confirmation')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
             if len(ages) == 1: draft.description='{}, would you like to set your age as **{}**?\n\nI currently have {} as your age; reacting with the check will overwrite this.'.format(message.author.name, age, currentAge)
             else: draft.description='{}, if you would like to set your age as one of the listed values, react with the corresponding letter, otherwise you may ignore this message.\n\n{}\n\nI currently have {} as your age; reacting will overwrite this.'.format(message.author.name,
                 '\n'.join(['{}: Set your age to **{}**'.format(letters[i], ages[i]) for i in range(len(ages))]), currentAge)
@@ -215,9 +216,9 @@ class Birthdays(commands.Cog):
     @commands.command(aliases=['bday'])
     async def birthday(self, ctx, *args):
         await ctx.trigger_typing()
-        #return await ctx.send('This command will be available soon')
+        theme = self.colorTheme(ctx.guild)
         if len(args) == 0:
-            embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), color=yellow, timestamp=datetime.datetime.utcnow())
+            embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
             embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
             adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
             try: bday, age = self.bot.lightningUsers[ctx.author.id]['birthday'], self.bot.lightningUsers[ctx.author.id]['age']
@@ -268,7 +269,7 @@ class Birthdays(commands.Cog):
                     return await self.bot.get_cog('Cyberlog').info(ctx)
         else:
             adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-            embed=discord.Embed(title='🍰 Birthdays', description='{} Processing...'.format(self.loading),color=yellow,timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title='🍰 Birthdays', description='{} Processing...'.format(self.loading), color=yellow[theme], timestamp=datetime.datetime.utcnow())
             message = await ctx.send(embed=embed)
             arg = ' '.join(args)
             actionList = []
@@ -302,7 +303,7 @@ class Birthdays(commands.Cog):
                     while True:
                         d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
                         try: r = d.pop().result()
-                        except: pass
+                        except: r = None
                         for f in p: f.cancel()
                         if type(r) is tuple:
                             if str(r[0]) == 'ℹ':
@@ -334,7 +335,7 @@ class Birthdays(commands.Cog):
             def reacCheck(r, u): return str(r) in letters[:len(final)] and u == ctx.author and r.message.id == message.id
             d, p = await asyncio.wait([self.bot.wait_for('message', check=messageCheck), self.bot.wait_for('reaction_add', check=reacCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: r = d.pop().result()
-            except: pass
+            except: return
             for f in p: f.cancel()
             if type(r) is discord.Message: 
                 index = alphabet.index(r.content)
@@ -360,6 +361,9 @@ class Birthdays(commands.Cog):
                         await message.delete()
                         if str(r[0]) == 'ℹ': return await self.birthday(ctx)
                         else: return await self.bot.get_cog('Cyberlog').info(ctx)
+    
+    def colorTheme(self, s: discord.Guild):
+        return self.bot.lightningLogging[s.id]['colorTheme']
                         
 
 async def messageManagement(self, ctx, message, user, groups):
@@ -486,7 +490,7 @@ async def guestBirthdayViewer(self, ctx, target, cake=False):
     bday = self.bot.lightningUsers.get(target.id).get('birthday')
     age = self.bot.lightningUsers.get(target.id).get('age')
     wishlist = self.bot.lightningUsers.get(target.id).get('wishList')
-    embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 👤 Guest View'.format(target.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 👤 Guest View')), color=yellow, description='**{0:–^70}**\n{1}'.format('WISH LIST', '\n'.join(['• {}'.format(w) for w in wishlist])), timestamp=datetime.datetime.utcnow())
+    embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 👤 Guest View'.format(target.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 👤 Guest View')), color=yellow[self.colorTheme(ctx.guild)], description='**{0:–^70}**\n{1}'.format('WISH LIST', '\n'.join(['• {}'.format(w) for w in wishlist])), timestamp=datetime.datetime.utcnow())
     embed.description+='\n**{0:–^70}**'.format('AVAILABLE OPTIONS')
     embed.description += '{}{}{}'.format('\n🍰 (Anyone except {0}): Write a personal birthday message to {0}'.format(target.name) if not cake else '', 
         '\nℹ: Enter Birthday Action Mode' if target == ctx.author else '', '\n👮‍♂️: Switch to Member Details view')
@@ -499,7 +503,7 @@ async def firstWishlistContinuation(self, ctx, m, cont=False, new=None):
     wishlist = await database.GetWishlist(ctx.author)
     embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📝 Wish List / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 📝 Wish List / 🏠 Home')), 
         description='**{0:–^70}**\n{2}\n**{1:–^70}**\n{3}'.format('YOUR WISH LIST', 'OPTIONS', 'Very spacious in here! Your wishlist is currently recruiting fabulous new wishes, and you seem to know just where to find them :)' if wishlist is None or len(wishlist) < 1 else '\n'.join(['• {}'.format(w) for w in wishlist]),
-        '❌: Close this embed\n{}: Add entries to your wish list\n{}: Remove entries from your wish list'.format(self.whitePlus, self.whiteMinus)),color=yellow, timestamp=datetime.datetime.utcnow())
+        '❌: Close this embed\n{}: Add entries to your wish list\n{}: Remove entries from your wish list'.format(self.whitePlus, self.whiteMinus)),color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
     if not cont: new = await ctx.send(embed=embed)
     else: await new.edit(embed=embed)
     for r in ['❌', '➕', '➖']: await new.add_reaction(r)
@@ -577,7 +581,7 @@ async def modifyWishlistItems(self, ctx, m, new, wishlist, add=True): #If add is
 
 async def firstAgeContinuation(self, ctx, author, message):
     revert = copy.deepcopy(message.embeds[0])
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ❔ Query'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ❔ Query')), description='''What is your age?\n\n(Your age is currently **{}**)'''.format('not set' if await database.GetAge(author) is None else await database.GetAge(author)), color=yellow, timestamp=datetime.datetime.utcnow())
+    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ❔ Query'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ❔ Query')), description='''What is your age?\n\n(Your age is currently **{}**)'''.format('not set' if await database.GetAge(author) is None else await database.GetAge(author)), color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
     embed.set_author(name=author.name, icon_url=author.avatar_url)
     new = await ctx.send(embed=embed)
     message.embeds[0].set_author(icon_url='https://cdn.discordapp.com/emojis/605060517861785610.gif', name='Waiting for callback...')
@@ -641,7 +645,7 @@ async def ageContinuation(self, age, author, mess, draft, callback=None, partial
     try: await mess.clear_reactions()
     except: pass
     await database.SetAge(u[1], age)
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ✅ Success'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Success')),color=yellow, timestamp=datetime.datetime.utcnow())
+    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ✅ Success'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Success')),color=yellow[self.colorTheme(mess.guild)], timestamp=datetime.datetime.utcnow())
     embed.set_author(name=author.name, icon_url=author.avatar_url)
     embed.description = 'Your age has successfully been saved, and will be used for your next birthday announcement.'
     try: 
@@ -653,7 +657,7 @@ async def ageContinuation(self, age, author, mess, draft, callback=None, partial
 async def firstBirthdayContinuation(self, ctx, author, message):
     revert = copy.deepcopy(message.embeds[0])
     bday = await database.GetMemberBirthday(author)
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / ❔ Query'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Query')), description='''When is your birthday?\n\n(Your birthday is currently **{}**)'''.format('not set' if bday is None else bday.strftime('%b %d')), color=yellow, timestamp=datetime.datetime.utcnow())
+    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / ❔ Query'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Query')), description='''When is your birthday?\n\n(Your birthday is currently **{}**)'''.format('not set' if bday is None else bday.strftime('%b %d')), color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
     embed.set_author(name=author.name, icon_url=author.avatar_url)
     new = await ctx.send(embed=embed)
     message.embeds[0].set_author(icon_url='https://cdn.discordapp.com/emojis/605060517861785610.gif', name='Waiting for callback...')
@@ -721,7 +725,7 @@ async def birthdayContinuation(self, birthday, target, draft, message, mess, use
         draft.description = '{} Saving {}\'s birthday'.format(self.loading, u[1].name)
         mess = await message.channel.send(embed=draft)
         await database.SetBirthday(u[1], birthday)
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / ✅ Success'.format(target[0].name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Success')),color=yellow, timestamp=datetime.datetime.utcnow())
+    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / ✅ Success'.format(target[0].name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Success')),color=yellow[self.colorTheme(message.guild)], timestamp=datetime.datetime.utcnow())
     embed.description='''{}, your birthday has been successfully recorded: **{}** (which is {} days from now on a {} {} year).\nIf you would like, you can include your age in your birthday profile by typing 'I am <age>' or 'I'm <age>'\n\n
         {}\n\nEveryone else, you may use the `birthday` command or react to this message with the 🍰 emoji to add a personal message that will be displayed on {}'s birthday.'''.format(u[1].name,
         birthday.strftime('%B %d'), (await database.GetMemberBirthday(u[1]) - adjusted).days, birthday.strftime('%A'), 'this' if birthday.year == adjusted.year else 'next',
@@ -746,6 +750,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
     u: User who is sending a message, used when this differs from person reacting with cake (such as when autoTrigger is True)'''
     def cakeReac(r, u): return str(r) == '🍰' and not u.bot and r.message.id == mess.id
     specialUserID = 596381991151337482 #My friend's ID, joking around with them :P
+    theme = self.colorTheme(mess.guild)
     while True:
         try: 
             if not autoTrigger:
@@ -754,7 +759,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
                     r, u = await self.bot.wait_for('reaction_add', check=cakeReac)
                     if u in target: #User attempts to send a message to themself
                         if u.id == specialUserID:
-                            confirmationMessage = await mess.channel.send(embed=discord.Embed(description='Aight Kailey, would you like to write a message to yourself?', color=yellow))
+                            confirmationMessage = await mess.channel.send(embed=discord.Embed(description='Aight Kailey, would you like to write a message to yourself?', color=yellow[1]))
                             def confirmationCheck(reaction, user): return str(reaction) == '✔' and user.id == specialUserID and reaction.message.id == confirmationMessage.id
                             try: 
                                 await confirmationMessage.add_reaction('✔')
@@ -766,7 +771,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
                                 await confirmationMessage.delete()
                                 try: await mess.remove_reaction(r, u)
                                 except discord.Forbidden: pass
-                        else: await mess.channel.send(embed=discord.Embed(description=f'Sorry {u.name}, you can\'t write a personal birthday message to yourself', color=yellow), delete_after=15)
+                        else: await mess.channel.send(embed=discord.Embed(description=f'Sorry {u.name}, you can\'t write a personal birthday message to yourself!', color=yellow[theme]), delete_after=15)
                     else:
                         try: await mess.remove_reaction(r, u)
                         except discord.Forbidden: pass
@@ -782,7 +787,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
                         break
                     except: pass
             else: recipient = target[0]
-            if birthday is None: return await mess.channel.send(embed=discord.Embed(description=f'{recipient.name} must set a birthday before you can write personal messages to them.', color=yellow))
+            if birthday is None: return await mess.channel.send(embed=discord.Embed(description=f'{recipient.name} must set a birthday before you can write personal messages to them.', color=yellow[theme]))
             verifying = await u.send('{} Verifying...'.format(self.loading))
             recipientMessages = await database.GetBirthdayMessages(recipient)
             alreadySent = [m for m in recipientMessages if u.id == m.get('author')]
@@ -845,7 +850,19 @@ def calculateDate(message, adjusted):
     longDays = collections.deque(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
     shortMonths = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
     longMonths = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-    ref = collections.deque([(a, b) for a, b in {1:31, 2:29, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}.items()]) #Number of days in each month. As with days, this dict may need to move around
+    def isLeapYear(): 
+        y = datetime.datetime.today().year
+        if y % 4 != 0: return False
+        else:
+            if y % 100 == 0:
+                if y % 400 != 0:
+                    return False
+                else:
+                    return True
+            else:
+                return True
+        return False
+    ref = collections.deque([(a, b) for a, b in {1:31, 2:29 if isLeapYear() else 28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}.items()]) #Number of days in each month. As with days, this dict may need to move around
     ref.rotate(-1 * (adjusted.month - 1)) #Current month moves to the front
     #Determine if user specified long or short day/month in response
     if any(c in message.content.lower().split(' ') for c in longMonths): months = longMonths
@@ -960,7 +977,6 @@ async def verifyAge(message, age):
         except: return False
     else: return False
     return True
-
 
 async def birthdayCancellation(message, embed, revert, new, author):
     await new.edit(embed=embed, delete_after=20)

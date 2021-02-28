@@ -3,8 +3,13 @@
 <html>
     <head>
         <title>Dashboard: Disguard</title>
-        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
-        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
+        {%if redesign%}
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        {%else%}
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldCss.css') }}">
+            <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldDesign.css') }}">
+        {%endif%}
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
         <script type="text/javascript">
             $(window).load(function() {
@@ -21,7 +26,12 @@
             <div class='circle'></div>
             <div class='circle'></div>
         </div>
-        <a href="{{url_for('index')}}"><h2 class=goBack>Select a server</h2></a>
+        <div class=breadcrumbs>
+            {%for breadcrumb in breadcrumbs%}
+                <a {%if loop.last%}class=breadcrumbCurrent{%endif%} href='{{breadcrumb.url}}'><span {%if loop.last%}class=breadcrumbCurrent{%endif%}>{{breadcrumb.text}}</span></a>
+                {{'>' if not loop.last}}
+            {%endfor%}
+        </div>
         <p class="pageTitle center">Choose a module</p>
         <a href="{{url_for('server', id=server)}}">
             <div id=genServer>
