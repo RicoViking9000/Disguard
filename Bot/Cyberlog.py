@@ -339,8 +339,10 @@ class Cyberlog(commands.Cog):
             else: 
                 attachmentsPath = f'Attachments/{s["server_id"]}'
                 indexesPath = f'{indexes}/{s["server_id"]}'
-                shutil.rmtree(attachmentsPath)
-                shutil.rmtree(indexesPath)
+                try: shutil.rmtree(attachmentsPath)
+                except FileNotFoundError: pass
+                try: shutil.rmtree(indexesPath)
+                except FileNotFoundError: pass
                 await database.DeleteServer(s['server_id'], self.bot)
         async for u in await database.GetAllUsers():
             if self.bot.get_user(u['user_id']):
