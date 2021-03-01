@@ -1306,7 +1306,8 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name='Old Category', value='Old')
                 embed.add_field(name='New Category', value='New')
             if len(embed.fields) > 0:
-                msg = await logChannel(before.guild, "channel").send(content=(content + embedToPlaintext(embed)) if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+                content += embedToPlaintext(embed)
+                msg = await logChannel(before.guild, "channel").send(content=content if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if type(before) is not discord.CategoryChannel and before.category != after.category:
                     oldChannelList = self.categories.get(before.category.id) if before.category is not None else self.categories.get(before.guild.id)
                     newChannelList = after.category.channels if after.category is not None else [c[1] for c in after.guild.by_category() if c[0] is None]
@@ -1966,10 +1967,10 @@ class Cyberlog(commands.Cog):
                 #embed.description+=f'\nWas the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}'
             except Exception as e: print(f'Member leave placement fail: {e}')
             if 'Finalizing' in embed.title: embed.title = f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}❌" if settings['library'] < 2 else self.emojis['memberLeave']) if settings['context'][0] > 0 else ''}{f'{"Member left" if not member.bot else "Bot removed"}' if settings['context'][0] < 2 else ''}'''
-            await message.edit(content = None if any((settings['flashText'], settings['tts'])) and not settings['plainText'] else content, embed=embed if not settings['plainText'] else None)
+            await message.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
             embed.set_field_at(-1, name='**Post count**', value=await asyncio.create_task(self.MemberPosts(member)))
             await message.edit(embed=embed if not settings['plainText'] else None)
-            if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
+            #if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
         members[member.guild.id] = member.guild.members
         try: 
             if os.path.exists(savePath): os.remove(savePath)

@@ -64,7 +64,7 @@ class LogModule(object):
         if entry:
             try:
                 for k, v in dict(entry).items():
-                    if f'{n:%m%d%Y}' != '022821':
+                    if f'{n:%m%d%Y}' != '02282021':
                         if k == 'embed': result['plainText'] = not entry['embed']
                         else: result[k] = v
             except: pass
@@ -239,7 +239,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             'context': (1, 1) if not log or not log.get('context') else log.get('context'), #0 = no emojis, 1 = emojis and descriptions, 2 = just emojis. index 0 = title, index 1 = description
             'hoverLinks': 1 if not log or not log.get('hoverLinks') else log.get('hoverLinks'), #0: data hidden, 1: data under hover links, 2: data under hover links & option to expand, 3: data visible. LATER
             'embedTimestamp': 3 if not log or not log.get('embedTimestamp') else log.get('embedTimestamp'), #0: All off, 1: Just footer, 2: Just description, 3: All on
-            'botLogging': log.get('botLogging') if f'{started:%m%d%Y}' != '022821' else 2,                  #0: Disabled, 1: Plaintext, 2: Embeds
+            'botLogging': log.get('botLogging') if f'{started:%m%d%Y}' != '02282021' else 2,                #0: Disabled, 1: Plaintext, 2: Embeds
             'color': ['auto', 'auto', 'auto'] if not log or not log.get('color') else log.get('color'),
             'plainText': False if not log or not log.get('plainText') else log.get('plainText'),
             'read': True if not log or not log.get('read') else log.get('read'),
