@@ -1028,7 +1028,7 @@ class Cyberlog(commands.Cog):
                         await msg.edit(content=None, embed=embed)
                         await msg.clear_reactions()
                         if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
-        if settings['botLogging'] == 0 and author.bot: return
+        if settings['botLogging'] == 0 and author.bot: pass #return
         elif settings['botLogging'] == 1 and author.bot: settings['plainText'] = True
         if datetime.datetime.utcnow() > created: #This makes negative time rather than posting some super weird timestamps. No, negative time doesn't exist but it makes more sense than what this would do otherwise
             mult = 1
@@ -1917,7 +1917,7 @@ class Cyberlog(commands.Cog):
             settings = getCyberAttributes(member.guild, 'doorguard')
             color = red[colorTheme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed=discord.Embed(
-                title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}❌" if settings['library'] < 2 else self.emojis['memberLeave']) if settings['context'][0] > 0 else ''}{"Member left" if not member.bot else "Bot removed"} ({self.loading} Finalyzing log)''',
+                title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}❌" if settings['library'] < 2 else self.emojis['memberLeave']) if settings['context'][0] > 0 else ''}{"Member left" if not member.bot else "Bot removed"} ({self.loading} Finalizing log)''',
                 description=f"{(self.emojis['member'] if not member.bot else '🤖') if settings['context'][1] > 0 else ''}{'Member' if settings['context'][1] < 2 and not member.bot else 'Bot' if settings['context'][1] < 2 and member.bot else ''}: {member.mention} ({member.name})",
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
@@ -1961,7 +1961,7 @@ class Cyberlog(commands.Cog):
                     Here for: {hereForDisplay}
                     Was the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}
                     '''
-                embed.description += f"[Hover for more details]({message.jump_url} '{hoverPlainText}'')"
+                embed.description += f"\n[Hover for more details]({message.jump_url} '{hoverPlainText}'')"
                 #embed.description+=f"\n[Hover for more details]({message.jump_url} 'Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}"
                 #embed.description+=f'''\nLeft at: {received}\nHere for: {hereForDisplay}'''
                 #embed.description+=f'\nWas the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}'
