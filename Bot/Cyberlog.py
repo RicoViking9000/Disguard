@@ -1306,7 +1306,7 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name='Old Category', value='Old')
                 embed.add_field(name='New Category', value='New')
             if len(embed.fields) > 0:
-                msg = await logChannel(before.guild, "channel").send(content=content + embedToPlaintext(embed) if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+                msg = await logChannel(before.guild, "channel").send(content=(content + embedToPlaintext(embed)) if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if type(before) is not discord.CategoryChannel and before.category != after.category:
                     oldChannelList = self.categories.get(before.category.id) if before.category is not None else self.categories.get(before.guild.id)
                     newChannelList = after.category.channels if after.category is not None else [c[1] for c in after.guild.by_category() if c[0] is None]
@@ -2626,7 +2626,7 @@ class Cyberlog(commands.Cog):
             color = blue[colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed=discord.Embed(
                 title=f'''{(self.emojis['roleEdit'] if settings['library'] > 1 else '🚩✏')}{'Role was updated (React ℹ to view role details)' if settings['context'][0] < 2 else ''}''',
-                description=f'''{'🚩' if settings['context'] > 0 else ''}{'Role' if settings['context'][1] < 2 else ''}: {after.mention}{f" ({after.name})" if after.name == before.name else ""}''',
+                description=f'''{'🚩' if settings['context'][1] > 0 else ''}{'Role' if settings['context'][1] < 2 else ''}: {after.mention}{f" ({after.name})" if after.name == before.name else ""}''',
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
             if after.name != before.name: embed.description += f'''\n{self.emojis['richPresence'] if settings['context'][1] > 0 else ''}Name: {before.name} → **{after.name}**'''
@@ -4094,7 +4094,7 @@ class Cyberlog(commands.Cog):
         #If we pass a solitary member, convert it to a list with a single entry, otherwise, leave it alone
         #COMMENT THE REST OF MY WORK. make the update good
         if self.bot.user.id != 558025201753784323: return
-        if type(memb) is discord.User: members = [memb]
+        if type(memb) in (discord.User, discord.Member): members = [memb]
         else: members = memb
         disguardServer = bot.get_guild(560457796206985216) #Disguard official server
         disguardServerMemberList = [m.id for m in disguardServer.members] #List of member IDs in Disguard Official server
@@ -4380,7 +4380,8 @@ def embedToPlaintext(e: discord.Embed):
 
 def multiLineQuote(s):
     '''Converts a string containing newlines in it to a block quote'''
-    return '\n'.join([f'> {line}' for line in s.split('\n')])
+    if '\n' in s: return '\n'.join([f'> {line}' for line in s.split('\n')])
+    else: return '\n'.join([line for line in s.split('\n')])
 
 def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
     if member.id == member.guild.owner.id: return True
