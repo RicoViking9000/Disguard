@@ -224,7 +224,7 @@ async def index(ctx, t: int = None):
 
 @bot.command()
 async def help(ctx):
-    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands '✔ Verified URL to Disguard website - https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{getData(bot).get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow)
+    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands '✔ Verified URL to Disguard website - https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{getData(bot).get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow[Cyberlog.colorTheme(ctx.guild) if ctx.guild else 1])
     await ctx.send(embed=e)
 
 @bot.command()
@@ -242,7 +242,7 @@ async def server(ctx):
     baseURL = f'http://disguard.herokuapp.com/manage/{ctx.guild.id}'
     green = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online')
     red = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='dnd')
-    embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow)
+    embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[Cyberlog.colorTheme(ctx.guild)])
     embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
     embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
     # embed.description+=f'''Flag members for: {f"{antispam.get('congruent')[0]} duplicate messages/{} min "}'''
@@ -297,7 +297,7 @@ async def broadcast(ctx):
     except asyncio.TimeoutError: return
     if str(reaction[0]) == '☑': embedForm = True
     else: embedForm = False
-    if embedForm: embed = discord.Embed(title=message.content[:message.content.find('\n')], description=message.content[message.content.find('\n'):], color=yellow)
+    if embedForm: embed = discord.Embed(title=message.content[:message.content.find('\n')], description=message.content[message.content.find('\n'):], color=yellow[1])
     else: embed = message.content
     await ctx.send(content=f'Config - step 1: Servers\n\nType `all` to send to all servers, a comma-separated list of IDs to select specific servers, or an equation (eq: <statement>)\n\n{embed if not embedForm else ""}', embed=embed if embedForm else None)
     try: message = await bot.wait_for('message', check=patchCheck, timeout=300)
@@ -1822,7 +1822,7 @@ async def daylight(ctx):
         if await database.AdjustDST(s):
             defaultLogchannel = bot.get_channel(getData(bot)[s.id]['cyberlog'].get('defaultChannel'))
             if defaultLogchannel:
-                e = discord.Embed(title='🕰 Server Time Zone update', color=yellow)
+                e = discord.Embed(title='🕰 Server Time Zone update', color=yellow[1])
                 e.description = 'Your server\'s time zone offset from UTC setting via Disguard has automatically been decremented, as it appears your time zone is in the USA & Daylight Savings Time has ended.\n\nTo revert this, you may enter your server\'s general settings page on my web dashboard (use the `config` command to retrieve a quick link).'
                 await defaultLogchannel.send(embed=e)
     await status.edit(content='Done')

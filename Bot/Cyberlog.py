@@ -2788,7 +2788,7 @@ class Cyberlog(commands.Cog):
                     await updateLastActive(log.user, datetime.datetime.now(), 'updated emojis somewhere')
                 except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             embed.set_footer(text=f'Relevant emoji IDs: {" • ".join(str(f) for f in footerIDList)}' if len(footerIDList) > 1 else f'Emoji ID: {footerIDList[0]}')
-            if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(rawReceived) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(after.guild)}"
+            if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(rawReceived) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(guild)}"
             if msg and len(embed.fields) > 0:
                 msg = await logChannel(guild, 'emoji').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if any((settings['plainText'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
