@@ -993,7 +993,7 @@ class Cyberlog(commands.Cog):
                     if any([ext in directory.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]):
                         URL = await self.uploadFiles(savePath)
                         embed.set_image(url=URL)
-                    else: attachments.append(discord.File(savePath))
+                    else: attachments.append(savePath)
                 except discord.HTTPException:
                     fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
         except OSError: pass
@@ -1096,14 +1096,14 @@ class Cyberlog(commands.Cog):
         a = 0
         while a < len(attachments):
             f = attachments[a]
-            if os.stat(f.fp).st_size / 1000000 > 8:
-                fileError += f"\n{self.emojis['alert']} | This message's attachment ({f.filename}) is too large to be sent ({round(os.stat(f.fp).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-                savePath = f'{tempDir}/{payload.message_id}/{f.filename}'
+            if os.stat(f).st_size / 1000000 > 8:
+                fileError += f"\n{self.emojis['alert']} | This message's attachment ({os.path.basename(f)}) is too large to be sent ({round(os.stat(f).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
+                savePath = f'{tempDir}/{payload.message_id}/{os.path.basename(f)}'
                 shutil.copy2(f.fp, savePath)
                 attachments.pop(a)
             else: a += 1
         content += f'\n\n{fileError}'
-        msg = await c.send(content=plainText if 'audit log' in plainText or 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, files=attachments, tts=settings['tts'])
+        msg = await c.send(content=plainText if 'audit log' in plainText or 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, files=[discord.File(f) for f in attachments], tts=settings['tts'])
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
         if os.path.exists(savePath): os.remove(savePath)
         #Now delete any attachments associated with this message
@@ -1252,6 +1252,7 @@ class Cyberlog(commands.Cog):
                     log = (await before.guild.audit_logs(limit=1).flatten())[0]
                     if log.action in (discord.AuditLogAction.channel_update, discord.AuditLogAction.overwrite_create, discord.AuditLogAction.overwrite_update, discord.AuditLogAction.overwrite_delete):
                         if log.user.id == self.bot.user.id and before.overwrites != after.overwrites: return
+                        if log.user.id == 814971588214390827 and after.guild.id == 460611346837405696: return
                         if settings['botLogging'] == 0 and log.user.bot: return
                         elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
                         embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
@@ -1651,7 +1652,7 @@ class Cyberlog(commands.Cog):
                             {"🚪" if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
                             {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}
                             {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}
-                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times'''
+                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')'''
                         ]
                     embed.add_field(name='Invite Details',value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             await msg.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
@@ -4348,7 +4349,7 @@ def cyberAttribute(s: discord.Guild, mod, a):
     specific = lightningLogging[s.id]['cyberlog'][mod][a]
     def boolEval(i):
         if type(i) is list: return all(a is not None for a in i)
-        else: return bool(i)
+        else: return i is not None
     return specific if boolEval(specific) else default
 
 def getCyberAttributes(s: discord.Guild, mod):
