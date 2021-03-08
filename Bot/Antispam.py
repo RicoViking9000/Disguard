@@ -31,6 +31,7 @@ class Antispam(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
+        self.emojis = self.bot.get_cog('Cyberlog').emojis
         self.antispamProcessTimes = [] #stores 5,000 antispam events received in on_message for data evaluation/statistical purposes
         self.fullAntispamProcessTimes = [] #stores 100 antispam events - full effect (meaning only actions with consequences, be it warnings, bans, mutes, etc)
         self.checkTimedEvents.start()
