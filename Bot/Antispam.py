@@ -46,7 +46,7 @@ class Antispam(commands.Cog):
                     if datetime.datetime.utcnow() > e.get('expires'):
                         try:
                             if e.get('type') == 'ban':
-                                try: await g.unban(self.bot.fetch_user(e.get('target')), reason=f'{e.get("flavor")} Ban duration expired')
+                                try: await g.unban(await self.bot.fetch_user(e.get('target')), reason=f'{e.get("flavor")} Ban duration expired')
                                 except discord.Forbidden as error: print(f'Timed ban error: {error.text}')
                             elif e.get('type') == 'mute':
                                 member = g.get_member(e.get('target'))
