@@ -1,3 +1,5 @@
+import collections
+import typing
 import discord
 from discord.ext import commands
 import database
@@ -12,8 +14,10 @@ import json
 filters = {}
 loading = None
 newline = '\n'
+qlf = '  '
 
 blue = (0x0000FF, 0x6666ff)
+orange = (0xD2691E, 0xffc966)
 
 class PurgeObject(object):
     def __init__(self, message=None, botMessage=None, limit=100, author=[], contains=None, startsWith=None, endsWith=None, links=None, invites=None, images=None, embeds=None, mentions=None, bots=None, channel=[], files=None, reactions=None, appMessages=None, startDate=None, endDate=None, caseSensitive=False, cleanup=False, anyMatch=False):
@@ -46,6 +50,9 @@ class PurgeObject(object):
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.emojis = self.bot.get_cog('Cyberlog').emojis
+        self.roleCache = {}
+        self.permissionsCache = {}
 
     @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
@@ -72,6 +79,88 @@ class Moderation(commands.Cog):
         except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
         await status.edit(content=f'{member.name} is now unlocked and can access channels again.{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
 
+    @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
+    @commands.command()
+    async def mute(self, ctx, members: commands.Greedy[discord.Member], duration=None, *, reason=''):
+        '''Mutes the specified member(s) for a specified amount of time, if given
+           Preliminary for v0.2.25.1 - very basic interface, snappy, takes members or list of members, no fancy UI, expand later by 0.2.26
+        '''
+        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to mute\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}mute [list of members to mute] [duration:optional] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]\nDuration: 3d = 3 days, 6h30m = 6 hours 30 mins, etc. s=sec, m=min, h=hour, d=day, w=week, mo=month, y=year')
+        if duration: duration = ParseDuration(duration)
+        embed = discord.Embed(title=f'{self.emojis["muted"]}Muting {len(members)} member{"s" if len(members) != 1 else ""} for {duration if duration else "♾"}s', description=f"{self.emojis['loading']}\n", color=orange[self.colorTheme(ctx.guild)])
+        message = await ctx.send(embed=embed)
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        results = await self.muteMembers(members, duration=duration, reason=reason)
+        def nestMore(array):
+            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+        embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+        embed.title = embed.title.replace('Muting', 'Mute')
+        await message.edit(embed=embed)
+
+    @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
+    @commands.command()
+    async def unmute(self, ctx, members: commands.Greedy[discord.Member], *, reason=''):
+        '''Unmuted the specified members'''
+        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to unmute\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}unmute [list of members to unmute] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
+        embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmuting {len(members)} member{"s" if len(members) != 1 else ""}', description=f"{self.emojis['loading']}\n", color=orange[self.colorTheme(ctx.guild)])
+        message = await ctx.send(embed=embed)
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        results = await self.unmuteMembers(members, {}, reason=reason)
+        def nestMore(array):
+            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+        embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+        embed.title = embed.title.replace('Unmuting', 'Unmute')
+        await message.edit(embed=embed)
+
+    @commands.has_guild_permissions(kick_members=True)
+    @commands.command()
+    async def kick(self, ctx, members: commands.Greedy[discord.Member], *, reason=''):
+        '''Kicks the specified members'''
+        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to kick\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}kick [list of members to kick] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
+        await ctx.trigger_typing()
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        embed = discord.Embed(title=f'👢Kick {len(members)} member{"s" if len(members) != 1 else ""}', description='', color=orange[self.colorTheme(ctx.guild)])
+        for m in members:
+            try: 
+                if await database.ManageServer(m): raise Exception("You cannot kick a moderator")
+                await m.kick(reason=reason)
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully kicked {m}\n'
+            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error kicking {m}: {e}\n'
+        await ctx.send(embed=embed)
+
+    @commands.has_guild_permissions(ban_members=True)
+    @commands.command()
+    async def ban(self, ctx, users: commands.Greedy[typing.Union[discord.User, int]], deleteMessageDays:int = 0, *, reason=''):
+        '''Bans the specified members'''
+        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to ban\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}ban [list of users to ban] [deleteMessageDays:optional[int] = 0 ▷ must be 0 <= x <= 7] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nUse a user\'s ID if you want to ban someone not in this server\n\nExample: `.ban {self.bot.user.mention} 5 Muted me for spamming` Would ban Disguard, delete its message sent within the past 5 days, with the reason "Muted me for spamming"')
+        users = await self.UserProcessor(users)
+        await ctx.trigger_typing()
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[self.colorTheme(ctx.guild)])
+        for m in users:
+            try: 
+                member = ctx.guild.get_member(m.id)
+                if member and await database.ManageServer(member): raise Exception("You cannot ban a moderator")
+                await ctx.guild.ban(m, delete_message_days=deleteMessageDays, reason=reason)
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully banned {m}\n'
+            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error banning {m}: {e}\n'
+        await ctx.send(embed=embed)
+
+    @commands.has_guild_permissions(ban_members=True)
+    @commands.command()
+    async def unban(self, ctx, users: commands.Greedy[typing.Union[discord.User, int]], *, reason=''):
+        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to unban\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}unban [list of users to unban] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nID is the only argument guaranteed to work, as that would be the only way I can retrieve a User not in any of my servers')
+        users = await self.UserProcessor(users)
+        await ctx.trigger_typing()
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[self.colorTheme(ctx.guild)])
+        for u in users:
+            try: 
+                await ctx.guild.unban(u, reason=reason)
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully unbanned {u}\n'
+            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error unbanning {u}: {e}\n'
+        await ctx.send(embed=embed)
+
     @commands.guild_only()
     @commands.has_guild_permissions(manage_messages=True)
     @commands.command()
@@ -88,7 +177,7 @@ class Moderation(commands.Cog):
             path = 'Indexes/{}/{}'
             cancel=discord.Embed(title='Purge command',description='Cancelled')
             url='https://cdn.discordapp.com/emojis/605060517861785610.gif'
-            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n',timestamp=datetime.datetime.utcnow(),color=blue[colorTheme(ctx.guild)])
+            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n',timestamp=datetime.datetime.utcnow(),color=blue[self.colorTheme(ctx.guild)])
             embed.description+='First, what channel(s) are you thinking of purging? Make sure the channel(s) are hyperlinked. To purge from this channel ({}), type `here`, to purge from all text channels, type `all`'.format(ctx.channel.mention)
             embed.set_footer(text='Type cancel to cancel the command. Timeout is 120s')
             embed.set_author(name='Waiting for input')
@@ -587,6 +676,113 @@ class Moderation(commands.Cog):
     def colorTheme(self, s: discord.Guild):
         return self.bot.lightningLogging[s.id]['colorTheme']
 
+    async def UserProcessor(self, users):
+        returnQueue = []
+        for user in users:
+            if type(user) is discord.User: returnQueue.append(user)
+            else:
+                try: returnQueue.append(await self.bot.fetch_user(user))
+                except discord.NotFound: pass
+        return returnQueue
+
+    async def muteMembers(self, members, *, duration=None, reason=None, harsh=False, waitToUnmute=True, muteRole=None):
+        '''Applies automated mute to the given member, returning a status tuple (bool:success, string explanation)'''
+        '''Harsh: If True, apply permission overwrites to each channel for this member in addition to for the mute role'''
+        # Vars
+        g = members[0].guild
+        results = {'Notes': []} #0 holds notes
+        #First: Check if we have an automute role stored
+        if not muteRole:
+            muteRole = g.get_role(self.bot.lightningLogging[g.id]['antispam'].get('automuteRole', 0))
+            #If we don't have a mute role, we gotta make one
+            if not muteRole:
+                try: muteRole = await g.create_role(name='Disguard AutoMute', reason='This role will be used when Disguard needs to mute a member. As long as this role exists, its ID will be stored in my database. You may edit the name of this role as you wish.')
+                except Exception as e: 
+                    results['Notes'].append(f'{self.emojis["alert"]} | Unable to mute member{"s" if len(members) != 1 else ""} - error during AutoMute role creation: {type(e)}: {e}{e}')
+                    return results
+                asyncio.create_task(database.SetMuteRole(g, muteRole))
+        #Move the mute role's position to the position right below Disguard's top role, if it's not already there
+        if muteRole.position < g.me.top_role.position - 1:
+            try: await muteRole.edit(position=g.me.top_role.position - 1)
+            except Exception as e: results['Notes'].append(f'Unable to move the AutoMute role higher in the rolelist, please do this manually: {type(e)}: {e}{e}')
+        #Check all channels to make sure the overwrites are correct, along with removing member permissions from the channel
+        permissionsTaken = collections.defaultdict(dict)
+        memberRolesTaken = {}
+        for c in g.text_channels:
+            if c.overwrites_for(muteRole).send_messages != False:
+                try: asyncio.create_task(c.set_permissions(muteRole, send_messages=False))
+                except Exception as e: results['Notes'].append(f'{self.emojis["alert"]} | #{c.name} (🚩{muteRole.name}): `{type(e)}: {e}`')
+            for m in members:
+                results[m] = {'Channel Permission Overwrites': [], 'Add Mute Role': [], 'Cache/Data Management': []}
+                if harsh and c.overwrites_for(m).send_messages != False:
+                    try: 
+                        asyncio.create_task(c.set_permissions(m, send_messages=False))
+                        permissionsTaken[str(m.id)][str(c.id)] = (c.overwrites.get(m).pair()[0].value, c.overwrites.get(m).pair()[1].value) if c.overwrites.get(m) else (0, 0)
+                    except Exception as e: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: `{type(e)}: {e}`')
+                elif not harsh and c.overwrites_for(m):
+                    try: 
+                        asyncio.create_task(c.set_permissions(m, overwrite=None))
+                        permissionsTaken[str(m.id)][str(c.id)] = (c.overwrites.get(m).pair()[0].value, c.overwrites.get(m).pair()[1].value) if c.overwrites.get(m) else (0, 0)
+                    except Exception as e: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: {type(e)}: {e}')
+                if len(results[m]['Channel Permission Overwrites']) == 0: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["greenCheck"]}')
+        #Since we're removing most of the member's roles to enforce this mute, we need to keep track of the changes
+        muteTimedEvents = {}
+        for m in members:
+            try:
+                memberRolesTaken[m.id] = [r for r in m.roles if r.id != g.default_role.id]
+                self.roleCache[f'{m.guild.id}_{m.id}'] = memberRolesTaken[m.id]
+                self.permissionsCache[f'{m.guild.id}_{m.id}'] = permissionsTaken[str(m.id)]
+                try: 
+                    await m.edit(roles=[muteRole], reason=reason)
+                    results[m]['Add Mute Role'].append(f'{self.emojis["greenCheck"]}')
+                except Exception as e: results[m]['Add Mute Role'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+                if duration:
+                    muteTimedEvents[m.id] = {'type': 'mute', 'target': m.id, 'flavor': reason, 'role': muteRole.id, 'roleList': [r.id for r in memberRolesTaken[m.id]], 'permissionsTaken': permissionsTaken[str(m.id)], 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                    asyncio.create_task(database.AppendTimedEvent(g, muteTimedEvents[m.id]))
+                results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
+            except Exception as e: results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+        asyncio.create_task(database.SetMuteCache(m.guild, members, memberRolesTaken))
+        asyncio.create_task(database.SetPermissionsCache(m.guild, members, permissionsTaken))
+        if duration and waitToUnmute: asyncio.create_task(self.waitToUnmute(members, muteTimedEvents, datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)))
+        return results
+
+    async def waitToUnmute(self, members, events, expires, reason=None):
+        await discord.utils.sleep_until(expires)
+        await self.unmuteMembers(members, events, reason=reason)
+
+    async def unmuteMembers(self, members, events, reason=None):
+        #Note: Possibly make use of discord.Object to reduce iteration counts and running time
+        results = {}
+        removedRoles = {}
+        removedOverwrites = {}
+        for m in members: 
+            try:
+                results[m] = {'Cache/Data Management': [], 'Remove Mute Role': [], 'Channel Permission Overwrites': []}
+                try: 
+                    await m.edit(roles=removedRoles, reason=reason)
+                    results[m]['Remove Mute Role'].append(f'{self.emojis["greenCheck"]}')
+                except Exception as e: results[m]['Remove Mute Role'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+                if events and events.get(m.id): asyncio.create_task(database.RemoveTimedEvent(m.guild, events[m.id]))
+                removedRoles[m.id] = copy.deepcopy(self.roleCache.get(f'{m.guild.id}_{m.id}')) or [m.guild.get_role(r) for r in self.bot.get_cog('Cyberlog').getServerMember(m).get('roleCache', [])]
+                removedOverwrites[m.id] = copy.deepcopy(self.permissionsCache.get(f'{m.guild.id}_{m.id}', {})) or self.bot.get_cog('Cyberlog').getServerMember(m).get('permissionsCache', {})
+                if self.roleCache.get(f'{m.guild.id}_{m.id}'): self.roleCache.pop(f'{m.guild.id}_{m.id}')
+                if self.permissionsCache.get(f'{m.guild.id}_{m.id}'): self.permissionsCache.pop(f'{m.guild.id}_{m.id}')
+                results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
+            except Exception as e: results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+        asyncio.create_task(database.SetMuteCache(m.guild, members, []))
+        asyncio.create_task(database.SetPermissionsCache(m.guild, members, []))
+        for c in m.guild.text_channels:
+            for m in members:
+                try:
+                    if m.id in [o.id for o in c.overwrites.keys()] and str(c.id) not in removedOverwrites[m.id].keys(): asyncio.create_task(c.set_permissions(m, overwrite=None))
+                    elif str(c.id) in removedOverwrites[m.id].keys(): 
+                        currentOverwrite = removedOverwrites[m.id].get(str(c.id), (0, 0))
+                        asyncio.create_task(c.set_permissions(m, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(currentOverwrite[0]), discord.Permissions(currentOverwrite[1]))))
+                    if len(results[m]['Channel Permission Overwrites']) == 0: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["greenCheck"]}')
+                except Exception as e: 
+                    results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+        return results
+
 def PurgeFilter(m: discord.Message):
     '''Used to determine if a message should be purged'''
     current = filters.get(m.guild.id)
@@ -687,6 +883,22 @@ def ConvertToDatetime(string: str):
         except:
             pass
     return None
+
+def ParseDuration(string):
+    numbers = '1234567890'
+    startIndex = 0
+    i = 0
+    duration = 0
+    multipliers = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800, 'mo': 2628000, 'y': 31536000}
+    while i < len(string):
+        if string[i] not in numbers:
+            duration += int(string[startIndex:i]) * multipliers[string[i]]
+            startIndex = i
+        i += 1
+    if len(string) > 0 and duration == 0:
+        try: duration += int(string)
+        except: pass
+    return duration
 
 def setup(bot):
     global loading

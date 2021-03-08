@@ -141,9 +141,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         # easterAnnouncement.start()
         #Cyberlog.ConfigureSummaries(bot)
         scheduleDeliveryLoop.start()
-        print('Fetching emojis...')
-        for server in [560457796206985216, 403327720714665994, 495263898002522144]:
-            for e in bot.get_guild(server).emojis: emojis[e.name] = e
+        emojis = bot.get_cog('Cyberlog').emojis
         def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == bot.get_cog('Cyberlog').imageLogChannel.id and m.content == 'Completed'
         print('Waiting for database callback...')
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database

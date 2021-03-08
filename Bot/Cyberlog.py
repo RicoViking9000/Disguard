@@ -22,6 +22,7 @@ import string
 import codecs
 import emojis
 import asyncpraw
+import textwrap
 
 bot = None
 serverPurge = {}
@@ -453,7 +454,7 @@ class Cyberlog(commands.Cog):
         if enabled:
             words = message.content.split(' ')
             for w in words:
-                if 'https://discord.com/channels/' in w or 'https://canary.discord.com/channels' in w: #This word is a hyperlink to a message
+                if 'https://discord.com/channels/' in w or 'https://canary.discord.com/channels' in w or 'https://discordapp.com/channels' in w: #This word is a hyperlink to a message
                     context = await self.bot.get_context(message)
                     messageConverter = commands.MessageConverter()
                     result = await messageConverter.convert(context, w)
@@ -528,11 +529,11 @@ class Cyberlog(commands.Cog):
         pinned = (await message.channel.pins())[0]
         embed=discord.Embed(
             title=f'''{(f'{self.emojis["thumbtack"]}' if settings['library'] > 0 else "📌") if settings['context'][0] > 0 else ""}{"Message was pinned" if settings['context'][0] < 2 else ''}''',
-            description=f'''
+            description=textwrap.dedent(f'''
                 {"👮‍♂️" if settings['context'][1] > 0 else ""}{"Pinned by" if settings['context'][1] < 2 else ""}: {message.author.mention} ({message.author.name})
                 {(self.emojis["member"] if settings['library'] > 0 else "👤") if settings['context'][1] > 0 else ""}{"Authored by" if settings['context'][1] < 2 else ""}: {pinned.author.mention} ({pinned.author.name})
                 {self.channelEmoji(pinned.channel) if settings['context'][1] > 0 else ""}{"Channel" if settings['context'][1] > 2 else ""}: {pinned.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings['context'][1] > 0 else "[Jump to message]"}({pinned.jump_url} 'Jump to message')
-                {f"{(clockEmoji(rawReceived) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(message.guild)}" if settings['embedTimestamp'] > 1 else ''}''',
+                {f"{(clockEmoji(rawReceived) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(message.guild)}" if settings['embedTimestamp'] > 1 else ''}'''),
             color=settings['color'][1])
         if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
         if any(a > 1 for a in (settings['thumbnail'], settings['author'])): #Moderator image saving; target doesn't apply here since the target is the pinned message
@@ -594,8 +595,10 @@ class Cyberlog(commands.Cog):
         if not g: return
         m = p.message_id
         c = bot.get_channel(p.channel_id)
-        layerObject = self.reactions[m][u.id][p.emoji.name]
-        if not layerObject: return
+        try:
+            layerObject = self.reactions[m][u.id][p.emoji.name]
+            if not layerObject: return
+        except KeyError: return
         seconds = (datetime.datetime.utcnow() - layerObject['timestamp']).seconds
         if seconds < self.bot.lightningLogging[g.id]['cyberlog']['ghostReactionTime']:
             settings = getCyberAttributes(g, 'misc')
@@ -748,11 +751,11 @@ class Cyberlog(commands.Cog):
             #I will be multilining lots of code to account for the myriad of new customization settings - for organization purposes which I'll definitely need later
             embed=discord.Embed(
                 title=f'''{(f'{self.emojis["thumbtack"]}❌' if settings['library'] > 0 else "📌❌") if settings['context'][0] > 0 else ""}{"Message was unpinned" if settings['context'][0] < 2 else ""}''',
-                description=f'''
-                {f'{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Unpinned by" if settings["context"][1] < 2 else ""}: {eventMessage.author.mention} ({eventMessage.author.name})' if eventMessage else ""}
-                {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {after.author.mention} ({after.author.name})
-                {self.channelEmoji(after.channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {after.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
-                {f"{(clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(guild)}" if settings['embedTimestamp'] > 1 else ''}''',
+                description=textwrap.dedent(f'''
+                    {f'{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Unpinned by" if settings["context"][1] < 2 else ""}: {eventMessage.author.mention} ({eventMessage.author.name})' if eventMessage else ""}
+                    {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {after.author.mention} ({after.author.name})
+                    {self.channelEmoji(after.channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {after.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
+                    {f"{(clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(guild)}" if settings['embedTimestamp'] > 1 else ''}'''),
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
             if any(a > 1 for a in (settings['thumbnail'], settings['author'])): #Moderator image saving; target doesn't apply here since the target is the pinned message
@@ -1007,7 +1010,7 @@ class Cyberlog(commands.Cog):
                     indexData = json.load(fl)
                     currentMessage = indexData[str(payload.message_id)]
                     authorID, created, content = tuple(currentMessage.values())[-3:]
-                    author, channel, created = self.bot.get_user(authorID), self.bot.get_channel(payload.channel_id), datetime.datetime.fromisoformat(created)
+                    author, channel, created = await self.bot.fetch_user(authorID), self.bot.get_channel(payload.channel_id), datetime.datetime.fromisoformat(created)
                     indexData.pop(str(payload.message_id))
                 with open(filePath, 'w+') as fl:
                     fl.write(json.dumps(indexData, indent=4))
@@ -1054,11 +1057,11 @@ class Cyberlog(commands.Cog):
         except IndexError: messageBefore = ''
         created += datetime.timedelta(hours=self.bot.lightningLogging.get(g.id).get('offset'))
         #embed.description='Author: {0} ({1})\nChannel: {2} • Jump to message [before]({3} \'{4}\') or [after]({5} \'{6}\') this one\nPosted: {7} {8}\nDeleted: {9} {8} ({10} later)'.format(author.mention if memberObject is not None else author.name, author.name if memberObject is not None else 'No longer in this server', channel.mention, messageBefore.jump_url if messageBefore != '' else '', messageBefore.content if messageBefore != '' else '', messageAfter.jump_url if messageAfter != '' else '', messageAfter.content if messageAfter != '' else '', created.strftime("%b %d, %Y • %I:%M:%S %p"), nameZone(bot.get_guild(payload.guild_id)), received, ' '.join(reversed(display)))
-        embed.description=f'''
+        embed.description=textwrap.dedent(f'''
             {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {author.mention} ({author.name}){ '(No longer in this server)' if not memberObject else ''}
             {self.channelEmoji(channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} • Jump to message [before]({messageBefore.jump_url if messageBefore else ''} \'{messageBefore.content if messageBefore else ''}\') or [after]({messageAfter.jump_url if messageAfter else ''} \'{messageAfter.content if messageAfter else ''}\') this one
-            {self.emojis['sendMessage'] if settings["context"][1] > 0 else ""}: {created:%b %d, %Y • %I:%M:%S %p} {nameZone(g)}
-            {self.emojis['delete']}: {received} {nameZone(g)} ({' '.join(reversed(display))} later)'''
+            {self.emojis['sendMessage'] if settings["context"][1] > 0 else ""}{"Sent" if settings["context"][1] < 2 else ""}: {created:%b %d, %Y • %I:%M:%S %p} {nameZone(g)}
+            {self.emojis['delete'] if settings["context"][1] > 0 else ""}{"Deleted" if settings["context"][1] < 2 else ""}: {received} {nameZone(g)} ({' '.join(reversed(display))} later)''')
         if message: embed.add_field(name="Content",value=message.content[:1024] if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<Error retrieving content>")
         else: embed.add_field(name='Content',value='<No content>' if len(content) < 1 else content[:1024])
         for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
@@ -1084,8 +1087,8 @@ class Cyberlog(commands.Cog):
                         await updateLastActive(log.user, datetime.datetime.now(), 'deleted a message')
                         modDelete = True
                         if any(a in (3, 4) for a in (settings['thumbnail'], settings['author'])): #Moderator image saving; target doesn't apply here since the target is the pinned message
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not message.author.is_avatar_animated() else 'gif'))
-                            try: await message.author.avatar_url_as(size=1024).save(savePath)
+                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
+                            try: await author.avatar_url_as(size=1024).save(savePath)
                             except discord.HTTPException: pass
                             url = await self.uploadFiles(savePath)
                             if settings['thumbnail'] in (3, 4) and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
@@ -1278,6 +1281,7 @@ class Cyberlog(commands.Cog):
                     self.categories[after.category.id] = [c for c in after.category.channels]
             if before.overwrites != after.overwrites:
                 embed.add_field(name='Permission overwrites updated',value='Manually react 🇵 to show/hide') #The rest of this code is later because we need a message link to the current message
+                if log and log.user == self.bot.user: return
             if before.name != after.name:
                 embed.add_field(name='Name', value=f'{before.name} → **{after.name}**')
             if type(before) is discord.TextChannel:
@@ -1608,24 +1612,24 @@ class Cyberlog(commands.Cog):
                 except: pass
             else:
                 descriptionString = [ #First: plaintext version, second: hover-links hybrid version
-                    f'''
+                    textwrap.dedent(f'''
                         {self.emojis['member'] if settings['context'][1] > 0 else ''}{"Member" if settings['context'][1] < 2 else ''}: {f"{member.mention} ({member.name})"}
                         {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{suffix(count)} member
                         {f"{(clockEmoji(rawReceived) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(member.guild)}" if settings['embedTimestamp'] > 1 else ''}
                         {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old
                         {self.emojis["share"] if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in bot.guilds if member in g.members])}\n
-                        QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}''', 
-                    f'''
+                        QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}'''), 
+                    textwrap.dedent(f'''
                         {self.emojis['member'] if settings['context'][1] > 0 else ''}{"Member" if settings['context'][1] < 2 else ''}: {f"{member.mention} ({member.name})"}
                         {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{suffix(count)} member
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {ageDisplay[0]} old
-                        [Hover or react 🔽 for more details]({msg.jump_url} '
+                        [Hover or react {self.emojis["expand"]} for more details]({msg.jump_url} '
                         {"🕰" if settings['context'][1] > 0 else ''}{"Timestamp" if settings['context'][1] < 2 else ''}: {received} {nameZone(member.guild)}
                         {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old
                         {"🌐" if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in bot.guilds if member in g.members])}\n
-                        QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')'''
+                        QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')''')
                     ]
                 embed.description = descriptionString[1]
                 if targetInvite: 
@@ -1638,21 +1642,21 @@ class Cyberlog(commands.Cog):
                         if settings['thumbnail'] > 2 and embed.thumbnail.url == discord.Embed.Empty: embed.set_thumbnail(url=url)
                         if settings['author'] > 2 and embed.author.name == discord.Embed.Empty: embed.set_author(name=targetInvite.inviter.name, icon_url=url)
                     inviteString = [ #First: plaintext version, second: hover-links hybrid version
-                        f'''
-                            {"👮‍♂️" if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
+                        textwrap.dedent(f'''
+                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
                             {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
                             {self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
                             {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}
                             {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}
-                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times''',
-                        f'''
-                            {"👮‍♂️" if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
-                            [Hover or react 🔽 for more details]({msg.jump_url} '
+                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times'''),
+                        textwrap.dedent(f'''
+                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
+                            [Hover or react {self.emojis["expand"]} for more details]({msg.jump_url} '
                             {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
                             {"🚪" if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
                             {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}
                             {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}
-                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')'''
+                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')''')
                         ]
                     embed.add_field(name='Invite Details',value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             await msg.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
@@ -1956,13 +1960,13 @@ class Cyberlog(commands.Cog):
             try:
                 sortedMembers = sorted(members.get(member.guild.id), key=lambda x: x.joined_at)
                 memberJoinPlacement = sortedMembers.index(member) + 1
-                hoverPlainText = f'''
+                hoverPlainText = textwrap.dedent(f'''
                     Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}
                     Left at: {received}
                     Here for: {hereForDisplay}
                     Was the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}
-                    '''
-                embed.description += f"\n[Hover for more details]({message.jump_url} '{hoverPlainText}'')"
+                    ''')
+                embed.description += f"\n[Hover for more details]({message.jump_url} '{hoverPlainText}')"
                 #embed.description+=f"\n[Hover for more details]({message.jump_url} 'Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}"
                 #embed.description+=f'''\nLeft at: {received}\nHere for: {hereForDisplay}'''
                 #embed.description+=f'\nWas the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}'
@@ -1998,7 +2002,7 @@ class Cyberlog(commands.Cog):
             settings = getCyberAttributes(guild, 'doorguard')
             color = green[colorTheme(guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed=discord.Embed(
-                title=f'''{f"{self.emojis['member']}{self.emojis['unban']}" if settings["context"][0] > 0 else ""}{"User was unbanned" if settings['context'] < 2 else ""}''',
+                title=f'''{f"{self.emojis['member']}{self.emojis['unban']}" if settings["context"][0] > 0 else ""}{"User was unbanned" if settings['context'][0] < 2 else ""}''',
                 description=f"{self.emojis['member'] if settings['context'][1] > 0 else ''}{'User' if settings['context'][1] < 2 else ''}: {user.name}",
                 color=color)
             if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
@@ -2029,12 +2033,12 @@ class Cyberlog(commands.Cog):
                                 content=f'{log.user} unbanned {user}'
                                 bannedForDisplay = elapsedDuration(datetime.datetime.utcnow() - log.created_at)
                                 embed.add_field(name="Old ban details",value=f'React {self.emojis["expand"]} to expand', inline=False)
-                                longString = f'''
+                                longString = textwrap.dedent(f'''
                                     {'👮‍♂️' if settings['context'][1] > 0 else ''}{'Banned by' if settings['context'][1] < 2 else ''}: {log.user.name} ({log.user.mention})
                                     {'📜' if settings['context'][1] > 0 else ''}{'Banned because' if settings['context'][1] < 2 else ''}: {log.reason if log.reason is not None else '<No reason specified>'}
                                     {f"{self.emojis['ban']}📅" if settings['context'][1] > 0 else ''}{'Banned at' if settings['context'][1] < 2 else ''}: {(log.created_at + datetime.timedelta(hours=timeZone(guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(guild)}
                                     {f"{self.emojis['unban']}📅" if settings['context'][1] > 0 else ''}{'Unbanned at' if settings['context'][1] < 2 else ''}: {received}
-                                    {f"{self.emojis['ban']}📅" if settings['context'][1] > 0 else ''}{'Banned for' if settings['context'][1] < 2 else ''}: {bannedForDisplay}'''
+                                    {f"{self.emojis['ban']}📅" if settings['context'][1] > 0 else ''}{'Banned for' if settings['context'][1] < 2 else ''}: {bannedForDisplay}''')
                                 break
                 except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             embed.set_footer(text=f'User ID: {user.id}')
@@ -3116,8 +3120,9 @@ class Cyberlog(commands.Cog):
             if 'antispam' != args[0]:
                 return
             key = 'antispam'
-        duration = datetime.timedelta(seconds = self.ParsePauseDuration((' ').join(args[1:])))
-        if duration > 0: 
+        seconds = self.ParsePauseDuration((' ').join(args[1:]))
+        duration = datetime.timedelta(seconds = seconds)
+        if seconds > 0: 
             rawUntil = datetime.datetime.utcnow() + duration
             until = rawUntil + timeZone(ctx.guild)
         else: 
@@ -3128,7 +3133,7 @@ class Cyberlog(commands.Cog):
             description=f'''
                 👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.name})
                 {clockEmoji(until)}Paused at: {until:%b %d, %Y • %I:%M %p}
-                ⏰Paused until: {'Manually resumed' if duration == 0 else f"{until:%b %d, %Y • %I:%M %p} {nameZone(ctx.guild)}"}
+                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{until:%b %d, %Y • %I:%M %p} {nameZone(ctx.guild)}"}
                 ''',
             color=yellow[colorTheme(ctx.guild)])
         embed.set_footer(text='Resuming at: ')
@@ -4068,6 +4073,12 @@ class Cyberlog(commands.Cog):
         if type(messages) is list: self.pauseDelete += [m.id for m in messages]
         else: self.pauseDelete.append(messages.id)
 
+    def getServerMember(self, m):
+        '''Gets the member data given a member object'''
+        for member in self.bot.lightningLogging[m.guild.id]['members']:
+            if member['id'] == m.id: return member
+        return None
+
     def channelEmoji(self, c,):
         '''Gives us the proper new emoji for the channel - good for varying channels in a single list'''
         if c.type == discord.ChannelType.category: return self.emojis['folder']
@@ -4219,7 +4230,7 @@ class Cyberlog(commands.Cog):
         if redditFeed: description=f'''{submissionType[0].upper()}{submissionType[1:]} post • r/{subreddit.display_name}{linkFlavor}{f"{newline}👀(Spoiler)" if submission.spoiler else ""}{f"{newline}{self.emojis['alert']}(NSFW)" if submission.over_18 else ""}'''
         else: description=f'''{submission.score} upvote{"s" if submission.score != 1 else ""} • {round(submission.upvote_ratio * 100)}% upvoted{f" • {awards} awards" if awards > 0 else ""}{f" • {submission.view_count} " if submission.view_count else ""} • {submission.num_comments} comment{"s" if submission.num_comments != 1 else ""} on r/{subreddit.display_name}{linkFlavor}{f"{newline}👀(Spoiler)" if submission.spoiler else ""}{f"{newline}{self.emojis['alert']}(NSFW)" if submission.over_18 else ""}'''
         embed = discord.Embed(
-            title=f'{"🔒" if submission.locked and not redditFeed else ""}{"📌" if submission.stickied and not redditFeed else ""}{typeKeys[submissionType] if not redditFeed else ""}{(submission.title[:truncateTitle] + "…") if len(submission.title) > truncateTitle else submission.title}', 
+            title=f'{"🔒" if submission.locked and not redditFeed else ""}{"📌" if submission.stickied and not redditFeed else ""}{f"{typeKeys[submissionType]} • " if not redditFeed else ""}{(submission.title[:truncateTitle] + "…") if len(submission.title) > truncateTitle else submission.title}', 
             description=description,
             color=hexToColor(keyColor) if color == 'colorCode' else hexToColor(color), url=f'https://www.reddit.com{submission.permalink}')
         if submissionType == 'text': embed.description += f'\n\n{(submission.selftext[:truncateText] + "…") if len(submission.selftext) > truncateText else submission.selftext}'
@@ -4347,10 +4358,10 @@ def cyberAttribute(s: discord.Guild, mod, a):
     '''Returns common attribute: cyberlog <--> cyberlog module. Not coded for beta datasystem'''
     default = lightningLogging[s.id]['cyberlog'][a]
     specific = lightningLogging[s.id]['cyberlog'][mod][a]
-    def boolEval(i):
-        if type(i) is list: return all(a is not None for a in i)
-        else: return i is not None
-    return specific if boolEval(specific) else default
+    def processor(i):
+        if type(i) is list: return i if any(a is not None for a in i) else []
+        else: return i
+    return processor(specific) or default
 
 def getCyberAttributes(s: discord.Guild, mod):
     result = {}

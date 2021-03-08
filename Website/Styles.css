@@ -70,8 +70,8 @@
 .pad div > ul > li {color: rgb(161, 161, 161); font-size: 25px;}
 .pad div > img {padding-left: 16%;}
 .active {color: inherit; border-bottom: 3px solid rgb(66, 66, 248);}
-.header, .header *, .subheader, .subheader * {padding-top: 35px; font-size: 35px; text-align: center;}
-.header, .header * {font-size: 70px; text-align: center;}
+.pageHeader *{padding-top: 25px; padding-left: 2%;}
+.justify80 .subheader, .justify80 .subheader * {padding-top: 35px; font-size: 35px; text-align: center;}
 .commandsHeader p {font-size: 25px; color: rgb(202, 66, 66); padding-top: 10px; padding-bottom: 10px;}
 .grayed {color: rgb(161, 161, 161); padding: 0px;}
 .lgray {color: lightgray;}
@@ -86,7 +86,7 @@
 .largeText {font-size: 20px;}
 .incSpaced, .incSpaced * {line-height: 1.5em;}
 #navig li a:hover:not(.active) {border-bottom: 3px solid rgb(202, 66, 66);}
-#mainbullethead {font-size: 40px}
+#mainbullethead {font-size: 40px; text-align: center; padding: 0;}
 #comTable {width: 100%; padding-top: 60px;}
 #comTable, td, th {font-size: 25px}
 #comTable th {color: rgb(66, 66, 248);}

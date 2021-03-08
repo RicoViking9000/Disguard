@@ -24,6 +24,7 @@ class Birthdays(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.loading = bot.get_cog('Cyberlog').emojis['loading']
+        self.emojis = self.bot.get_cog('Cyberlog').emojis
         self.whitePlus = bot.get_cog('Cyberlog').emojis['whitePlus']
         self.whiteMinus = bot.get_cog('Cyberlog').emojis['whiteMinus']
         self.whiteCheck = bot.get_cog('Cyberlog').emojis['whiteCheck']

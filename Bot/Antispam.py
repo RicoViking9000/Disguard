@@ -45,14 +45,14 @@ class Antispam(commands.Cog):
                     if datetime.datetime.utcnow() > e.get('expires'):
                         try:
                             if e.get('type') == 'ban':
-                                try: await g.get_member(e.get('target')).unban(reason=f'{e.get("flavor")} Ban duration expired')
+                                try: await g.unban(self.bot.fetch_user(e.get('target')), reason=f'{e.get("flavor")} Ban duration expired')
                                 except discord.Forbidden as error: print(f'Timed ban error: {error.text}')
                             elif e.get('type') == 'mute':
                                 member = g.get_member(e.get('target'))
                                 try: 
                                     await member.remove_roles(g.get_role(e.get('role')))
                                     await member.add_roles(*[g.get_role(r) for r in e.get('roleList')])
-                                    for p in e.get('permissionsTaken'): await g.get_channel(p.get('id')).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(p.get('overwrites')[0]), discord.Permissions(p.get('overwrites')[1])))
+                                    for k, v in e.get('permissionsTaken').items(): await g.get_channel(int(k)).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(v[0]), discord.Permissions(v[1])))
                                 except discord.Forbidden as error: 
                                     try: await self.bot.get_channel(self.bot.lightningLogging[g.id]['cyberlog']['defaultChannel']).send(f'Unable to unmute {member} because {error.text}')
                                     except: pass
