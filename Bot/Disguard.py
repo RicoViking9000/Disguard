@@ -1821,7 +1821,7 @@ async def daylight(ctx):
             defaultLogchannel = bot.get_channel(getData(bot)[s.id]['cyberlog'].get('defaultChannel'))
             if defaultLogchannel:
                 e = discord.Embed(title='🕰 Server Time Zone update', color=yellow[1])
-                e.description = 'Your server\'s time zone offset from UTC setting via Disguard has automatically been decremented, as it appears your time zone is in the USA & Daylight Savings Time has ended.\n\nTo revert this, you may enter your server\'s general settings page on my web dashboard (use the `config` command to retrieve a quick link).'
+                e.description = 'Your server\'s `time zone offset from UTC` setting via Disguard has automatically been incremented one hour, as it appears your time zone is in the USA & Daylight Savings Time has started (Spring Forward).\n\nTo revert this, you may enter your server\'s general settings page on my web dashboard (use the `config` command to retrieve a quick link).'
                 await defaultLogchannel.send(embed=e)
     await status.edit(content='Done')
 

@@ -983,9 +983,9 @@ async def AdjustDST(s: discord.Guild):
     server = await GetServer(s)
     offset = server['offset']
     tzname = server['tzname']
-    if offset in [-4, -5, -6, -7]:
-        if not (offset == -5 and tzname == 'EST'): 
-            await servers.update_one({'server_id': s.id}, {'$inc': {'offset': -1}})
+    if offset in [-5, -6, -7, -8]: #SPRING FORWARD
+        if not (offset == -4 and tzname == 'EST'): 
+            await servers.update_one({'server_id': s.id}, {'$inc': {'offset': 1}})
             return True
     return False
 
