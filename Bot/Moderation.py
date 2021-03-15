@@ -892,7 +892,7 @@ def ParseDuration(string):
     multipliers = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800, 'mo': 2628000, 'y': 31536000}
     while i < len(string):
         if string[i] not in numbers:
-            duration += int(string[startIndex:i]) * multipliers[string[i]]
+            duration += int(string[startIndex:i]) * multipliers[string[i].lower()]
             startIndex = i
         i += 1
     if len(string) > 0 and duration == 0:

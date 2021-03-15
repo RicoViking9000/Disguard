@@ -370,53 +370,8 @@ class Antispam(commands.Cog):
                 desc.append("Unable to warn member")
         else:
             if spam.get("action") in [1, 4]:
-                if spam.get("action") == 1:
-                    for a in message.guild.roles:
-                        if a.name == "RicobotAutoMute":
-                            role = a
-                            for a in message.guild.text_channels:
-                                try: await a.set_permissions(role, send_messages=False)
-                                except discord.Forbidden: pass
-                            successful = True
-                            break
-                    if role is None:
-                        try:
-                            role = await message.guild.create_role(name="RicobotAutoMute", reason="Anti-Spam: AutoMute consequence")
-                            successful = True
-                        except discord.Forbidden:
-                            desc.append("Unable to create new role for Automatic Mute")
-                        try:
-                            await role.edit(position=message.guild.me.top_role.position - 1)
-                        except discord.Forbidden:
-                            desc.append("Unable to move role to below my top role (so some members may not be muted)")
-                        try:
-                            for a in message.guild.channels:
-                                if type(a) is discord.TextChannel:
-                                    await a.set_permissions(role, send_messages=False)
-                        except discord.Forbidden:
-                            successful = False
-                            desc.append("Unable to create permission overrides for RicobotAutoMute, so mute can't be enforced")  
-                else:
-                    role = message.guild.get_role(spam.get("customRole"))
-                    successful = True
-                memberRolesTaken = [r for r in message.author.roles if r != message.guild.default_role]
-                permissionsTaken = []
-                #rawPermissionsTaken = []
-                try:
-                    await message.author.add_roles(role)
-                    await message.author.remove_roles(*memberRolesTaken)
-                    for c in message.author.guild.text_channels:
-                        if message.author in c.overwrites.keys():
-                            before, after = c.overwrites.get(message.author).pair()
-                            #permissionsTaken.append({'id': c.id, 'overwrites': c.overwrites.get(message.author)})
-                            permissionsTaken.append({'id': c.id, 'overwrites': (before.value, after.value)})
-                            await c.set_permissions(message.author, overwrite=None, reason='Automute')
-                    roled = True
-                except discord.Forbidden:
-                    desc.append("Unable to add role " + role.name + " to member upon being flagged")
-                    successful = False
-                muteTimedEvent = {'type': 'mute', 'target': message.author.id, 'flavor': '[Antispam: AutoMute]', 'role': role.id, 'roleList': [r.id for r in memberRolesTaken], 'permissionsTaken': permissionsTaken, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=spam.get('muteTime'))}
-                await database.AppendTimedEvent(message.guild, muteTimedEvent)
+                if spam['action'] == 4: role = message.guild.get_role(spam.get('customRole', 0))
+                successful = await self.bot.get_cog('Moderation').muteMembers([message.author], duration=spam.get('muteTime', 0), reason='[Antispam: Automute]', waitToUnmute=False, muteRole=role)
             if spam.get("action") == 2:
                 try:
                     await message.guild.kick(message.author)
@@ -496,20 +451,11 @@ class Antispam(commands.Cog):
         if not message.channel.permissions_for(message.author).read_messages:
             try: await message.author.send(f'You are now unmuted in {message.guild.name}')
             except discord.Forbidden: pass
-        lcEmbed = None
-        if role not in message.guild.get_member(message.author.id).roles:
-            lcEmbed = discord.Embed(title="Mute time is up for "+message.author.name,description="It appears somebody else already removed role **" + role.name + "** from __" + message.author.mention + "__, but I'll make sure the rest of the roles they had before were given back.",timestamp=datetime.datetime.utcnow(),color=orange[theme])
         try:
-            await message.author.remove_roles(role)
+            await self.bot.get_cog('Moderation').unmuteMembers([message.author], {})
             lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Successfully removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])
         except discord.Forbidden:
             lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Unable to remove role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])
-        try: await message.author.add_roles(*memberRolesTaken)
-        except discord.Forbidden: lcEmbed.description+=f'Unable to add some roles back to {message.author.name}, make sure they have these roles: {" • ".join([r.name for r in memberRolesTaken])}'
-        try:
-            for p in permissionsTaken: await message.guild.get_channel(p.get('id')).set_permissions(message.author, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(p.get('overwrites')[0]), discord.Permissions(p.get('overwrites')[1])))
-        except discord.Forbidden: lcEmbed.description+=f'Unable to recreate channel permission overwrites for {message.author.name}'
-        await database.RemoveTimedEvent(message.guild, muteTimedEvent)
         if spam.get("log"):
             try:
                 await message.guild.get_channel(spam.get("log")[1]).send(embed=lcEmbed)

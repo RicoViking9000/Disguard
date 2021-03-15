@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Mute - Disguard Commands</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
+                </ul>
+            </nav>
+        </header>
+        <div class=pad>
+            <h1>Mute command</h1>
+            <p>Mute or unmute members for text channels</p>
+            <p>Requires Manage Channels (to apply/remove channel permission overwrites) and Manage Roles (to apply/remove mute role) permissions</p>
+            <h3>.mute {members} |{duration}| |{reason}|</h3>
+            <h3>.unmute {members} |{reason}|</h3>
+            <h4>{members}</h4>
+            <div>
+                <p>A list of members you wish to mute or unmute. Separate member inputs with a space, and each argument must exactly match (Case Sensitive) one of the following formats:</p>
+                <ul>
+                    <li>Member ID</li>
+                    <li>Member Mention</li>
+                    <li>Username#0000</li>
+                    <li>Username</li>
+                    <li>Nickname</li>
+                </ul>
+            </div>
+            <h4>{duration}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>How long you want the member(s) to be muted for. Only applies to mute command. Type a duration value like this: 6h or 4m or 12d6h - with the number first followed by the unit.
+                    6h = 6 hours, 4m = 4 minutes, 12d6h = 12 days 6 hours. Combine as many values as you want, but they cannot have a space in between or else the bot will take it in as the reason
+                    to mute.
+                </p>
+                <p>List of acceptable unit values (case-insensitive):</p>
+                <ul>
+                    <li>s: second</li>
+                    <li>m: minute</li>
+                    <li>h: hour</li>
+                    <li>d: day</li>
+                    <li>w: week</li>
+                    <li>mo: month (30 days)</li>
+                    <li>y: year</li>
+                </ul>
+            </div>
+            <h4>{reason}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>Shows up in the audit log when applying role changes to members</p>
+            </div>
+            <p>Examples</p>
+            <div>
+                <h4>.mute applebees#7890</h4>
+                <p>Mutes the account named "applebees" for an indefinite period of time (until Disguard's unmute command is used)</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.mute "Rick Astley" rickrolling the server owner</h4>
+                <p>Mutes Rick Astley for rickrolling the server owner. Quotes are required for members with spaces in their names since we want both words to be processed as a single input</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.mute SpamBot#5432 1mo1w</h4>
+                <p>Mutes SpamBot for 1 month and 1 week</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.unmute SpamBot#5432</h4>
+                <p>Restores permissions to SpamBot</p>
+            </div>
+        </div>
+    </body>
+</html>

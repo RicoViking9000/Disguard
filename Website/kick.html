@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Kick - Disguard Commands</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
+                </ul>
+            </nav>
+        </header>
+        <div class=pad>
+            <h1>Kick command</h1>
+            <p>Kick a member from the server</p>
+            <p>Requires Kick Members permissions</p>
+            <h3>.kick {members} |{reason}|</h3>
+            <h4>{members}</h4>
+            <div>
+                <p>A list of members you wish to mute or unmute. Separate member inputs with a space, and each argument must exactly match (Case Sensitive) one of the following formats:</p>
+                <ul>
+                    <li>Member ID</li>
+                    <li>Member Mention</li>
+                    <li>Username#0000</li>
+                    <li>Username</li>
+                    <li>Nickname</li>
+                </ul>
+            </div>
+            <h4>{reason}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>Shows up in the audit log when kicking members</p>
+            </div>
+            <p>Examples</p>
+            <div>
+                <h4>.kick Dyno rogue bot</h4>
+                <p>Kicks Dyno from the server with the reason being displayed as "rogue bot"</p>
+            </div>
+        </div>
+    </body>
+</html>

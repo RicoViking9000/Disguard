@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Ban - Disguard Commands</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
+                </ul>
+            </nav>
+        </header>
+        <div class=pad>
+            <h1>Ban command</h1>
+            <p>Ban or unban users from a server</p>
+            <p>Requires Ban Members permissions</p>
+            <h3>.ban {users} |{deleteMessageDays}| |{reason}|</h3>
+            <h3>.unban {users} |{reason}|</h3>
+            <h4>{users}</h4>
+            <div>
+                <p>A list of users you wish to mute or unmute. Separate user inputs with a space, and each argument must exactly match (Case Sensitive) one of the following formats:</p>
+                <ul>
+                    <li>User ID</li>
+                    <li>User Mention</li>
+                    <li>Username#0000</li>
+                    <li>Username</li>
+                </ul>
+                <p>Disguard can ban users not in your server, provided you pass in their ID as the input</p>
+            </div>
+            <h4>{deleteMessageDays}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>Upon banning this user, Disguard will have Discord delete messages from this person sent within the past {deleteMessageDays} days. Defaults to 0 (don't delete anything) if not specified</p>
+            </div>
+            <h4>{reason}<span class=grayed> - optional</span></h4>
+            <div>
+                <p>Shows up in the audit log when banninb members</p>
+            </div>
+            <p>Examples</p>
+            <div>
+                <h4>.ban applebees#7890</h4>
+                <p>Bans the account named "applebees" for an indefinite period of time or until the ban is revoked</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.ban "Rick Astley" rickrolling the server owner</h4>
+                <p>Bans Rick Astley for rickrolling the server owner. Quotes are required for members with spaces in their names since we want both words to be processed as a single input</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.unban 12345780824523525</h4>
+                <p>Unbans an account with this ID</p>
+            </div>
+        </div>
+    </body>
+</html>

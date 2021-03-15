@@ -157,11 +157,11 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     await UpdatePresence()
 
 async def indexMessages(server, channel, full=False):
-    path = f'{indexes}/{server.id}/{channel.id}'
+    path = f'{indexes}/{server.id}'
     start = datetime.datetime.now()
     try: os.makedirs(path)
     except FileExistsError: pass
-    path += '.json'
+    path += f'/{channel.id}.json'
     try: saveImages = await database.GetImageLogPerms(server)
     except AttributeError: return
     if not os.path.exists(path): 
@@ -1705,8 +1705,8 @@ async def _status(ctx):
     m = await ctx.send('React with what you would like my desired status to be')
     #emojis = [e for e in bot.get_cog('Cyberlog').emojis.values() if e.name in ['online', 'idle', 'dnd', 'offline', 'streaming', 'reload']]
     cog = bot.get_cog('Cyberlog')
-    emojis = (cog.online, cog.idle, cog.dnd, cog.offline, discord.utils.get(bot.get_guild(560457796206985216).emojis, name='streaming'), discord.utils.get(bot.get_guild(403327720714665994).emojis, name='reload'))
-    for r in emojis: await m.add_reaction(r)
+    reactions = (emojis['online'], emojis['idle'], emojis['dnd'], emojis['offline'], emojis['streaming'], emojis['loop'])
+    for r in reactions: await m.add_reaction(r)
     def reacCheck(r, m): return r.emoji in emojis and m.id == ctx.author.id
     r = await bot.wait_for('reaction_add', check=reacCheck)
     if r[0].emoji.name == 'online': status = discord.Status.online
