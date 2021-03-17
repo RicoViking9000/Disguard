@@ -291,8 +291,10 @@ class Cyberlog(commands.Cog):
                 except FileNotFoundError: pass
                 try:
                     for p in os.listdir(attachmentsPath):
-                        if not self.bot.get_channel(int(p)):
-                            shutil.rmtree(f'Attachments/{g.id}/{p}')
+                        try: 
+                            if not self.bot.get_channel(int(p)):
+                                shutil.rmtree(f'Attachments/{g.id}/{p}')
+                        except: pass
                 except FileNotFoundError: pass
                 print(f'Local file management done in {(datetime.datetime.now() - started).seconds}s')
                 started = datetime.datetime.now()
@@ -2700,7 +2702,7 @@ class Cyberlog(commands.Cog):
                 if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(rawReceived) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {received} {nameZone(after.guild)}"
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await message.edit(content=None)
                 if not settings['plainText']: await message.edit(embed=embed)
-                self.archiveLogEmbed(after.guild, msg.id, embed, 'Role Update')
+                self.archiveLogEmbed(after.guild, message.id, embed, 'Role Update')
                 if before.permissions != after.permissions:
                     for m in after.members: self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
         await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
