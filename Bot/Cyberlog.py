@@ -395,9 +395,9 @@ class Cyberlog(commands.Cog):
         runningFeeds = self.redditThreads.get(server.id) or []
         proposedFeeds = [entry['subreddit'] for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if self.bot.get_channel(entry['channel'])]
         feedsToCreate = [entry for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if entry['subreddit'] not in runningFeeds and self.bot.get_channel(entry['channel']) and not (await self.bot.reddit.subreddit(entry['subreddit'], fetch=True)).over18]
-        feedsToDelete = [entry for entry in runningFeeds if entry['subreddit'] not in proposedFeeds]
+        feedsToDelete = [entry for entry in runningFeeds if entry not in proposedFeeds]
         for feed in feedsToCreate: asyncio.create_task(self.createRedditStream(server, feed))
-        for feed in feedsToDelete: self.redditThreads[server.id].remove(feed['subreddit'])
+        for feed in feedsToDelete: self.redditThreads[server.id].remove(feed)
     
     async def createRedditStream(self, server, data):
         '''Data represents a singular subreddit customization data'''
@@ -416,8 +416,7 @@ class Cyberlog(commands.Cog):
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        '''[DISCORD API METHOD] Called when message is sent
-        Unlike RicoBot, I don't need to spend over 1000 lines of code doing things here in [ON MESSAGE] due to the web dashboard :D'''
+        '''[DISCORD API METHOD] Called when message is sent'''
         await self.bot.wait_until_ready()
         await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
         if type(message.channel) is discord.DMChannel: return
@@ -481,7 +480,7 @@ class Cyberlog(commands.Cog):
         if config == 0: return #Feature is disabled
         if message.author.id == self.bot.user.id: return
         for w in message.content.split(' '):
-            if 'r/' in w.lower() and 'https://' not in w:
+            if w.lower().startswith('r/') and 'https://' not in w:
                 try:
                     subSearch = w[w.find('r/') + 2:]
                     result = await self.subredditEmbed(subSearch, config == 1)
