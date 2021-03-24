@@ -399,20 +399,25 @@ class Cyberlog(commands.Cog):
         for feed in feedsToCreate: asyncio.create_task(self.createRedditStream(server, feed))
         for feed in feedsToDelete: self.redditThreads[server.id].remove(feed)
     
-    async def createRedditStream(self, server, data):
+    async def createRedditStream(self, server, data, attempt=0):
         '''Data represents a singular subreddit customization data'''
+        if attempt > 2: return
         if self.redditThreads.get(server.id) and data["subreddit"] in self.redditThreads[server.id]: return #We already have a thread running for this server & subreddit
         reddit = self.bot.reddit
         channel = self.bot.get_channel(data['channel'])
         subreddit = await reddit.subreddit(data['subreddit'], fetch=True)
         try: self.redditThreads[server.id].append(data['subreddit']) #Marks that we have a running thread for this server & subreddit
         except KeyError: self.redditThreads[server.id] = [data['subreddit']]
-        async for submission in subreddit.stream.submissions(skip_existing=True):
-            try:
-                if data['subreddit'] not in self.redditThreads[server.id]: return #This feed has been cancelled
-                embed = await self.redditSubmissionEmbed(server, submission, True, data['truncateTitle'], data['truncateText'], data['media'], data['creditAuthor'], data['color'], data['timestamp'])
-                await channel.send(embed=embed)
-            except: pass
+        try:
+            async for submission in subreddit.stream.submissions(skip_existing=True):
+                try:
+                    if data['subreddit'] not in self.redditThreads[server.id]: return #This feed has been cancelled
+                    embed = await self.redditSubmissionEmbed(server, submission, True, data['truncateTitle'], data['truncateText'], data['media'], data['creditAuthor'], data['color'], data['timestamp'])
+                    await channel.send(embed=embed)
+                except: pass
+        except asyncio.TimeoutError: 
+            await asyncio.sleep(60)
+            asyncio.create_task(self.createRedditStream(server, data, attempt + 1))
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
