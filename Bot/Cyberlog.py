@@ -444,6 +444,8 @@ class Cyberlog(commands.Cog):
         with open(f'{path}/{message.channel.id}.json', 'w+') as f:
             f.write(indexData)
         if message.author.bot: return
+        return
+        #Message attachment saving is now disabled due to low storage space
         if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
             try: os.makedirs(path2)
@@ -2844,6 +2846,7 @@ class Cyberlog(commands.Cog):
         rawReceived = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(member.guild.id).get('offset'))
         received = rawReceived.strftime('%b %d, %Y • %I:%M:%S %p')
         msg = None
+        if datetime.datetime.now().strftime('%m/%d/%Y') == '04/01/2021': asyncio.create_task(self.aprilFools(member, before, after))
         if not logEnabled(member.guild, 'voice'):
             return
         settings = getCyberAttributes(member.guild, 'voice')
@@ -3057,6 +3060,23 @@ class Cyberlog(commands.Cog):
                     await msg.edit(content=None, embed=embed)
                     await msg.clear_reactions()
                     if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
+
+    async def aprilFools(self, member, before, after):
+        if before.channel == None and after.channel and not member.bot:
+            await asyncio.sleep(10)
+            def disconnect(error):
+                asyncio.create_task(member.guild.voice_client.disconnect())
+            if member.voice:
+                c = member.voice.channel
+                if member.guild.voice_client and member.guild.voice_client.is_playing() and member.guild.voice_client.channel != member.voice.channel:
+                    member.guild.voice_client.stop
+                if member.guild.voice_client and member.guild.voice_client.channel: await member.guild.voice_client.disconnect()
+                await member.voice.channel.connect()
+                audio = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio('rickroll.mp3', executable='G:/My Drive/Other/ffmpeg-2021-03-31-git-61ea0e3191-full_build/bin/ffmpeg.exe'))
+                member.guild.voice_client.play(audio, after=disconnect)
+                await asyncio.sleep(180)
+                try: await member.guild.voice_client.disconnect()
+                except: pass
 
     '''The following listener methods are used for lastActive tracking; not logging right now'''
     # As of update 0.2.25, on_raw_reaction_add and on_raw_reaction_remove are in use, at the top, for ghost reaction logging, the latter of which used to be here.
