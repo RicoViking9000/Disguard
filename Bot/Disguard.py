@@ -162,7 +162,7 @@ async def indexMessages(server, channel, full=False):
     try: os.makedirs(path)
     except FileExistsError: pass
     path += f'/{channel.id}.json'
-    try: saveImages = await database.GetImageLogPerms(server)
+    try: saveImages = await database.GetImageLogPerms(server) and not channel.is_nsfw()
     except AttributeError: return
     if not os.path.exists(path): 
         with open(path, 'w+') as f: f.write('{}')
@@ -175,7 +175,7 @@ async def indexMessages(server, channel, full=False):
             if str(message.id) in indexData.keys() and not full:
                 break
             indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
-            if not message.author.bot and (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages and False: #Message attachment saving is now disabled due to low storage space
+            if not message.author.bot and (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
                 attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
                 try: os.makedirs(attach)
                 except FileExistsError: pass

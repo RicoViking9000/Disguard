@@ -444,8 +444,6 @@ class Cyberlog(commands.Cog):
         with open(f'{path}/{message.channel.id}.json', 'w+') as f:
             f.write(indexData)
         if message.author.bot: return
-        return
-        #Message attachment saving is now disabled due to low storage space
         if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
             try: os.makedirs(path2)
@@ -2846,7 +2844,7 @@ class Cyberlog(commands.Cog):
         rawReceived = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(member.guild.id).get('offset'))
         received = rawReceived.strftime('%b %d, %Y • %I:%M:%S %p')
         msg = None
-        if datetime.datetime.now().strftime('%m/%d/%Y') == '04/01/2021': asyncio.create_task(self.aprilFools(member, before, after))
+        #if datetime.datetime.now().strftime('%m/%d/%Y') == '04/01/2021': asyncio.create_task(self.aprilFools(member, before, after))
         if not logEnabled(member.guild, 'voice'):
             return
         settings = getCyberAttributes(member.guild, 'voice')
