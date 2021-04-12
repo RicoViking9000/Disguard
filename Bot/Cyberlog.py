@@ -198,8 +198,8 @@ class Cyberlog(commands.Cog):
     
     @tasks.loop(hours = 6)
     async def syncData(self):
-        #global lightningUsers
-        #global lightningLogging
+        global lightningUsers
+        global lightningLogging
         print('Summarizing')
         started = datetime.datetime.now()
         rawStarted = datetime.datetime.now()
@@ -320,8 +320,8 @@ class Cyberlog(commands.Cog):
             print(f'Garbage collection: {gc.collect()} objects')
             #self.bot.lightningLogging = lightningLogging
             ## Commented out as of patch 0.2.25 - remove next patch. Reason: I find this obsolete as synchronizeDatabase handles this the first time, and trackChanges keeps them updated thereafter
-            #lightningLogging = self.bot.lightningLogging
-            #lightningUsers = self.bot.lightningUsers
+            lightningLogging = self.bot.lightningLogging
+            lightningUsers = self.bot.lightningUsers
             await self.imageLogChannel.send('Completed')
         except Exception as e: 
             print('Summarize error: {}'.format(traceback.format_exc()))
@@ -940,7 +940,7 @@ class Cyberlog(commands.Cog):
                             await asyncio.sleep(5)
                     elif str(result[0]) == '⬅':
                         await msg.clear_reactions()
-                        await msg.edit(content=oldContent, embed=oldEmbed if not settings['plainText'] else None)
+                        await msg.edit(content=oldContent if settings['plainText'] else None, embed=oldEmbed if not settings['plainText'] else None)
                         embed = copy.deepcopy(oldEmbed)
                         if not settings['plainText']: await msg.add_reaction(self.emojis['threeDots'])
                         break
@@ -3157,7 +3157,7 @@ class Cyberlog(commands.Cog):
         if isinstance(error, commands.CommandNotFound): return
         embed = None
         alert = self.emojis['alert']
-        #traceback.print_exception(type(error), error, error.__traceback__)
+        traceback.print_exception(type(error), error, error.__traceback__)
         m = await ctx.send(f'{alert} {error}')
         if type(error) in (commands.MissingPermissions, commands.MissingRequiredArgument): return
         filename = datetime.datetime.now().strftime('%m%d%Y%H%M%S%f')
@@ -3726,7 +3726,6 @@ class Cyberlog(commands.Cog):
 
     async def ChannelInfo(self, channel: discord.abc.GuildChannel, invites, pins, logs):
         permString = None
-        global bot
         details = discord.Embed(title=f'{self.channelEmoji(channel)}{channel.name}', description='',color=yellow[colorTheme(channel.guild)], timestamp=datetime.datetime.utcnow())
         details.set_footer(text='Channel ID: {}'.format(channel.id))
         if type(channel) is discord.TextChannel: details.description+=channel.mention
@@ -3925,7 +3924,6 @@ class Cyberlog(commands.Cog):
 
     async def ChannelListInfo(self, channels, logs):
         '''Prereq: len(channels) > 0'''
-        global bot
         embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(channels[0].guild)])
         none=['(No category)'] if len([c for c in channels if type(c) is not discord.CategoryChannel and c.category is None]) else []
         none += ['|{}{}'.format(self.channelEmoji(c), c.name) for c in channels if type(c) is not discord.CategoryChannel and c.category is None]
@@ -4253,6 +4251,9 @@ class Cyberlog(commands.Cog):
                         if not any([m.id == s.owner.id for s in memberServers]) and m.id in vipMembers: await disguardMember.remove_roles(disguardVIPTester, reason=f'Automatic Scan: {reason}')
                         if not any([s.get_member(m.id).guild_permissions.manage_guild for s in memberServers]) and m.id in alphaMembers: await disguardMember.remove_roles(disguardAlphaTester, reason=f'Automatic Scan: {reason}')
 
+    def colorTheme(self, s: discord.Guild):
+        return self.bot.lightningLogging[s.id]['colorTheme']
+    
     async def uploadFiles(self, f):
         #if type(f) is not list: f = [f]
         try:
@@ -4564,16 +4565,16 @@ def ManageServer(member: discord.Member): #Check if a member can manage server, 
     return False
 
 def nameZone(s: discord.Guild):
-    return lightningLogging.get(s.id).get('tzname')
+    return getServer(s).get('tzname', 'EST')
 
 def timeZone(s: discord.Guild):
-    return lightningLogging.get(s.id).get('offset')
+    return getServer(s).get('offset', -4)
 
 def prefix(s: discord.Guild):
-    return lightningLogging.get(s.id).get('prefix')
+    return getServer(s).get('prefix', '.')
 
 def getServer(s: discord.Guild):
-    return lightningLogging.get(s.id)
+    return bot.lightningLogging.get(s.id)
 
 def colorTheme(s):
     return getServer(s)['colorTheme']
@@ -4645,4 +4646,3 @@ def elapsedDuration(timeSpan, joinString=True, fullUnits=True, *, onlyTimes=Fals
 def setup(Bot):
     global bot
     Bot.add_cog(Cyberlog(Bot))
-    bot = Bot

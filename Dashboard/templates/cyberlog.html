@@ -20,6 +20,12 @@
                 })
             });
         </script>
+        <style>
+            .show *:not(legend) {display: initial;}
+            .show p {display: block;}
+            .show option {display: block;}
+            fieldset *:not(legend) {display: none;}
+        </style>
     </head>
     {%set colorTheme = ["#008000", "#0000FF", "#ff0000"] if server.colorTheme == 0 else ["#66ff66", "#6666ff", "#ff6666"]%}
     <body>

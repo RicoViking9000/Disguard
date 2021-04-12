@@ -222,7 +222,7 @@ async def index(ctx, t: int = None):
 
 @bot.command()
 async def help(ctx):
-    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands '✔ Verified URL to Disguard website - https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{getData(bot).get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow[Cyberlog.colorTheme(ctx.guild) if ctx.guild else 1])
+    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands 'https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{getData(bot).get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow[getData(bot)[ctx.guild.id]['colorTheme'] if ctx.guild else 1])
     await ctx.send(embed=e)
 
 @bot.command()
