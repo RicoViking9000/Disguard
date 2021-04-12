@@ -3589,7 +3589,7 @@ class Cyberlog(commands.Cog):
         loadContent = discord.Embed(title='{}Loading {}', color=yellow[colorTheme(ctx.guild)])
         if message.content is not None: await message.edit(content=None)
         past = False
-        while True:
+        while not self.bot.is_closed():
             if past or message.embeds[0].author.name is not discord.Embed.Empty and '⭐' in message.embeds[0].author.name: 
                 if len(every) > 0: 
                     for r in ['⬅']: await message.add_reaction(r)
