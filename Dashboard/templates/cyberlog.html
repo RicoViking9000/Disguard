@@ -311,9 +311,12 @@
                             <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if cyberlog.misc.channel == channel.id%}selected{%endif%}>{{channel.name}}</option>
                         {%endfor%}
                         </select><br>
-                
+                <br>
                 <label>Enable ghost reaction logging</label> <select name=ghostReactionEnabled><option value=0 {%if not cyberlog.ghostReactionEnabled%}selected{%endif%}>Disabled</option><option value=1 {%if cyberlog.ghostReactionEnabled%}selected{%endif%}>Enabled</option></select><br>
                 <label>Ghost reaction time consideration</label> <input type="number" min=0 name=ghostReactionTime value={{cyberlog.ghostReactionTime}}><br>
+                <br>
+                <label>Infinite reposting of deleted Disguard logs</label> <select name=disguardLogRecursion><option value=0 {%if not cyberlog.disguardLogRecursion%}selected{%endif%}>Disabled</option><option value=1 {%if cyberlog.disguardLogRecursion%}selected{%endif%}>Enabled</option></select><br>
+                <br>
                 <label>Log message format</label> <select name=miscPlainText><option value=default {%if cyberlog.misc.plainText == None%}selected{%endif%}>--Use Default--</option><option value=0 {%if cyberlog.misc.plainText == False%}selected{%endif%}>Embed</option><option value=1 {%if cyberlog.misc.plainText%}selected{%endif%}>Plaintext</option></select><br>
                 <label>Read server audit log</label> <select name=miscRead><option value=default {%if cyberlog.misc.read == None%}selected{%endif%}>--Use Default--</option><option value=0 {%if cyberlog.misc.read == False%}selected{%endif%}>Disabled</option><option value=1 {%if cyberlog.misc.read%}selected{%endif%}>Enabled</option></select><br>
                 <label>Embed color theme</label> <select name=miscColor><option value=default {%if cyberlog.misc.color == None%}selected{%endif%}>--Use Default--</option><option value=auto {%if cyberlog.misc.color == ["auto", "auto", "auto"]%}selected{%endif%}>Match server color theme (ignore colors below)</option><option value=custom {%if cyberlog.misc.color != None and cyberlog.misc.color != ["auto", "auto", "auto"]%}selected{%endif%}>Use the custom colors below</option></select><br>

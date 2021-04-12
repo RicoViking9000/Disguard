@@ -87,10 +87,10 @@ class Moderation(commands.Cog):
         '''
         if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to mute\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}mute [list of members to mute] [duration:optional] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]\nDuration: 3d = 3 days, 6h30m = 6 hours 30 mins, etc. s=sec, m=min, h=hour, d=day, w=week, mo=month, y=year')
         if duration: duration = ParseDuration(duration)
-        embed = discord.Embed(title=f'{self.emojis["muted"]}Muting {len(members)} member{"s" if len(members) != 1 else ""} for {duration if duration else "♾"}s', description=f"{self.emojis['loading']}\n", color=orange[self.colorTheme(ctx.guild)])
+        embed = discord.Embed(title=f'{self.emojis["muted"]}Muting {len(members)} member{"s" if len(members) != 1 else ""} for {duration if duration else "∞"}s', description=f"{self.emojis['loading']}\n", color=orange[self.colorTheme(ctx.guild)])
         message = await ctx.send(embed=embed)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        results = await self.muteMembers(members, duration=duration, reason=reason)
+        results = await self.muteMembers(members, ctx.author, duration=duration, reason=reason)
         def nestMore(array):
             return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
         embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
@@ -105,7 +105,7 @@ class Moderation(commands.Cog):
         embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmuting {len(members)} member{"s" if len(members) != 1 else ""}', description=f"{self.emojis['loading']}\n", color=orange[self.colorTheme(ctx.guild)])
         message = await ctx.send(embed=embed)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        results = await self.unmuteMembers(members, {}, reason=reason)
+        results = await self.unmuteMembers(members, ctx.author, {}, reason=reason)
         def nestMore(array):
             return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
         embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
@@ -685,7 +685,7 @@ class Moderation(commands.Cog):
                 except discord.NotFound: pass
         return returnQueue
 
-    async def muteMembers(self, members, *, duration=None, reason=None, harsh=False, waitToUnmute=True, muteRole=None):
+    async def muteMembers(self, members, author, *, duration=None, reason=None, harsh=False, waitToUnmute=True, muteRole=None):
         '''Applies automated mute to the given member, returning a status tuple (bool:success, string explanation)'''
         '''Harsh: If True, apply permission overwrites to each channel for this member in addition to for the mute role'''
         # Vars
@@ -698,32 +698,32 @@ class Moderation(commands.Cog):
             if not muteRole:
                 try: muteRole = await g.create_role(name='Disguard AutoMute', reason='This role will be used when Disguard needs to mute a member. As long as this role exists, its ID will be stored in my database. You may edit the name of this role as you wish.')
                 except Exception as e: 
-                    results['Notes'].append(f'{self.emojis["alert"]} | Unable to mute member{"s" if len(members) != 1 else ""} - error during AutoMute role creation: {type(e)}: {e}{e}')
+                    results['Notes'].append(f'{self.emojis["alert"]} | Unable to mute member{"s" if len(members) != 1 else ""} - error during AutoMute role creation: {type(e).__name__}: {e}')
                     return results
                 asyncio.create_task(database.SetMuteRole(g, muteRole))
         #Move the mute role's position to the position right below Disguard's top role, if it's not already there
         if muteRole.position < g.me.top_role.position - 1:
             try: await muteRole.edit(position=g.me.top_role.position - 1)
-            except Exception as e: results['Notes'].append(f'Unable to move the AutoMute role higher in the rolelist, please do this manually: {type(e)}: {e}{e}')
+            except Exception as e: results['Notes'].append(f'Unable to move the AutoMute role higher in the rolelist, please do this manually: {type(e).__name__}: {e}')
         #Check all channels to make sure the overwrites are correct, along with removing member permissions from the channel
         permissionsTaken = collections.defaultdict(dict)
         memberRolesTaken = {}
         for c in g.text_channels:
             if c.overwrites_for(muteRole).send_messages != False:
                 try: asyncio.create_task(c.set_permissions(muteRole, send_messages=False))
-                except Exception as e: results['Notes'].append(f'{self.emojis["alert"]} | #{c.name} (🚩{muteRole.name}): `{type(e)}: {e}`')
+                except Exception as e: results['Notes'].append(f'{self.emojis["alert"]} | #{c.name} (🚩{muteRole.name}): `{type(e).__name__}: {e}`')
             for m in members:
                 results[m] = {'Channel Permission Overwrites': [], 'Add Mute Role': [], 'Cache/Data Management': []}
                 if harsh and c.overwrites_for(m).send_messages != False:
                     try: 
                         asyncio.create_task(c.set_permissions(m, send_messages=False))
                         permissionsTaken[str(m.id)][str(c.id)] = (c.overwrites.get(m).pair()[0].value, c.overwrites.get(m).pair()[1].value) if c.overwrites.get(m) else (0, 0)
-                    except Exception as e: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: `{type(e)}: {e}`')
+                    except Exception as e: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: `{type(e).__name__}: {e}`')
                 elif not harsh and c.overwrites_for(m):
                     try: 
                         asyncio.create_task(c.set_permissions(m, overwrite=None))
                         permissionsTaken[str(m.id)][str(c.id)] = (c.overwrites.get(m).pair()[0].value, c.overwrites.get(m).pair()[1].value) if c.overwrites.get(m) else (0, 0)
-                    except Exception as e: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: {type(e)}: {e}')
+                    except Exception as e: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: {type(e).__name__}: {e}')
                 if len(results[m]['Channel Permission Overwrites']) == 0: results[m]['Channel Permission Overwrites'].append(f'{self.emojis["greenCheck"]}')
         #Since we're removing most of the member's roles to enforce this mute, we need to keep track of the changes
         muteTimedEvents = {}
@@ -732,25 +732,29 @@ class Moderation(commands.Cog):
                 memberRolesTaken[m.id] = [r for r in m.roles if r.id != g.default_role.id]
                 self.roleCache[f'{m.guild.id}_{m.id}'] = memberRolesTaken[m.id]
                 self.permissionsCache[f'{m.guild.id}_{m.id}'] = permissionsTaken[str(m.id)]
-                try: 
+                try:
+                    #if muteRole.position > author.top_role.position:
+                    #    raise discord.Forbidden("Your top role is below the mute role; operation aborted")
+                    if author.top_role.position < m.top_role.position:
+                        raise discord.Forbidden("You can't mute someone with a higher role than you")
                     await m.edit(roles=[muteRole], reason=reason)
                     results[m]['Add Mute Role'].append(f'{self.emojis["greenCheck"]}')
-                except Exception as e: results[m]['Add Mute Role'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+                except Exception as e: results[m]['Add Mute Role'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')
                 if duration:
                     muteTimedEvents[m.id] = {'type': 'mute', 'target': m.id, 'flavor': reason, 'role': muteRole.id, 'roleList': [r.id for r in memberRolesTaken[m.id]], 'permissionsTaken': permissionsTaken[str(m.id)], 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
                     asyncio.create_task(database.AppendTimedEvent(g, muteTimedEvents[m.id]))
                 results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
-            except Exception as e: results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+            except Exception as e: results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')
         asyncio.create_task(database.SetMuteCache(m.guild, members, memberRolesTaken))
         asyncio.create_task(database.SetPermissionsCache(m.guild, members, permissionsTaken))
-        if duration and waitToUnmute: asyncio.create_task(self.waitToUnmute(members, muteTimedEvents, datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)))
+        if duration and waitToUnmute: asyncio.create_task(self.waitToUnmute(members, author, muteTimedEvents, datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)))
         return results
 
-    async def waitToUnmute(self, members, events, expires, reason=None):
+    async def waitToUnmute(self, members, author, events, expires, reason=None):
         await discord.utils.sleep_until(expires)
-        await self.unmuteMembers(members, events, reason=reason)
+        await self.unmuteMembers(members, author, events, reason=reason)
 
-    async def unmuteMembers(self, members, events, reason=None):
+    async def unmuteMembers(self, members, author, events, reason=None):
         #Note: Possibly make use of discord.Object to reduce iteration counts and running time
         results = {}
         removedRoles = {}
@@ -758,7 +762,11 @@ class Moderation(commands.Cog):
         for m in members: 
             try:
                 results[m] = {'Cache/Data Management': [], 'Remove Mute Role': [], 'Channel Permission Overwrites': []}
-                try: 
+                try:
+                    #if muteRole.position > author.top_role.position:
+                    #    raise discord.Forbidden("Your top role is below the mute role; operation aborted")
+                    if author.top_role.position < m.top_role.position:
+                        raise discord.Forbidden("You can't unmute someone with a higher role than you")
                     await m.edit(roles=removedRoles, reason=reason)
                     results[m]['Remove Mute Role'].append(f'{self.emojis["greenCheck"]}')
                 except Exception as e: results[m]['Remove Mute Role'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')

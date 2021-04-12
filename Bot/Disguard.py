@@ -230,6 +230,14 @@ async def invite(ctx):
     e = discord.Embed(title='Invite Links', description='• Invite Disguard to your server: https://discord.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot\n\n• Join the Disguard discord server: https://discord.gg/xSGujjz')
     await ctx.send(embed=e)
 
+@bot.command()
+async def privacy(ctx):
+    await ctx.send("https://disguard.netlify.app/privacybasic")
+
+@bot.command()
+async def dashboard(ctx):
+    await ctx.send(f"https://disguard.herokuapp.com/manage/{ctx.guild.id if ctx.guild else ''}\n\nUpon clicking the link, please allow a few seconds for the server to wake up")
+
 @bot.command(aliases=['config', 'configuration', 'setup'])
 async def server(ctx):
     '''Pulls up information about the current server, configuration-wise'''
@@ -1795,20 +1803,31 @@ async def scheduleAnnounce(ctx):
 async def test(ctx):
     status = await ctx.send('Working')
     
-    toRemove = []
-    for s in bot.guilds:
-        for c in s.text_channels:
-            path = f'Attachments/{s.id}/{c.id}'
-            if not os.path.exists(path): continue
-            messages = [m.id for m in (await c.history(limit=None).flatten())]
-            for folder in os.listdir(path):
-                if int(folder) not in messages: toRemove.append(f'path/{folder}')
-    
-    print(f'Captured {len(toRemove)} unnecessary folders, removing now')
+    for u in bot.lightningUsers.values():
+        if u.get('age') and (u['age'] < 13 or u['age'] > 110):
+            user = bot.get_user(u['user_id'])
+            await database.SetAge(user, None)
+            message = f"Hello {user.name}, this message is to inform you that it's no longer possible to store age values for my birthday module smaller than 13 or larger than 110. Your currently stored age, {u['age']}, falls outside of this range and has been reset. The birthday module only works in servers, so head to a server to update your age if you wish, otherwise it'll stay stored as null.\n\n(You are receiving this message because you have an age value for my birthday module outside of the new acceptable range, and it has been reset)"
+            try: await user.send(message)
+            except: pass
 
-    for path in toRemove:
-        try: shutil.rmtree(path)
-        except: continue
+    await status.edit(content='Done')
+
+@commands.is_owner()
+@bot.command()
+async def test2(ctx):
+    status = await ctx.send('Working')
+    
+    for u in bot.lightningUsers.values():
+        user = bot.get_user(u['user_id'])
+        if user.bot:
+            if u.get('usernameHistory') and len(u['usernameHistory']) > 1000:
+                u['usernameHistory'] = u['usernameHistory'][-1000:]
+                asyncio.create_task(database.SetUsernameHistory(user, u['usernameHistory']))
+            if u.get('avatarHistory') and len(u['avatarHistory']) > 1000:
+                u['avatarHistory'] = u['avatarHistory'][-1000:]
+                asyncio.create_task(database.SetAvatarHistory(user, u['avatarHistory']))
+        
 
     await status.edit(content='Done')
 

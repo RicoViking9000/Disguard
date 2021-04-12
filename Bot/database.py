@@ -232,6 +232,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             # 'globalSettings': vars(loggingHome),
             "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
             'ghostReactionEnabled': log.get('ghostReactionEnabled') or True,
+            'disguardLogRecursion': log.get('disguardLogRecursion') or False, #Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
             "image": False if log is None or log.get('image') is None else log.get('enabled'),
             "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
             'library': 1 if not log or not log.get('library') else log.get('library'), #0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
@@ -747,13 +748,25 @@ async def AppendCustomStatusHistory(m: discord.Member, emoji, status):
     '''Appends a custom status event to a user listing of them. Member object because only they have custom status attributes, not just user objects.'''
     await users.update_one({'user_id': m.id}, {'$push': {'customStatusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}}})
 
+async def SetCustomStatusHistory(m: discord.Member, entries):
+    '''Overwrites the member's custom status history list'''
+    await users.update_one({'user_id': m.id}, {'$set': {'customStatusHistory': entries}})
+
 async def AppendUsernameHistory(m: discord.User):
     '''Appends a username update to a user's listing of them'''
     await users.update_one({'user_id': m.id}, {'$push': {'usernameHistory': {'name': m.name, 'timestamp': datetime.datetime.utcnow()}}})
 
+async def SetUsernameHistory(m: discord.User, entries):
+    '''Overwrites the user's username history list'''
+    await users.update_one({'user_id': m.id}, {'$set': {'usernameHistory': entries}})
+
 async def AppendAvatarHistory(m: discord.User, url):
     '''Appends an avatar update to a user's listing of them. Old is the discord CDN avatar link used for comparisons, new is the permanent link from the image log channel (copy attachment)'''
     await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': str(m.avatar_url), 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}})
+
+async def SetAvatarHistory(m: discord.User, entries):
+    '''Overwrites the user's avatar history list'''
+    await users.update_one({'user_id': m.id}, {'$set': {'avatarHistory': entries}})
 
 async def UnduplicateHistory(u: discord.User):
     '''Removes duplicate entries from a user's history lists'''

@@ -199,7 +199,10 @@ class Birthdays(commands.Cog):
             age = ages[0]
             letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
             draft=discord.Embed(title='🍰 Birthdays / 👮 {:.{diff}} / 🕯 Configure Age / {} Confirmation'.format(message.author.name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍ / 🕯 Configure Age / ✔ Confirmation')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
-            if len(ages) == 1: draft.description='{}, would you like to set your age as **{}**?\n\nI currently have {} as your age; reacting with the check will overwrite this.'.format(message.author.name, age, currentAge)
+            if len(ages) == 1: 
+                if age >= 13 and age <= 110: draft.description='{}, would you like to set your age as **{}**?\n\nI currently have {} as your age; reacting with the check will overwrite this.'.format(message.author.name, age, currentAge)
+                else: 
+                    draft.description = f"{message.author.name}, if you're trying to set your age as {age}, you can no longer set ages outside the range of 13 to 110 years old. Please be realistic if you wish to set your age and try again."
             else: draft.description='{}, if you would like to set your age as one of the listed values, react with the corresponding letter, otherwise you may ignore this message.\n\n{}\n\nI currently have {} as your age; reacting will overwrite this.'.format(message.author.name,
                 '\n'.join(['{}: Set your age to **{}**'.format(letters[i], ages[i]) for i in range(len(ages))]), currentAge)
             mess = await message.channel.send(embed=draft)
@@ -645,13 +648,18 @@ async def ageContinuation(self, age, author, mess, draft, callback=None, partial
     await mess.edit(embed=draft)
     try: await mess.clear_reactions()
     except: pass
-    await database.SetAge(u[1], age)
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ✅ Success'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Success')),color=yellow[self.colorTheme(mess.guild)], timestamp=datetime.datetime.utcnow())
-    embed.set_author(name=author.name, icon_url=author.avatar_url)
-    embed.description = 'Your age has successfully been saved, and will be used for your next birthday announcement.'
-    try: 
-        if not self.lightningUsers[author.id]['birthday']: embed.description = f'Your age ({age}) has successfully been saved.\n\nYou do not have a birthday configured yet - set your birthday by typing `my birthday is [date]` or using the birthday command (no args) & subsequently reacting with 🍰'
-    except: pass
+    if age >= 13 and age <= 110:
+        await database.SetAge(u[1], age)
+        embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ✅ Success'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Success')),color=yellow[self.colorTheme(mess.guild)], timestamp=datetime.datetime.utcnow())
+        embed.set_author(name=author.name, icon_url=author.avatar_url)
+        embed.description = 'Your age has successfully been saved, and will be used for your next birthday announcement in your DMs.'
+        try: 
+            if not self.lightningUsers[author.id]['birthday']: embed.description = f'Your age ({age}) has successfully been saved.\n\nYou do not have a birthday configured yet - set your birthday by typing `my birthday is [date]` or using the birthday command (no args) & subsequently reacting with 🍰'
+        except: pass
+    else:
+        embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ❌ Failure'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ❌ Failure')),color=yellow[self.colorTheme(mess.guild)], timestamp=datetime.datetime.utcnow())
+        embed.set_author(name=author.name, icon_url=author.avatar_url)
+        embed.description = f'As of April 12, 2021, only ages between 13 and 110 will be accepted. Please try again using the casual format (`I am <age>`) or the birthday command `{self.bot.lightningLogging.get(author.guild.id).get("prefix")}birthday <age>`, without the angle brackets.'
     if callback is not None: embed.set_footer(text='Callback: {}'.format(callback))
     await mess.edit(embed=embed)
 
@@ -727,7 +735,7 @@ async def birthdayContinuation(self, birthday, target, draft, message, mess, use
         mess = await message.channel.send(embed=draft)
         await database.SetBirthday(u[1], birthday)
     embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / ✅ Success'.format(target[0].name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Success')),color=yellow[self.colorTheme(message.guild)], timestamp=datetime.datetime.utcnow())
-    embed.description='''{}, your birthday has been successfully recorded: **{}** (which is {} days from now on a {} {} year).\nIf you would like, you can include your age in your birthday profile by typing 'I am <age>' or 'I'm <age>'\n\n
+    embed.description='''{}, your birthday has been successfully recorded: **{}** (which is {} days from now on a {} {} year).\nIf you would like, you can include your age in your birthday profile by typing 'I am <age>' or 'I'm <age>'\n
         {}\n\nEveryone else, you may use the `birthday` command or react to this message with the 🍰 emoji to add a personal message that will be displayed on {}'s birthday.'''.format(u[1].name,
         birthday.strftime('%B %d'), (await database.GetMemberBirthday(u[1]) - adjusted).days, birthday.strftime('%A'), 'this' if birthday.year == adjusted.year else 'next',
         'Your birthday will be announced at {} {} to the channel {}'.format((await database.GetBirthdate(message.guild)).strftime('%I:%M %p'), await database.GetNamezone(message.guild), 
@@ -964,7 +972,7 @@ async def verifyAge(message, age):
             try: tail = s[s.index(str(number)):] #If there is content after the number, try to deal with it
             except: 
                 if int(s[1 + s.index(finder)]) not in calculateAge(message): return False #If the relevant age is not the same one found in the message, return
-                if not tail: return
+                return False
             if len(tail) > 1:
                 if 'year' not in tail[1]:
                     #Parts of speech analysis

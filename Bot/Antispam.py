@@ -371,7 +371,7 @@ class Antispam(commands.Cog):
         else:
             if spam.get("action") in [1, 4]:
                 if spam['action'] == 4: role = message.guild.get_role(spam.get('customRole', 0))
-                successful = await self.bot.get_cog('Moderation').muteMembers([message.author], duration=spam.get('muteTime', 0), reason='[Antispam: Automute]', waitToUnmute=False, muteRole=role)
+                successful = await self.bot.get_cog('Moderation').muteMembers([message.author], message.guild.me, duration=spam.get('muteTime', 0), reason='[Antispam: Automute]', waitToUnmute=False, muteRole=role)
             if spam.get("action") == 2:
                 try:
                     await message.guild.kick(message.author)
@@ -452,7 +452,7 @@ class Antispam(commands.Cog):
             try: await message.author.send(f'You are now unmuted in {message.guild.name}')
             except discord.Forbidden: pass
         try:
-            await self.bot.get_cog('Moderation').unmuteMembers([message.author], {})
+            await self.bot.get_cog('Moderation').unmuteMembers([message.author], message.guild.me, {})
             lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Successfully removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])
         except discord.Forbidden:
             lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Unable to remove role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])

@@ -175,7 +175,7 @@ def server(id):
                 'truncateText': int(r.getlist('subTruncateText')[i]),
                 'media': int(r.getlist('subMedia')[i]),
                 'creditAuthor': int(r.getlist('subCreditAuthor')[i]),
-                'color': r.getlist('subColor')[i],
+                'color': 'colorCode' if r.getlist('subColor')[i] == 'colorCode' else r.getlist('subCustomColor')[i],
                 'timestamp': r.getlist('subTimestamp')[i].lower() == 'true',
             } for i in range(len(r.getlist('subName'))) if not r.getlist('delete')[i] == '1' and i != 0]
             }})
@@ -271,6 +271,7 @@ def cyberlog(id):
         servers.update_one({"server_id": id}, {"$set": {"cyberlog": {
         "enabled": r.get('enabled').lower() == 'true',
         'ghostReactionEnabled': r.get('ghostReactionEnabled') == '1',
+        'disguardLogRecursion': r.get('disguardLogRecursion') == '1',
         "image": r.get('imageLogging').lower() == 'true',
         "defaultChannel": r.get('defaultChannel', None, type=int),
         'library': r.get('defaultLibrary', type=int),
