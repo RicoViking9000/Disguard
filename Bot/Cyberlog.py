@@ -4646,3 +4646,4 @@ def elapsedDuration(timeSpan, joinString=True, fullUnits=True, *, onlyTimes=Fals
 def setup(Bot):
     global bot
     Bot.add_cog(Cyberlog(Bot))
+    bot = Bot
