@@ -400,6 +400,7 @@ class Cyberlog(commands.Cog):
     
     async def createRedditStream(self, server, data, attempt=0):
         '''Data represents a singular subreddit customization data'''
+        print(f'creating reddit stream for {server.name}: {data["subreddit"]}', attempt)
         if attempt > 2:
             return self.redditThreads[server.id].remove(data['subreddit']) #This will get picked up in the next syncRedditFeeds loop
         if self.redditThreads.get(server.id) and data["subreddit"] in self.redditThreads[server.id]: return #We already have a thread running for this server & subreddit
@@ -414,8 +415,12 @@ class Cyberlog(commands.Cog):
                     if data['subreddit'] not in self.redditThreads[server.id]: return #This feed has been cancelled
                     embed = await self.redditSubmissionEmbed(server, submission, True, data['truncateTitle'], data['truncateText'], data['media'], data['creditAuthor'], data['color'], data['timestamp'], channel=channel)
                     await channel.send(embed=embed)
-                except: pass
-        except: 
+                except: 
+                    print(f'reddit feed submission error')
+                    traceback.print_exc()
+        except:
+            print(f"reddit feed error: {server.name} {server.id}")
+            traceback.print_exc()
             await asyncio.sleep(60)
             asyncio.create_task(self.createRedditStream(server, data, attempt + 1))
     

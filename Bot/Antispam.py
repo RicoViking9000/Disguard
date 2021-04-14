@@ -50,14 +50,16 @@ class Antispam(commands.Cog):
                                 except discord.Forbidden as error: print(f'Timed ban error: {error.text}')
                             elif e.get('type') == 'mute':
                                 member = g.get_member(e.get('target'))
-                                try: 
-                                    await member.remove_roles(g.get_role(e.get('role')))
-                                    await member.add_roles(*[g.get_role(r) for r in e.get('roleList')])
-                                    for k, v in e.get('permissionsTaken').items(): await g.get_channel(int(k)).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(v[0]), discord.Permissions(v[1])))
-                                except discord.Forbidden as error: 
-                                    try: await self.bot.get_channel(self.bot.lightningLogging[g.id]['cyberlog']['defaultChannel']).send(f'Unable to unmute {member} because {error.text}')
-                                    except: pass
-                                    print(f'Timed mute error: {error.text}')
+                                if member:
+                                    try: 
+                                        await member.remove_roles(g.get_role(e.get('role')))
+                                        await member.add_roles(*[g.get_role(r) for r in e.get('roleList')])
+                                        for k, v in e.get('permissionsTaken').items(): await g.get_channel(int(k)).set_permissions(member, overwrite=discord.PermissionOverwrite.from_pair(discord.Permissions(v[0]), discord.Permissions(v[1])))
+                                    except discord.Forbidden as error: 
+                                        try: await self.bot.get_channel(self.bot.lightningLogging[g.id]['cyberlog']['defaultChannel']).send(f'Unable to unmute {member} because {error.text}')
+                                        except: pass
+                                        print(f'Timed mute error: {error.text}')
+                                else: await database.RemoveTimedEvent(g, e)
                             elif e.get('type') == 'pause':
                                 g = self.bot.get_guild(e['server'])
                                 await database.ResumeMod(g, e['key'])
