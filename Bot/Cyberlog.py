@@ -4281,12 +4281,14 @@ class Cyberlog(commands.Cog):
         return self.bot.lightningLogging[s.id]['colorTheme']
 
     def privacyEnabledChecker(self, u, parent, child):
-        p = self.bot.lightningUsers[u.id]['privacy']
+        try: p = self.bot.lightningUsers[u.id]['privacy']
+        except KeyError: return False
         if p[child][0] == 2: return self.privacyEnabledChecker(u, 'default', parent)
         return p[child][0] == 1
 
     def privacyVisibilityChecker(self, u, parent, child):
-        p = self.bot.lightningUsers[u.id]['privacy']
+        try: p = self.bot.lightningUsers[u.id]['privacy']
+        except KeyError: return False
         if p[child][1] == 2: return self.privacyEnabledChecker(u, 'default', parent)
         return p[child][1] == 1
     
