@@ -42,21 +42,25 @@ class Birthdays(commands.Cog):
         try:
             for member in self.bot.users:
                 try:
-                    bday = self.bot.lightningUsers[member.id]['birthday']
-                    if bday is not None:
+                    u = self.bot.lightningUsers[member.id]
+                    bday = u['birthday']
+                    if bday is not None and self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayDay'):
                         if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
                             print(f'DMing {member.name} because it is their birthday')
-                            try: age = self.bot.lightningUsers[member.id]['age']
+                            try: 
+                                if self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'age'):
+                                    age = self.bot.lightningUsers[member.id]['age']
+                                else: age = None
                             except KeyError: age = None
                             if age is not None:
                                 age += 1
-                                await database.SetAge(member, age)
+                                asyncio.create_task(database.SetAge(member, age))
                             new = datetime.datetime(bday.year + 1, bday.month, bday.day)
-                            await database.SetBirthday(member, new)
-                            messages = await database.GetBirthdayMessages(member)
+                            asyncio.create_task(database.SetBirthday(member, new))
                             try: messages = self.bot.lightningUsers[member.id]['birthdayMessages']
-                            except KeyError: pass
+                            except KeyError: messages = await database.GetBirthdayMessages(member)
                             embed=discord.Embed(title=f'''🍰 Happy {f"{age}{Cyberlog.suffix(age) if age else ''} "}Birthday, {member.name}! 🍰''', timestamp=datetime.datetime.utcnow(), color=yellow[1])
+                            if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayMessages'): messages = []
                             if len(messages) > 0: embed.description=f'You have {len(messages)} personal messages that will be sent below this message.'
                             else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with fun, food, and gifts,\n  RicoViking9000, my developer'
                             await member.send(embed=embed)
@@ -73,21 +77,24 @@ class Birthdays(commands.Cog):
                 initial = started + datetime.timedelta(hours=tz)
                 try: channel = self.bot.lightningLogging[server.id]['birthday']
                 except KeyError: continue
-                if channel:
+                if channel > 0:
                     try:
                         if (initial.strftime('%H:%M') == self.bot.lightningLogging[server.id]['birthdate'].strftime('%H:%M')):
                             for member in server.members:
                                 try:
                                     bday = self.bot.lightningUsers[member.id]['birthday']
                                     if bday is not None:
-                                        if bday.strftime('%m%d') == initial.strftime('%m%d'):
+                                        if bday.strftime('%m%d') == initial.strftime('%m%d') and self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayDay'):
                                             print(f'Announcing birthday for {member.name}')
                                             try:
-                                                messages = [a for a in self.bot.lightningUsers[member.id]['birthdayMessages'] if server.id in a['servers']]
+                                                messages = [a for a in self.bot.lightningUsers[member.id]['birthdayMessages'] if server.id in a['servers']] if self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayMessages') else []
                                                 newline = '\n'
-                                                messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m['author']).name if m['author'] in [mb.id for mb in server.members] else m['authName']}: {m['message']}" for m in messages])}'''
+                                                messageVisibility = self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayMessages')
+                                                messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m['author']).name if m['author'] in [mb.id for mb in server.members] else m['authName']}: {m['message'] if messageVisibility else '<Content hidden due to privacy settings>'}" for m in messages])}'''
                                                 if member.id == 247412852925661185: toSend = f"🍰🎊🍨🎈 Greetings {server.name}! It's my developer {member.mention}'s birthday!! Let's wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ''}"
-                                                else: toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
+                                                else: 
+                                                    if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
+                                                    else: toSend = f"🍰 Greetings {server.name}! We have one anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
                                                 try: 
                                                     m = await self.bot.get_channel(channel).send(toSend)
                                                     await m.add_reaction('🍰')
@@ -149,9 +156,10 @@ class Birthdays(commands.Cog):
         if any(word in message.content.lower().split(' ') for word in ['isn', 'not', 'you', 'your']): return #Blacklisted words
         ctx = await self.bot.get_context(message)
         if ctx.valid:
-            if any([message.content.startswith(w) for w in [ctx.prefix + 'bday', ctx.prefix + 'birthday']]): return #Don't auto detect birthday information is the user is using a command
+            if any([message.content.startswith(w) for w in [ctx.prefix + 'bday', ctx.prefix + 'birthday']]): return #Don't auto detect birthday information if the user is using a command
         try: 
             if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
+            if self.bot.get_cog('Cyberlog').privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #This person disabled the birthday module
         except AttributeError: pass
         self.bot.loop.create_task(self.messagehandler(message))
 
@@ -225,27 +233,32 @@ class Birthdays(commands.Cog):
             embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
             embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
             adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-            try: bday, age = self.bot.lightningUsers[ctx.author.id]['birthday'], self.bot.lightningUsers[ctx.author.id]['age']
-            except KeyError: bday, age = await database.GetMemberBirthday(ctx.author), await database.GetAge(ctx.author)
-            embed.add_field(name='Your Birthday',value='Unknown' if not bday else f'{bday:%a %b %d}\n(In {(bday - adjusted).days} days)')
-            embed.add_field(name='Your Age', value='Unknown' if not age else age)
-            embed.description = '{} Processing global birthday information...'.format(self.loading)
+            if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'default', 'birthdayModule'):
+                embed.description = 'Birthday module disabled. To edit your privacy settings or enable the birthday module, go [here](http://disguard.herokuapp.com/manage/profile).'
+                return await ctx.send(embed=embed)
+            bday, age = self.bot.lightningUsers[ctx.author.id].get('birthday'), self.bot.lightningUsers[ctx.author.id].get('age')
+            embed.add_field(name='Your Birthday',value='Unknown' if not bday else 'Hidden' if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(In {(bday - adjusted).days} days)')
+            embed.add_field(name='Your Age', value='Unknown' if not age else 'Hidden' if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
+            embed.description = f'{self.loading} Processing global birthday information...\n\n*Performance/quality of life improvements for the birthdays module will be worked on in early June*'
             message = await ctx.send(embed=embed)
             #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
             currentServer = []
             disguardSuggest = []
             weekBirthday = []
-            memberIDs = [m.id for m in ctx.guild.members]
+            memberIDs = set([m.id for m in ctx.guild.members]) #June 2021 (v0.2.27): Changed from list to set to improve performance // Holds list of member IDs for the current server
             for m in self.bot.users:
                 try:
-                    if m.id in memberIDs and self.bot.lightningUsers[m.id].get('birthday'): currentServer.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
-                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m.id in [member.id for member in s.members] and ctx.author in s.members]) >= 1 and (self.bot.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
+                    #Skip members whose privacy settings show they don't want to partake in public features of the birthday module
+                    if not (self.bot.get_cog('Cyberlog').privacyEnabledChecker(m, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(m, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyEnabledChecker(m, 'birthdayModule', 'birthdayDay') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(m, 'birthdayModule', 'birthdayDay')): continue
+                    userBirthday = self.bot.lightningUsers[m.id].get('birthday')
+                    if m.id in memberIDs and userBirthday: currentServer.append({'data': m, 'bday': userBirthday})
+                    elif userBirthday and len([s for s in self.bot.guilds if m.id in [member.id for member in s.members] and ctx.author in s.members]) >= 1 and (self.bot.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
                     elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m.id in [member.id for member in s.members] and ctx.author in s.members]) >= 1: disguardSuggest.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
-                except (AttributeError, TypeError): pass
+                except (AttributeError, TypeError, KeyError): pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
             disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members]), reverse=True) #Servers the author and target share
-            embed.description = '''**{7:–^70}**\n🍰: Send a birthday message to someone\n📆: Update your birthday\n🕯: Update your age\n📝: Edit your wish list\n👮‍♂️: Switch to Member Details view\n**{8:–^70}**\n{3}\n\n__{0}__\n{4}\n\n__{1}__\n{5}\n\n__{2}__\n{6}
+            embed.description = '''**{7:–^70}**\n🍰: Send a birthday message to someone\n📆: Update your birthday\n🕯: Update your age\n📝: Manage your wish list\n👮‍♂️: Switch to your profile view\n*Discord UI buttons will be used as soon as they're available*\n**{8:–^70}**\n{3}\n\n__{0}__\n{4}\n\n__{1}__\n{5}\n\n__{2}__\n{6}
                 '''.format('THIS SERVER', 'DISGUARD SUGGESTIONS', 'OTHER', 'To send a message to someone, react 🍰 or type `{}birthday <recipient>`'.format(ctx.prefix),
                 '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in currentServer[:5]]),
                 '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in disguardSuggest[:5]]),
@@ -265,9 +278,9 @@ class Birthdays(commands.Cog):
                 except asyncio.TimeoutError: return await message.edit(embed=birthdayCancelled)
                 for future in pending: future.cancel()
                 if str(stuff[0]) == '🍰': await messageManagement(self, ctx, message, stuff[1], [currentServer[:5], disguardSuggest[:5], weekBirthday[:5]])
-                if str(stuff[0]) == '📆': await firstBirthdayContinuation(self, ctx, ctx.author, message)
-                if str(stuff[0]) == '🕯': await firstAgeContinuation(self, ctx, ctx.author, message)
-                if str(stuff[0]) == '📝': await firstWishlistContinuation(self, ctx, message)
+                if str(stuff[0]) == '📆' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'birthdayDay'): await firstBirthdayContinuation(self, ctx, ctx.author, message)
+                if str(stuff[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await firstAgeContinuation(self, ctx, ctx.author, message)
+                if str(stuff[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await firstWishlistContinuation(self, ctx, message)
                 if str(stuff[0]) == '👮‍♂️':
                     await message.delete()
                     return await self.bot.get_cog('Cyberlog').info(ctx)
@@ -463,6 +476,9 @@ async def messageManagement(self, ctx, message, user, groups):
                     if str(result[0]) in letters: 
                         await message.remove_reaction(str(result[0]), self.bot.user)
                         target = pages[pageData[2]][letters.index(str(result[0]))]
+                        #Check to make sure this member has 'receive birthday messages' enabled in their privacy settings
+                        if not (self.bot.get_cog('Cyberlog').privacyEnabledChecker(target, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyEnabledChecker(target, 'birthdayModule', 'birthdayMessages')):
+                            await message.edit(content = f'{target.name} has disabled receiving birthday messages, so you will be unable to write a message to them.')
                         break
                 if type(result) is discord.Message or str(result[0]) in ['◀', '▶']:
                     flavorText = '{}{} - {}: Select this member (I will DM you)'.format('◀: Previous page\n▶: Next page\n' if len(pages) > 1 else '', letters[0], letters[len(pages[pageData[2]]) - 1])
@@ -497,20 +513,22 @@ async def guestBirthdayViewer(self, ctx, target, cake=False):
     embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 👤 Guest View'.format(target.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 👤 Guest View')), color=yellow[self.colorTheme(ctx.guild)], description='**{0:–^70}**\n{1}'.format('WISH LIST', '\n'.join(['• {}'.format(w) for w in wishlist])), timestamp=datetime.datetime.utcnow())
     embed.description+='\n**{0:–^70}**'.format('AVAILABLE OPTIONS')
     embed.description += '{}{}{}'.format('\n🍰 (Anyone except {0}): Write a personal birthday message to {0}'.format(target.name) if not cake else '', 
-        '\nℹ: Enter Birthday Action Mode' if target == ctx.author else '', '\n👮‍♂️: Switch to Member Details view')
+        '\nℹ: Enter Birthday Action Mode' if target == ctx.author else '', '\n👮‍♂️: Switch to member profile view')
     embed.set_author(name=target.name, icon_url=target.avatar_url)
-    embed.add_field(name='Birthday',value='Unknown' if bday is None else bday.strftime('%a %b %d\n(In {} days)').format((bday - adjusted).days))
-    embed.add_field(name='Age', value='Unknown' if age is None else age)
+    embed.add_field(name='Birthday',value='Unknown' if bday is None else 'Hidden' if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else bday.strftime('%a %b %d\n(In {} days)').format((bday - adjusted).days))
+    embed.add_field(name='Age', value='Unknown' if age is None else 'Hidden' if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else age)
     return embed
 
 async def firstWishlistContinuation(self, ctx, m, cont=False, new=None):
-    wishlist = await database.GetWishlist(ctx.author)
+    wishlist = await database.GetWishlist(ctx.author) if self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have disabled birthday wishlist functionality'] if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private. Work to allow the birthday module to be used in DMs is underway.']
     embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📝 Wish List / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 📝 Wish List / 🏠 Home')), 
         description='**{0:–^70}**\n{2}\n**{1:–^70}**\n{3}'.format('YOUR WISH LIST', 'OPTIONS', 'Very spacious in here! Your wishlist is currently recruiting fabulous new wishes, and you seem to know just where to find them :)' if wishlist is None or len(wishlist) < 1 else '\n'.join(['• {}'.format(w) for w in wishlist]),
         '❌: Close this embed\n{}: Add entries to your wish list\n{}: Remove entries from your wish list'.format(self.whitePlus, self.whiteMinus)),color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
     if not cont: new = await ctx.send(embed=embed)
     else: await new.edit(embed=embed)
-    for r in ['❌', '➕', '➖']: await new.add_reaction(r)
+    await new.add_reaction('❌')
+    if self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist'):
+        for r in ['➕', '➖']: await new.add_reaction(r)
     def navigChecks(r, u): return str(r) in ['❌', '➕', '➖'] and r.message.id == new.id and u == ctx.author
     while True:
         try: result = await self.bot.wait_for('reaction_add', check=navigChecks)
@@ -758,7 +776,6 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
     autoTrigger: go straight to query rather than waiting for cake reaction
     u: User who is sending a message, used when this differs from person reacting with cake (such as when autoTrigger is True)'''
     def cakeReac(r, u): return str(r) == '🍰' and not u.bot and r.message.id == mess.id
-    specialUserID = 596381991151337482 #My friend's ID, joking around with them :P
     theme = self.colorTheme(mess.guild)
     while True:
         try: 
@@ -767,20 +784,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
                 while not haveAppropriateUser:
                     r, u = await self.bot.wait_for('reaction_add', check=cakeReac)
                     if u in target: #User attempts to send a message to themself
-                        if u.id == specialUserID:
-                            confirmationMessage = await mess.channel.send(embed=discord.Embed(description='Aight Kailey, would you like to write a message to yourself?', color=yellow[1]))
-                            def confirmationCheck(reaction, user): return str(reaction) == '✔' and user.id == specialUserID and reaction.message.id == confirmationMessage.id
-                            try: 
-                                await confirmationMessage.add_reaction('✔')
-                                await self.bot.wait_for('reaction_add', check=confirmationCheck, timeout=15)
-                                await confirmationMessage.delete()
-                                haveAppropriateUser = True
-                                break
-                            except asyncio.TimeoutError: 
-                                await confirmationMessage.delete()
-                                try: await mess.remove_reaction(r, u)
-                                except discord.Forbidden: pass
-                        else: await mess.channel.send(embed=discord.Embed(description=f'Sorry {u.name}, you can\'t write a personal birthday message to yourself!', color=yellow[theme]), delete_after=15)
+                        await mess.channel.send(embed=discord.Embed(description=f'Sorry {u.name}, you can\'t write a personal birthday message to yourself!', color=yellow[theme]), delete_after=15)
                     else:
                         try: await mess.remove_reaction(r, u)
                         except discord.Forbidden: pass
@@ -842,7 +846,7 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
             r = await self.bot.wait_for('reaction_add', check=finalConfirm, timeout=180)
             if str(r[0]) == '✅':
                 await database.SetBirthdayMessage(recipient, script, u, [a for a in selected if type(a) is discord.Guild])
-                await u.send(f'Your personal message for {recipient} has been successfully set. To write personal messages, set your birthday, age, wishlist, or view your Birthday Profile, you may use the `birthday` command.\n\n{"And congrats on finding the Easter egg :)))" if u.id == specialUserID else ""}'.strip())
+                await u.send(f'Your personal message for {recipient} has been successfully set. To write personal messages, set your birthday, age, wishlist, or view your Birthday Profile, you may use the `birthday` command.')
             elif str(r[0]) == '🔁': await writePersonalMessage(self, birthday, target, mess, True, u)
             else: return await u.send('Cancelled birthday message configuration')
         except asyncio.TimeoutError:

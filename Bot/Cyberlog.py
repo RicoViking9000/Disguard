@@ -207,6 +207,7 @@ class Cyberlog(commands.Cog):
             if self.syncData.current_loop % 4 == 0: #This segment activates once per day
                 if self.syncData.current_loop == 0: #This segment activates only once while the bot is up (on bootup)
                     await database.VerifyServers(self.bot, False, True)
+                    asyncio.create_task(database.VerifyUsers(self.bot))
                     asyncio.create_task(self.synchronizeDatabase(True))
                     def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                     await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
@@ -224,51 +225,55 @@ class Cyberlog(commands.Cog):
                 for m in g.members:
                     memberStart = datetime.datetime.now()
                     updates = []
-                    try:
-                        for a in m.activities:
-                            if a.type == discord.ActivityType.custom:
+                    if self.privacyEnabledChecker(m, 'default', 'attributeHistory'):
+                        if self.privacyEnabledChecker(m, 'attributeHistory', 'customStatusHistory'):
+                            try:
+                                for a in m.activities:
+                                    if a.type == discord.ActivityType.custom:
+                                        try:
+                                            if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
+                                                asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
+                                                updates.append('status')
+                                        except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
+                                        except (TypeError, IndexError):
+                                            if not (await database.GetUser(m)).get('customStatusHistory'):
+                                                asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
+                                                updates.append('status')
+                            except Exception as e: print(f'Custom status error for {m.name}: {e}')
+                        if self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
+                            try:
+                                if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
+                                    asyncio.create_task(database.AppendUsernameHistory(m))
+                                    updates.append('username')
+                            except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
+                            except (TypeError, IndexError):
+                                asyncio.create_task(database.AppendUsernameHistory(m))
+                                updates.append('username')
+                            except Exception as e: print(f'Username error for {m.name}: {e}')
+                        if self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
+                            try:
+                                if str(m.avatar_url) != self.bot.lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
+                                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                                    await m.avatar_url_as(size=1024).save(savePath)
+                                    f = discord.File(savePath)
+                                    message = await self.imageLogChannel.send(file=f)
+                                    asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
+                                    if os.path.exists(savePath): os.remove(savePath)
+                                    updates.append('avatar')
+                            except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
+                            except (TypeError, IndexError):
                                 try:
-                                    if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
-                                        asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
-                                        updates.append('status')
-                                except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                                except (TypeError, IndexError):
-                                    if not (await database.GetUser(m)).get('customStatusHistory'):
-                                        asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
-                                        updates.append('status')
-                    except Exception as e: print(f'Custom status error for {m.name}: {e}')
-                    try:
-                        if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
-                            asyncio.create_task(database.AppendUsernameHistory(m))
-                            updates.append('username')
-                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                    except (TypeError, IndexError):
-                        asyncio.create_task(database.AppendUsernameHistory(m))
-                        updates.append('username')
-                    except Exception as e: print(f'Username error for {m.name}: {e}')
-                    try:
-                        if str(m.avatar_url) != self.bot.lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                            await m.avatar_url_as(size=1024).save(savePath)
-                            f = discord.File(savePath)
-                            message = await self.imageLogChannel.send(file=f)
-                            asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                            if os.path.exists(savePath): os.remove(savePath)
-                            updates.append('avatar')
-                    except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                    except (TypeError, IndexError):
-                        try:
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                            await m.avatar_url_as(size=1024).save(savePath)
-                            f = discord.File(savePath)
-                            message = await self.imageLogChannel.send(file=f)
-                            asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                            if os.path.exists(savePath): os.remove(savePath)
-                            updates.append('avatar')
-                        except discord.HTTPException: pass #Filesize is too large
-                    except Exception as e: print(f'Avatar error for {m.name}: {e}')
+                                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
+                                    await m.avatar_url_as(size=1024).save(savePath)
+                                    f = discord.File(savePath)
+                                    message = await self.imageLogChannel.send(file=f)
+                                    asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
+                                    if os.path.exists(savePath): os.remove(savePath)
+                                    updates.append('avatar')
+                                except discord.HTTPException: pass #Filesize is too large
+                            except Exception as e: print(f'Avatar error for {m.name}: {e}')
+                        if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
                     self.memberPermissions[g.id][m.id] = m.guild_permissions
-                    if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
                 print(f'Member Management and attribute updates done in {(datetime.datetime.now() - started).seconds}s')
                 started = datetime.datetime.now()
                 for c in g.text_channels: 
@@ -309,7 +314,6 @@ class Cyberlog(commands.Cog):
                 if self.syncData.current_loop == 0:
                     started = datetime.datetime.now()
                     self.syncRedditFeeds.start()
-                    asyncio.create_task(database.VerifyUsers(self.bot))
                     print(f'Full post-verification done in {(datetime.datetime.now() - started).seconds}s')
                 for g in self.bot.guilds:
                     await verifyLogChannel(self.bot, g)
@@ -423,6 +427,12 @@ class Cyberlog(commands.Cog):
             traceback.print_exc()
             await asyncio.sleep(60)
             asyncio.create_task(self.createRedditStream(server, data, attempt + 1))
+    
+    @commands.Cog.listener()
+    async def on_command(self, ctx):
+        if self.bot.lightningUsers[ctx.author.id]['flags']['announcedPrivacySettings']: return
+        await ctx.send(f'Hey {ctx.author.name}! Just wanted to let you know that you can now control some Disguard privacy settings on your new profile page on my web dashboard. Take a look: http://disguard.herokuapp.com/manage/profile')
+        await (await database.GetUserCollection()).update_one({'user_id': ctx.author.id}, {'$set': {'flags.announcedPrivacySettings': True}})
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -598,7 +608,7 @@ class Cyberlog(commands.Cog):
         '''Discord.py event listener: When a reaction is added to a message'''
         #Layer style: Message ID > User ID > Reaction (emoji)
         u = self.bot.get_user(p.user_id)
-        await updateLastActive(u, datetime.datetime.now(), 'removed a reaction')
+        await updateLastActive(u, datetime.datetime.now(), 'added a reaction')
         if u.bot: return
         g = self.bot.get_guild(p.guild_id)
         if not g: return
@@ -2292,17 +2302,15 @@ class Cyberlog(commands.Cog):
             if after.guild.id == targetServer.id:
                 for a in after.activities:
                     if a.type == discord.ActivityType.custom:
-                        #print(f'{datetime.datetime.now()} Member update - inside of activity update for {after.name} in server {after.guild.name}')
-                        try:
-                            #timeStarted = datetime.datetime.now()
-                            try: user = self.bot.lightningUsers[after.id]
-                            except KeyError: return
-                            #print(f'{datetime.datetime.now()} Time taken to fetch user from database: {(datetime.datetime.now() - timeStarted).seconds} seconds')
-                            if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': user.get('customStatusHistory')[-1].get('emoji'), 'n': user.get('customStatusHistory')[-1].get('name')}: 
-                                if not (await database.GetUser(after)).get('customStatusHistory'):
-                                    asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
-                        except AttributeError as e: print(f'Attribute error: {e}')
-                        except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
+                        if self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory'):
+                            try:
+                                try: user = self.bot.lightningUsers[after.id]
+                                except KeyError: return
+                                if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': user.get('customStatusHistory')[-1].get('emoji'), 'n': user.get('customStatusHistory')[-1].get('name')}: 
+                                    if not (await database.GetUser(after)).get('customStatusHistory'):
+                                        asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
+                            except AttributeError as e: print(f'Attribute error: {e}')
+                            except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
                         if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
         if before.guild_permissions != after.guild_permissions: asyncio.create_task(database.VerifyUser(before, self.bot))
@@ -2332,7 +2340,7 @@ class Cyberlog(commands.Cog):
         titles = []
         f = []
         try: thumbnailURL = self.bot.lightningUsers.get(after.id).get('avatarHistory')[-1].get('imageURL')
-        except (TypeError, AttributeError): 
+        except (TypeError, AttributeError, KeyError): 
             thumbnailURL = before.avatar_url_as(static_format='png', size=1024)
         embed.set_thumbnail(url=thumbnailURL)
         if before.avatar_url != after.avatar_url:
@@ -2348,7 +2356,7 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="Profile picture updated", value=f"Old: [Thumbnail to the right]({thumbnailURL})\nNew: [Image below]({message.attachments[0].url})", inline=False)
             content += f'\n•Profile picture'
             await updateLastActive(after, datetime.datetime.now(), 'updated their profile picture')
-            asyncio.create_task(database.AppendAvatarHistory(after, message.attachments[0].url))
+            if self.privacyEnabledChecker(after, 'attributeHistory', 'avatarHistory'): asyncio.create_task(database.AppendAvatarHistory(after, message.attachments[0].url))
             if os.path.exists(savePath): os.remove(savePath)
         if before.discriminator != after.discriminator:
             #data['discrim'] = True
@@ -2367,7 +2375,7 @@ class Cyberlog(commands.Cog):
             embed.add_field(name="New username",value=after.name)
             content += f'\n•Discriminator'
             await updateLastActive(after, datetime.datetime.now(), 'updated their username')
-            asyncio.create_task(database.AppendUsernameHistory(after))
+            if self.privacyEnabledChecker(after, 'attributeHistory', 'usernameHistory'): asyncio.create_task(database.AppendUsernameHistory(after))
             asyncio.create_task(database.VerifyUser(membObj, bot))
         embed.set_footer(text=f'User ID: {after.id}')
         for server in servers:
@@ -3296,15 +3304,30 @@ class Cyberlog(commands.Cog):
         if target is None: target = ctx.author
         p = prefix(ctx.guild)
         embed=discord.Embed(color=yellow[colorTheme(ctx.guild)])
+        if not self.privacyEnabledChecker(target, 'default', 'attributeHistory'):
+            if self.privacyVisibilityChecker(target, 'default', 'attributeHistory'):
+                embed.title = 'Attribute History » Feature Disabled' 
+                embed.description = f'{target.name} has disabled their attribute history' if target.id != ctx.author.id else 'You have disabled your attribute history'
+            else:
+                if not ctx.guild and target.id != ctx.author.id:
+                    embed.title = 'Attribute History » Access Restricted' 
+                    embed.description = f'{target.name} has privated their attribute history' if target.id != ctx.author.id else 'You have privated your attribute history. Use this command in DMs to access it.'
+            return await ctx.send(embed=embed)
         letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
         def navigationCheck(r, u): return str(r) in navigationList and u.id == ctx.author.id and r.message.id == message.id
         async def viewerAbstraction():
             e = copy.deepcopy(embed)
+            if not self.privacyEnabledChecker(target, 'attributeHistory', f'{mod}History'):
+                e.description = f'{target.name} has disabled their {mod} history feature' if target != ctx.author else f'You have disabled your {mod} history.'
+                return e, []
+            if not self.privacyVisibilityChecker(target, 'attributeHistory', f'{mod}History'):
+                e.description = f'{target.name} has privated their {mod} history feature' if target != ctx.author else f'You have privated your {mod} history. Use this command in DMs to access it.'
+                return e, []
             e.description = ''
             tailMappings = {'avatar': 'imageURL', 'username': 'name', 'customStatus': 'name'}
             backslash = '\\'
             data = self.bot.lightningUsers[target.id].get(f'{mod}History')
-            e.description = f'{len(data) if len(data) < 19 else 19} / {len(data)} entries shown; oldest on top\nWebsite portal coming soon'
+            e.description = f'{len(data) if len(data) < 19 else 19} / {len(data)} entries shown; oldest on top\nWebsite portal coming soon™'
             if mod == 'avatar': e.description += '\nTo set an entry as the embed thumbnail, react with that letter'
             if mod == 'customStatus': e.description += '\nTo set a custom emoji as the embed thumbnail, react with that letter'
             for i, entry in enumerate(data[-19:]): #first twenty entries because that is the max number of reactions
@@ -3323,8 +3346,7 @@ class Cyberlog(commands.Cog):
             headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
             header = f'📜 Attribute History / 👮 / {headerTail}'
             header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
-            footerText = 'Data from June 10, 2020 and on • Data before June 14 may be missing'
-            if mod == 'customStatus': footerText = 'Data from June 10, 2020 and on • Data before June 17 may be missing'
+            footerText = 'Data from June 10, 2020 and on'
             e.set_footer(text=footerText)
             e.title = header
             return e, data[-19:]
@@ -3565,13 +3587,13 @@ class Cyberlog(commands.Cog):
             main.set_author(name='{}: {}'.format(ctx.author.name, ctx.author.id),icon_url=ctx.author.avatar_url)
             if len(main.description) > 2048: main.description = main.description[:2048]
             if len(every) == 0 and indiv is None: return await message.edit(embed=main)
-            elif len(every) == 1: 
-                if counter == 0 and type(every[0].obj) is not discord.Member:
-                    temp = await self.evalInfo(every[0].obj, ctx.guild, logs)
-                    temp.set_author(name='⭐{}% relevant ({})'.format(every[0].relevance, every[0].mainKey))
-                    await message.edit(embed=temp)
-            elif len(reactions) == 0: await message.edit(embed=main)
-            if len(embeds) > 1 or indiv is not None: 
+            elif len(every) == 1 and counter == 0 and type(every[0].obj) is not discord.Member: 
+                temp = await self.evalInfo(every[0].obj, ctx.guild, logs)
+                temp.set_author(name='⭐{}% relevant ({})'.format(every[0].relevance, every[0].mainKey))
+                await message.edit(embed=temp)
+            elif len(reactions) == 0: 
+                await message.edit(embed=main)
+            elif len(embeds) > 1 or indiv is not None: 
                 #pass
                 #await asyncio.sleep(5)
                 await message.edit(embed=indiv)
@@ -3825,14 +3847,13 @@ class Cyberlog(commands.Cog):
         onlineTimes = [seconds, minutes, hours, onlineDelta.days]
         activeDisplay = []
         onlineDisplay = []
+        offline = self.emojis['offline']
         for i in range(len(activeTimes)):
             if activeTimes[i] != 0: activeDisplay.append('{}{}'.format(activeTimes[i], units[i][0]))
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         if len(activeDisplay) == 0: activeDisplay = ['0s']
         activities = {discord.Status.online: self.emojis['online'], discord.Status.idle: self.emojis['idle'], discord.Status.dnd: self.emojis['dnd'], discord.Status.offline: self.emojis['offline']}
-        #embed.description='{} ({}) {}\n\n{}Last active {} {} • {} ago ({}){}'.format(activities.get(m.status), m.mention, m.name,
-        #    'Last online {} {} • {} ago\n'.format(onlineTimestamp.strftime('%b %d, %Y • %I:%M %p'), nameZone(m.guild), list(reversed(onlineDisplay))[0]) if m.status == discord.Status.offline else '', activeTimestamp.strftime('%b %d, %Y • %I:%M %p'), nameZone(m.guild), list(reversed(activeDisplay))[0], mA.get('reason'), '\n•This member is likely {} invisible'.format(self.emojis["offline"]) if mA.get('timestamp') > lastOnline(m) and m.status == discord.Status.offline else '')
-        embed.description=f'{activities.get(m.status)} {m.name} ({m.mention})\nLast online: This feature is globally disabled until further notice\nLast Active: This feature is globally disabled until further notice'
+        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{activeTimestamp:%b %d, %Y • %I:%M %p} {nameZone(m.guild)} • {activeDisplay[-1]} ago ({mA['reason']})" if self.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}\nLast online {f"{onlineTimestamp:%b %d, %Y • %I:%M %p} {nameZone(m.guild)} • {onlineDisplay[-1]} ago{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > lastOnline(m) and m.status == discord.Status.offline else ''}" if self.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
@@ -3847,7 +3868,7 @@ class Cyberlog(commands.Cog):
                 except:
                     current.append('Error parsing activity')
             embed.description+='\n\n • {}'.format('\n • '.join(current))
-        embed.description+='\n\n**Roles:** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([permissionKeys.get(p[0]) for p in iter(m.guild_permissions) if p[1]]))
+        embed.description+='\n\n**Roles ({}):** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(len(m.roles), ' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([permissionKeys.get(p[0]) for p in iter(m.guild_permissions) if p[1]]))
         boosting = m.premium_since
         joined = m.joined_at + datetime.timedelta(hours=tz)
         created = m.created_at + datetime.timedelta(hours=tz)
@@ -4258,6 +4279,16 @@ class Cyberlog(commands.Cog):
 
     def colorTheme(self, s: discord.Guild):
         return self.bot.lightningLogging[s.id]['colorTheme']
+
+    def privacyEnabledChecker(self, u, parent, child):
+        p = self.bot.lightningUsers[u.id]['privacy']
+        if p[child][0] == 2: return self.privacyEnabledChecker(u, 'default', parent)
+        return p[child][0] == 1
+
+    def privacyVisibilityChecker(self, u, parent, child):
+        p = self.bot.lightningUsers[u.id]['privacy']
+        if p[child][1] == 2: return self.privacyEnabledChecker(u, 'default', parent)
+        return p[child][1] == 1
     
     async def uploadFiles(self, f):
         #if type(f) is not list: f = [f]
@@ -4589,18 +4620,20 @@ def lastActive(u: discord.User):
     except AttributeError: return {'timestamp': datetime.datetime.min, 'reason': 'not tracked yet'}
 
 async def updateLastActive(u: discord.User, timestamp, reason):
-    try: lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
-    except: pass
-    asyncio.create_task(database.SetLastActive(u, timestamp, reason))
+    if bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'profile', 'lastActive'):
+        try: lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
+        except: pass
+        asyncio.create_task(database.SetLastActive(u, timestamp, reason))
 
 def lastOnline(u: discord.User):
     try: return lightningUsers.get(u.id).get('lastOnline')
     except AttributeError: return datetime.datetime.min
 
 async def updateLastOnline(u: discord.User, timestamp):
-    try: lightningUsers[u.id]['lastOnline'] = timestamp
-    except: pass
-    asyncio.create_task(database.SetLastOnline(u, timestamp))
+    if bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'profile', 'lastOnline'):
+        try: lightningUsers[u.id]['lastOnline'] = timestamp
+        except: pass
+        asyncio.create_task(database.SetLastOnline(u, timestamp))
 
 def beginPurge(s: discord.Guild):
     '''Prevent logging of purge'''

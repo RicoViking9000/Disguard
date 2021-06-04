@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>Profile - Disguard Dashboard</title>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        <link rel='icon' type='image/png' href="{{user.avatar}}">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+        <script type="text/javascript">
+
+        $(document).ready(function() {
+            $(".copyText").click(function() {
+                var element = document.getElementsByTagName($(this).siblings("input, select").first().prop('tagName'))[0];
+                element.select();
+                document.execCommand("copy");
+                $(this).siblings(".copyTextFeedback").css({"opacity": 1, "display": "block"});
+                $(this).siblings(".copyTextFeedback").fadeOut(1000);
+            })
+
+            $("select").change(function() {
+                if ($(this).attr('name').includes("Enabled") && $(this).val() == "0") {
+                    $(this).siblings('.COE').first().children().each(function() {
+                        $(this).fadeIn(400);
+                    })
+                }
+                else if ($(this).attr('name').includes("Enabled") && $(this).val() != "0") {
+                    $(this).siblings('.COE').first().children().each(function() {
+                        $(this).fadeOut(400);
+                    })
+                }
+            })
+        })
+            
+        </script>
+        <script src="{{url_for('static', filename='functions.js')}}"></script>
+        <style>
+            .avatarBanner {background-image: url("{{user.avatar}}"); height: 100px; width: 80%; margin: 0 10%; background-position: center; background-repeat: no-repeat;}
+            fieldset:not(.selected) {display: block;}
+            input:disabled {background-color: transparent; opacity: 75%;}
+            label {width: 20%;}
+            label.forCheckbox {position: absolute; text-align: left; left: 26%; width: 50%;}
+            option:disabled {color: rgba(202, 66, 66, 0.5);}
+            input:not([type=submit]):not([type=checkbox]), select, textarea {width: 75%;}
+            input[type=checkbox] {position: absolute; left: 25%;}
+            .pageTitle, .pageSubtitle {text-align: center; margin: 2.5% 0;}
+            .imgInteract {position: absolute; top: 10px; display: inline-block; height: 35px; width: 35px; cursor: pointer;}
+            .imgInteract.copyText {height: 39px; width: 39px;}
+            .copyText {right: 150px;}
+            .info {right: 230px; border-radius: 50%; border: 2px solid white;}
+            .copyTextFeedback {position: absolute; right: 150px; top: -50px; font-size: 20px; opacity: 0;}
+            .infoDescription {position: absolute; right: 20%; top: 0; font-size: 16px;}
+            .COE * {display: none;}
+        </style>
+    </head>
+    <body>
+        {%set defaultEnabled = user.privacy.default[0]%}
+        {%set defaultVisible = user.privacy.default[1]%}
+        <div class="loadingBar blue"></div>
+        <div class='loader'><div class="bg"></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div></div>
+        <div class=avatarBanner></div>
+        <h3 class=pageTitle>{{user.username}}</h3>
+        <form id=settings method="POST" autocomplete="off">
+            {%raw%}
+            <!-- <fieldset id=basicInfo>
+                <legend>About you</legend>
+                <div class="inputPod">
+                    <label for="username">Username</label>
+                    <input type="text" id=username value={{user.username}}#{{user.discriminator}} disabled>
+                    <img class="imgInteract copyText" src="{{url_for('static', filename='copy.png')}}">
+                    <img class="imgInteract info" src="{{url_for('static', filename='info.png')}}">
+                    <p class=infoDescription>This is your username on Discord. To edit this field, go to your user settings on Discord</p>
+                    <p class=copyTextFeedback>Copied!</p>
+                    
+                </div>
+                <div class="inputPod">
+                    <label for="userID">User ID</label>
+                    <input type="text" id=userID value={{user.user_id}} disabled>
+                    <img class="imgInteract copyText" src="{{url_for('static', filename='copy.png')}}">
+                    <img class="imgInteract info" src="{{url_for('static', filename='info.png')}}">
+                    <p class=infoDescription>This is your unique user ID on Discord. This value was assigned at account creation and cannot be changed</p>
+                    <p class=copyTextFeedback>Copied!</p>
+                </div>
+                <div class="inputPod">
+                    <label class=textarea for="bio">Personal Bio</label>
+                    <textarea id=bio value="{{user.username}}"></textarea>
+                    <img class="imgInteract copyText" src="{{url_for('static', filename='copy.png')}}">
+                    <img class="imgInteract info" src="{{url_for('static', filename='info.png')}}">
+                    <p class=infoDescription>Add some information about yourself if desired</p>
+                    <p class=copyTextFeedback>Copied!</p>
+                    
+                </div>
+                <div class="inputPod">
+                    <label for="birthday">Birthday</label>
+                    <input type="date" id=birthday value={{user.birthday}}>
+                    <img class="imgInteract copyText" src="{{url_for('static', filename='copy.png')}}">
+                    <img class="imgInteract info" src="{{url_for('static', filename='info.png')}}">
+                    <p class=infoDescription>The next occurrence of your birthday. This information is used by Disguard's birthdays module</p>
+                    <p class=copyTextFeedback>Copied!</p>
+                </div>
+                <div class="inputPod">
+                    <label for="age">Age</label>
+                    <input type="number" id=age min="13" max="110" value={{user.age}}>
+                    <img class="imgInteract copyText" src="{{url_for('static', filename='copy.png')}}">
+                    <img class="imgInteract info" src="{{url_for('static', filename='info.png')}}">
+                    <p class=infoDescription>This information is used by Disguard's birthdays module</p>
+                    <p class=copyTextFeedback>Copied!</p>
+                </div>
+                <div class="inputPod">
+                    <label for="lastOnline">Last Online on Discord</label>
+                    <input type="datetime-local" id=lastOnline value="{{user.lastOnline.strftime('%Y-%m-%dT%H:%M')}}">
+                    <img class="imgInteract copyText" src="{{url_for('static', filename='copy.png')}}">
+                    <img class="imgInteract info" src="{{url_for('static', filename='info.png')}}">
+                    <p class=infoDescription>The last time Disguard detected your account status was not offline or invisible, refreshed every 5 minutes or when you go offline</p>
+                    <p class=copyTextFeedback>Copied!</p>
+                </div>
+                <div class="inputPod">
+                    <label for="lastActive">Last Active on Discord</label>
+                    <input type="datetime-local" id=lastActive value="{{user.lastActive.timestamp.strftime('%Y-%m-%dT%H:%M')}}">
+                    <img class="imgInteract copyText" src="{{url_for('static', filename='copy.png')}}">
+                    <img class="imgInteract info" src="{{url_for('static', filename='info.png')}}">
+                    <p class=infoDescription>The last time Disguard detected public activity on your account (such as sending a message in a server with Disguard in it)</p>
+                    <p class=copyTextFeedback>Copied!</p>
+                </div>
+                <div class=addPod>
+                    <div class=plusSign><div class=horizontalLine></div><div class=verticalLine></div></div>
+                    <span class=inputOptionText>Add a custom field</span>
+                </div>
+
+            </fieldset>
+            <fieldset id=basicInfo>
+                <legend>Personalization</legend>
+                <div class="inputPod">
+                    <label for="tzoffset">Current time where you are</label>
+                    <input type="number" id=tzoffset value="{{user.profile.tzoffset}}">
+                </div>
+                <div class="inputPod"><label for=""></label><input type="text"></div>
+                <div class="inputPod"><label for=""></label><input type="text"></div>
+                <div class="inputPod"><label for=""></label><input type="text"></div>
+                <div class="inputPod"><label for=""></label><input type="text"></div>
+            </fieldset> -->
+            {%endraw%}
+            <h4 class=pageSubtitle>Privacy Settings</h4>
+            <fieldset>
+                <legend>Defaults</legend>
+                <legend class=subLegend>The values set here will be used for all privacy features unless overridden in specific modules below</legend>
+                <div class="inputPod twoColumn">
+                    <label for="defaultEnabled">Enable personalized settings</label>
+                    <select name="defaultEnabled" default=1><option value=0 {%if user.privacy.default[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.default[0] == 1%}selected{%endif%}>Enabled</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting controls optional Disguard bonus features that use user-provided data. If enabled, Disguard will use your personalization settings such as time zone to improve your user experience. If you wish to disable this feature, Disguard will use system defaults for configuration data and bonus modules such as the birthday module will be disabled or won't use your data.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="defaultCOE" class="forCheckbox">Clear existing data for disabled features on save</label><input type="checkbox" name="defaultCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="defaultVisibility">Personalized data visibility</label>
+                    <select name="defaultVisibility" default=1><option value=0 {%if user.privacy.default[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.default[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting controls who can view data you give to Disguard in optional features such as the birthday module. Public means all features will function as they used to; people can access data you provide Disguard in its various features. Private means Disguard will not display your data publicly; you'll have to use commands in DMs to see your data in some features.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+            </fieldset>
+            <fieldset>
+                <legend>Profile Data</legend>
+                <div class="inputPod twoColumn">
+                    <label for="profileEnabled">Enable personalized settings</label>
+                    <select name="profileEnabled" default=2><option value=0 {%if user.privacy.profile[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.profile[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.profile[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting acts as the default for all features listed below the 'Profile Data' header. Changing this value will override the master default, and changing values inside here will override this value.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="profileCOE" class="forCheckbox">Clear existing data for disabled features on save</label><input type="checkbox" name="profileCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="profileVisibility">Profile data visibility</label>
+                    <select name="profileVisibility" default=2><option value=0 {%if user.privacy.profile[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.profile[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.profile[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting acts as the default for all features listed below the 'Profile Data' header. Changing this value will override the master default, and changing values inside here will override this value.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="bioEnabled">Enable personal bio</label>
+                    <select name="bioEnabled" default=2 disabled><option value=0 {%if user.privacy.bio[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.bio[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.bio[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="bioVisibility">Personal bio visibility</label>
+                    <select name="bioVisibility" default=2 disabled><option value=0 {%if user.privacy.bio[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.bio[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.bio[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="tzEnabled">Enable timezone personalization</label>
+                    <select name="tzEnabled" default=2 disabled><option value=0 {%if user.privacy.timezone[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.timezone[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.timezone[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="tzVisibility">Timezone visibility</label>
+                    <select name="tzVisibility" default=2 disabled><option value=0 {%if user.privacy.timezone[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.timezone[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.timezone[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="favColorEnabled">Use your favorite color</label>
+                    <select name="favColorEnabled" default=2 disabled><option value=0 {%if user.privacy.favColor[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.favColor[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.favColor[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="favColorVisibility">Favorite color visibility</label>
+                    <select name="favColorVisibility" default=2 disabled><option value=0 {%if user.privacy.favColor[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.favColor[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.favColor[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="colorThemeEnabled">Enable embed color theme personalization</label>
+                    <select name="colorThemeEnabled" default=2 disabled><option value=0 {%if user.privacy.colorTheme[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.colorTheme[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.colorTheme[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="colorThemeVisibility">Embed color theme visibility</label>
+                    <select name="colorThemeVisibility" default=2 disabled><option value=0 {%if user.privacy.colorTheme[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.colorTheme[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.colorTheme[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="nameEnabled">Use your name</label>
+                    <select name="nameEnabled" default=2><option value=0 {%if user.privacy.name[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.name[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.name[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>I have no clue if or what I'm going to implement name features (coming soon) into. I'm debating if I should have this as an option but I know some people have names that differ from their Discord username who still want to appear searchable by their name. That's probably what I'll do when I redo Disguard's info command.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="nameVisibility">Name visibility</label>
+                    <select name="nameVisibility" default=0><option value=0 {%if user.privacy.name[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.name[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.name[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Implementation not determined yet</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="lastOnlineEnabled">Enable tracking when you were last online</label>
+                    <select name="lastOnlineEnabled" default=2><option value=0 {%if user.privacy.lastOnline[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.lastOnline[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.lastOnline[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, Disguard stores stores the timestamp your account was last online to display on your info command page. If you wish for Disguard to no longer track this information, you may disable this feature</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="lastOnlineCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="lastOnlineCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="lastOnlineVisibility">Last online visibility</label>
+                    <select name="lastOnlineVisibility" default=2><option value=0 {%if user.privacy.lastOnline[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.lastOnline[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.lastOnline[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, Disguard displays the timestamp your account was last online on your info command page. If you wish for this feature to be hidden, set this value to private</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="lastActiveEnabled">Enable tracking when you were last active</label>
+                    <select name="lastActiveEnabled" default=2><option value=0 {%if user.privacy.lastActive[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.lastActive[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.lastActive[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, Disguard stores your last public account activity (such as when you send a message in a server) and the timestamp of you performing it to display on your info command page. If you wish for Disguard to no longer track this information, you may disable this feature</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="lastActiveCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="lastActiveCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="lastActiveVisibility">Last active visibility</label>
+                    <select name="lastActiveVisibility" default=2><option value=0 {%if user.privacy.lastActive[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.lastActive[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.lastActive[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, Disguard displays your last public account activity (such as "sent a message") and the timestamp you performed it on your info command page. If you wish for this feature to be hidden, set this value to private</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+            </fieldset>
+            <fieldset>
+                <legend>Birthday Data</legend>
+                <div class="inputPod twoColumn">
+                    <label for="birthdayModuleEnabled">Enable birthday module</label>
+                    <select name="birthdayModuleEnabled" default=2><option value=0 {%if user.privacy.birthdayModule[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.birthdayModule[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.birthdayModule[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting acts as the default for all features listed below the 'Birthday Data' header. Changing this value will override the master default, and changing values inside here will override this value. If you aren't interested in any of Disguard's birthday module features, you may consider disabling this feature.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="birthdayModuleCOE" class="forCheckbox">Clear existing data for disabled features on save</label><input type="checkbox" name="birthdayModuleCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="birthdayModuleVisibility">Birthday data visibility</label>
+                    <select name="birthdayModuleVisibility" default=2><option value=0 {%if user.privacy.birthdayModule[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.birthdayModule[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.birthdayModule[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting acts as the default for all features listed below the 'Birthday Data' header. Changing this value will override the master default, and changing values inside here will override this value. If you wish to have all birthday-related information remain private to you only, set this feature to private.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="birthdayEnabled">Use your birthday for the birthday module</label>
+                    <select name="birthdayEnabled" default=2><option value=0 {%if user.privacy.birthdayDay[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.birthdayDay[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.birthdayDay[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, if you choose to add your birthday to your birthday profile, Disguard will DM you a happy birthday message on your birthday, announce your birthday in servers that enable that feature, and display your birthday publicly on your birthday profile. If you aren't interested in any of these features, you may disable this feature.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="birthdayCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="birthdayCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="birthdayVisibility">Birthday visibility</label>
+                    <select name="birthdayVisibility" default=2><option value=0 {%if user.privacy.birthdayDay[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.birthdayDay[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.birthdayDay[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, if you choose to add your birthday to your birthday profile, Disguard will display it publicly on your birthday profile as well as announce your birthday in servers who enable that option. If you want your birthday to remain private to you only, set this feature to private.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="ageEnabled">Use your age for the birthday module</label>
+                    <select name="ageEnabled" default=2><option value=0 {%if user.privacy.age[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.age[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.age[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, if you choose to add your age to your birthday profile, Disguard will take it into consideration when generating a happy birthday message & will also display your age publicly on your birthday profile. If you wish to disable those two features, you may disable this feature.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="ageCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="ageCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="ageVisiblity">Age visibility</label>
+                    <select name="ageVisibility" default=2><option value=0 {%if user.privacy.age[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.age[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.age[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, if you choose to add your age to your birthday profile, Disguard will display it publicly on your birthday profile. If you want your age to remain private to you only, set this feature to private.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="wishlistEnabled">Use your wishlist for the birthday module</label>
+                    <select name="wishlistEnabled" default=2><option value=0 {%if user.privacy.wishlist[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.wishlist[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.wishlist[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Disguard's birthday module comes with a wishlist feature, where you can add entries designating items you're interested in. If you aren't interested in this feature, you can disable it.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="wishlistCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="wishlistCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="wishlistVisibility">Wishlist visibility</label>
+                    <select name="wishlistVisibility" default=2><option value=0 {%if user.privacy.wishlist[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.wishlist[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.wishlist[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>Disguard's birthday module comes with a wishlist feature designed to be public, where you can add entries designating items you're interested in. If you wish to hide your wishlist from others, set this feature to private.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="birthdayMessagesEnabled">Receive birthday messages</label>
+                    <select name="birthdayMessagesEnabled" default=2><option value=0 {%if user.privacy.birthdayMessages[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.birthdayMessages[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.birthdayMessages[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, members can write birthday messages that will be delivered to your DMs and/or servers you and the author of the message share on your birthday. If you're not interested in this feature, you can disable it.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="birthdayMessagesCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="birthdayMessagesCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="birthdayMessagesVisibility">Received birthday message visibility</label>
+                    <select name="birthdayMessagesVisibility" default=2><option value=0 {%if user.privacy.birthdayMessages[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.birthdayMessages[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.birthdayMessages[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If you wish to hide the content of received birthday messages when they're displayed publicly in servers you're in, set this feature to private</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+            </fieldset>
+            <fieldset>
+                <legend>Attribute History Data</legend>
+                <div class="inputPod twoColumn">
+                    <label for="attributeHistoryEnabled">Enable attribute history archives</label>
+                    <select name="attributeHistoryEnabled" default=2><option value=0 {%if user.privacy.attributeHistory[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.attributeHistory[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.attributeHistory[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting acts as the default for all features listed below the 'Attribute History' header. Changing this value will override the master default, and changing values inside here will override this value. By default, Disguard maintains archives of some of your attributes, listed in the fields below. If you no longer wish for Disguard to update records for this type of data, disable this feature.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="attributeHistoryCOE" class="forCheckbox">Clear existing data for disabled features on save</label><input type="checkbox" name="attributeHistoryCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="attributeHistoryVisibility">Attribute history visibility</label>
+                    <select name="attributeHistoryVisibility" default=2><option value=0 {%if user.privacy.attributeHistory[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.attributeHistory[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.attributeHistory[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>This setting acts as the default for all features listed below the 'Attribute History' header. Changing this value will override the master default, and changing values inside here will override this value.</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="customStatusHistoryEnabled">Enable custom status history archives</label>
+                    <select name="customStatusHistoryEnabled" default=2><option value=0 {%if user.privacy.customStatusHistory[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.customStatusHistory[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.customStatusHistory[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, Disguard maintains archives of your custom status history for your viewing pleasure. If you do not want Disguard to continue updating these records, disable this feature</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="customStatusHistoryCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="customStatusHistoryCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="customStatusHistoryVisibility">Custom status history visibility</label>
+                    <select name="customStatusHistoryVisibility" default=2><option value=0 {%if user.privacy.customStatusHistory[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.customStatusHistory[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.customStatusHistory[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If you do not want other members to be able to view your custom status history via the history command, set this feature to private</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="usernameHistoryEnabled">Enable username history archives</label>
+                    <select name="usernameHistoryEnabled" default=2><option value=0 {%if user.privacy.usernameHistory[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.usernameHistory[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.usernameHistory[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, Disguard maintains archives of your username history for your viewing pleasure. If you do not want Disguard to continue updating these records, disable this feature</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="usernameHistoryCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="usernameHistoryCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="usernameHistoryVisibility">Username history visibility</label>
+                    <select name="usernameHistoryVisibility" default=2><option value=0 {%if user.privacy.usernameHistory[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.usernameHistory[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.usernameHistory[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If you do not want other members to be able to view your username history via the history command, set this feature to private</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="avatarHistoryEnabled">Enable avatar history archives</label>
+                    <select name="avatarHistoryEnabled" default=2><option value=0 {%if user.privacy.avatarHistory[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.avatarHistory[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.avatarHistory[0] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>By default, Disguard maintains archives of your avatar history for your viewing pleasure. If you do not want Disguard to continue updating these records, disable this feature</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                    <br><div class=COE><label for="avatarHistoryCOE" class="forCheckbox">Clear existing data on save</label><input type="checkbox" name="avatarHistoryCOE"></div>
+                </div>
+                <div class="inputPod twoColumn">
+                    <label for="avatarHistoryVisibility">Avatar history visibility</label>
+                    <select name="avatarHistoryVisibility" default=2><option value=0 {%if user.privacy.avatarHistory[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.avatarHistory[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.avatarHistory[1] == 2%}selected{%endif%}>Use Default</option></select>
+                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+                    <div class=hoverDescBox><p class=hoverDesc>If you do not want other members to be able to view your profile picture history via the history command, set this feature to private</p></div>
+                    <div class=inputOptions>
+                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+                    </div>
+                </div>
+            </fieldset>
+            <button id=revert onclick="revertChanges()">Revert</button>
+            <input id=submit type="submit" value="Save">
+            <p>This page is new and under construction. These privacy settings were very quickly put together over the course of a couple days to ensure you have control over your privacy. Work is being done over the month of June to ensure this page holds all desired features and proper functionality. Once work is complete, your profile page will hold much more than privacy settings. Click <a href="{{url_for('manage')}}">here</a> to go back to the server selection page.</p>
+
+        </form>
+    </body>
+</html>

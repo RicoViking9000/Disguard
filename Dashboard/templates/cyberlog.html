@@ -2,7 +2,7 @@
 
 <html>
     <head>
-        <title>Dashboard: Disguard</title>
+        <title>Logging Settings - {{server.name}} - Disguard Dashboard</title>
         {%if redesign%}
             <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
             <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
@@ -10,6 +10,7 @@
             <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldCss.css') }}">
             <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='oldDesign.css') }}">
         {%endif%}
+        <link rel='icon' type='image/png' href="{{url_for('static', filename='disguardNoBackground.png')}}">
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
         <script type="text/javascript">
             $(window).load(function() {

@@ -343,17 +343,53 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
     #started = datetime.datetime.now()
     current = await users.find_one({'user_id': m.id})
     if b.get_user(m.id) is None: return await users.delete_one({'user_id': m.id})
-    if current: await users.update_one({'user_id': m.id}, {'$set': {'username': m.name, 'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon_url)} for server in b.guilds if await DashboardManageServer(server, m)]}})
+    if current and current.get('privacy'): await users.update_one({'user_id': m.id}, {'$set': {'username': m.name, 'avatar': str(m.avatar_url_as(static_format='png', size=2048)), 'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon_url)} for server in b.guilds if await DashboardManageServer(server, m)]}})
     else:
         await users.update_one({"user_id": m.id}, {"$set": { #For new members, set them up. For existing members, the only things that that may have changed that we care about here are the two fields above
         "username": m.name,
+        #'discriminator': m.discriminator,
         "user_id": m.id,
+        'avatar': str(m.avatar_url_as(static_format='png', size=2048)),
         'lastActive': {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'},
         'lastOnline': datetime.datetime.min,
         'birthdayMessages': [],
         'birthday': None,
-        'wishList': [],
-        "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)]}}, True)
+        'wishlist': [],
+        "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)],
+        # 'profile': {
+        #     
+        #     'bio': None,
+        #     'tzoffset': -4,
+        #     'tzname': 'EDT',
+        #     'favColor': 0x000000,
+        #     'colorTheme': 1, #0: Original, 1: New
+        #     'name': '',
+        # },
+        'privacy': {
+            'default': (1, 1), #Index 0 - 0: Disable features, 1: Enable features || Index 1 - 0: Hidden to others, 1: Visible to everyone, Array: List of user IDs allowed to view the profile
+            'birthdayModule': (2, 2), #Index 0 - 0: Disable, 1: Enable, 2: Default || Index 1 - 0: Hidden, 1: Everyone, 2: Default, Array: Certain users || Applies to the next fields unless otherwise specified
+            'age': (2, 2),
+            'birthdayDay': (2, 2),
+            'wishlist': (2, 2),
+            'birthdayMessages': (2, 2), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
+            'attributeHistory': (2, 2),
+            'customStatusHistory': (2, 2),
+            'usernameHistory': (2, 2),
+            'avatarHistory': (2, 2),
+            'lastOnline': (2, 2),
+            'lastActive': (2, 2),
+            'profile': (2, 2),
+            'bio': (2, 2),
+            'timezone': (2, 2),
+            'favColor': (2, 2),
+            'colorTheme': (2, 2),
+            'name': (2, 0)
+        },
+        'flags': {
+            'usedFirstCommand': False,
+            'announcedPrivacySettings': False,
+        }
+        }}, True)
     #print(f'Verified User {m.name} in {(datetime.datetime.now() - started).seconds}s')
 
 async def DeleteServer(s, bot):
@@ -435,6 +471,10 @@ async def GetAllUsers():
 async def GetUser(u: discord.User):
     '''Returns a global user'''
     return (await users.find_one({'user_id': u.id}))
+
+async def GetUserCollection():
+    '''Returns the users collection object'''
+    return users
 
 async def GetMember(m: discord.Member):
     '''Returns a member of a server'''

@@ -47,6 +47,7 @@ body.light {background-color: white; color: rgb(46, 46, 46);}*/
 
 /* Dashboard General Styling */
 .pageTitle {font-size: 60px}
+.pageSubtitle {font-size: 50px; color: rgb(138, 203, 247);}
 .center {text-align: center}
 .ChooseServer {height: 200px; width: 200px; display: inline-block; font-size: 12px; margin-left: 1%; margin-right: 1%; text-align: center}
 .ChooseServer:hover * {background-color: black}
@@ -77,19 +78,20 @@ input[type=submit]:focus {outline: none;}
 input[type=submit], #revert {margin: 0.75%; font-size: 25px; border-radius: 25px; border: none; height: 3em; display: inline-block; transition: background-color 0.5s; cursor: pointer;}
 input[type=submit]:hover {background-color: rgba(89, 89, 248, 0.85);}
 #revert:hover {background-color: rgba(202, 66, 66, 0.85);}
-input:not([type=submit]), select {padding: 0.75em 50px; width: 60%; font-size: 16.5px; color: rgb(202, 66, 66); border: 0.5px solid black; transition: border 0.5s, background-color 0.5s; border-radius: 5px; height: 3.5em; box-sizing: border-box;}
-input:not([type=submit]):focus, select:focus {border: 1px solid darkgray; outline: none;}
-input:invalid, select:invalid {border-left: 5px solid rgba(202, 66, 66, 1);}
+input:not([type=submit]):not([type=checkbox]), textarea, select {padding: 0.75em 50px; width: 60%; font-size: 16.5px; color: rgb(202, 66, 66); border: 0.5px solid black; transition: border 0.5s, background-color 0.5s, color 0.15s; border-radius: 5px; height: 3.5em; box-sizing: border-box;}
+input:not([type=submit]):focus, select:focus, textarea:focus {border: 1px solid darkgray; outline: none;}
+input:invalid, select:invalid, textarea:invalid {border-left: 5px solid rgba(202, 66, 66, 1);}
 select:disabled, input:disabled {background-color: black}
 option {height: 40px;}
 label {margin: 0 15px; height: 3.5em; font-size: 16.5px; display: inline-block; width: 20%; text-align: right;}
-fieldset {border: none;}
+fieldset {border: none; margin-top: 50px;}
 fieldset:not(.selected) {display: none;}
-.threeDots {display: inline-block; margin-left: 3em; top: 4px; position: relative; cursor: pointer;}
+.threeDots {display: inline-block; margin-left: 3em; top: 4px; position: relative; cursor: pointer; background-color: transparent;}
 .dot {display: inline-block; border: 5px solid darkgray; border-radius: 50%; transition: border 0.1s; margin: 3px;}
 legend {text-align: center; font-size: 40px; color: rgb(220, 221, 222);}
-.hoverDescBox {width: 57%; background-color: transparent; z-index: 1; position: absolute; right: 20%; height: 3.5em; top: 0.4em; border-radius: 5px; display: none;}
-.hoverDesc {background-color: rgb(54, 57, 63); text-align: right; width: 100%; font-size: 14px; margin: 0; vertical-align: middle;}
+legend.subLegend {font-size: 20px;}
+.hoverDescBox {width: 57%; background-color: transparent; z-index: 2; position: absolute; right: 20%; height: 3.5em; top: 0.4em; border-radius: 5px; display: none;}
+.hoverDesc {background-color: rgb(54, 57, 63); text-align: right; width: 100%; font-size: 14px; margin: 0; vertical-align: middle; background-color: transparent;}
 .inputOptions {width: 11.5%; position: absolute; right: 0.5%; top: -0.5em; background-color: rgb(24, 25, 28); height: 5em; display: none; border-radius: 10px;}
 .inputOptions div {display: block; height: 2.2em; line-height: 2.2em; max-width: 100%; background-color: transparent; transition: background-color 0.5s; border-radius: 10px; z-index: 1; margin: 0.2em 0; cursor: pointer;}
 .inputOptions div:hover {background-color: rgb(202, 66, 66);}
@@ -112,7 +114,10 @@ legend {text-align: center; font-size: 40px; color: rgb(220, 221, 222);}
 .negSlopeLine {transform: rotate(-45deg);}
 .posSlopeLine, .negSlopeLine {width: 0.25em; height: 2em; background-color: rgb(202, 66, 66); margin: 0.5em; top: 0.875em; position: absolute;}
 .redditFeedPod {margin: 1.5em; border-radius: 5px; transition: border 0.5s, opacity 0.5s; border: 2px solid rgb(24, 25, 28);}
-.redditFeedPod .inputPod {display: inline-block; margin: 1.5em; width: 46.5%;}
+.redditFeedPod .inputPod, .inputPod.twoColumn {display: inline-block; margin: 1.5em; width: 46.5%;}
 .redditFeedPod label {width: 20%;}
-.redditFeedPod input, .redditFeedPod select {width: 75%;}
+.redditFeedPod .inputPod input, .redditFeedPod select {width: 75%;}
+.inputPod.twoColumn .threeDots {position: absolute; right: 50px; top: 33%;}
+.inputPod.twoColumn .hoverDescBox {right: 13%; width: 62%;}
+.inputPod.twoColumn .inputOptions {right: 0; width: 22%; z-index: 1; top: -75px}
 

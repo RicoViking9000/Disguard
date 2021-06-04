@@ -181,7 +181,7 @@ def server(id):
             }})
         return redirect(url_for('server', id=id))
     feeds = [{'template': True, 'subreddit': 'placeholder', 'channel': serv['channels'][1]['id'], 'truncateTitle': 100, 'truncateText': 400, 'media': 3, 'creditAuthor': 3, 'color': 'colorCode', 'timestamp': True}] + serv.get('redditFeeds', [])
-    return render_template('general.html', servObj=serv, redditFeeds=feeds, date=d, date2=d2, id=id, redesign=True)
+    return render_template('general.html', server=serv, redditFeeds=feeds, date=d, date2=d2, id=id, redesign=True)
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
 @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.antispam', 'Antispam')
@@ -305,6 +305,49 @@ def cyberlog(id):
         'misc': moduleDict['misc']}}})
         return redirect(url_for('cyberlog', id=id))
     return render_template('cyberlog.html', servid=id, server=servObj, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"), redesign=False)
+
+@app.route('/manage/profile', methods=['GET', 'POST'])
+def profile():
+    # Make sure redirect works at the end
+    if 'user_id' not in session: return url_for('index')
+    uID = int(session['user_id'])
+    user = users.find_one({'user_id': uID})
+    if request.method == 'POST':
+        r = request.form
+        updateDict = {
+            'privacy': {
+                'default': (int(r.get('defaultEnabled')), int(r.get('defaultVisibility'))),
+                'profile': (int(r.get('profileEnabled')), int(r.get('profileVisibility'))),
+                'bio': (int(r.get('bioEnabled')), int(r.get('bioVisibility'))),
+                'timezone': (int(r.get('tzEnabled')), int(r.get('tzVisibility'))),
+                'favColor': (int(r.get('favColorEnabled')), int(r.get('favColorVisibility'))),
+                'colorTheme': (int(r.get('colorThemeEnabled')), int(r.get('colorThemeVisibility'))),
+                'name': (int(r.get('nameEnabled')), int(r.get('nameVisibility'))),
+                'lastOnline': (int(r.get('lastOnlineEnabled')), int(r.get('lastOnlineVisibility'))),
+                'lastActive': (int(r.get('lastActiveEnabled')), int(r.get('lastActiveVisibility'))),
+                'birthdayModule': (int(r.get('birthdayModuleEnabled')), int(r.get('birthdayModuleVisibility'))),
+                'birthdayDay': (int(r.get('birthdayEnabled')), int(r.get('birthdayVisibility'))),
+                'age': (int(r.get('ageEnabled')), int(r.get('ageVisibility'))),
+                'wishlist': (int(r.get('wishlistEnabled')), int(r.get('wishlistVisibility'))),
+                'birthdayMessages': (int(r.get('birthdayMessagesEnabled')), int(r.get('birthdayMessagesVisibility'))),
+                'attributeHistory': (int(r.get('attributeHistoryEnabled')), int(r.get('attributeHistoryEnabled'))),
+                'customStatusHistory': (int(r.get('customStatusHistoryEnabled')), int(r.get('customStatusHistoryVisibility'))),
+                'usernameHistory': (int(r.get('usernameHistoryEnabled')), int(r.get('usernameHistoryVisibility'))),
+                'avatarHistory': (int(r.get('avatarHistoryEnabled')), int(r.get('avatarHistoryVisibility'))),
+            }
+        }
+        if (r.get('defaultCOE') == 'on' or r.get('profileCOE') == 'on' or r.get('lastOnlineCOE') == 'on'): updateDict.update({'lastOnline': datetime.datetime.min})
+        if (r.get('defaultCOE') == 'on' or r.get('profileCOE') == 'on' or r.get('lastActiveCOE') == 'on'): updateDict.update({'lastActive': {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'}})
+        if (r.get('defaultCOE') == 'on' or r.get('birthdayModuleCOE') == 'on' or r.get('birthdayCOE') == 'on'): updateDict.update({'birthday': None})
+        if (r.get('defaultCOE') == 'on' or r.get('birthdayModuleCOE') == 'on' or r.get('ageCOE') == 'on'): updateDict.update({'age': None})
+        if (r.get('defaultCOE') == 'on' or r.get('birthdayModuleCOE') == 'on' or r.get('wishlistCOE') == 'on'): updateDict.update({'wishlist': []})
+        if (r.get('defaultCOE') == 'on' or r.get('birthdayModuleCOE') == 'on' or r.get('birthdayMessagesCOE') == 'on'): updateDict.update({'birthdayMessages': []})
+        if (r.get('defaultCOE') == 'on' or r.get('attributeHistoryCOE') == 'on' or r.get('customStatusHistoryCOE') == 'on'): updateDict.update({'customStatusHistory': []})
+        if (r.get('defaultCOE') == 'on' or r.get('attributeHistoryCOE') == 'on' or r.get('usernameHistoryCOE') == 'on'): updateDict.update({'usernameHistory': []})
+        if (r.get('defaultCOE') == 'on' or r.get('attributeHistoryCOE') == 'on' or r.get('avatarHistoryCOE') == 'on'): updateDict.update({'avatarHistory': []})
+        users.update_one({'user_id': uID}, {'$set': updateDict})
+        return redirect(url_for('profile'))
+    return render_template('profile.html', user=user)
 
 @app.route('/special/<string:landing>')
 def specialLanding(landing):

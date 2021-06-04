@@ -26,7 +26,7 @@ import asyncpraw
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc']
 
 print("Connecting...")
 
@@ -230,9 +230,9 @@ async def invite(ctx):
     e = discord.Embed(title='Invite Links', description='• Invite Disguard to your server: https://discord.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot\n\n• Join the Disguard discord server: https://discord.gg/xSGujjz')
     await ctx.send(embed=e)
 
-@bot.command()
-async def privacy(ctx):
-    await ctx.send("https://disguard.netlify.app/privacybasic")
+# @bot.command()
+# async def privacy(ctx):
+#     await ctx.send("https://disguard.netlify.app/privacybasic")
 
 @bot.command()
 async def dashboard(ctx):
@@ -475,7 +475,7 @@ async def ticketsCommand(ctx, number:int = None):
         return await message.edit(embed=embed)
     def optionNavigation(r, u): return r.emoji in reactions and r.message.id == message.id and u.id == ctx.author.id and not u.bot
     def messageCheck(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
-    while True:
+    while not bot.is_closed():
         filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
         organize(sortMode)
         pages = list(paginate(filtered, 5))
@@ -553,7 +553,7 @@ async def ticketsCommand(ctx, number:int = None):
                     continue
             conversationPages = list(paginate(ticket['conversation'], 7))
             currentConversationPage = len(conversationPages) - 1
-            while True:
+            while not bot.is_closed():
                 embed.clear_fields()
                 server = bot.get_guild(ticket['server'])
                 member = [m for m in ticket['members'] if m['id'] == ctx.author.id][0]
@@ -595,7 +595,7 @@ async def ticketsCommand(ctx, number:int = None):
                     embed.clear_fields()
                     permissionsDict = {0: 'View ticket', 1: 'View and respond to ticket', 2: 'Ticket Owner (View, Respond, Manage Sharing)', 3: 'Invite sent'}
                     memberResults = []
-                    while True:
+                    while not bot.is_closed():
                         def calculateBio(m): 
                             return '(No description)' if type(m) is not discord.Member else "Server Owner" if server.owner.id == m.id else "Server Administrator" if m.guild_permissions.administrator else "Server Moderator" if m.guild_permissions.manage_guild else "Junior Server Moderator" if m.guild_permissions.manage_roles or m.guild_permissions.manage_channels else '(No description)'
                         if len(memberResults) == 0: staffMemberResults = [m for m in server.members if any([m.guild_permissions.administrator, m.guild_permissions.manage_guild, m.guild_permissions.manage_channels, m.guild_permissions.manage_roles, m.id == server.owner.id]) and not m.bot and m.id not in [mb['id'] for mb in ticket['members']]][:15]
@@ -637,7 +637,7 @@ async def ticketsCommand(ctx, number:int = None):
                                     except Exception as e: await ctx.send(f'Error inviting {addMember} to ticket: {e}.\n\nBTW, error code 50007 means that the recipient disabled DMs from server members - they will need to temporarily allow this in the `Server Options > Privacy Settings` or `User Settings > Privacy & Safety` in order to be invited')
                                 else:
                                     user = bot.get_user([mb['id'] for mb in ticket['members']][2 + len([l for l in alphabet if l in embed.description])]) #Offset - the first three members in the ticket are permanent
-                                    while True:
+                                    while not bot.is_closed():
                                         if ctx.author.id != ticket['author']: break #If someone other than the ticket owner gets here, deny them
                                         ticketUser = [mb for mb in ticket['members'] if mb['id'] == user.id][0]
                                         embed.description=f'''**{f'Manage {user.name}':-^70}**\n{'🔒' if not ctx.guild or ticketUser['permissions'] == 0 else '🔓'}Permissions: {permissionsDict[ticketUser['permissions']]}\n\n{emojis['details']}Responses: {len([r for r in ticket['conversation'] if r['author'] == user.id])}\n\n{f'{emojis["bell"]}Notifications: True' if ticketUser['notifications'] else f'{emojis["bellMute"]}Notifications: False'}\n\n❌: Remove this member'''
@@ -754,7 +754,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if breakAfter and statusMessage: oldPrompt = statusMessage
             statusMessage = await ctx.send(string)
         for r in reactions: await statusMessage.add_reaction(r)
-        while True:
+        while not bot.is_closed():
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
             except: result = None
@@ -801,7 +801,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if breakAfter and statusMessage: oldPrompt = statusMessage
             statusMessage = await ctx.send(string)
         for r in reactions: await statusMessage.add_reaction(r)
-        while True:
+        while not bot.is_closed():
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
             except: result = None
@@ -872,7 +872,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if breakAfter and statusMessage: oldPrompt = statusMessage
             statusMessage = await ctx.send(string)
         for r in reactions: await statusMessage.add_reaction(r)
-        while True:
+        while not bot.is_closed():
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
             except: result = None
@@ -948,7 +948,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if breakAfter and statusMessage: oldPrompt = statusMessage
             statusMessage = await ctx.send(string)
         for r in reactions: await statusMessage.add_reaction(r)
-        while True:
+        while not bot.is_closed():
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
             except: result = None
@@ -1024,7 +1024,7 @@ async def _schedule(ctx, *, desiredDate=None):
             if breakAfter and statusMessage: oldPrompt = statusMessage
             statusMessage = await ctx.send(string)
         for r in reactions: await statusMessage.add_reaction(r)
-        while True:
+        while not bot.is_closed():
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
             except: result = None
@@ -1112,7 +1112,7 @@ async def _schedule(ctx, *, desiredDate=None):
             oldPrompt = statusMessage
             statusMessage = await ctx.send(string)
         for r in reactions: await statusMessage.add_reaction(r)
-        while True:
+        while not bot.is_closed():
             d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
             try: result = d.pop().result()
             except: result = None
@@ -1151,7 +1151,7 @@ async def _schedule(ctx, *, desiredDate=None):
         try: await statusMessage.edit(content=f'{loading}Preparing settings...')
         except: statusMessage = await ctx.send(f'{loading}Preparing settings...')
         slide = {False: emojis['slideToggleOff'], True: emojis['slideToggleOn']}
-        while True:
+        while not bot.is_closed():
             def truncate(l, cutoff=4):
                 return ', '.join([f'{entry[:cutoff]}…' if entry and len(entry) > cutoff else str(entry) for entry in l])
             reactions = [emojis['member'], emojis['details'], emojis['members'], emojis['greyCompass'], emojis['apple'], emojis['edit'], emojis['hiddenVoiceChannel'], emojis['bell'], emojis['newsChannel'], '❌', emojis['greenCheck']]
@@ -1182,7 +1182,7 @@ async def _schedule(ctx, *, desiredDate=None):
                     await statusMessage.delete()
                     statusMessage = await ctx.send(embed=dailySetupEmbed)
                 for reaction in reactions: await statusMessage.add_reaction(reaction)
-                while True:
+                while not bot.is_closed():
                     d, p = await asyncio.wait([bot.wait_for('message', check=messageCheck), bot.wait_for('reaction_add', check=reactionCheck)], return_when=asyncio.FIRST_COMPLETED)
                     try: result = d.pop().result()
                     except: pass
@@ -1515,7 +1515,7 @@ async def scheduleManagement(ctx, mode='events'):
         i = datetime.date(t.year, t.month, 1)
         datePrompt = None
         skipped = []
-        while True:
+        while not bot.is_closed():
             embed = discord.Embed(title=f'HS Schedule - Events', description = f'{i:%B}\n\n', color = blue[1])
             temp = copy.deepcopy(i)
             datePrompt = calculateDatePrompt(i)

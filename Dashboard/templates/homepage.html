@@ -27,7 +27,7 @@
             <div class='circle'></div>
             <div class='circle'></div>
         </div>
-        <h3>Welcome, {{user}}!</h3>
+        <h3>Welcome, {{user}}! Click <a href="{{url_for('profile')}}">here</a> to view your user profile.</h3>
         <p class=pageTitle>Click on a server image or link to manage your server.</p>
         {% for server in servers %}
             <div class="ChooseServer">
