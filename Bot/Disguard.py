@@ -248,7 +248,7 @@ async def server(ctx):
     baseURL = f'http://disguard.herokuapp.com/manage/{ctx.guild.id}'
     green = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online')
     red = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='dnd')
-    embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[Cyberlog.colorTheme(ctx.guild)])
+    embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[bot.get_cog('Cyberlog').colorTheme(ctx.guild)])
     embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
     embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
     # embed.description+=f'''Flag members for: {f"{antispam.get('congruent')[0]} duplicate messages/{} min "}'''
@@ -349,7 +349,7 @@ async def support(ctx, *, opener=''):
     2: in progress (dev has replied)
     3: closed'''
     await ctx.trigger_typing()
-    colorTheme = Cyberlog.colorTheme(ctx.guild) if ctx.guild else 1
+    colorTheme = bot.get_cog('Cyberlog').colorTheme(ctx.guild) if ctx.guild else 1
     details = bot.get_cog('Cyberlog').emojis['details']
     def navigationCheck(r, u): return str(r) in reactions and r.message.id == status.id and u.id == ctx.author.id
     #If the user didn't provide a message with the command, prompt them with one here
@@ -422,7 +422,7 @@ async def ticketsCommand(ctx, number:int = None):
     '''Command to view feedback tickets'''
     g = ctx.guild
     alphabet = [l for l in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-    colorTheme = Cyberlog.colorTheme(ctx.guild) if ctx.guild else 1
+    colorTheme = bot.get_cog('Cyberlog').colorTheme(ctx.guild) if ctx.guild else 1
     #emojis = bot.get_cog('Cyberlog').emojis
     global emojis
     trashcan = emojis['delete']
@@ -560,7 +560,7 @@ async def ticketsCommand(ctx, number:int = None):
                 memberIndex = ticket['members'].index(member)
                 tg = g
                 if not tg and ticket['server']: tg = bot.get_guild(ticket['server'])
-                ticketColorTheme = Cyberlog.colorTheme(tg) if tg else 1
+                ticketColorTheme = bot.get_cog('Cyberlog').colorTheme(tg) if tg else 1
                 def returnPresence(status): return emojis['hiddenVoiceChannel'] if status == 4 else emojis['online'] if status == 3 else emojis['idle'] if status in (1, 2) else emojis['dnd']
                 reactions = [emojis['arrowLeft'], emojis['members'], emojis['reply']]
                 reactions.insert(2, emojis['bell'] if not ctx.guild or not member['notifications'] else emojis['bellMute'])
