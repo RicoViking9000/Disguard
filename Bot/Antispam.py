@@ -524,13 +524,13 @@ class Antispam(commands.Cog):
                     await r[0].message.edit(embed=r[0].message.embeds[0])
                 else: e.description='My developer has denied your request on the grounds of security, please try another custom message or join [my support server](https://discord.gg/xSGujjz) for assistance.'
             e.set_author(name='Success')
-            e.set_footer(text=f'React {self.emojis["loop"]} to view ageKick configuration')
+            e.set_footer(text=f'React {self.emojis["reload"]} to view ageKick configuration')
             await m.edit(embed=e)
-            await m.add_reaction(self.emojis['loop'])
+            await m.add_reaction(self.emojis['reload'])
             await Cyberlog.updateServer(ctx.guild)
             config = self.bot.lightningLogging.get(ctx.guild.id).get('antispam')
             wl = config.get('ageKickWhitelist')
-            def configCheck(r, u): return r.emoji == self.emojis['loop'] and r.message.id == m.id and u.id == ctx.author.id
+            def configCheck(r, u): return r.emoji == self.emojis['reload'] and r.message.id == m.id and u.id == ctx.author.id
             await self.bot.wait_for('reaction_add', check=configCheck)
             await m.clear_reactions()
             return await m.edit(embed=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELISTED USERS":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get('ageKickDM')}''', color=yellow[theme], timestamp=datetime.datetime.utcnow()))

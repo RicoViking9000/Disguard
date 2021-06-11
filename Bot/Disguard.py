@@ -246,8 +246,8 @@ async def server(ctx):
     cyberlog = config.get('cyberlog')
     antispam = config.get('antispam')
     baseURL = f'http://disguard.herokuapp.com/manage/{ctx.guild.id}'
-    green = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='online')
-    red = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='dnd')
+    green = emojis['online']
+    red = emojis['dnd']
     embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[bot.get_cog('Cyberlog').colorTheme(ctx.guild)])
     embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
     embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
