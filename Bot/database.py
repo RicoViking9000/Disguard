@@ -189,6 +189,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
         "channels": serverChannels,
         'server_id': s.id,
         "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
+        'flags': {'firstBirthdayAnnouncement': False},
         'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
         "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
             "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
@@ -343,7 +344,12 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
     #started = datetime.datetime.now()
     current = await users.find_one({'user_id': m.id})
     if b.get_user(m.id) is None: return await users.delete_one({'user_id': m.id})
-    if current and current.get('privacy'): await users.update_one({'user_id': m.id}, {'$set': {'username': m.name, 'avatar': str(m.avatar_url_as(static_format='png', size=2048)), 'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon_url)} for server in b.guilds if await DashboardManageServer(server, m)]}})
+    if current and current.get('privacy'): 
+        flags = current.get('flags', {})
+        if flags.get('birthdayDataPurgeAnnouncement', -1) == -1: flags.update({'birthdayDataPurgeAnnouncement': False})
+        #str(m.avatar_url_as(static_format='png', size=2048))
+        #str(server.icon_url)
+        await users.update_one({'user_id': m.id}, {'$set': {'username': m.name, 'avatar': str(m.avatar_url_as(static_format='png', size=2048)), 'flags': flags, 'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon_url)} for server in b.guilds if await DashboardManageServer(server, m)]}})
     else:
         await users.update_one({"user_id": m.id}, {"$set": { #For new members, set them up. For existing members, the only things that that may have changed that we care about here are the two fields above
         "username": m.name,
@@ -353,7 +359,6 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
         'lastActive': {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'},
         'lastOnline': datetime.datetime.min,
         'birthdayMessages': [],
-        'birthday': None,
         'wishlist': [],
         "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)],
         # 'profile': {
@@ -386,6 +391,7 @@ async def VerifyUser(m: discord.Member, b: commands.Bot):
             'name': (2, 0)
         },
         'flags': {
+            'birthdayDataPurgeAnnouncement': False,
             'usedFirstCommand': False,
             'announcedPrivacySettings': False,
         }

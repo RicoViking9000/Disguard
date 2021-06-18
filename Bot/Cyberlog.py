@@ -430,9 +430,16 @@ class Cyberlog(commands.Cog):
     
     @commands.Cog.listener()
     async def on_command(self, ctx):
-        if self.bot.lightningUsers[ctx.author.id]['flags']['announcedPrivacySettings']: return
-        await ctx.send(f'Hey {ctx.author.name}! Just wanted to let you know that you can now control some Disguard privacy settings on your new profile page on my web dashboard. Take a look: http://disguard.herokuapp.com/manage/profile')
-        await (await database.GetUserCollection()).update_one({'user_id': ctx.author.id}, {'$set': {'flags.announcedPrivacySettings': True}})
+        flags = self.bot.lightningUsers[ctx.author.id]['flags']
+        if flags['announcedPrivacySettings'] and flags['birthdayDataPurgeAnnouncement']: return
+        flagMessages = []
+        if not flags['announcedPrivacySettings']:
+            flagMessages.append(f'Hey {ctx.author.name}! Just wanted to let you know that you can now control some Disguard privacy settings on your new profile page on my web dashboard. Take a look: http://disguard.herokuapp.com/manage/profile')
+            await (await database.GetUserCollection()).update_one({'user_id': ctx.author.id}, {'$set': {'flags.announcedPrivacySettings': True}})
+        if not flags['birthdayDataPurgeAnnouncement']:
+            flagMessages.append(f'{ctx.author.name}, there is an announcement from my developer: please know that due to a database configuration error, all saved birthdays under my birthdays module were unintentionally deleted on June 3. I don\'t store data letting me know who saved their birthday previously, but if you *have* saved your birthday previously, set it again to restore functionality of your profile for the birthday module. Age/wishlist data has not been affected. You can set your birthday either by using the `birthday` command or by typing `my birthday is <when your birthday is>`.')
+            await (await database.GetUserCollection()).update_one({'user_id': ctx.author.id}, {'$set': {'flags.birthdayDataPurgeAnnouncement': True}})
+        await ctx.send('\n\n'.join(flagMessages))
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -3853,7 +3860,8 @@ class Cyberlog(commands.Cog):
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         if len(activeDisplay) == 0: activeDisplay = ['0s']
         activities = {discord.Status.online: self.emojis['online'], discord.Status.idle: self.emojis['idle'], discord.Status.dnd: self.emojis['dnd'], discord.Status.offline: self.emojis['offline']}
-        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{activeTimestamp:%b %d, %Y • %I:%M %p} {nameZone(m.guild)} • {activeDisplay[-1]} ago ({mA['reason']})" if self.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}\nLast online {f"{onlineTimestamp:%b %d, %Y • %I:%M %p} {nameZone(m.guild)} • {onlineDisplay[-1]} ago{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > lastOnline(m) and m.status == discord.Status.offline else ''}" if self.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
+        lastOnlineString = f'''\nLast online {f"{onlineTimestamp:%b %d, %Y • %I:%M %p} {nameZone(m.guild)} • {onlineDisplay[-1]} ago{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > lastOnline(m) and m.status == discord.Status.offline else ''}" if self.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
+        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{activeTimestamp:%b %d, %Y • %I:%M %p} {nameZone(m.guild)} • {activeDisplay[-1]} ago ({mA['reason']})" if self.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}{lastOnlineString if m.status == discord.Status.offline else ""}'''
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
