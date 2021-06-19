@@ -130,7 +130,7 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(ban_members=True)
     @commands.command()
-    async def ban(self, ctx, users: commands.Greedy[typing.Union[discord.User, int]], deleteMessageDays:int = 0, *, reason=''):
+    async def ban(self, ctx, users: commands.Greedy[typing.Union[discord.User, int]], deleteMessageDays: typing.Optional[int] = 0, *, reason=''):
         '''Bans the specified members'''
         if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to ban\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}ban [list of users to ban] [deleteMessageDays:optional[int] = 0 ▷ must be 0 <= x <= 7] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nUse a user\'s ID if you want to ban someone not in this server\n\nExample: `.ban {self.bot.user.mention} 5 Muted me for spamming` Would ban Disguard, delete its message sent within the past 5 days, with the reason "Muted me for spamming"')
         users = await self.UserProcessor(users)
