@@ -3897,8 +3897,8 @@ class Cyberlog(commands.Cog):
         embed.add_field(name='📆Joined server',value=f'{DisguardRelativeTimestamp(joined)}')
         embed.add_field(name='📜Messages',value=postCount)
         embed.add_field(name='🎙Voice Chat',value=voice)
-        if addThumbnail: embed.set_thumbnail(url=m.avatar_url)
         if addThumbnail: embed.set_thumbnail(url=m.avatar_url) #V1.5
+        #if addThumbnail: embed.set_thumbnail(url=m.avatar.url) #V2.0
         embed.set_footer(text='Member ID: {}'.format(m.id))
         return embed
         
