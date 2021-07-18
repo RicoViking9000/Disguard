@@ -17,6 +17,8 @@ blue = (0x0000FF, 0x6666ff)
 red = (0xff0000, 0xff6666)
 yellow = (0xffff00, 0xffff66)
 loading = None
+newline = '\n'
+qlfc = ' '
 
 birthdayCancelled = discord.Embed(title='🍰 Birthdays', description='Timed out')
 
@@ -232,128 +234,117 @@ class Birthdays(commands.Cog):
             await mess.add_reaction('✅')
             await ageContinuation(self, age, message.author, mess, draft)
 
-    @commands.guild_only()
+    #7/12/21:  Began rewriting birthday command & some extras
+    #7/17/21:  Finished rewriting birthday command & some extras
+    #@commands.guild_only() #Target for allowability in DMs
     @commands.command(aliases=['bday'])
     async def birthday(self, ctx, *args):
         await ctx.trigger_typing()
-        theme = self.colorTheme(ctx.guild)
+        theme = self.colorTheme(ctx.guild) if ctx.guild else 1
+        adjusted = datetime.datetime.now()
         if len(args) == 0:
-            embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🏠 Home')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url)
-            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
+            header = '👮‍♂️ » 🍰 Birthday » 🏠 Overview'
+            header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 🏠 Overview'
+            embed = discord.Embed(title=header, color=yellow[theme])
+            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url) #V1.5
+            #embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url) #V2.0
             if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'default', 'birthdayModule'):
                 embed.description = 'Birthday module disabled. To edit your privacy settings or enable the birthday module, go [here](http://disguard.herokuapp.com/manage/profile).'
                 return await ctx.send(embed=embed)
-            bday, age = self.bot.lightningUsers[ctx.author.id].get('birthday'), self.bot.lightningUsers[ctx.author.id].get('age')
-            embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(In {(bday - adjusted).days} days)')
-            embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
-            embed.description = f'{self.loading} Processing global birthday information...\n\n*Performance/quality of life improvements for the birthdays module will be worked on in early June*'
+            user = self.bot.lightningUsers[ctx.author.id]
+            bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
+            embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
+            embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
+            if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
+            embed.description = f'{self.loading} Processing global birthday information'
             message = await ctx.send(embed=embed)
+            #SUGGESTION » 7/13/21: Basic Disguard Wiki (after website improvements of course), maintaining an information database on various disguard features
             #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
             currentServer = []
             disguardSuggest = []
             weekBirthday = []
-            memberIDs = set([m.id for m in ctx.guild.members]) #June 2021 (v0.2.27): Changed from list to set to improve performance // Holds list of member IDs for the current server
-            for m in self.bot.users:
+            memberIDs = set([m.id for m in ctx.guild.members]) if ctx.guild else () #June 2021 (v0.2.27): Changed from list to set to improve performance // Holds list of member IDs for the current server
+            for u in self.bot.users:
                 try:
                     #Skip members whose privacy settings show they don't want to partake in public features of the birthday module
-                    if not (self.bot.get_cog('Cyberlog').privacyEnabledChecker(m, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(m, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyEnabledChecker(m, 'birthdayModule', 'birthdayDay') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(m, 'birthdayModule', 'birthdayDay')): continue
-                    userBirthday = self.bot.lightningUsers[m.id].get('birthday')
-                    if m.id in memberIDs and userBirthday: currentServer.append({'data': m, 'bday': userBirthday})
-                    elif userBirthday and len([s for s in self.bot.guilds if m.id in [member.id for member in s.members] and ctx.author in s.members]) >= 1 and (self.bot.lightningUsers.get(m.id).get('birthday') - adjusted).days < 8: weekBirthday.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
-                    elif self.bot.lightningUsers.get(m.id).get('birthday') is not None and len([s for s in self.bot.guilds if m.id in [member.id for member in s.members] and ctx.author in s.members]) >= 1: disguardSuggest.append({'data': m, 'bday': self.bot.lightningUsers.get(m.id).get('birthday')})
+                    if not (self.bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(u, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')): continue
+                    userBirthday = self.bot.lightningUsers[u.id].get('birthday')
+                    if not userBirthday: continue
+                    if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
+                    elif mutualServerMemberToMember(self, ctx.author, u):
+                        if (userBirthday - adjusted).days < 8: weekBirthday.append({'data': u, 'bday': userBirthday})
+                        else: disguardSuggest.append({'data': u, 'bday': userBirthday})
                 except (AttributeError, TypeError, KeyError): pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
-            disguardSuggest.sort(key = lambda m: len([s for s in self.bot.guilds if ctx.author in s.members and m.get('data') in s.members]), reverse=True) #Servers the author and target share
-            embed.description = '''**{7:–^70}**\n🍰: Send a birthday message to someone\n📆: Update your birthday\n🕯: Update your age\n📝: Manage your wish list\n👮‍♂️: Switch to your profile view\n*Discord UI buttons will be used as soon as they're available*\n**{8:–^70}**\n{3}\n\n__{0}__\n{4}\n\n__{1}__\n{5}\n\n__{2}__\n{6}\n\n{9}
-                '''.format('THIS SERVER', 'DISGUARD SUGGESTIONS', 'OTHER', 'To send a message to someone, react 🍰 or type `{}birthday <recipient>`'.format(ctx.prefix),
-                '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in currentServer[:5]]),
-                '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in disguardSuggest[:5]]),
-                '\n'.join([' \\▪️ **{}** • {} • {} day{} from now'.format(m.get('data'), m.get('bday').strftime('%a %b %d'), (m.get('bday') - adjusted).days, 's' if (m.get('bday') - adjusted).days != 1 else '') for m in weekBirthday[:5]]),
-                'AVAILABLE OPTIONS', 'UPCOMING BIRTHDAYS', "*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday.")
+            disguardSuggest.sort(key = lambda m: mutualServersMemberToMember(self, ctx.author, m['data']), reverse=True) #Servers the author and target share
+            firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
+            def fillBirthdayList(list, maxEntries):
+                return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
+            embed.description = f'''**{"AVAILABLE OPTIONS":–^70}**\n🍰: Browse birthday profiles\n📪: View more upcoming birthdays\n📆: Update your birthday\n🕯: Update your age\n📝: {"Manage" if len(wishlist) > 0 else "Create"} your wish list\n**{"UPCOMING BIRTHDAYS":–^70}\n**{"__THIS SERVER__" if len(currentServer) > 0 else ""}\n'''
+            embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{"__DISGUARD SUGGESTIONS__" if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{"__WITHIN A WEEK__" if len(weekBirthday) > 0 else ""}'''
+            embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}\n*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday.'''
             await message.edit(embed=embed)
-            for r in ['🍰', '📆', '🕯', '📝', '👮‍♂️']: await message.add_reaction(r)
-            #While loop, inside: wait for any of these reactions, and when one happens, start a new thread --- suggestion for multiple people reacting
-            def cakeCheck(r, u): return str(r) == '🍰' and r.message.id == message.id
-            def calendarCheck(r, u):  return str(r) == '📆' and r.message.id == message.id and u == ctx.author
-            def candleCheck(r, u): return str(r) == '🕯' and r.message.id == message.id and u == ctx.author
-            def wishCheck(r, u): return str(r) == '📝' and r.message.id == message.id and u == ctx.author
-            def detailsCheck(r,u): return str(r) == '👮‍♂️' and u == ctx.author and r.message.id == message.id
-            while True:
-                done, pending = await asyncio.wait([self.bot.wait_for('reaction_add', check=cakeCheck), self.bot.wait_for('reaction_add', check=calendarCheck), self.bot.wait_for('reaction_add', check=candleCheck), self.bot.wait_for('reaction_add', check=wishCheck), self.bot.wait_for('reaction_add', check=detailsCheck)], return_when=asyncio.FIRST_COMPLETED)
-                try: stuff = done.pop().result()
-                except asyncio.TimeoutError: return await message.edit(embed=birthdayCancelled)
-                for future in pending: future.cancel()
-                if str(stuff[0]) == '🍰': await messageManagement(self, ctx, message, stuff[1], [currentServer[:5], disguardSuggest[:5], weekBirthday[:5]])
-                if str(stuff[0]) == '📆' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'birthdayDay'): await firstBirthdayContinuation(self, ctx, ctx.author, message)
-                if str(stuff[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await firstAgeContinuation(self, ctx, ctx.author, message)
-                if str(stuff[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await firstWishlistContinuation(self, ctx, message)
-                if str(stuff[0]) == '👮‍♂️':
-                    await message.delete()
-                    return await self.bot.get_cog('Cyberlog').info(ctx)
+            reactions = ['🍰', '📪',  '📆', '🕯', '📝', '👮‍♂️']
+            for r in reactions: await message.add_reaction(r)
+            def reactionCheck(r, u): return str(r) in reactions and r.message.id == message.id and u == ctx.author
+            try: result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+            except asyncio.TimeoutError: return await message.edit(embed=birthdayCancelled)
+            if str(result[0]) == '🍰': await messageManagement(self, ctx, message, result[1], [currentServer[:5], disguardSuggest[:5], weekBirthday[:5]])
+            elif str(result[0]) == '📪': await upcomingBirthdaysViewer(self, ctx, message, currentServer, disguardSuggest, weekBirthday)
+            elif str(result[0]) == '📆' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'birthdayDay'): await firstBirthdayContinuation(self, ctx, ctx.author, message)
+            elif str(result[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await firstAgeContinuation(self, ctx, ctx.author, message)
+            elif str(result[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await firstWishlistContinuation(self, ctx, message)
         else:
-            adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-            embed=discord.Embed(title='🍰 Birthdays', description='{} Processing...'.format(self.loading), color=yellow[theme], timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title=f'{self.emojis["search"]} Birthdays', description=f'{self.loading} Searching', color=yellow[theme])
             message = await ctx.send(embed=embed)
             arg = ' '.join(args)
             actionList = []
             age = calculateAge(ctx.message)
-            currentAge = self.bot.lightningUsers.get(ctx.author.id).get('age')
+            currentAge = self.bot.lightningUsers[ctx.author.id].get('age')
             try: age.remove(currentAge)
-            except: pass
-            addLater = []
-            def detailsCheck(r,u): return str(r) == '👮‍♂️' and u == ctx.author and r.message.id == message.id
-            for a in age: #Temporarily remove ages over 1000 as to not interfere with member calculation through IDs
-                if a > 1000: 
-                    age.remove(a)
-                    addLater.append(a)
+            except ValueError: pass
+            for a in age: #Remove out of bounds of [0, 105]
+                if a < 0 or a > 105: age.remove(a)
             actionList += age
             memberList = await self.bot.get_cog('Cyberlog').FindMoreMembers(self.bot.users, arg)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
-            memberList = [m.get('member') for m in memberList] #Only take member results with at least 50% relevance to avoid ID searches when people only want to get their age
-            memberList = [m for m in memberList if len([s for s in self.bot.guilds if m in s.members and ctx.author in s.members])]
+            memberList = [m.get('member') for m in memberList] #Only take member results with at least 33% relevance to avoid ID searches when people only want to get their age
+            memberList = [m for m in memberList if mutualServerMemberToMember(self, ctx.author, m)]
             actionList += memberList
-            def infoCheck(r,u): return str(r) == 'ℹ' and u == ctx.author and r.message.id == message.id
+            def actionCheck(r, u): return str(r) == str(self.emojis['settings']) and u == ctx.author and r.message.id == message.id
             date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=self.bot.lightningLogging.get(ctx.guild.id).get('offset')))
-            if date is not None: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
-            if len(actionList) >= 1:
-                if type(actionList[0]) is int and actionList[0] < 10000: return await ageContinuation(self, actionList[0], ctx.author, message, embed, partial=True)
-            if len(actionList) == 1:
-                if type(actionList[0]) in [discord.User, discord.ClientUser]:
+            if date: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
+            async def makeChoice(result, message):
+                if type(result) in (discord.User, discord.ClientUser):
                     await message.edit(embed=await guestBirthdayViewer(self, ctx, actionList[0]))
+                    if actionList[0] == ctx.author: await message.add_reaction(self.emojis['settings'])
                     await message.add_reaction('🍰')
-                    if actionList[0] == ctx.author: await message.add_reaction('ℹ')
-                    await message.add_reaction('👮‍♂️')
-                    while True:
-                        d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
-                        try: r = d.pop().result()
-                        except: r = None
-                        for f in p: f.cancel()
-                        if type(r) is tuple:
-                            if str(r[0]) == 'ℹ':
-                                try: await message.delete()
-                                except discord.Forbidden: pass
-                                return await self.birthday(ctx)
-                            else:
-                                await message.delete()
-                                return await self.bot.get_cog('Cyberlog').info(ctx)
-            if len(actionList) == 0:
-                if len(addLater) == 1: return await ageContinuation(self, addLater[0], ctx.author, message, embed, partial=True)
-                elif len(addLater) > 1: actionList += addLater
-                else:
-                    embed.description = 'No actions found for **{}**'.format(arg)
-                    return await message.edit(embed=embed)
+                    #while True:
+                    d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=actionCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
+                    try: r = d.pop().result()
+                    except: r = None
+                    for f in p: f.cancel()
+                    if type(r) is tuple:
+                        if r[0].emoji == self.emojis['settings']:
+                            try: await message.delete()
+                            except discord.Forbidden: pass
+                            return await self.birthday(ctx)
+                elif type(result) is int: return await ageContinuation(self, actionList[index], ctx.author, message, embed, partial=True)
+                else: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
+            if len(actionList) == 1 and type(actionList[0]) in (discord.User, discord.ClientUser): await makeChoice(actionList[0], message)
+            elif len(actionList) == 0:
+                embed.description = f'No actions found for **{arg}**'
+                return await message.edit(embed=embed)
             parsed = []
             for entry in actionList:
-                if type(entry) in [discord.User, discord.ClientUser]: parsed.append('View {}\'s birthday information'.format(entry.name))
-                elif type(entry) is int: parsed.append('Set your age as **{}**'.format(entry))
-                else: parsed.append('Set your birthday as **{}**'.format(entry.strftime('%A, %b %d, %Y')))
-            embed.description=''
+                if type(entry) in [discord.User, discord.ClientUser]: parsed.append(f'View {entry.name}\'s birthday profile')
+                elif type(entry) is int: parsed.append(f'Set your age as **{entry}**')
+                else: parsed.append(f'Set your birthday as **{entry:%A, %b %d, %Y}**')
             final = parsed[:20] #We only are dealing with the top 20 results
             letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
             alphabet = 'abcdefghijklmnopqrstuvwxyz'
-            embed.description='**{0:–^70}**\nType the letter or react with your choice\n\n{1}'.format('AVAILABLE ACTIONS', '\n'.join(['{}: {}'.format(letters[i], final[i]) for i in range(len(final))]))
+            embed.description=f'**{"AVAILABLE ACTIONS":–^70}**\nType the letter of or react with your choice\n\n{newline.join([f"{letters[i]}: {f}" for i, f in enumerate(final)])}'
             await message.edit(embed=embed)
             for l in letters[:len(final)]: await message.add_reaction(l)
             def messageCheck(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in alphabet
@@ -371,21 +362,7 @@ class Birthdays(commands.Cog):
             else: index = letters.index(str(r[0]))
             try: await message.clear_reactions()
             except: pass
-            if type(actionList[index]) is int: return await ageContinuation(self, actionList[index], ctx.author, message, embed, partial=True)
-            elif type(actionList[index]) in [discord.User, discord.ClientUser]:
-                await message.edit(embed=await guestBirthdayViewer(self, ctx, actionList[index]))
-                await message.add_reaction('🍰')
-                if actionList[0] == ctx.author: await message.add_reaction('ℹ')
-                await message.add_reaction('👮‍♂️')
-                while True:
-                    r = await asyncio.wait([self.bot.wait_for('reaction_add', check=infoCheck), self.bot.wait_for('reaction_add', check=detailsCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[index].id).get('birthday'), [actionList[index]], message)], return_when=asyncio.FIRST_COMPLETED)
-                    try: r = d.pop().result()
-                    except: pass
-                    for f in p: f.cancel()
-                    if type(r) is tuple: 
-                        await message.delete()
-                        if str(r[0]) == 'ℹ': return await self.birthday(ctx)
-                        else: return await self.bot.get_cog('Cyberlog').info(ctx)
+            await makeChoice(actionList[index], message)
     
     def colorTheme(self, s: discord.Guild):
         return self.bot.lightningLogging[s.id]['colorTheme']
@@ -514,18 +491,20 @@ async def messageManagement(self, ctx, message, user, groups):
     await self.birthday(ctx)
         
 async def guestBirthdayViewer(self, ctx, target, cake=False):
-    '''Displays information about somebody else's profile'''
-    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-    bday = self.bot.lightningUsers.get(target.id).get('birthday')
-    age = self.bot.lightningUsers.get(target.id).get('age')
-    wishlist = self.bot.lightningUsers.get(target.id).get('wishList')
-    embed = discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 👤 Guest View'.format(target.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 👤 Guest View')), color=yellow[self.colorTheme(ctx.guild)], description='**{0:–^70}**\n{1}'.format('WISH LIST', '\n'.join(['• {}'.format(w) for w in wishlist])), timestamp=datetime.datetime.utcnow())
-    embed.description+='\n**{0:–^70}**'.format('AVAILABLE OPTIONS')
-    embed.description += '{}{}{}'.format('\n🍰 (Anyone except {0}): Write a personal birthday message to {0}'.format(target.name) if not cake else '', 
-        '\nℹ: Enter Birthday Action Mode' if target == ctx.author else '', '\n👮‍♂️: Switch to member profile view')
-    embed.description += f"*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday. To do that, use the `birthday` command or type `my birthday is july 31st` (replace july 31 with whenever your birthday is)\n\n"
-    embed.set_author(name=target.name, icon_url=target.avatar_url)
-    embed.add_field(name='Birthday',value='Not configured' if bday is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else bday.strftime('%a %b %d\n(In {} days)').format((bday - adjusted).days))
+    '''Displays information about somebody else's birthday profile'''
+    #adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
+    user = self.bot.lightningUsers[target.id]
+    bday = user.get('birthday')
+    age = user.get('age')
+    wishlist = user.get('wishList')
+    header = '👮‍♂️ » 🍰 Birthday'
+    header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday'
+    embed = discord.Embed(title=header, color=yellow[self.colorTheme(ctx.guild)], description=f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}')
+    embed.description += f'''\n**{"AVAILABLE OPTIONS":–^70}**\n{f"{self.emojis['settings']}: Enter Action Overview" if target == ctx.author else ''}{f"{newline}🍰 (Only anyone other than {target.name}): Write a personal birthday message to {target.name}" if not cake else ''}'''
+    embed.description += f"\n\n*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday. To do that, use the `birthday` command or type `my birthday is july 31st` (replace july 31 with whenever your birthday is)\n\n"
+    embed.set_author(name=target.name, icon_url=target.avatar_url) #V1.5
+    #embed.set_author(name=target.name, icon_url=target.avatar.url) #V2.0
+    embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
     embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else age)
     return embed
 
@@ -715,6 +694,8 @@ async def firstBirthdayContinuation(self, ctx, author, message):
                 await stuff.delete()
             except: pass
             if result:
+                now = datetime.datetime.now()
+                if result < now: result = datetime.datetime(now.year + 1, result.month, result.day)
                 embed.title = '🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(author.name, self.whiteCheck, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation'))
                 if bday is None or result.day != bday.day:
                     embed.description='**{}**\n\nIs this correct? Ready to save it? React with ✅, otherwise type another date or wait 3 minutes for timeout'.format(result.strftime('%A, %b %d, %Y'))
@@ -864,6 +845,21 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
             break
         if autoTrigger: break
 
+async def upcomingBirthdaysViewer(self, ctx, message, currentServer, disguardSuggest, weekBirthday):
+    namesOnly = [m['data'].name for m in currentServer + disguardSuggest + weekBirthday]
+    def fillBirthdayList(list, maxEntries):
+        return [f"{qlfc}\\▪️ **{m['data'].name if namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
+    embed = message.embeds[0]
+    embed.clear_fields()
+    embed.description = f'''The ability to expand specific sections will arrive when Discord Buttons arrive**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(fillBirthdayList(currentServer, 10))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(fillBirthdayList(disguardSuggest, 10))}\n\n__WITHIN A WEEK__\n{newline.join(fillBirthdayList(weekBirthday, 10))}'''
+    await message.edit(embed=embed)
+    try: await message.clear_reactions()
+    except: pass
+    await message.add_reaction('⬅')
+    def reactionCheck(r, u): return str(r) == '⬅' and r.message.id == message.id and u == ctx.author
+    await self.bot.wait_for('reaction_add', check=reactionCheck)
+    await message.delete() #Rework the system so we don't have to delete the message to go back
+    await self.birthday(ctx)
 
 def calculateDate(message, adjusted):
     '''Returns a datetime.datetime parsed from a message
@@ -1011,6 +1007,29 @@ async def messageManagementTimeout(message, oldEmbed):
     await message.edit(embed=oldEmbed)
     await message.clear_reactions()
     for r in ['🍰', '📆', '🕯', '📝']: await message.add_reaction(r)
+
+async def mutualServerMemberToMember(self, memberA, memberB):
+    '''Returns True if these two members share at least one mutual server'''
+    for g in self.bot.guilds:
+        foundA = False
+        foundB = False
+        for m in g.members:
+            if m.id == memberA.id: foundA = True
+            elif m.id == memberB.id: foundB = True
+            if foundA and foundB: return True
+    return False
+
+async def mutualServersMemberToMember(self, memberA, memberB):
+    '''Returns the number of servers shared by the two given members'''
+    counter = 0
+    for g in self.bot.guilds:
+        foundA = False
+        foundB = False
+        for m in g.members:
+            if m.id == memberA.id: foundA = True
+            elif m.id == memberB.id: foundB = True
+            if foundA and foundB: counter += 1
+    return counter
 
 
 def setup(bot):

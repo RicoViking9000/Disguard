@@ -1048,3 +1048,15 @@ async def AdjustDST(s: discord.Guild):
             return True
     return False
 
+async def GetBirthdayList():
+    '''Returns the global birthday dictionary'''
+    return (await disguard.find_one({})).get('birthdays')
+
+async def UpdateBirthdayList(u: discord.User, d: datetime.datetime):
+    '''Adds a member's birthday to the global dictionary'''
+    birthdayList = await GetBirthdayList()
+    if not birthdayList: birthdayList = {}
+    try: birthdayList[d.strftime('%m/%d/%Y')].append({u.id: d})
+    except KeyError: birthdayList[d.strftime('%m/%d/%Y')] = [{u.id: d}]
+    await disguard.update_one({}, {'$set': {'birthdays': birthdayList}}, True)
+
