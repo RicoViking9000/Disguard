@@ -3154,16 +3154,98 @@ class Cyberlog(commands.Cog):
         await asyncio.sleep(5)
         await updateLastActive((await c.guild.audit_logs(limit=1).flatten())[0].user, datetime.datetime.now(), 'updated webhooks')
 
+    # @commands.Cog.listener()
+    # async def on_command_error(self, ctx, error):
+    #     encounter = datetime.datetime.now()
+    #     if isinstance(error, commands.CommandNotFound): return
+    #     embed = None
+    #     alert = self.emojis['alert']
+    #     traceback.print_exception(type(error), error, error.__traceback__)
+    #     originalView = discord.ui.View(timeout=None)
+    #     originalView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, label='View error information'))
+    #     m = await ctx.send(f'{alert} {error}', view=originalView)
+    #     if type(error) in (commands.MissingPermissions, commands.MissingRequiredArgument): return
+    #     filename = datetime.datetime.now().strftime('%m%d%Y%H%M%S%f')
+    #     p = f'{tempDir}/Tracebacks/{filename}.txt'
+    #     try: os.makedirs(f'{tempDir}/Tracebacks')
+    #     except FileExistsError: pass
+    #     with codecs.open(p, 'w+', encoding='utf-8-sig') as f:
+    #         f.write(''.join(traceback.format_exception(type(error), error, error.__traceback__)))
+    #     while not self.bot.is_closed():
+    #         #await m.add_reaction(self.emojis['information'])
+    #         #def optionsCheck(r, u): return r.emoji == self.emojis['information'] and u.id == ctx.author.id and r.message.id == m.id
+    #         def optionsCheck(i): return i.type == discord.InteractionType.component and i.user.id == ctx.author.id and i.message.id == m.id
+    #         await self.bot.wait_for('interaction', check=optionsCheck)
+    #         #try: await m.clear_reactions()
+    #         #except: pass
+    #         #await m.edit(content=self.loading)
+    #         #### Upload traceback to image log channel, use URL button for link ####
+    #         if not embed:
+    #             embed=discord.Embed(
+    #                 title=f'{alert} An error has occured {alert}',
+    #                 #description=f"{error}\n\n{self.emojis['collapse']}: Collapse information\n{self.emojis['disguard']}: Forward this embed to my official server for my developer to view\n🎟: Open a support ticket with my developer\n\nSystem: Traceback is saved to {os.path.abspath(p)}",
+    #                 description=f"{error}\n\nSystem: Traceback is saved to {os.path.abspath(p)}. [Click here to download it from Discord's CDN.]({''})",
+    #                 color=red[colorTheme(ctx.guild)])
+    #             embed.add_field(name='Command',value=f'{ctx.prefix}{ctx.command}')
+    #             embed.add_field(name='Server',value=f'{ctx.guild.name}\n{ctx.guild.id}' if ctx.guild else 'N/A')
+    #             embed.add_field(name='Channel',value=f'{self.channelEmoji(ctx.channel)}{ctx.channel.name}\n{ctx.channel.id}')
+    #             embed.add_field(name='Author',value=f'{ctx.author.name}\n{ctx.author.id}')
+    #             embed.add_field(name='Message',value=f'{ctx.message.content}\n{ctx.message.id}')
+    #             embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y • %I:%M %p EST'))
+    #         intermediateView = discord.ui.View(timeout=None)
+    #         intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['collapse'], label='Collapse embed', custom_id='collapse'))
+    #         intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['arrowRight'], label='Forward to Disguard Official Server', custom_id='forward'))
+    #         intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji='🎟', label='Open a support ticket', custom_id='ticket'))
+    #         await m.edit(content=None, embed=embed, view=intermediateView)
+    #         #reactions = [self.emojis['collapse'], self.emojis["disguard"], '🎟']
+    #         #for r in reactions: await m.add_reaction(r)
+    #         #def navigCheck(r,u): return r.emoji in reactions and u.id == ctx.author.id and r.message.id == m.id
+    #         #r = await self.bot.wait_for('reaction_add', check=navigCheck)
+    #         r = await self.bot.wait_for('interaction', check=optionsCheck)
+    #         print(r.data)
+    #         if r.id == 'forward':
+    #         #if r[0].emoji == self.emojis['disguard']:
+    #             errorChannel = bot.get_channel(620787092582170664)
+    #             if os.path.exists(p): f = discord.File(p)
+    #             else: f = None
+    #             log = await errorChannel.send(embed=embed, file=f)
+    #             successView = discord.ui.View(timeout=None)
+    #             successView.add_item(discord.ui.Button(style=discord.ButtonStyle.link, emoji=self.emojis['disguard'], label='Join Disguard server', url='https://discord.gg/xSGujjz'))
+    #             successView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['modDelete'], label='Retract diagnostic report', custom_id='retract'))
+    #             successView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji='🎟', label='Open a support ticket', custom_id='ticket'))
+    #             await m.edit(content=f'A copy of this embed has been sent to my official server ({errorChannel.mention}).', view=successView)# You may retract the error message from there by reacting with {self.emojis["modDelete"]}. You may still quickly open a support ticket with 🎟 or by using the command ({prefix(ctx.guild) if ctx.guild else "."}ticket)')
+    #             #reactions = [self.emojis['modDelete'], '🎟']
+    #             while not self.bot.is_closed():
+    #                 #for r in reactions: await m.add_reaction(r)
+    #                 r = await self.bot.wait_for('interaction', check=optionsCheck)
+    #                 #try: await m.remove_reaction(r[0], r[1])
+    #                 #except: pass
+    #                 #if r[0].emoji == self.emojis['modDelete']:
+    #                 if r.id == 'retract':
+    #                     await m.edit(content=self.loading)
+    #                     await log.delete()
+    #                     break
+    #                 elif r.id == 'ticket':
+    #                     #I guess I never implemented opening a ticket from here
+    #                     command = self.bot.get_command('support')
+    #                     await command.invoke(ctx)
+    #         elif r.id == 'ticket':
+    #             #I guess I never implemented opening a ticket from here
+    #             command = self.bot.get_command('support')
+    #             print(command)
+    #             await command.invoke(ctx)
+    #         #try: await m.clear_reactions()
+    #         #except: pass
+    #         await m.edit(content=f'{alert} {error}', embed=None, view=originalView)
+
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         encounter = datetime.datetime.now()
         if isinstance(error, commands.CommandNotFound): return
         embed = None
         alert = self.emojis['alert']
-        traceback.print_exception(type(error), error, error.__traceback__)
-        originalView = discord.ui.View(timeout=None)
-        originalView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, label='View error information'))
-        m = await ctx.send(f'{alert} {error}', view=originalView)
+        #traceback.print_exception(type(error), error, error.__traceback__)
+        m = await ctx.send(f'{alert} {error}')
         if type(error) in (commands.MissingPermissions, commands.MissingRequiredArgument): return
         filename = datetime.datetime.now().strftime('%m%d%Y%H%M%S%f')
         p = f'{tempDir}/Tracebacks/{filename}.txt'
@@ -3172,19 +3254,17 @@ class Cyberlog(commands.Cog):
         with codecs.open(p, 'w+', encoding='utf-8-sig') as f:
             f.write(''.join(traceback.format_exception(type(error), error, error.__traceback__)))
         while not self.bot.is_closed():
-            #await m.add_reaction(self.emojis['information'])
-            #def optionsCheck(r, u): return r.emoji == self.emojis['information'] and u.id == ctx.author.id and r.message.id == m.id
-            def optionsCheck(i): return i.type == discord.InteractionType.component and i.user.id == ctx.author.id and i.message.id == m.id
-            await self.bot.wait_for('interaction', check=optionsCheck)
-            #try: await m.clear_reactions()
-            #except: pass
-            #await m.edit(content=self.loading)
-            #### Upload traceback to image log channel, use URL button for link ####
+            await m.add_reaction(self.emojis['information'])
+            def optionsCheck(r, u): return r.emoji == self.emojis['information'] and u.id == ctx.author.id and r.message.id == m.id
+            await self.bot.wait_for('reaction_add', check=optionsCheck)
+            try: await m.clear_reactions()
+            except: pass
+            await m.edit(content=self.loading)
             if not embed:
                 embed=discord.Embed(
                     title=f'{alert} An error has occured {alert}',
-                    #description=f"{error}\n\n{self.emojis['collapse']}: Collapse information\n{self.emojis['disguard']}: Forward this embed to my official server for my developer to view\n🎟: Open a support ticket with my developer\n\nSystem: Traceback is saved to {os.path.abspath(p)}",
-                    description=f"{error}\n\nSystem: Traceback is saved to {os.path.abspath(p)}. [Click here to download it from Discord's CDN.]({''})",
+                    description=f"{error}\n\n{self.emojis['collapse']}: Collapse information\n{self.emojis['disguard']}: Forward this embed to my official server for my developer to view\n🎟: Open a support ticket with my developer\n\nSystem: Traceback is saved to {os.path.abspath(p)}",
+                    timestamp=datetime.datetime.utcnow(),
                     color=red[colorTheme(ctx.guild)])
                 embed.add_field(name='Command',value=f'{ctx.prefix}{ctx.command}')
                 embed.add_field(name='Server',value=f'{ctx.guild.name}\n{ctx.guild.id}' if ctx.guild else 'N/A')
@@ -3192,51 +3272,32 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name='Author',value=f'{ctx.author.name}\n{ctx.author.id}')
                 embed.add_field(name='Message',value=f'{ctx.message.content}\n{ctx.message.id}')
                 embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y • %I:%M %p EST'))
-            intermediateView = discord.ui.View(timeout=None)
-            intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['collapse'], label='Collapse embed', custom_id='collapse'))
-            intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['arrowRight'], label='Forward to Disguard Official Server', custom_id='forward'))
-            intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji='🎟', label='Open a support ticket', custom_id='ticket'))
-            await m.edit(content=None, embed=embed, view=intermediateView)
-            #reactions = [self.emojis['collapse'], self.emojis["disguard"], '🎟']
-            #for r in reactions: await m.add_reaction(r)
-            #def navigCheck(r,u): return r.emoji in reactions and u.id == ctx.author.id and r.message.id == m.id
-            #r = await self.bot.wait_for('reaction_add', check=navigCheck)
-            r = await self.bot.wait_for('interaction', check=optionsCheck)
-            print(r.data)
-            if r.id == 'forward':
-            #if r[0].emoji == self.emojis['disguard']:
+            await m.edit(content=None, embed=embed)
+            reactions = [self.emojis['collapse'], self.emojis["disguard"], '🎟']
+            for r in reactions: await m.add_reaction(r)
+            def navigCheck(r,u): return r.emoji in reactions and u.id == ctx.author.id and r.message.id == m.id
+            r = await self.bot.wait_for('reaction_add', check=navigCheck)
+            if r[0].emoji == self.emojis['disguard']:
                 errorChannel = bot.get_channel(620787092582170664)
                 if os.path.exists(p): f = discord.File(p)
                 else: f = None
                 log = await errorChannel.send(embed=embed, file=f)
-                successView = discord.ui.View(timeout=None)
-                successView.add_item(discord.ui.Button(style=discord.ButtonStyle.link, emoji=self.emojis['disguard'], label='Join Disguard server', url='https://discord.gg/xSGujjz'))
-                successView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['modDelete'], label='Retract diagnostic report', custom_id='retract'))
-                successView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji='🎟', label='Open a support ticket', custom_id='ticket'))
-                await m.edit(content=f'A copy of this embed has been sent to my official server ({errorChannel.mention}).', view=successView)# You may retract the error message from there by reacting with {self.emojis["modDelete"]}. You may still quickly open a support ticket with 🎟 or by using the command ({prefix(ctx.guild) if ctx.guild else "."}ticket)')
-                #reactions = [self.emojis['modDelete'], '🎟']
+                await m.edit(content=f'A copy of this embed has been sent to my official server ({errorChannel.mention}). You may retract the error message from there by reacting with {self.emojis["modDelete"]}. You may still quickly open a support ticket with 🎟 or by using the command ({prefix(ctx.guild) if ctx.guild else "."}ticket)')
+                reactions = [self.emojis['modDelete'], '🎟']
                 while not self.bot.is_closed():
-                    #for r in reactions: await m.add_reaction(r)
-                    r = await self.bot.wait_for('interaction', check=optionsCheck)
-                    #try: await m.remove_reaction(r[0], r[1])
-                    #except: pass
-                    #if r[0].emoji == self.emojis['modDelete']:
-                    if r.id == 'retract':
+                    for r in reactions: await m.add_reaction(r)
+                    r = await bot.wait_for('reaction_add', check=navigCheck)
+                    try: await m.remove_reaction(r[0], r[1])
+                    except: pass
+                    if r[0].emoji == self.emojis['modDelete']:
                         await m.edit(content=self.loading)
                         await log.delete()
                         break
-                    elif r.id == 'ticket':
-                        #I guess I never implemented opening a ticket from here
-                        command = self.bot.get_command('support')
-                        await command.invoke(ctx)
-            elif r.id == 'ticket':
-                #I guess I never implemented opening a ticket from here
-                command = self.bot.get_command('support')
-                print(command)
-                await command.invoke(ctx)
-            #try: await m.clear_reactions()
-            #except: pass
-            await m.edit(content=f'{alert} {error}', embed=None, view=originalView)
+                    else:
+                        pass
+            try: await m.clear_reactions()
+            except: pass
+            await m.edit(content=f'{alert} {error}', embed=None)
 
     @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
