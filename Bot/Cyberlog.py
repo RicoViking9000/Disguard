@@ -3244,7 +3244,7 @@ class Cyberlog(commands.Cog):
         if isinstance(error, commands.CommandNotFound): return
         embed = None
         alert = self.emojis['alert']
-        #traceback.print_exception(type(error), error, error.__traceback__)
+        traceback.print_exception(type(error), error, error.__traceback__)
         m = await ctx.send(f'{alert} {error}')
         if type(error) in (commands.MissingPermissions, commands.MissingRequiredArgument): return
         filename = datetime.datetime.now().strftime('%m%d%Y%H%M%S%f')

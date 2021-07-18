@@ -1008,7 +1008,7 @@ async def messageManagementTimeout(message, oldEmbed):
     await message.clear_reactions()
     for r in ['🍰', '📆', '🕯', '📝']: await message.add_reaction(r)
 
-async def mutualServerMemberToMember(self, memberA, memberB):
+def mutualServerMemberToMember(self, memberA, memberB):
     '''Returns True if these two members share at least one mutual server'''
     for g in self.bot.guilds:
         foundA = False
@@ -1019,7 +1019,7 @@ async def mutualServerMemberToMember(self, memberA, memberB):
             if foundA and foundB: return True
     return False
 
-async def mutualServersMemberToMember(self, memberA, memberB):
+def mutualServersMemberToMember(self, memberA, memberB):
     '''Returns the number of servers shared by the two given members'''
     counter = 0
     for g in self.bot.guilds:
