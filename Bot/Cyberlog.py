@@ -1120,7 +1120,7 @@ class Cyberlog(commands.Cog):
         except IndexError: messageAfter = ''
         try: messageBefore = (await channel.history(limit=1, before=created).flatten())[0] #The message directly before the deleted one
         except IndexError: messageBefore = ''
-        created += datetime.timedelta(hours=self.bot.lightningLogging.get(g.id).get('offset'))
+        created -= datetime.timedelta(hours=DST)
         embed.description=textwrap.dedent(f'''
             {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {author.mention} ({author.name}){ '(No longer in this server)' if not memberObject else ''}
             {self.channelEmoji(channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} • Jump to message [before]({messageBefore.jump_url if messageBefore else ''} \'{messageBefore.content if messageBefore else ''}\') or [after]({messageAfter.jump_url if messageAfter else ''} \'{messageAfter.content if messageAfter else ''}\') this one
@@ -3293,8 +3293,13 @@ class Cyberlog(commands.Cog):
                         await m.edit(content=self.loading)
                         await log.delete()
                         break
-                    else:
-                        pass
+                    elif r[0].emoji == '🎟':
+                        command = self.bot.get_command('support')
+                        await command.invoke(ctx)
+            elif r[0].emoji == '🎟':
+                #I guess I never implemented opening a ticket from here
+                command = self.bot.get_command('support')
+                await command.invoke(ctx)
             try: await m.clear_reactions()
             except: pass
             await m.edit(content=f'{alert} {error}', embed=None)
