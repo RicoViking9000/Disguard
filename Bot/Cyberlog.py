@@ -392,7 +392,9 @@ class Cyberlog(commands.Cog):
         '''Goes through all servers and ensures reddit feeds are working'''
         try:
             for server in self.bot.guilds: asyncio.create_task(self.redditFeedHandler(server))
-        except: traceback.print_exc()
+        except: 
+            print(f'Reddit sync fail: ')
+            traceback.print_exc()
     
     async def redditFeedHandler(self, server):
         '''Handles starting/stopping of reddit feeds for servers, along with ensuring there are no duplicates, etc.'''
@@ -1619,6 +1621,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when member joins a server'''
         received = datetime.datetime.now()
         adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(member.guild))
+        self.members[member.guild.id].append(member)
         asyncio.create_task(self.doorguardHandler(member))
         msg = None
         if logEnabled(member.guild, "doorguard"):
@@ -1738,7 +1741,6 @@ class Cyberlog(commands.Cog):
                     embed.add_field(name='Invite Details',value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             await msg.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
             self.archiveLogEmbed(member.guild, msg.id, embed, 'Member Join')
-        self.members[member.guild.id] = member.guild.members
         await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot), updateLastActive(member, datetime.datetime.now(), 'joined a server')])
         try:
             if os.path.exists(savePath): os.remove(savePath)
@@ -1999,6 +2001,8 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when member leaves a server'''
         received = datetime.datetime.now()
         adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(member.guild))
+        membersCache = copy.deepcopy(self.members[member.guild.id])
+        self.members[member.guild.id].remove(member)
         asyncio.create_task(updateLastActive(member, datetime.datetime.now(), 'left a server'))
         message = None
         if logEnabled(member.guild, "doorguard"):
@@ -2044,7 +2048,7 @@ class Cyberlog(commands.Cog):
                 except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             message = await logChannel(member.guild, 'doorguard').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             try:
-                sortedMembers = sorted(self.members.get(member.guild.id), key=lambda x: x.joined_at)
+                sortedMembers = sorted(membersCache, key=lambda x: x.joined_at or datetime.datetime.utcnow())
                 memberJoinPlacement = sortedMembers.index(member) + 1
                 hoverPlainText = textwrap.dedent(f'''
                     Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}
@@ -2063,7 +2067,6 @@ class Cyberlog(commands.Cog):
             await message.edit(embed=embed if not settings['plainText'] else None)
             self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             #if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
-        self.members[member.guild.id] = member.guild.members
         try: 
             if os.path.exists(savePath): os.remove(savePath)
         except: pass
@@ -2183,10 +2186,8 @@ class Cyberlog(commands.Cog):
                 if settings['author'] in (1, 2, 4): embed.set_author(name=after.name, icon_url=url)
             if (before.nick != after.nick or before.roles != after.roles) and logEnabled(before.guild, "member") and memberGlobal(before.guild) != 1:
                 content=f"{before}'s server attributes were updated"
-                #data = {'member': before.id, 'name': before.name, 'server': before.guild.id}
                 embed.description=f'{self.emojis["member"] if settings["context"][1] > 0 else ""}{"Recipient" if settings["context"][1] < 2 else ""}: {before.mention} ({before.name})'
                 if before.roles != after.roles:
-                    #print(f'{datetime.datetime.now()} Member update - role for {after.name} in server {after.guild.name}')
                     br = len(before.roles)
                     ar = len(after.roles)
                     embed.title = f'''{f"{self.emojis['member']}🚩{self.emojis['darkGreenPlus']}" if settings['context'][0] > 0 else ''}{f'Member gained {"roles" if ar - br > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar > br else f'''{f"{self.emojis['member']}🚩❌" if settings['context'][0] > 0 else ''}{f'Member lost {"roles" if br - ar > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar < br else f'''{f"{self.emojis['member']}🚩✏" if settings['context'][0] > 0 else ''}{'Member roles moodified' if settings['context'][0] < 2 else ''}'''
@@ -2239,7 +2240,6 @@ class Cyberlog(commands.Cog):
                         if len(gained) > 0: embed.add_field(name='Gained permissions', value='\n'.join(gainedList), inline=False)
                         self.memberPermissions[after.guild.id][after.id] = after.guild_permissions
                 if before.nick != after.nick:
-                    #print(f'{datetime.datetime.now()} Member update - nickname for {after.name} in server {after.guild.name}')
                     embed.title = f'''{f"{self.emojis['member'] if settings['library'] > 0 else '👤'}📄{self.emojis['edit'] if settings['library'] > 0 else '✏'}" if settings['context'][0] > 0 else ''}{"Member nickname updated" if settings['context'][0] < 2 else ''}'''
                     try:
                         log = (await before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update).flatten())[0]
@@ -2283,12 +2283,10 @@ class Cyberlog(commands.Cog):
         #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
         if before.status != after.status:
             if after.guild.id == targetServer.id:
-                #print(f'{datetime.datetime.now()} Member update - inside of status update for {after.name} in server {after.guild.name}')
                 if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
                 if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
-            #print(f'{datetime.datetime.now()} Member update - outside of activity update for {after.name} in server {after.guild.name}')
             if after.guild.id == targetServer.id:
                 for a in after.activities:
                     if a.type == discord.ActivityType.custom:
@@ -2299,7 +2297,9 @@ class Cyberlog(commands.Cog):
                                 if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': user.get('customStatusHistory')[-1].get('emoji'), 'n': user.get('customStatusHistory')[-1].get('name')}: 
                                     if not (await database.GetUser(after)).get('customStatusHistory'):
                                         asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
-                            except AttributeError as e: print(f'Attribute error: {e}')
+                            except AttributeError as e: 
+                                print(f'Attribute error: {e}')
+                                traceback.print_exc()
                             except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
                         if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
