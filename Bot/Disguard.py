@@ -23,15 +23,12 @@ import shutil
 import asyncpraw
 import sys
 import py7zr
-import tracemalloc
-import linecache
 
 
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
 cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc']
-tracemalloc.start()
 
 print("Connecting...")
 
@@ -72,61 +69,6 @@ bot.reddit = asyncpraw.Reddit(user_agent = 'Portal for Disguard - Auto link func
 
 indexes = 'Indexes'
 
-def formatProperly(input):
-    units = ['B', 'KiB', 'MiB', 'GiB']
-    i = 0
-    while i < 3 and input > 1024:
-        input /= 1024
-        i += 1
-    return f'{input:.2f} {units[i]}'
-
-def get_size(obj, seen=None):
-    # From https://goshippo.com/blog/measure-real-size-any-python-object/
-    # Recursively finds size of objects
-    size = sys.getsizeof(obj)
-    if seen is None:
-        seen = set()
-    obj_id = id(obj)
-    if obj_id in seen:
-        return 0
-# Important mark as seen *before* entering recursion to gracefully handle
-    # self-referential objects
-    seen.add(obj_id)
-    if isinstance(obj, dict):
-        size += sum([get_size(v, seen) for v in obj.values()])
-        size += sum([get_size(k, seen) for k in obj.keys()])
-    elif hasattr(obj, '__dict__'):
-        size += get_size(obj.__dict__, seen)
-    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
-        size += sum([get_size(i, seen) for i in obj])
-    return size
-
-@tasks.loop(minutes=10)
-#@tasks.loop(seconds=30)
-async def memoryTracker():
-    BPM = 1048576
-    snapshot = tracemalloc.take_snapshot()
-    snapshot = snapshot.filter_traces((
-        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
-        tracemalloc.Filter(False, "<unknown>"),
-    ))
-    top_stats = snapshot.statistics('lineno')
-    linesToTrack = 10
-    print(f"\n\nTop {linesToTrack} lines")
-    for index, stat in enumerate(top_stats[:linesToTrack], 1):
-        frame = stat.traceback[0]
-        # replace "/path/to/module/file.py" with "module/file.py"
-        filename = os.sep.join(frame.filename.split(os.sep)[-2:])
-        print(f"#{index}: {filename}:{frame.lineno}: {formatProperly(stat.size)}")
-        line = linecache.getline(frame.filename, frame.lineno).strip()
-        if line:
-            print(f'    {line}')
-    other = top_stats[linesToTrack:]
-    if other:
-        size = sum(stat.size for stat in other)
-        print(f"{len(other)} other: {formatProperly(size)}")
-    total = sum(stat.size for stat in top_stats)
-    print(f"Total allocated size: {formatProperly(total)}")
 
 # @tasks.loop(minutes=1)
 # async def anniversaryDayKickoff():
@@ -160,7 +102,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     if not booted:
         booted=True
         print('Booting...')
-        memoryTracker.start()
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening)
         await UpdatePresence()
@@ -548,14 +489,15 @@ async def _status(ctx):
 @commands.is_owner()
 @bot.command()
 async def test(ctx):
+    await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
     #status = await ctx.send('Working')
     # v = discord.ui.View(timeout=None)
     # options = [discord.SelectOption(label=g.name[:25], value=g.id, description = g.name if len(g.name) > 25 else None) for g in bot.guilds]
     # v.add_item(discord.ui.Select(placeholder='Select a server', options=options))
     # await ctx.send(content='Testing', view=v)
-    BPM = 1048576
-    await ctx.send(f'{round(sys.getsizeof(bot.lightningLogging) / BPM, 4)}MB (servers)\n{round(sys.getsizeof(bot.lightningUsers) / BPM, 4)}MB (users)')
-    await ctx.send(f'{formatProperly(get_size(bot.lightningLogging))} (servers) \n {formatProperly(get_size(bot.lightningUsers))} (users)\n')
+    # BPM = 1048576
+    # await ctx.send(f'{round(sys.getsizeof(bot.lightningLogging) / BPM, 4)}MB (servers)\n{round(sys.getsizeof(bot.lightningUsers) / BPM, 4)}MB (users)')
+    # await ctx.send(f'{formatProperly(get_size(bot.lightningLogging))} (servers) \n {formatProperly(get_size(bot.lightningUsers))} (users)\n')
     #await status.edit(content='Done')
 
 @commands.is_owner()
