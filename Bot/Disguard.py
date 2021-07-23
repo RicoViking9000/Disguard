@@ -62,10 +62,10 @@ def getData(bot):
 def getUserData(bot):
     return bot.lightningUsers
 
-intents = discord.Intents.all()
+#intents = discord.Intents.all()
 
-bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)) #Make sure bot doesn't tag everyone/mass roles people unless I specify
-#bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False))
+#bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)) #Make sure bot doesn't tag everyone/mass roles people unless I specify
+bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False))
 bot.remove_command('help')
 
 bot.reddit = asyncpraw.Reddit(user_agent = 'Portal for Disguard - Auto link functionality. --RV9k--')
