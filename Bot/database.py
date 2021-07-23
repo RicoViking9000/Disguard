@@ -106,21 +106,6 @@ class NewLogModule(object):
         self.children = entry.get('children', [])
         self.customSettings = entry.get('customSettings', [])
         return self
-    def createEmbed(self, *, title=None, description=None, authName=None, authURL=None, authImg=None, URL=None, timestamp=True, color=0x000000, footText=None, footImg=None, image=None, thumbnail=None, fields=[]):
-        e = discord.Embed(title=title, description=description, timestamp=datetime.datetime.utcnow() if timestamp else None, color=color)
-        e.set_author(name=authName, url=authURL, icon_url=authImg)
-        e.set_image(url=image)
-        e.set_thumbnail(url=thumbnail)
-        e.set_footer(text=footText, icon_url=footImg)
-        e.url = URL
-        for f in fields: e.add_field(name=f.get('name'), value=f.get('value'), inline=f.get('inline'))
-        return e
-    def configureDefault(self, t): #Configure the default customMessage and customEmbed parameters for log types specified by [type]
-        if t == 'messageEdit':
-            self.defaultCustomMessage = '<<after.message.author.name>> edited their message from **<<before>>** to **<<after.content>>**'
-            self.defaultCustomEmbed = Embeds.defaultMessageEditEmbed().to_dict()
-        
-        return self
 
 def Initialize(token):
     '''Configure the database based on if bot is Disguard or Disguard Beta'''
@@ -148,7 +133,7 @@ async def VerifyServers(b: commands.Bot, newOnly=False, full=False):
     '''First: Index all bot servers, and verify them'''
     await asyncio.gather(*[VerifyServer(s, b, newOnly, full) for s in b.guilds])
 
-async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=False):
+async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=False, *, includeServer=True, includeMembers=True):
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
@@ -171,7 +156,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
     for c in s.categories:
         serverChannels.append({'name': f'-----{c.name.upper()}-----', 'id': c.id})
         for channel in c.text_channels: serverChannels.append({'name': channel.name, 'id': channel.id})
-    if not serv or full:
+    if (not serv or full) and includeServer:
         await servers.update_one({'server_id': s.id}, {"$set": { #add entry for new servers
         "name": s.name,
         "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
@@ -230,7 +215,6 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents'), #Bans, mutes, etc
             'automuteRole': 0 if not spam else spam.get('automuteRole', 0)},
         "cyberlog": {
-            # 'globalSettings': vars(loggingHome),
             "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
             'ghostReactionEnabled': log.get('ghostReactionEnabled') or True,
             'disguardLogRecursion': log.get('disguardLogRecursion') or False, #Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
@@ -268,69 +252,48 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else (LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice'))),
             "misc": vars(LogModule('misc', "Logging for various bonus features that don't fit into an above category (currently only ghost reaction logging)")) if log is None or log.get('misc') is None else (LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc')))
         }}}, upsert=True)
-        
-            # 'modules': [
-            #     vars(messageContainer),
-            #     vars(doorguardContainer),
-            #     vars(channelContainer),
-            #     vars(memberContainer),
-            #     vars(roleContainer),
-            #     vars(emojiContainer),
-            #     vars(serverContainer),
-            #     vars(voiceContainer)]
-            #}}},upsert=True)
-    else: #only update things that may have changed (on discord's side) if the server already exists; otherwise we're literally putting things back into the variable for no reason
-        await servers.update_one({'server_id': s.id}, {"$set": { 
-            'name': s.name,
-            'thumbnail': str(s.icon_url),
-            'channels': serverChannels,
-            'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]}})
-    started2 = datetime.datetime.now()
-    membDict = {}
-    if not serv: serv = await servers.find_one({'server_id': s.id})
-    if serv:
-        spam = serv.get("antispam") #antispam object from database
-        log = serv.get("cyberlog") #cyberlog object from database
-        members = serv.get("members") or []
-    else: return
-    for m in s.members: #Create dict 
-        membDict[str(m.id)] = m.name
-        membDict[m.name] = m.id
-    databaseMembIDs = [m.get('id') for m in members] or []
-    serverMembIDs = [m.id for m in s.members]
-    if len(members) < 1: 
-        membersToUpdate = [{'id': member.id, 'name': member.name, 'warnings': spam['warn']} for member in s.members]
-        await servers.update_one({'server_id': s.id}, {'$set': {'members': membersToUpdate}}, True)
-    else:
-        if any([m not in databaseMembIDs for m in serverMembIDs]):
-            toUpdate = [{'id': userID, 'name': membDict[str(userID)], 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []} for userID in [memberID for memberID in serverMembIDs if memberID not in databaseMembIDs]] #Add members that aren't in the database yet
-            await servers.update_one({'server_id': s.id}, {"$push": {'members': { '$each': toUpdate}}}, True)
-        toUpdate = []
-        toRemove = []
-        for member in members:
-            def retrieveMember(identification):
-                for m in serverMembIDs:
-                    if m == identification: return s.get_member(m)
-                return None
-            serverMember = retrieveMember(member['id'])
-            if not serverMember: toRemove.append(member)
-            else:
-                if serverMember.name != member['name']: toUpdate.append(serverMember)
-            # if member.get('id') in serverMembIDs:
-            #     try:
-            #         await servers.update_one({'server_id': s.id, 'members.id': member.get('id')}, {"$set": {
-            #             "members.$.id": member.get('id'),
-            #             "members.$.name": membDict.get(str(member.get('id'))),
-            #             "members.$.warnings": spam.get('warn') if member is None else member.get('warnings'),
-            #             "members.$.quickMessages": [] if member is None or member.get('quickMessages') is None else member.get('quickMessages'),
-            #             "members.$.lastMessages": [] if member is None or member.get('lastMessages') is None else member.get('lastMessages')
-            #         }}, upsert=True)
-            #     except: pass
-            # else: await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': member.get('id')}}})
-        bulkUpdates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': member.id}, {'$set': {'members.$.name': member.name}}) for member in toUpdate]
-        bulkRemovals = [pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}) for member in toRemove]
-        if bulkUpdates or bulkRemovals: await servers.bulk_write(bulkUpdates + bulkRemovals)
-    print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds}s\n Members only: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
+    elif includeServer: #only update things that may have changed (on discord's side) if the server already exists; otherwise we're literally putting things back into the variable for no reason
+        base = {} #Empty dict, to be added to when things need to be updated
+        roleGen = [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]
+        if s.name != serv['name']: base.update({'name': s.name})
+        if str(s.icon_url) != serv['thumbnail']: base.update({'thumbnail': str(s.icon_url)})
+        if serverChannels != serv['channels']: base.update({'channels': serverChannels})
+        if roleGen != serv['roles']: base.update({'roles': roleGen})
+        await servers.update_one({'server_id': s.id}, {"$set": base})
+    if includeMembers:
+        started2 = datetime.datetime.now()
+        membDict = {}
+        if not serv: serv = await servers.find_one({'server_id': s.id})
+        if serv:
+            spam = serv.get("antispam") #antispam object from database
+            log = serv.get("cyberlog") #cyberlog object from database
+            members = serv.get("members") or []
+        else: return
+        serverMembIDs = set()
+        membersToUpdate = []
+        for m in s.members: #Create dict 
+            membDict[str(m.id)] = m.name
+            #membDict[m.name] = m.id
+            serverMembIDs.add(m.id)
+            if len(members) < 1: membersToUpdate.append({'id': m.id, 'name': m.name, 'warnings': spam['warn']})
+        databaseMembIDs = set(m.get('id') for m in members)
+        if len(members) < 1: 
+            await servers.update_one({'server_id': s.id}, {'$set': {'members': membersToUpdate}}, True)
+        else: #Need to update existing members
+            toInsert = []
+            for m in serverMembIDs:
+                if m not in databaseMembIDs:
+                    toInsert.append({'id': m, 'name': membDict[str(m)], 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []}) #Add members that aren't in the database yet
+            await servers.update_one({'server_id': s.id}, {"$push": {'members': {'$each': toInsert}}}, True)
+            bulkUpdates = []
+            bulkRemovals = []
+            for member in members:
+                serverMember = s.get_member(member['id'])
+                if not serverMember: bulkRemovals.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}))
+                else:
+                    if serverMember.name != member['name']: bulkUpdates.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': member.id}, {'$set': {'members.$.name': member.name}}))
+            if bulkUpdates or bulkRemovals: await servers.bulk_write(bulkUpdates + bulkRemovals)
+    print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds if includeServer else "N/A"}s\n Members only: {(datetime.datetime.now() - started2).seconds if includeMembers else "N/A"}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     return (serv.get('name'), serv.get('server_id'))
 
 async def VerifyUsers(b: commands.Bot):

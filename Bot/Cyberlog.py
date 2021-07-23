@@ -220,7 +220,7 @@ class Cyberlog(commands.Cog):
                     generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, self.bot, True), await database.CalculateAnnouncementsChannel(g, self.bot, True), await database.CalculateModeratorChannel(g, self.bot, True)
                     print(f'{g.name}\n -general channel: {generalChannel}\n -announcements channel: {announcementsChannel}\n -moderator channel: {moderatorChannel}')
                 except: pass
-                await self.CheckDisguardServerRoles(g.members, mode=0, reason='Bot bootup check')
+                await self.CheckDisguardServerRoles(g.members, mode=0, reason='Full verification check')
                 self.memberPermissions[g.id] = {} #Ok, so then in the future, look into collections.defaultDict for this one, just like the ghost reaction logging
                 self.members[g.id] = g.members
                 for m in g.members:
@@ -1304,7 +1304,7 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden: pass
         if type(channel) is discord.TextChannel:
             self.pins[channel.id] = []
-            asyncio.create_task(database.VerifyServer(channel.guild, bot))
+            asyncio.create_task(database.VerifyServer(channel.guild, bot, includeMembers=False))
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
@@ -1490,7 +1490,7 @@ class Cyberlog(commands.Cog):
             try: self.channelCacheHelper[after.guild.id].append(channelPosTimekey)
             except: self.channelCacheHelper[after.guild.id] = [channelPosTimekey]
             asyncio.create_task(self.delayedUpdateChannelIndexes(after.guild, channelPosTimekey))
-        if type(before) is discord.TextChannel and before.name != after.name: await asyncio.gather(database.VerifyServer(after.guild, bot))
+        if type(before) is discord.TextChannel and before.name != after.name: await asyncio.gather(database.VerifyServer(after.guild, bot, includeMembers=False))
         try:
             if msg:
                 final = copy.deepcopy(embed)
@@ -1602,7 +1602,7 @@ class Cyberlog(commands.Cog):
             await msg.edit(content = None if not settings['plainText'] else content, embed=embed)
             self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
             if os.path.exists(savePath): os.remove(savePath)
-        if type(channel) is discord.TextChannel: asyncio.create_task(database.VerifyServer(channel.guild, bot))
+        if type(channel) is discord.TextChannel: asyncio.create_task(database.VerifyServer(channel.guild, bot, includeMembers=False))
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
@@ -1741,7 +1741,7 @@ class Cyberlog(commands.Cog):
                     embed.add_field(name='Invite Details',value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             await msg.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
             self.archiveLogEmbed(member.guild, msg.id, embed, 'Member Join')
-        await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot), updateLastActive(member, datetime.datetime.now(), 'joined a server')])
+        await asyncio.gather(*[database.VerifyServer(member.guild, bot, includeServer=False), database.VerifyUser(member, bot), updateLastActive(member, datetime.datetime.now(), 'joined a server')])
         try:
             if os.path.exists(savePath): os.remove(savePath)
         except: pass
@@ -2001,8 +2001,6 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when member leaves a server'''
         received = datetime.datetime.now()
         adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(member.guild))
-        membersCache = copy.deepcopy(self.members[member.guild.id])
-        self.members[member.guild.id].remove(member)
         asyncio.create_task(updateLastActive(member, datetime.datetime.now(), 'left a server'))
         message = None
         if logEnabled(member.guild, "doorguard"):
@@ -2048,7 +2046,7 @@ class Cyberlog(commands.Cog):
                 except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             message = await logChannel(member.guild, 'doorguard').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             try:
-                sortedMembers = sorted(membersCache, key=lambda x: x.joined_at or datetime.datetime.utcnow())
+                sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or datetime.datetime.utcnow())
                 memberJoinPlacement = sortedMembers.index(member) + 1
                 hoverPlainText = textwrap.dedent(f'''
                     Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}
@@ -2070,7 +2068,8 @@ class Cyberlog(commands.Cog):
         try: 
             if os.path.exists(savePath): os.remove(savePath)
         except: pass
-        await asyncio.gather(*[database.VerifyServer(member.guild, bot), database.VerifyUser(member, bot)])
+        self.members[member.guild.id].remove(member)
+        await asyncio.gather(*[database.VerifyServer(member.guild, bot, includeServer=False), database.VerifyUser(member, bot)])
         if message:
             def reactionCheck(r, u): return r.message.id == message.id and not u.bot
             while not self.bot.is_closed():
@@ -2399,7 +2398,7 @@ class Cyberlog(commands.Cog):
                     if not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None)
                     self.archiveLogEmbed(server, msg.id, embed, 'User Update')
             except: pass
-        for s in servers: asyncio.create_task(database.VerifyServer(s, bot))
+        for s in servers: asyncio.create_task(database.VerifyServer(s, bot, includeServer=False))
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -2516,7 +2515,7 @@ class Cyberlog(commands.Cog):
                 embed.set_thumbnail(url=thumbURL)
                 embed.set_image(url=imageURL)
                 embed.add_field(name='Server icon updated',value=f'Old: [Thumbnail to the right]({thumbURL})\nNew: [Image below]({imageURL})')
-            asyncio.create_task(database.VerifyServer(after, bot))
+            asyncio.create_task(database.VerifyServer(after, bot, includeMembers=False))
             if message and len(embed.fields) > 0:
                 reactions = ['ℹ']
                 if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
@@ -2611,7 +2610,7 @@ class Cyberlog(commands.Cog):
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
             self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
         self.roles[role.id] = role.members
-        asyncio.create_task(database.VerifyServer(role.guild, bot))
+        asyncio.create_task(database.VerifyServer(role.guild, bot, includeMembers=False))
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
@@ -2774,7 +2773,7 @@ class Cyberlog(commands.Cog):
                 if before.permissions != after.permissions:
                     for m in after.members: self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
         await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
-        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, bot))
+        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, bot, includeMembers=before.permissions != after.permissions))
         for member in after.members:
             await database.VerifyUser(member, bot)
         if message and len(embed.fields) > 0 or before.name != after.name:
