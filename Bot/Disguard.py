@@ -101,7 +101,7 @@ def get_size(obj, seen=None):
         size += sum([get_size(i, seen) for i in obj])
     return size
 
-#@tasks.loop(minutes=10)
+@tasks.loop(minutes=10)
 #@tasks.loop(seconds=30)
 async def memoryTracker():
     BPM = 1048576
