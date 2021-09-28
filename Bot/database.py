@@ -122,7 +122,7 @@ def Initialize(token):
     disguard = db.disguard
 
 
-'''Checking events'''
+'''Verification events'''
 async def Verification(b: commands.Bot):
     '''Longest operation. Checks entire usable database *twice*, and verifies it's as it should be, creating entries as necessary'''
     await VerifyServers(b)
