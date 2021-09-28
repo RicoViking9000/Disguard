@@ -209,10 +209,10 @@
                 <div class="inputPod">
                     <label for="redditEnhance">Reddit URL enhancements</label>
                     <select id=redditEnhance name=redditEnhance default=true>
-                        <option value=0 {%if server.redditEnhance == 0%}selected{%endif%}>Disabled</option>
-                        <option value=1 {%if server.redditEnhance == 1%}selected{%endif%}>Only subreddit URLs</option>
-                        <option value=2 {%if server.redditEnhance == 2%}selected{%endif%}>Only submission URLs</option>
-                        <option value=3 {%if server.redditEnhance == 3%}selected{%endif%}>Both subreddit and submission URLs</option>
+                        <option value=0 {%if not server.redditEnhance[0] and not server.redditEnhance[1]%}selected{%endif%}>Disabled</option>
+                        <option value=1 {%if server.redditEnhance[1] and not server.redditEnhance[0]%}selected{%endif%}>Only subreddit URLs</option>
+                        <option value=2 {%if server.redditEnhance[0] and not server.redditEnhance[1]%}selected{%endif%}>Only submission URLs</option>
+                        <option value=3 {%if server.redditEnhance[1] and server.redditEnhance[1]%}selected{%endif%}>Both subreddit and submission URLs</option>
                     </select>
                     <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>If enabled, Disguard will remove any auto-generated embeds attached to messages with reddit URLs, and send a message containing a more informative embed about the subreddit or submission. Made possible by PRAW & the Reddit API.</p></div>

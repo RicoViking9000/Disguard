@@ -147,6 +147,7 @@ def server(id):
         #bd = r.get('birthday')
         bdt = r.get('birthdate')
         #nz = r.get('tzname')
+        redEn = int(r.get('redditEnhance'))
         dt = datetime.datetime(int(o[:o.find('-')]), int(o[o.find('-')+1:o.find('-')+3]), int(o[o.find('-')+4:o.find('-')+6]), int(o[o.find('T')+1:o.find(':')]), int(o[o.find(':')+1:]))
         decrement = int(bdt[bdt.find(':')+1:])
         while decrement % 5 != 0: decrement -= 1
@@ -160,7 +161,7 @@ def server(id):
             'jumpContext': r.get('jumpContext').lower() == 'true',
             'undoSuppression': r.get('undoSuppression').lower() == 'true',
             'redditComplete': r.get('redditComplete').lower() == 'true',
-            'redditEnhance': int(r.get('redditEnhance')),
+            'redditEnhance': (False, False) if redEn == 0 else (False, True) if redEn == 1 else (True, False) if redEn == 2 else (True, True),
             'colorTheme': int(r.get('colorTheme')),
             'birthday': int(r.get('birthday')),
             'birthdate': dt2,
