@@ -163,13 +163,13 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
         "thumbnail": str(s.icon_url),
         'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
         'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
-        'jumpContext': True if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
-        'undoSuppression': True if not serv else serv.get('undoSuppression', True), #Whether to enable the undo functionality after a message's embed was collapsed
-        'redditComplete': 1 if not serv else serv.get('redditComplete', 1), #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
-        'redditEnhance': (True, True) if not serv else serv.get('redditEnhance') if type(serv.get('redditEnhance')) is tuple else (True, True), #0: submission, 1: subreddit
+        'jumpContext': False if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
+        'undoSuppression': False if not serv else serv.get('undoSuppression', True), #Whether to enable the undo functionality after a message's embed was collapsed
+        'redditComplete': 0 if not serv else serv.get('redditComplete', 1), #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
+        'redditEnhance': (False, False) if not serv else serv.get('redditEnhance') if type(serv.get('redditEnhance')) is tuple else (True, True), #0: submission, 1: subreddit
         'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
         'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
-        'birthdayMode': 2 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
+        'birthdayMode': 0 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
         'colorTheme': 0 if not serv or not serv.get('colorTheme') else serv.get('colorTheme'), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
         "channels": serverChannels,
         'server_id': s.id,
