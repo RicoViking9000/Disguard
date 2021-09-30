@@ -1161,9 +1161,9 @@ class Cyberlog(commands.Cog):
                         url = await self.uploadFiles(savePath)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-            except Exception as e: plainText += f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
                 else: 
                     if g.id not in gimpedServers: await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
+            except Exception as e: plainText += f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
         if settings['botLogging'] in [0, 2] and author.bot: 
             #Check to see if the recursion deletion mode is enabled for Disguard log messages
             if author.id == self.bot.user.id and self.bot.lightningLogging[g.id]['cyberlog']['disguardLogRecursion']:
@@ -2255,7 +2255,7 @@ class Cyberlog(commands.Cog):
                                 if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                                 if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
                     except Exception as e: auditLogFail = e
-                        if after.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated a nickname')
+                    if after.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated a nickname')
                     oldNick = before.nick if before.nick is not None else "<No nickname>"
                     newNick = after.nick if after.nick is not None else "<No nickname>"
                     embed.add_field(name="Old nickname",value=oldNick)
