@@ -336,27 +336,31 @@ class Cyberlog(commands.Cog):
 
     async def synchronizeDatabase(self, notify=False):
         '''This method downloads data from the database and puts it in the lightningLogging/Users variables, then is kept updated in the motorMongo changeStream method (trackChanges)'''
-        started = datetime.datetime.now()
-        print('Synchronizing Database')
-        global lightningLogging
-        global lightningUsers
-        async for s in await database.GetAllServers():
-            if self.bot.get_guild(s['server_id']):
-                self.bot.lightningLogging[s['server_id']] = s
-                lightningLogging[s['server_id']] = s
-            else: 
-                attachmentsPath = f'Attachments/{s["server_id"]}'
-                indexesPath = f'{indexes}/{s["server_id"]}'
-                try: shutil.rmtree(attachmentsPath)
-                except FileNotFoundError: pass
-                try: shutil.rmtree(indexesPath)
-                except FileNotFoundError: pass
-                await database.DeleteServer(s['server_id'], self.bot)
-        async for u in await database.GetAllUsers():
-            if self.bot.get_user(u['user_id']):
-                self.bot.lightningUsers[u['user_id']] = u
-                lightningUsers[u['user_id']] = u
-            else: await database.DeleteUser(u['user_id'], self.bot)
+        try:
+            started = datetime.datetime.now()
+            print('Synchronizing Database')
+            global lightningLogging
+            global lightningUsers
+            async for s in await database.GetAllServers():
+                if self.bot.get_guild(s['server_id']):
+                    self.bot.lightningLogging[s['server_id']] = s
+                    lightningLogging[s['server_id']] = s
+                else: 
+                    attachmentsPath = f'Attachments/{s["server_id"]}'
+                    indexesPath = f'{indexes}/{s["server_id"]}'
+                    try: shutil.rmtree(attachmentsPath)
+                    except FileNotFoundError: pass
+                    try: shutil.rmtree(indexesPath)
+                    except FileNotFoundError: pass
+                    await database.DeleteServer(s['server_id'], self.bot)
+            async for u in await database.GetAllUsers():
+                if self.bot.get_user(u['user_id']):
+                    self.bot.lightningUsers[u['user_id']] = u
+                    lightningUsers[u['user_id']] = u
+                else: await database.DeleteUser(u['user_id'], self.bot)
+        except:
+            print('Database sync error:')
+            traceback.print_exc()
         if notify: await self.imageLogChannel.send('Synchronized')
         print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s', notify)
 
@@ -449,7 +453,7 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent'''
         await self.bot.wait_until_ready()
-        if message.guild.id not in gimpedServers: await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
+        if not serverIsGimped(message.guild): await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
         if type(message.channel) is discord.DMChannel: return
         if message.type is discord.MessageType.pins_add: await self.pinAddLogging(message)
         if message.content == f'<@!{self.bot.user.id}>': await self.sendGuideMessage(message)
@@ -470,7 +474,7 @@ class Cyberlog(commands.Cog):
         with open(f'{path}/{message.channel.id}.json', 'w+') as f:
             f.write(indexData)
         if message.author.bot: return
-        if await database.GetImageLogPerms(message.guild) and len(message.attachments) > 0 and not message.channel.is_nsfw():
+        if await self.bot.lightningLogging[message.guild.id]['cyberlog'].get('image') and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
             try: os.makedirs(path2)
             except FileExistsError: pass
@@ -618,7 +622,7 @@ class Cyberlog(commands.Cog):
         '''Discord.py event listener: When a reaction is added to a message'''
         #Layer style: Message ID > User ID > Reaction (emoji)
         u = self.bot.get_user(p.user_id)
-        if p.guild_id not in gimpedServers: await updateLastActive(u, datetime.datetime.now(), 'added a reaction')
+        if not serverIsGimped(self.bot.get_guild(p.guild_id)): await updateLastActive(u, datetime.datetime.now(), 'added a reaction')
         if u.bot: return
         g = self.bot.get_guild(p.guild_id)
         if not g: return
@@ -636,7 +640,7 @@ class Cyberlog(commands.Cog):
     async def on_raw_reaction_remove(self, p):
         '''Discord.py event listener: When a reaction is removed from a message'''
         u = self.bot.get_user(p.user_id)
-        if p.guild_id not in gimpedServers: await updateLastActive(u, datetime.datetime.now(), 'removed a reaction')
+        if not serverIsGimped(self.bot.get_guild(p.guild_id)): await updateLastActive(u, datetime.datetime.now(), 'removed a reaction')
         if u.bot: return
         g = self.bot.get_guild(p.guild_id)
         if not g: return
@@ -906,7 +910,7 @@ class Cyberlog(commands.Cog):
         except: pass
         oldEmbed=copy.deepcopy(embed)
         oldContent=plainText
-        if guild.id not in gimpedServers: await updateLastActive(author, datetime.datetime.now(), 'edited a message')
+        if not serverIsGimped(guild): await updateLastActive(author, datetime.datetime.now(), 'edited a message')
         while not self.bot.is_closed():
             def iCheck(r, u): return r.message.id == msg.id and not u.bot
             result = await self.bot.wait_for('reaction_add', check=iCheck)
@@ -980,7 +984,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when message is edited'''
         if not after.guild: return #We don't deal with DMs
         received = datetime.datetime.utcnow() + datetime.timedelta(hours=timeZone(after.guild)) #Timestamp of receiving the message edit event
-        if after.guild.id not in gimpedServers: asyncio.create_task(updateLastActive(after.author, datetime.datetime.now(), 'edited a message'))
+        if not serverIsGimped(after.guild): asyncio.create_task(updateLastActive(after.author, datetime.datetime.now(), 'edited a message'))
         if self.pins.get(after.channel.id) is None: return
         g = after.guild
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
@@ -1007,7 +1011,7 @@ class Cyberlog(commands.Cog):
             return
         author = g.get_member(after.author.id) #Get the member of the edited message, and if not found, return (this should always work, and if not, then it isn't a server and we can let it error and Tdon't need to proceed)
         if not self.pins.get(channel.id): return
-        if g.id not in gimpedServers: asyncio.create_task(updateLastActive(author, datetime.datetime.now(), 'edited a message'))
+        if not serverIsGimped(g): asyncio.create_task(updateLastActive(author, datetime.datetime.now(), 'edited a message'))
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
         try:
             if not logExclusions(after.channel, author): return #Check the exclusion settings
@@ -1152,7 +1156,7 @@ class Cyberlog(commands.Cog):
                 if log.action in (discord.AuditLogAction.message_delete, discord.AuditLogAction.message_bulk_delete) and absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=20)) and log.target.id in (author.id, channel.id) and log.user != author:
                     embed.description+=f'''\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{"Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name})'''
                     embed.title = f'''{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["modDelete"])}') if settings["context"][0] > 0 else ""}{"Message was deleted" if settings["context"][1] < 2 else ''}'''
-                    if g.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'deleted a message')
+                    if not serverIsGimped(g): await updateLastActive(log.user, datetime.datetime.now(), 'deleted a message')
                     modDelete = True
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
                         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
@@ -1162,7 +1166,7 @@ class Cyberlog(commands.Cog):
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
                 else: 
-                    if g.id not in gimpedServers: await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
+                    if not serverIsGimped(g): await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
             except Exception as e: plainText += f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
         if settings['botLogging'] in [0, 2] and author.bot: 
             #Check to see if the recursion deletion mode is enabled for Disguard log messages
@@ -1649,9 +1653,6 @@ class Cyberlog(commands.Cog):
             try:
                 newInv = await member.guild.invites()
                 oldInv = self.invites.get(str(member.guild.id))
-            except discord.Forbidden:
-                content+="Tip: I can determine who invited new members if I have the `Manage Server` permissions"
-            try:
                 for invite in oldInv:
                     try:
                         if newInv[newInv.index(invite)].uses > invite.uses:
@@ -1670,6 +1671,7 @@ class Cyberlog(commands.Cog):
                         if i.id not in [oi.id for oi in oldInv] and i.uses != 0: 
                             targetInvite = i
                             break
+            except discord.Forbidden: embed.add_field(name='Invite Details', value=f'Enable `manage server` permissions to use this feature')
             except Exception as e: embed.add_field(name='Invite Details',value=f'Error retrieving details: {e}'[:1023])
             try: self.invites[str(member.guild.id)] = newInv
             except: pass
@@ -1690,7 +1692,7 @@ class Cyberlog(commands.Cog):
                             if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                             if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
                         content = f'{log.user} added the {member.name} bot to the server'
-                        if member.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'added a bot to a server')
+                        await updateLastActive(log.user, datetime.datetime.now(), 'added a bot to a server')
                 except: pass
             else:
                 descriptionString = [ #First: plaintext version, second: hover-links hybrid version
@@ -2255,7 +2257,7 @@ class Cyberlog(commands.Cog):
                                 if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
                                 if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
                     except Exception as e: auditLogFail = e
-                    if after.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated a nickname')
+                    if not serverIsGimped(after.guild): await updateLastActive(log.user, datetime.datetime.now(), 'updated a nickname')
                     oldNick = before.nick if before.nick is not None else "<No nickname>"
                     newNick = after.nick if after.nick is not None else "<No nickname>"
                     embed.add_field(name="Old nickname",value=oldNick)
@@ -2282,10 +2284,11 @@ class Cyberlog(commands.Cog):
                 targetServer = g
                 break
         #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
+        if after.guild.id == 403698615446536203: return
         if before.status != after.status:
             if after.guild.id == targetServer.id:
-                if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
-                if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+                if after.status == discord.Status.offline and not serverIsGimped(after.guild): await updateLastOnline(after, datetime.datetime.now())
+                if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]) and not serverIsGimped(after.guild): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
             if after.guild.id == targetServer.id:
@@ -2303,7 +2306,7 @@ class Cyberlog(commands.Cog):
                                 traceback.print_exc()
                             except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
-                        if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
+                        if before.status == newMemb.status and before.name != newMemb.name and not serverIsGimped(after.guild): await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
         if before.guild_permissions != after.guild_permissions: asyncio.create_task(database.VerifyUser(before, self.bot))
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
@@ -3035,7 +3038,7 @@ class Cyberlog(commands.Cog):
                             embed.add_field(
                                 name=f'''{(self.emojis['modDeafened'] if settings['library'] > 0 else '🔨🔇') if settings['context'][1] > 0 else ''}Deafened by moderator''',
                                 value=f'''{'👮‍♂️' if settings['context'][1] > 0 else ''}{'Moderator' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.name})''')
-            await updateLastActive(member, datetime.datetime.now(), 'voice channel activity')
+            if not serverIsGimped(member.guild): await updateLastActive(member, datetime.datetime.now(), 'voice channel activity')
             #Member changed self-deafen status
             if before.self_deaf != after.self_deaf:
                 if before.self_deaf:
@@ -3148,7 +3151,7 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_typing(self, c: discord.abc.Messageable, u: discord.User, w: datetime.datetime):
-        if c.guild and c.guild.id not in gimpedServers: await updateLastActive(u, datetime.datetime.now(), 'started typing somewhere') #9/29/21: Changed behavior to not work in DMs
+        if c.guild and not serverIsGimped(c.guild): await updateLastActive(u, datetime.datetime.now(), 'started typing somewhere') #9/29/21: Changed behavior to not work in DMs
 
     @commands.Cog.listener()
     async def on_webhooks_update(self, c):
@@ -4699,6 +4702,9 @@ def getServer(s: discord.Guild):
 
 def colorTheme(s):
     return getServer(s)['colorTheme']
+
+def serverIsGimped(s: discord.Guild):
+    return s.member_count > 250
 
 def lastActive(u: discord.User):
     try: return lightningUsers.get(u.id).get('lastActive')
