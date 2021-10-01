@@ -474,7 +474,7 @@ class Cyberlog(commands.Cog):
         with open(f'{path}/{message.channel.id}.json', 'w+') as f:
             f.write(indexData)
         if message.author.bot: return
-        if await self.bot.lightningLogging[message.guild.id]['cyberlog'].get('image') and len(message.attachments) > 0 and not message.channel.is_nsfw():
+        if self.bot.lightningLogging[message.guild.id]['cyberlog'].get('image') and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
             try: os.makedirs(path2)
             except FileExistsError: pass
