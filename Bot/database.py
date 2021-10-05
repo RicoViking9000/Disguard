@@ -21,6 +21,9 @@ servers = None
 users = None
 disguard = None
 
+lastVerifiedServer = {}
+lastVerifiedUser = {}
+
 def getDatabase(): return db
 
 #yellow=0xffff00
@@ -137,6 +140,12 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
     '''Ensures that an individual server has a database entry, and checks all its variables'''
     '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
     print('Verifying server: {} - {}'.format(s.name, s.id))
+    if s.member_count > 250:
+        global lastVerifiedServer
+        if not lastVerifiedServer.get(s.id) or datetime.datetime.now() > lastVerifiedServer.get(s.id) + datetime.timedelta(minutes=5): #Make sure that individual servers only go through this once every 5 mins
+            lastVerifiedServer[s.id] = datetime.datetime.now()
+        elif datetime.datetime.now() < lastVerifiedServer.get(s.id) + datetime.timedelta(minutes=5):
+            return
     started = datetime.datetime.now()
     serv = await servers.find_one({"server_id": s.id})
     if b.get_guild(s.id) is None: #If there's a server in the database the bot is no longer a part of, we can delete it
