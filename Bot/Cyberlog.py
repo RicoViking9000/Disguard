@@ -342,6 +342,7 @@ class Cyberlog(commands.Cog):
             global lightningLogging
             global lightningUsers
             async for s in await database.GetAllServers():
+                print(f'Bootup sync: {s.name}')
                 if self.bot.get_guild(s['server_id']):
                     self.bot.lightningLogging[s['server_id']] = s
                     lightningLogging[s['server_id']] = s
@@ -353,6 +354,7 @@ class Cyberlog(commands.Cog):
                     try: shutil.rmtree(indexesPath)
                     except FileNotFoundError: pass
                     await database.DeleteServer(s['server_id'], self.bot)
+            print('bootup sync: got to the users')
             async for u in await database.GetAllUsers():
                 if self.bot.get_user(u['user_id']):
                     self.bot.lightningUsers[u['user_id']] = u
@@ -1637,7 +1639,7 @@ class Cyberlog(commands.Cog):
             targetInvite = None
             settings = getCyberAttributes(member.guild, 'doorguard')
             color = green[colorTheme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
-            count = len(member.guild.members)
+            count = member.guild.member_count
             ageDisplay = elapsedDuration(datetime.datetime.utcnow() - member.created_at, False)
             embed=discord.Embed(
                 title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'}"} {self.loading}''',
@@ -1764,7 +1766,7 @@ class Cyberlog(commands.Cog):
                     asyncio.create_task(muteDelay)
             except: pass
         if msg:
-            if member.id in [m.id for m in member.guild.members]:
+            if member.id in [m.id for m in member.guild.members]: #TODO: change to dict for performance if possible?
                 embed.title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'} (React ℹ for member info viewer)" if settings['context'][0] < 2 else ''}'''
                 if hadToRemute: embed.description += f"\n{self.emojis['greenCheck']}Succesfully remuted member; their mute time isn't over yet"
                 await msg.edit(content=msg.content, embed=embed if not settings['plainText'] else None)
@@ -2056,7 +2058,7 @@ class Cyberlog(commands.Cog):
                     Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}
                     Left at: {received}
                     Here for: {hereForDisplay}
-                    Was the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}
+                    Was the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {member.guild.member_count}
                     ''')
                 embed.description += f"\n[Hover for more details]({message.jump_url} '{hoverPlainText}')"
                 #embed.description+=f"\n[Hover for more details]({message.jump_url} 'Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}"
