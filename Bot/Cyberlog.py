@@ -344,7 +344,7 @@ class Cyberlog(commands.Cog):
             global lightningUsers
             async for s in await database.GetAllServers():
                 if self.bot.get_guild(s['server_id']):
-                    print(f'Bootup sync: {s.name}')
+                    print(f'Bootup sync: {s["name"]}')
                     self.bot.lightningLogging[s['server_id']] = s
                     lightningLogging[s['server_id']] = s
                 else: 
