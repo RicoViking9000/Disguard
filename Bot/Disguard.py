@@ -451,7 +451,7 @@ async def nameVerify(ctx):
     await ctx.send('Successful')
 
 @bot.event
-async def on_error(event):
+async def on_error(event, *args, **kwargs):
     traceback.print_exc()
     traceback.print_exc(file='output.txt')
 
