@@ -22,6 +22,7 @@ import codecs
 import emojis
 import asyncpraw
 import textwrap
+import logging
 
 bot = None
 serverPurge = {}
@@ -331,6 +332,8 @@ class Cyberlog(commands.Cog):
             await self.imageLogChannel.send('Completed')
         except Exception as e: 
             print('Summarize error: {}'.format(traceback.format_exc()))
+            logging.warning('Summarize error')
+            logging.error(e, exc_info=True)
             traceback.print_exc()
         print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
 
@@ -360,8 +363,10 @@ class Cyberlog(commands.Cog):
                     self.bot.lightningUsers[u['user_id']] = u
                     lightningUsers[u['user_id']] = u
                 else: await database.DeleteUser(u['user_id'], self.bot)
-        except:
+        except Exception as e:
             print('Database sync error:')
+            logging.warning('Database sync error')
+            logging.error(e, exc_info=True)
             traceback.print_exc()
         if notify: await self.imageLogChannel.send('Synchronized')
         print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s', notify)
@@ -2304,7 +2309,9 @@ class Cyberlog(commands.Cog):
                                     if not (await database.GetUser(after)).get('customStatusHistory'):
                                         asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                             except AttributeError as e: 
-                                print(f'Attribute error: {e}')
+                                print(f'Attribute error during status: {e}')
+                                logging.warning('Attribute error during status')
+                                logging.error(e, exc_info=True)
                                 traceback.print_exc()
                             except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
