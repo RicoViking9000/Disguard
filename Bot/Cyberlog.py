@@ -331,7 +331,7 @@ class Cyberlog(commands.Cog):
             await self.imageLogChannel.send('Completed')
         except Exception as e: 
             print('Summarize error: {}'.format(traceback.format_exc()))
-            traceback.print_exc(file='output.txt')
+            traceback.print_exc()
         print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
 
     async def synchronizeDatabase(self, notify=False):
@@ -362,7 +362,7 @@ class Cyberlog(commands.Cog):
                 else: await database.DeleteUser(u['user_id'], self.bot)
         except:
             print('Database sync error:')
-            traceback.print_exc(file='output.txt')
+            traceback.print_exc()
         if notify: await self.imageLogChannel.send('Synchronized')
         print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s', notify)
 
@@ -401,7 +401,7 @@ class Cyberlog(commands.Cog):
             for server in self.bot.guilds: asyncio.create_task(self.redditFeedHandler(server))
         except: 
             print(f'Reddit sync fail: ')
-            traceback.print_exc(file='output.txt')
+            traceback.print_exc()
     
     async def redditFeedHandler(self, server):
         '''Handles starting/stopping of reddit feeds for servers, along with ensuring there are no duplicates, etc.'''
@@ -431,10 +431,10 @@ class Cyberlog(commands.Cog):
                     await channel.send(embed=embed)
                 except: 
                     print(f'reddit feed submission error')
-                    traceback.print_exc(file='output.txt')
+                    traceback.print_exc()
         except:
             print(f"reddit feed error: {server.name} {server.id}")
-            traceback.print_exc(file='output.txt')
+            traceback.print_exc()
             await asyncio.sleep(60)
             asyncio.create_task(self.createRedditStream(server, data, attempt + 1))
     
@@ -2305,7 +2305,7 @@ class Cyberlog(commands.Cog):
                                         asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                             except AttributeError as e: 
                                 print(f'Attribute error: {e}')
-                                traceback.print_exc(file='output.txt')
+                                traceback.print_exc()
                             except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
                         if before.status == newMemb.status and before.name != newMemb.name and not serverIsGimped(after.guild): await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
@@ -3250,7 +3250,7 @@ class Cyberlog(commands.Cog):
         if isinstance(error, commands.CommandNotFound): return
         embed = None
         alert = self.emojis['alert']
-        traceback.print_exception(type(error), error, error.__traceback__, file='output.txt')
+        traceback.print_exception(type(error), error, error.__traceback__)
         m = await ctx.send(f'{alert} {error}')
         if type(error) in (commands.MissingPermissions, commands.MissingRequiredArgument): return
         filename = datetime.datetime.now().strftime('%m%d%Y%H%M%S%f')
