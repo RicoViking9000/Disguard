@@ -196,7 +196,7 @@ class Cyberlog(commands.Cog):
                         lightningUsers[objectID] = fullDocument
                     if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys(): asyncio.create_task(self.redditFeedHandler(self.bot.get_guild(objectID)))
                     if change['operationType'] == 'update' and any([word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]): continue
-                    print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=5):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
+                    #print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=5):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
     
     @tasks.loop(hours = 6)
@@ -332,8 +332,6 @@ class Cyberlog(commands.Cog):
             await self.imageLogChannel.send('Completed')
         except Exception as e: 
             print('Summarize error: {}'.format(traceback.format_exc()))
-            logging.warning('Summarize error')
-            logging.error(e, exc_info=True)
             traceback.print_exc()
         print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
 
@@ -365,8 +363,6 @@ class Cyberlog(commands.Cog):
                 else: await database.DeleteUser(u['user_id'], self.bot)
         except Exception as e:
             print('Database sync error:')
-            logging.warning('Database sync error')
-            logging.error(e, exc_info=True)
             traceback.print_exc()
         if notify: await self.imageLogChannel.send('Synchronized')
         print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s', notify)
@@ -2284,18 +2280,21 @@ class Cyberlog(commands.Cog):
                 try:
                     if os.path.exists(savePath): os.remove(savePath)
                 except: pass
-        if before.guild_permissions != after.guild_permissions: await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
+        if before.guild_permissions != after.guild_permissions: 
+            await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
+            asyncio.create_task(database.VerifyUser(before, self.bot))
         #halfwayStart = datetime.datetime.now()
+        if after.guild.id == 403698615446536203: return
+        if serverIsGimped(after.guild) and not msg: return
         for g in self.bot.guilds:
-            if after.id in [m.id for m in g.members]:
+            if g.get_member(after.id):
                 targetServer = g
                 break
         #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
-        if after.guild.id == 403698615446536203: return
         if before.status != after.status:
             if after.guild.id == targetServer.id:
-                if after.status == discord.Status.offline and not serverIsGimped(after.guild): await updateLastOnline(after, datetime.datetime.now())
-                if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]) and not serverIsGimped(after.guild): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+                if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
+                if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
         if before.activities != after.activities:
             '''This is for LastActive information and custom status history'''
             if after.guild.id == targetServer.id:
@@ -2310,13 +2309,10 @@ class Cyberlog(commands.Cog):
                                         asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
                             except AttributeError as e: 
                                 print(f'Attribute error during status: {e}')
-                                logging.warning('Attribute error during status')
-                                logging.error(e, exc_info=True)
                                 traceback.print_exc()
                             except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
                         newMemb = before.guild.get_member(before.id)
-                        if before.status == newMemb.status and before.name != newMemb.name and not serverIsGimped(after.guild): await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
-        if before.guild_permissions != after.guild_permissions: asyncio.create_task(database.VerifyUser(before, self.bot))
+                        if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
