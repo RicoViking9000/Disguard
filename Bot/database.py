@@ -301,7 +301,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
                 if not serverMember: bulkRemovals.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}))
                 else:
                     if serverMember.name != member['name']: bulkUpdates.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': serverMember.id}, {'$set': {'members.$.name': serverMember.name}}))
-            if bulkUpdates or bulkRemovals: await servers.bulk_write(bulkUpdates + bulkRemovals)
+            if bulkUpdates or bulkRemovals: await servers.bulk_write(bulkUpdates + bulkRemovals, ordered=False)
     print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds if includeServer else "N/A"}s\n Members only: {(datetime.datetime.now() - started2).seconds if includeMembers else "N/A"}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     return (serv.get('name'), serv.get('server_id'))
 

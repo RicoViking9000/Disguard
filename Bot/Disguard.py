@@ -450,6 +450,11 @@ async def nameVerify(ctx):
     await database.NameVerify(ctx.guild)
     await ctx.send('Successful')
 
+@bot.event()
+async def on_error(event):
+    traceback.print_exc()
+    traceback.print_exc(file='output.txt')
+
 @commands.is_owner()
 @bot.command(aliases=['status'])
 async def _status(ctx):
