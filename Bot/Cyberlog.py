@@ -196,7 +196,7 @@ class Cyberlog(commands.Cog):
                         lightningUsers[objectID] = fullDocument
                     if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys(): asyncio.create_task(self.redditFeedHandler(self.bot.get_guild(objectID)))
                     if change['operationType'] == 'update' and any([word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]): continue
-                    #print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=5):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
+                    print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=5):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
     
     @tasks.loop(hours = 6)
