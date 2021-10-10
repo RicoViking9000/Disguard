@@ -285,23 +285,30 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             #membDict[m.name] = m.id
             serverMembIDs.add(m.id)
             if len(members) < 1: membersToUpdate.append({'id': m.id, 'name': m.name, 'warnings': spam['warn']})
-        databaseMembIDs = set(m.get('id') for m in members)
         if len(members) < 1: 
             await servers.update_one({'server_id': s.id}, {'$set': {'members': membersToUpdate}}, True)
         else: #Need to update existing members
+            fullMembDict = {}
+            for m in members: fullMembDict[m['id']] = m
+            databaseMembIDs = set(m.get('id') for m in members)
             toInsert = []
             for m in serverMembIDs:
                 if m not in databaseMembIDs:
-                    toInsert.append({'id': m, 'name': membDict[str(m)], 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []}) #Add members that aren't in the database yet
-            await servers.update_one({'server_id': s.id}, {"$push": {'members': {'$each': toInsert}}}, True)
+                    #toInsert.append({'id': m, 'name': membDict[str(m)], 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []}) #Add members that aren't in the database yet
+                    fullMembDict[m] = {'id': m, 'name': membDict[str(m)], 'warnings': spam['warn']}
+            #await servers.update_one({'server_id': s.id}, {"$push": {'members': {'$each': toInsert}}}, True)
             bulkUpdates = []
             bulkRemovals = []
             for member in members:
                 serverMember = s.get_member(member['id'])
-                if not serverMember: bulkRemovals.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}))
+                if not serverMember:
+                    #bulkRemovals.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}))
+                    fullMembDict.pop(member['id'])
                 else:
-                    if serverMember.name != member['name']: bulkUpdates.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': serverMember.id}, {'$set': {'members.$.name': serverMember.name}}))
-            if bulkUpdates or bulkRemovals: await servers.bulk_write(bulkUpdates + bulkRemovals, ordered=False)
+                    #if serverMember.name != member['name']: bulkUpdates.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': serverMember.id}, {'$set': {'members.$.name': serverMember.name}}))
+                    if serverMember.name != member['name']: fullMembDict[member['id']].update({'name': serverMember.name})
+            #if bulkUpdates or bulkRemovals: await servers.bulk_write(bulkUpdates + bulkRemovals, ordered=False)
+            await servers.update_one({'server_id': s.id}, {'$set': {'members': list(fullMembDict.values())}})
     print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds if includeServer else "N/A"}s\n Members only: {(datetime.datetime.now() - started2).seconds if includeMembers else "N/A"}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     return (serv.get('name'), serv.get('server_id'))
 

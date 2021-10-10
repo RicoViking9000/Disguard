@@ -993,7 +993,10 @@ class Cyberlog(commands.Cog):
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
         try:
             if not logExclusions(after.channel, after.author): return #Check the exclusion settings
-        except: return
+        except: 
+            print('log exclusion error')
+            traceback.print_exc()
+            return
         await self.MessageEditHandler(before, after, received)
 
     @commands.Cog.listener()
@@ -1018,7 +1021,10 @@ class Cyberlog(commands.Cog):
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
         try:
             if not logExclusions(after.channel, author): return #Check the exclusion settings
-        except: return
+        except:
+            print('log exclusion error')
+            traceback.print_exc()
+            return
         c = logChannel(g, 'message')
         if c is None: return #Invalid log channel
         try:
