@@ -893,7 +893,9 @@ class Cyberlog(commands.Cog):
         try: 
             #msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, file=f, tts=settings['tts'], reference=after if settings['plainText'] else None, allowed_mentions=discord.AllowedMentions(users=False))
             msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
-            if not settings['plainText']: await msg.add_reaction(self.emojis['threeDots'])
+            if not settings['plainText']: 
+                try: await msg.add_reaction(self.emojis['threeDots'])
+                except: pass
         except discord.HTTPException as e: return await c.send(f'Message edit log error: {e}')
         with open(path, 'w+') as fl:
             fl.write(indexData) #push the changes to the json file
