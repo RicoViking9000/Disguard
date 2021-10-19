@@ -23,6 +23,7 @@ import emojis
 import asyncpraw
 import textwrap
 import logging
+import aiofiles
 
 bot = None
 serverPurge = {}
@@ -467,15 +468,16 @@ class Cyberlog(commands.Cog):
         try: os.makedirs(path)
         except FileExistsError: pass
         try:
-            with open(f'{path}/{message.channel.id}.json', 'r+') as f: 
-                try: indexData = json.load(f)
+            async with aiofiles.open(f'{path}/{message.channel.id}.json', 'r+') as f:
+                read = await f.read()
+                try: indexData = json.loads(read)
                 except json.JSONDecodeError: indexData = {}
                 indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if message.channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
         except (FileNotFoundError, PermissionError): 
             indexData = {}
         indexData = json.dumps(indexData, indent=4)
-        with open(f'{path}/{message.channel.id}.json', 'w+') as f:
-            f.write(indexData)
+        async with aiofiles.open(f'{path}/{message.channel.id}.json', 'w+') as f:
+            await f.write(indexData)
         if message.author.bot: return
         if self.bot.lightningLogging[message.guild.id]['cyberlog'].get('image') and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
