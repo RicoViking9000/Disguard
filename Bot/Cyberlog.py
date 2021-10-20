@@ -4218,34 +4218,37 @@ class Cyberlog(commands.Cog):
     async def FindMoreMembers(self, members, arg):
         arg=arg.lower()
         def check(m):
-            if type(m) is discord.Member and m.nick is not None and m.nick.lower() == arg.lower(): return 'Nickname is \'{}\''.format(m.nick.replace(arg, '**{}**'.format(arg))), compareMatch(arg, m.nick)
-            if arg in m.name.lower(): return 'Username is \'{}\''.format(m.name).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.name)
-            if arg in m.discriminator: return 'Discriminator is \'{}\''.format(m.discriminator).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.discriminator)
-            if arg in str(m.id): return 'ID matches: \'{}\''.format(m.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(m.id))
-            if arg in '<@!{}>'.format(m.id): return 'Mentioned', 100
-            if type(m) is discord.Member and len(m.activities) > 0:
-                if any(arg in a.name.lower() for a in m.activities if a.name is not None): return 'Playing \'{}\''.format([a.name for a in m.activities if a.name is not None and arg in a.name.lower()][0]).replace(arg, '**{}**'.format(arg)), compareMatch(arg, [a.name for a in m.activities if arg in a.name.lower()][0])
-                if any(a.type is discord.ActivityType.listening for a in m.activities):
-                    for a in m.activities:
-                        try:
-                            if a.type is discord.ActivityType.listening:
-                                if arg in a.title.lower(): return 'Listening to {} by {}'.format(a.title.replace(arg, '**{}**'.format(arg)), ', '.join(a.artists)), compareMatch(arg, a.title)
-                                elif any([arg in s.lower() for s in a.artists]): return 'Listening to {} by {}'.format(a.title, ', '.join(a.artists).replace(arg, '**{}**'.format(arg))), compareMatch(arg, [s for s in a.artists if arg in s.lower()][0])
-                        except: pass
-            if type(m) is discord.Member and arg in m.joined_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Server join date appears to match your search', compareMatch(arg, m.created_at.strftime('%A%B%d%Y%B%Y'))
-            if arg in m.created_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Account creation date appears to match your search', compareMatch(arg, m.created_at.strftime('%A%B%d%Y%B%Y'))
-            if type(m) is discord.Member and arg in str(m.status): return 'Member is \'{}\''.format(str(m.status).replace(arg, '**{}**'.format(arg))), compareMatch(arg, str(m.status))
-            if type(m) is discord.Member and any(s in arg for s in ['mobile', 'phone']) and m.is_on_mobile(): return 'Is on mobile app'.replace(arg, '**{}**'.format(arg)), compareMatch(arg, 'mobile')
-            if type(m) is discord.Member and (any(arg in r.name.lower() for r in m.roles) or any(arg in str(r.id) for r in m.roles)): return 'Has role matching **{}**'.format(arg), compareMatch(arg, [r.name for r in m.roles if arg in r.name.lower() or arg in str(r.id)][0])
-            if type(m) is discord.Member and any([arg in [p[0] for p in iter(m.guild_permissions) if p[1]]]): return 'Has permissions: \'{}\''.format([p[0] for p in iter(m.guild_permissions) if p[1] and arg in p[0]][0].replace(arg, '**{}**'.format(arg))), compareMatch(arg, [p[0] for p in iter(m.guild_permissions) if p[1] and arg in p[0]][0])
-            if 'bot' in arg and m.bot: return 'Bot account', compareMatch(arg, 'bot')
-            if type(m) is not discord.Member: return None
-            if m.voice is None: return None #Saves multiple checks later on since it's all voice attribute matching
-            if any(s in arg for s in ['voice', 'audio', 'talk']): return 'In voice chat', compareMatch(arg, 'voice')
-            if 'mute' in arg and (m.voice.mute or m.voice.self_mute): return 'Muted', compareMatch(arg, 'mute')
-            if 'deaf' in arg and (m.voice.deaf or m.voice.self_deaf): return 'Deafened', compareMatch(arg, 'deaf')
-            if arg in m.voice.channel.name.lower(): return 'Current voice channel matches **{}**'.format(arg), compareMatch(arg, m.voice.channel.name)
-            return None
+            try:
+                if not m: return None
+                if type(m) is discord.Member and m.nick is not None and m.nick.lower() == arg.lower(): return 'Nickname is \'{}\''.format(m.nick.replace(arg, '**{}**'.format(arg))), compareMatch(arg, m.nick)
+                if arg in m.name.lower(): return 'Username is \'{}\''.format(m.name).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.name)
+                if arg in m.discriminator: return 'Discriminator is \'{}\''.format(m.discriminator).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.discriminator)
+                if arg in str(m.id): return 'ID matches: \'{}\''.format(m.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(m.id))
+                if arg in '<@!{}>'.format(m.id): return 'Mentioned', 100
+                if type(m) is discord.Member and len(m.activities) > 0:
+                    if any(arg in a.name.lower() for a in m.activities if a.name is not None): return 'Playing \'{}\''.format([a.name for a in m.activities if a.name is not None and arg in a.name.lower()][0]).replace(arg, '**{}**'.format(arg)), compareMatch(arg, [a.name for a in m.activities if arg in a.name.lower()][0])
+                    if any(a.type is discord.ActivityType.listening for a in m.activities):
+                        for a in m.activities:
+                            try:
+                                if a.type is discord.ActivityType.listening:
+                                    if arg in a.title.lower(): return 'Listening to {} by {}'.format(a.title.replace(arg, '**{}**'.format(arg)), ', '.join(a.artists)), compareMatch(arg, a.title)
+                                    elif any([arg in s.lower() for s in a.artists]): return 'Listening to {} by {}'.format(a.title, ', '.join(a.artists).replace(arg, '**{}**'.format(arg))), compareMatch(arg, [s for s in a.artists if arg in s.lower()][0])
+                            except: pass
+                if type(m) is discord.Member and arg in m.joined_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Server join date appears to match your search', compareMatch(arg, m.created_at.strftime('%A%B%d%Y%B%Y'))
+                if arg in m.created_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Account creation date appears to match your search', compareMatch(arg, m.created_at.strftime('%A%B%d%Y%B%Y'))
+                if type(m) is discord.Member and arg in str(m.status): return 'Member is \'{}\''.format(str(m.status).replace(arg, '**{}**'.format(arg))), compareMatch(arg, str(m.status))
+                if type(m) is discord.Member and any(s in arg for s in ['mobile', 'phone']) and m.is_on_mobile(): return 'Is on mobile app'.replace(arg, '**{}**'.format(arg)), compareMatch(arg, 'mobile')
+                if type(m) is discord.Member and (any(arg in r.name.lower() for r in m.roles) or any(arg in str(r.id) for r in m.roles)): return 'Has role matching **{}**'.format(arg), compareMatch(arg, [r.name for r in m.roles if arg in r.name.lower() or arg in str(r.id)][0])
+                if type(m) is discord.Member and any([arg in [p[0] for p in iter(m.guild_permissions) if p[1]]]): return 'Has permissions: \'{}\''.format([p[0] for p in iter(m.guild_permissions) if p[1] and arg in p[0]][0].replace(arg, '**{}**'.format(arg))), compareMatch(arg, [p[0] for p in iter(m.guild_permissions) if p[1] and arg in p[0]][0])
+                if 'bot' in arg and m.bot: return 'Bot account', compareMatch(arg, 'bot')
+                if type(m) is not discord.Member: return None
+                if m.voice is None: return None #Saves multiple checks later on since it's all voice attribute matching
+                if any(s in arg for s in ['voice', 'audio', 'talk']): return 'In voice chat', compareMatch(arg, 'voice')
+                if 'mute' in arg and (m.voice.mute or m.voice.self_mute): return 'Muted', compareMatch(arg, 'mute')
+                if 'deaf' in arg and (m.voice.deaf or m.voice.self_deaf): return 'Deafened', compareMatch(arg, 'deaf')
+                if arg in m.voice.channel.name.lower(): return 'Current voice channel matches **{}**'.format(arg), compareMatch(arg, m.voice.channel.name)
+                return None
+            except: return None
         return [{'member': m, 'check': check(m)} for m in members if check(m) is not None] #list of dicts
         
     async def FindMoreRoles(self, g: discord.Guild, arg):
