@@ -37,6 +37,7 @@ tempDir = 'Attachments/Temp' #Path to save images for profile picture changes an
 gimpedServers = [403698615446536203, 460611346837405696, 366019576661671937]
 try: os.makedirs(tempDir)
 except FileExistsError: pass
+stockImage = 'https://www.femalefirst.co.uk/image-library/land/500/r/rick-astley-whenever-you-need-somebody-album-cover.jpg'
 
 summaries = {}
 grabbedSummaries = {}
