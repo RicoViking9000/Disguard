@@ -379,23 +379,27 @@ class Cyberlog(commands.Cog):
             for server in self.bot.guilds:
                 for channel in server.text_channels:
                     try:
-                        path='Attachments/{}/{}'.format(server.id, channel.id)
-                        for fl in os.listdir(path):
-                            with open('{}/{}/{}/{}.txt'.format(indexes,server.id, channel.id, fl)) as f:
-                                timestamp = datetime.datetime.strptime(list(enumerate(f))[0][1], '%b %d, %Y - %I:%M:%S %p')
+                        with open(f'{indexes}/{server.id}/{channel.id}.json', 'r+') as f:
+                            indexData = json.load(f)
+                        #path='Attachments/{}/{}'.format(server.id, channel.id)
+                        path = f'Attachments/{server.id}/{channel.id}'
+                        for folder in os.listdir(path):
+                            timestamp = datetime.datetime.fromisoformat(indexData[folder]['timestamp0'])
                             if (datetime.datetime.utcnow() - timestamp).days > 365:
-                                removal.append(path+fl)
+                                removal.append(folder) #Mark year-old attachments for deletion
+                            elif not os.listdir(folder):
+                                removal.append(folder) #Mark empty folders for deletion
                     except: pass
-            for path in removal: 
+            for folder in removal: 
                 try: shutil.rmtree(path)
-                except Exception as e: print(f'Attachment Deletion fail: {e}')
+                except Exception as e: print(f'Attachment folder deletion fail: {e}')
             for fl in outstandingTempFiles:
                 try: shutil.rmtree((os.path.join(tempDir, fl)))
                 except:
                     try: os.remove(os.path.join(tempDir, fl))
                     except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
-            print('Removed {} attachments in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
-        except Exception as e: print('Fail: {}'.format(e))
+            print('Removed {} items in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
+        except Exception as e: print('Attachment deletion fail: {}'.format(e))
 
     @tasks.loop(hours=1)
     async def syncRedditFeeds(self):
@@ -936,14 +940,14 @@ class Cyberlog(commands.Cog):
                         embed.clear_fields()
                         embed.add_field(name='Before', value=' '.join(beforeParsed), inline=False)
                         embed.add_field(name='After', value=' '.join(afterParsed), inline=False)
-                        embed.description=embed.description[:embed.description.find({DisguardLongTimestamp(received)}) + len({DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n> **ℹ: Full edited message**\n{qlf}📜: Message edit history\n{qlf}🗒: Message in context'
+                        embed.description=embed.description[:embed.description.find(DisguardLongTimestamp(received)) + len(DisguardLongTimestamp(received))] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n> **ℹ: Full edited message**\n{qlf}📜: Message edit history\n{qlf}🗒: Message in context'
                         await msg.edit(content=None, embed=embed)
                         for r in ['⬅', '📜', '🗒']: await msg.add_reaction(r)
                     elif str(result[0]) == '📜': 
                         try:
                             await msg.clear_reactions()
                             embed.clear_fields()
-                            embed.description=embed.description[:embed.description.find({DisguardLongTimestamp(received)}) + len({DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
+                            embed.description=embed.description[:embed.description.find(DisguardLongTimestamp(received)) + len(DisguardLongTimestamp(received))] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
                             with open(f'{indexes}/{guild.id}/{channel.id}.json', 'r+') as f:
                                 indexData = json.load(f)
                                 currentMessage = indexData[str(after.id)]
@@ -962,7 +966,7 @@ class Cyberlog(commands.Cog):
                     elif str(result[0]) == '🗒':
                         try:
                             embed.clear_fields()
-                            embed.description=embed.description[:embed.description.find({DisguardLongTimestamp(received)}) + len({DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
+                            embed.description=embed.description[:embed.description.find(DisguardLongTimestamp(received)) + len(DisguardLongTimestamp(received))] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
                             messagesBefore = list(reversed(await after.channel.history(limit=6, before=after).flatten()))
                             messagesAfter = await after.channel.history(limit=6, after=after, oldest_first=True).flatten()
                             combinedMessages = messagesBefore + [after] + messagesAfter
@@ -2968,8 +2972,8 @@ class Cyberlog(commands.Cog):
             #     f"{((self.emojis['neonRedDisconnect'] if theme == 1 else self.emojis['darkRedDisconnect']) if settings['library'] > 0 else '📥') if settings['context'] > 0 else ''}{'Joined' if settings['context'] < 2 else ''}: {(self.channelEmoji(after.channel) if settings['library'] > 0 else '🎙') if settings['context'] > 0 else ''}{after.channel}"
             # )
             lines = (
-                f"{(self.emojis['darkGreenConnect'] if settings['library'] > 0 else '📤') if settings['context'][1] > 0 else ''}{'Left' if settings['context'][1] < 2 else ''}: {(self.channelEmoji(before.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{before.channel}",
-                f"{(self.emojis['darkRedDisconnect'] if settings['library'] > 0 else '📥') if settings['context'][1] > 0 else ''}{'Joined' if settings['context'][1] < 2 else ''}: {(self.channelEmoji(after.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{after.channel}"
+                f"{(self.emojis['darkRedDisconnect'] if settings['library'] > 0 else '📤') if settings['context'][1] > 0 else ''}{'Left' if settings['context'][1] < 2 else ''}: {(self.channelEmoji(before.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{before.channel}",
+                f"{(self.emojis['darkGreenConnect'] if settings['library'] > 0 else '📥') if settings['context'][1] > 0 else ''}{'Joined' if settings['context'][1] < 2 else ''}: {(self.channelEmoji(after.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{after.channel}"
             )
             if after.afk: 
                 content = f'{member} went AFK from {before.channel}'
