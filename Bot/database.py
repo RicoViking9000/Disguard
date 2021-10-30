@@ -318,7 +318,7 @@ async def VerifyUsers(b: commands.Bot):
     await asyncio.gather(*[VerifyUser(m, b) for m in b.users])
     await users.delete_many({'user_id': {'$nin': [m.id for m in b.users]}}) #Remove all of the user data that no longer exists
     
-async def VerifyUser(m: discord.Member, b: commands.Bot):
+async def VerifyUser(m: discord.User, b: commands.Bot):
     '''Ensures that an individual user is in the database, and checks its variables'''
     #started = datetime.datetime.now()
     current = await users.find_one({'user_id': m.id})
@@ -589,10 +589,10 @@ async def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.
             return False
     return True
 
-async def DashboardManageServer(server: discord.Guild, member: discord.Member):
+async def DashboardManageServer(server: discord.Guild, user: discord.User):
     '''Initialize dashboard permissions; which servers a member can manage'''
-    if member.id == 247412852925661185: return True
-    return await ManageServer(member)
+    if user.id == 247412852925661185: return True
+    return await ManageServer(server.get_member(user.id))
 
 async def GetSummarize(s: discord.Guild, mod):
     '''Get the summarize value'''
