@@ -20,6 +20,7 @@ db = None
 servers = None
 users = None
 disguard = None
+bot: commands.Bot = None
 
 lastVerifiedServer = {}
 lastVerifiedUser = {}
@@ -145,6 +146,8 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             lastVerifiedServer[s.id] = datetime.datetime.now()
         elif datetime.datetime.now() < lastVerifiedServer.get(s.id) + datetime.timedelta(minutes=5):
             return
+    global bot
+    if not bot: bot = b
     print('Verifying server: {} - {}'.format(s.name, s.id))
     started = datetime.datetime.now()
     serv = await servers.find_one({"server_id": s.id})
@@ -538,7 +541,8 @@ async def DefaultMemberExclusions(server: discord.Guild):
     '''For now, return array of the ID of server owner. Will be customizable later'''
     return [server.owner.id]
 
-async def ManageServer(server: discord.Guild, member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
+async def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
+    server = bot.get_guild(member.guild.id)
     if member.id == server.owner.id: return True
     if member.id == 247412852925661185: return True
     for a in member.roles:
