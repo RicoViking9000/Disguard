@@ -538,8 +538,8 @@ async def DefaultMemberExclusions(server: discord.Guild):
     '''For now, return array of the ID of server owner. Will be customizable later'''
     return [server.owner.id]
 
-async def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
-    if member.id == member.guild.owner.id: return True
+async def ManageServer(server: discord.Guild, member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
+    if member.id == server.owner.id: return True
     if member.id == 247412852925661185: return True
     for a in member.roles:
         if a.permissions.administrator or a.permissions.manage_guild:
@@ -592,7 +592,7 @@ async def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.
 async def DashboardManageServer(server: discord.Guild, user: discord.User):
     '''Initialize dashboard permissions; which servers a member can manage'''
     if user.id == 247412852925661185: return True
-    return await ManageServer(server.get_member(user.id))
+    return await ManageServer(server, server.get_member(user.id))
 
 async def GetSummarize(s: discord.Guild, mod):
     '''Get the summarize value'''
