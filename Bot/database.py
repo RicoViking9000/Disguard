@@ -596,7 +596,7 @@ async def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.
 async def DashboardManageServer(server: discord.Guild, user: discord.User):
     '''Initialize dashboard permissions; which servers a member can manage'''
     if user.id == 247412852925661185: return True
-    return await ManageServer(server, server.get_member(user.id))
+    return await ManageServer(server.get_member(user.id))
 
 async def GetSummarize(s: discord.Guild, mod):
     '''Get the summarize value'''
