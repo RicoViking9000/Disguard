@@ -598,7 +598,7 @@ async def DashboardManageServer(server: discord.Guild, user: discord.User):
     if user.id == 247412852925661185: return True
     member = server.get_member(user.id)
     if not member: return False
-    return await ManageServer(server.get_member(member))
+    return await ManageServer(member)
 
 async def GetSummarize(s: discord.Guild, mod):
     '''Get the summarize value'''
