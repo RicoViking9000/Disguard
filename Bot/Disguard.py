@@ -23,6 +23,7 @@ import shutil
 import asyncpraw
 import sys
 import py7zr
+import aiofiles
 
 
 booted = False
@@ -143,19 +144,38 @@ async def indexMessages(server, channel, full=False):
     with open(path) as f:
         try: indexData = json.load(f)
         except: indexData = {}
-    try: 
+    try:
+        messageExistsCounter = 0
         async for message in channel.history(limit=None, oldest_first=full):
             if str(message.id) in indexData.keys() and not full:
-                break
+                if messageExistsCounter == 100: 
+                    messageExistsCounter = 0
+                    break
+                messageExistsCounter += 1
             indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
             if not message.author.bot and (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
-                attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-                try: os.makedirs(attach)
-                except FileExistsError: pass
-                for attachment in message.attachments:
-                    if attachment.size / 1000000 < 8:
-                        try: await attachment.save('{}/{}'.format(attach, attachment.filename))
-                        except discord.HTTPException: pass
+                path = f'Attachments/{message.guild.id}/fileDirectory.json'
+                URLs = []
+                for a in message.attachments:
+                    savePath = f'Attachments/Temp/{a.filename}'
+                    await a.save(savePath)
+                    m = await bot.get_cog('Cyberlog').attachmentChannel.send(file=discord.File(savePath))
+                    URLs.append(m.jump_url)
+                try:
+                    async with aiofiles.open(path, 'r+') as f:
+                        read = await f.read()
+                        try: attachmentDirectory = json.loads(read)
+                        except json.JSONDecodeError: attachmentDirectory = {}
+                        attachmentDirectory[message.id] = URLs
+                except (FileNotFoundError, PermissionError):
+                    attachmentDirectory = {}
+                # attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+                # try: os.makedirs(attach)
+                # except FileExistsError: pass
+                # for attachment in message.attachments:
+                #     if attachment.size / 1000000 < 8:
+                #         try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                #         except discord.HTTPException: pass
             if full: await asyncio.sleep(0.0025)
         indexData = json.dumps(indexData, indent=4)
         with open(path, "w+") as f:

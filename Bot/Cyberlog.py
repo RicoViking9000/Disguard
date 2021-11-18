@@ -146,6 +146,7 @@ class Cyberlog(commands.Cog):
         self.bot.lightningLogging = {}
         self.bot.lightningUsers = {}
         self.imageLogChannel = bot.get_channel(534439214289256478)
+        self.attachmentChannel = bot.get_channel(910598159963652126)
         self.globalLogChannel = bot.get_channel(566728691292438538)
         self.loading = self.emojis['loading']
         self.channelKeys = {'text': self.emojis['textChannel'], 'voice': self.emojis['voiceChannel'], 'category': self.emojis['folder'], 'private': self.emojis['hiddenVoiceChannel'], 'news': self.emojis['announcementsChannel'], 'store': self.emojis['storeChannel']}
@@ -477,7 +478,7 @@ class Cyberlog(commands.Cog):
                 read = await f.read()
                 try: indexData = json.loads(read)
                 except json.JSONDecodeError: indexData = {}
-                indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if message.channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
+                indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if message.channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
         except (FileNotFoundError, PermissionError): 
             indexData = {}
         indexData = json.dumps(indexData, indent=4)
@@ -485,13 +486,32 @@ class Cyberlog(commands.Cog):
             await f.write(indexData)
         if message.author.bot: return
         if self.bot.lightningLogging[message.guild.id]['cyberlog'].get('image') and len(message.attachments) > 0 and not message.channel.is_nsfw():
-            path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-            try: os.makedirs(path2)
-            except FileExistsError: pass
+            path2 = f'Attachments/{message.guild.id}/fileDirectory.json'
+            URLs = []
             for a in message.attachments:
-                if a.size / 1000000 < 8:
-                    try: await a.save(path2+'/'+a.filename)
-                    except discord.HTTPException: pass
+                savePath = f'{tempDir}/{a.filename}'
+                await a.save(savePath)
+                m = await self.attachmentChannel.send(file=discord.File(savePath))
+                URLs.append(m.jump_url)
+            try:
+                async with aiofiles.open(path2, 'r+') as f:
+                    read = await f.read()
+                    try: attachmentDirectory = json.loads(read)
+                    except json.JSONDecodeError: attachmentDirectory = {}
+            except (FileNotFoundError, PermissionError):
+                attachmentDirectory = {}
+            attachmentDirectory[str(message.id)] = URLs
+            attachmentDirectory = json.dumps(attachmentDirectory, indent=4)
+            async with aiofiles.open(path2, 'w+') as f:
+                await f.write(attachmentDirectory)
+
+            # path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+            # try: os.makedirs(path2)
+            # except FileExistsError: pass
+            # for a in message.attachments:
+            #     if a.size / 1000000 < 8:
+            #         try: await a.save(path2+'/'+a.filename)
+            #         except discord.HTTPException: pass
 
     async def jumpLinkQuoteContext(self, message: discord.Message):
         try: enabled = self.bot.lightningLogging.get(message.guild.id).get('jumpContext')
@@ -1084,6 +1104,27 @@ class Cyberlog(commands.Cog):
                 except discord.HTTPException:
                     fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
         except OSError: pass
+        if not attachments: #Check the attachment channel
+            path2 = f'Attachments/{g.id}/fileDirectory.json'
+            try:
+                async with aiofiles.open(path2, 'r+') as f:
+                    read = await f.read()
+                    try: attachmentDirectory = json.loads(read)
+                    except json.JSONDecodeError: attachmentDirectory = {}
+            except (FileNotFoundError, PermissionError):
+                attachmentDirectory = {}
+            if attachmentDirectory:
+                messageURLs = attachmentDirectory[str(payload.message_id)]
+                for u in messageURLs:
+                    converter = commands.MessageConverter()
+                    msg: discord.Message = await converter.convert(u)
+                    savePath = f'{tempDir}/{msg.attachments[0].filename}'
+                    await msg.attachments[0].save(savePath)
+                    attachments.append(savePath)
+                attachmentDirectory.pop(str(payload.message_id))
+                attachmentDirectory = json.dumps(attachmentDirectory, indent=4)
+                async with aiofiles.open(path2, 'w+') as f:
+                    await f.write(attachmentDirectory)
         if message is not None:
             author = self.bot.get_user(message.author.id)
             channel, created, content = message.channel, message.created_at, message.content
