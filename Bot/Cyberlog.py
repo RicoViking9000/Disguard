@@ -1122,17 +1122,18 @@ class Cyberlog(commands.Cog):
             except (FileNotFoundError, PermissionError):
                 attachmentDirectory = {}
             if attachmentDirectory:
-                messageURLs = attachmentDirectory[str(payload.message_id)]
-                for u in messageURLs:
-                    converter = commands.MessageConverter()
-                    msg: discord.Message = await converter.convert(u)
-                    savePath = f'{tempDir}/{msg.attachments[0].filename}'
-                    await msg.attachments[0].save(savePath)
-                    attachments.append(savePath)
-                attachmentDirectory.pop(str(payload.message_id))
-                attachmentDirectory = json.dumps(attachmentDirectory, indent=4)
-                async with aiofiles.open(path2, 'w+') as f:
-                    await f.write(attachmentDirectory)
+                if attachmentDirectory.get(str(payload.message_id)):
+                    messageURLs = attachmentDirectory[str(payload.message_id)]
+                    for u in messageURLs:
+                        converter = commands.MessageConverter()
+                        msg: discord.Message = await converter.convert(u)
+                        savePath = f'{tempDir}/{msg.attachments[0].filename}'
+                        await msg.attachments[0].save(savePath)
+                        attachments.append(savePath)
+                    attachmentDirectory.pop(str(payload.message_id))
+                    attachmentDirectory = json.dumps(attachmentDirectory, indent=4)
+                    async with aiofiles.open(path2, 'w+') as f:
+                        await f.write(attachmentDirectory)
         if message is not None:
             author = self.bot.get_user(message.author.id)
             channel, created, content = message.channel, message.created_at, message.content
