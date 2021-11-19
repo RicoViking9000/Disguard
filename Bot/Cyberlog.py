@@ -167,6 +167,7 @@ class Cyberlog(commands.Cog):
         self.channelCacheHelper = {}
         self.syncData.start()
         self.DeleteAttachments.start()
+        self.DeleteTemporaryFiles.start()
         self.trackChanges.start()
 
     def cog_unload(self):
@@ -401,6 +402,13 @@ class Cyberlog(commands.Cog):
                     except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
             print('Removed {} items in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
         except Exception as e: print('Attachment deletion fail: {}'.format(e))
+
+    @tasks.loop(minutes=15)
+    async def DeleteTemporaryFiles(self):
+        '''Temporary measure to ensure temp attachments get deleted while we're low on storage space'''
+        for f in os.listdir(tempDir):
+            try: os.remove(os.path.join(tempDir, f))
+            except: print(f'Temp files deletion error - {f}')
 
     @tasks.loop(hours=1)
     async def syncRedditFeeds(self):
