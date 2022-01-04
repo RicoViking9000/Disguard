@@ -93,7 +93,6 @@ class Birthdays(commands.Cog):
                                             print(f'Announcing birthday for {member.name}')
                                             try:
                                                 messages = [a for a in self.bot.lightningUsers[member.id]['birthdayMessages'] if server.id in a['servers']] if self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayMessages') else []
-                                                sentFirstMessage = self.bot.lightningLogging[server.id]['flags']['firstBirthdayAnnouncement']
                                                 newline = '\n'
                                                 messageVisibility = self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayMessages')
                                                 messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m['author']).name if m['author'] in [mb.id for mb in server.members] else m['authName']}: {m['message'] if messageVisibility else '<Content hidden due to privacy settings>'}" for m in messages])}'''
@@ -101,9 +100,6 @@ class Birthdays(commands.Cog):
                                                 else: 
                                                     if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
                                                     else: toSend = f"🍰 Greetings {server.name}! We have one anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
-                                                if not sentFirstMessage: 
-                                                    toSend += f"\n\nMessage from developer: Dear members, due to an unintentional database configuration error, all members' stored birthday information was unintentionally deleted on June 3. While this only applies to the birthday and not the age or wishlist data, it's an unfortunate event, and I am unable to recover the data. If you previously set your birthday before this event, and you would like to set your birthday again, use the `birthday` command or natural lingo by typing `my birthday is <month and day of when your birthday is e.g. july 31st>` to repopulate the Disguard birthdays index."
-                                                    await (await database.GetServerCollection()).update_one({'server_id': server.id}, {'$set': {'flags.firstBirthdayAnnouncement': True}})
                                                 try: 
                                                     m = await self.bot.get_channel(channel).send(toSend)
                                                     await m.add_reaction('🍰')
@@ -197,7 +193,6 @@ class Birthdays(commands.Cog):
                 draft.description='{}, would you like to set your birthday as **{}**?'.format(', '.join([a.name for a in target]), birthday.strftime('%A, %B %d, %Y'))
                 for member in target:
                     if bdays.get(member.id) is not None: draft.description+='\n\n{}I currently have {} as your birthday; reacting with the check will overwrite this.'.format('{}, '.format(member.name) if len(target) > 1 else '', bdays.get(member.id).strftime('%A, %B %d, %Y'))
-                draft.description+=f'\n\n*Note:* Due to a database configuration error, all members\' birthday data was unintentionally deleted on June 3. Unfortunately, there is no way for me to recover the overwritten data. If you previously had a birthday configured, or you would like to set your birthday for the first time, you can use the `birthday` command or natural lingo by typing `my birthday is <month and day of whenever your birthday is, e.g. july 31st>`.'
                 mess = await message.channel.send(embed=draft)
                 await mess.add_reaction('✅')
                 await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple processes for anyone to react to if necessary
@@ -283,7 +278,7 @@ class Birthdays(commands.Cog):
                 return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
             embed.description = f'''**{"AVAILABLE OPTIONS":–^70}**\n🍰: Browse birthday profiles\n📪: View more upcoming birthdays\n📆: Update your birthday\n🕯: Update your age\n📝: {"Manage" if len(wishlist) > 0 else "Create"} your wish list\n**{"UPCOMING BIRTHDAYS":–^70}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
             embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + newline) if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + newline) if len(weekBirthday) > 0 else ""}'''
-            embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}\n\n*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday.'''
+            embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}'''
             await message.edit(embed=embed)
             reactions = ['🍰', '📪',  '📆', '🕯', '📝', '👮‍♂️']
             for r in reactions: await message.add_reaction(r)
@@ -501,7 +496,6 @@ async def guestBirthdayViewer(self, ctx, target, cake=False):
     header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday'
     embed = discord.Embed(title=header, color=yellow[self.colorTheme(ctx.guild)], description=f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}')
     embed.description += f'''\n**{"AVAILABLE OPTIONS":–^70}**\n{f"{self.emojis['settings']}: Enter Action Overview" if target == ctx.author else ''}{f"{newline}🍰 (Only anyone other than {target.name}): Write a personal birthday message to {target.name}" if not cake else ''}'''
-    embed.description += f"\n\n*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday. To do that, use the `birthday` command or type `my birthday is july 31st` (replace july 31 with whenever your birthday is)\n\n"
     embed.set_author(name=target.name, icon_url=target.avatar_url) #V1.5
     #embed.set_author(name=target.name, icon_url=target.avatar.url) #V2.0
     embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')

@@ -422,7 +422,7 @@ class Cyberlog(commands.Cog):
     async def redditFeedHandler(self, server):
         '''Handles starting/stopping of reddit feeds for servers, along with ensuring there are no duplicates, etc.'''
         runningFeeds = self.redditThreads.get(server.id) or []
-        proposedFeeds = [entry['subreddit'] for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if self.bot.get_channel(entry['channel'])]
+        proposedFeeds = [entry['subreddit'] for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) if self.bot.get_channel(entry['channel'])]
         feedsToCreate = [entry for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if entry['subreddit'] not in runningFeeds and self.bot.get_channel(entry['channel']) and not (await self.bot.reddit.subreddit(entry['subreddit'], fetch=True)).over18]
         feedsToDelete = [entry for entry in runningFeeds if entry not in proposedFeeds]
         for feed in feedsToCreate: asyncio.create_task(self.createRedditStream(server, feed))
@@ -438,7 +438,7 @@ class Cyberlog(commands.Cog):
         channel = self.bot.get_channel(data['channel'])
         subreddit = await reddit.subreddit(data['subreddit'], fetch=True)
         try: self.redditThreads[server.id].append(data['subreddit']) #Marks that we have a running thread for this server & subreddit
-        except KeyError: self.redditThreads[server.id] = [data['subreddit']]
+        except (KeyError, AttributeError): self.redditThreads[server.id] = [data['subreddit']]
         try:
             async for submission in subreddit.stream.submissions(skip_existing=True):
                 try:

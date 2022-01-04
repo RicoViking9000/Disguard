@@ -1,10 +1,17 @@
-# Welcome users!
-This repository hosts the public code of the Discord bot named Disguard
-#### The bot is currently in Alpha phase
-Frequent updates are made to this code. Right now, the bot is actively being updated to bring it completely up to par with where its successor, RicoBot, is. Following that process, work will be done to bring my own fleet of features to the table.
-#### But you can take part in the development!
-The code is here on GitHub. Anyone who is proficient with coding can make a pull request, and if the changes are agreed upon, then your work may be featured in Disguard. If you would like to make suggestions, then invite the bot to your server and gather your impressions. Then you can join the support server (link below) and add suggestions. Those suggestions will be approved or denied by me, and I will work on them with time. As with any alpha development, I highly encourage people to leave their opinions on the bot.
-#### Questions about the code?
-[Join the Disguard support server](https://discord.gg/xSGujjz "Join the Disguard support server")
+# Disguard
+### An advanced logging, antispam, moderation, and cybersecurity bot working for you
+My vision with Disguard is to simplify the process of managing Discord servers, especially complex or large ones, with a variety of features. I seek to innovate in the field of management bots so that server managers can spend less time caught up keeping tabs on their server manually and more time interacting with their community and living their lives. Disguard provides features that automate or simplify many aspects of server management, such as sophisticated event logging, moderation commands, antispam filters, and more.
 
-[Explore the website](https://bit.ly/2disguard "Explore the website")
+Although the bot is fully open source and on GitHub, it's not intended to be distributed to be installed and run on individual machines like some Javascript bots do. Everyone is welcome to clone or submit pull requests to the repository if you wish to contribute to the project. If you were seeking to customize the bot yourself and need a small custom bot, feel free to contact me - I do make custom bots for free as long as they're relatively simple.
+
+### Disguard is emerging from its beta phase
+After having spent quite some time in beta phase, I now have plans to publicly release Disguard in early 2022. While Disguard was always public, it was never listed or advertised anywhere. When Disguard is officially released, it'll have a more "public" appearance and will be listed on sites such as top.gg, and I will submit a request to Discord for verification once it grows large enough.
+
+### Learn more about Disguard
+[Check out the website](https://bit.ly/2disguard "Check out the website")
+
+[Add Disguard to your server](https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot)
+
+[Join Disguard's official server](https://discord.gg/xSGujjz "Join Disguard's official server")
+
+

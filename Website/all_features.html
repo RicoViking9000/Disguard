@@ -5,7 +5,7 @@
         <link rel="stylesheet" type="text/css" href="Styles.css">
         <link rel='icon' type='image/png' href='icoDisguard.png'>
     </head>
-    <body>
+    <body class="narrowMargins">
         <header>
             <nav>
                 <ul id="navig">
@@ -20,86 +20,113 @@
             </nav>
         </header>
         <h4 class="featTitle pageHeader">All Features</h4>
-        <h4 class=featSubtitle>For specific questions on features, click the 'join support server' link up top. All features are customizable. Some features aren't available yet.</h4>
+        <h4 class=featSubtitle>If you want to learn more about the features Disguard offers, join the support server from the link bar on top and ask away!</h4>
         <div class=row>
             <div class=col1>
-                <p class=coltitle>Anti-spam</p>
-                <p class=colsub>Automation level can be customized</p>
+                <p class=coltitle>Antispam</p>
+                <p class=colsub>Your server is a place for its members, not raiders</p>
                 <ul class=collist>
-                    <li>Flag messages with</li>
+                    <li>Ability to flag messages with</li>
                     <ul class=collist>
-                        <li>Duplicate/repeated content</li>
+                        <li>Duplicated messages</li>
+                        <li>Flood (posting too much too quickly)</li>
                         <li>Too many emoji</li>
                         <li>Too many member or role tags</li>
-                        <li>Selfbot content</li>
                         <li>Too many capital letters</li>
-                        <li>Discord.gg invites</li>
-                        <li>Web addresses (http[s] URLs)</li>
+                        <li>Server invites</li>
+                        <li>Web addresses</li>
                         <li>Attempted @everyone/@here tags</li>
-                        <li>Spammed messages sent too quickly</li>
-                        <li>Common or custom profanity</li>
+                        <li>Certain types of attachments</li>
+                        <li>Custom profane words</li>
                     </ul>
-                    <li>Exclude channels/roles/members from anti-spam at will</li>
-                    <li>Choose to warn members, and how many if so</li>
-                    <li>Set up a consequence for any offense</li>
+                    <li>Exclude channels/roles/members from the antispam filter</li>
+                    <li>Choose how many warnings members should have</li>
+                    <li>Choose consequences for spamming</li>
                     <ul class=collist>
-                        <li>Do nothing, AutoMute, kick, ban, give custom role</li>
+                        <li>Nothing</li>
+                        <li>Automute</li>
+                        <li>Kick</li>
+                        <li>Ban</li>
+                        <li>Mute with custom role</li>
                     </ul>
-                    <li>Choose to allow consequences to be logged</li>
+                    <li>Choose to send logs when filter reacts</li>
                     <li>Choose to delete the flagged message</li>
-                </ul>
-            </div>
-            <div class=col2>
-                <p class=coltitle>Moderation</p>
-                <p class=colsub>All commands have reciprocals (unmute, etc)</p>
-                <ul class=collist>
-                    <li>Quick commands to</li>
-                    <ul class=collist>
-                        <li>Pin messages</li>
-                        <li>Purge messages</li>
-                        <li>Mute members</li>
-                        <li>Kick members</li>
-                        <li>Ban members</li>
-                        <li>Softban members</li>
-                        <ul class=collist>
-                            <li>Bans then immediately unbans members</li>
-                        </ul>
-                        <li>Add role(s) to members</li>
-                        <li>Lock server</li>
-                        <ul class=collist>
-                            <li>Prevents members from texting/talking anywhere</li>
-                        </ul>
-                        <li>Hide server</li>
-                        <ul class=collist>
-                            <li>Prevents members from entering channels, & effects of lock</li>
-                        </ul>
-                        <li>Lock channel</li>
-                        <li>Hide channel</li>
-                        <li>Warn members</li>
-                    </ul>
+                    <li>Option to block members under a certain account age from joining your server</li>
+                    <li>Option to ban members who repeatedly try to join your server in a short time span</li>
                 </ul>
             </div>
             <div class=col1>
-                <p class=coltitle>Logging & Security</p>
-                <p class=colsub>Keep guard of your server</p>
+                <p class=coltitle>Moderation</p>
+                <p class=colsub>Designed with speed and flexibility in mind</p>
                 <ul class=collist>
-                    <li>Complete logging suite</li>
+                    <li>Interactive purge command
+                        <ul>
+                            <li>Optional walkthrough menu allows for extreme precision with filters</li>
+                        </ul>
+                    </li>
+                    <li>Mute command</li>
+                    <li>Lockout command
+                        <ul>
+                            <li>Prevents channel access for affected members</li>
+                        </ul>
+                    </li>
+                    <li>Kick command</li>
+                    <li>Ban command</li>
+                    <li>Disguard is gearing up for new moderation features in light of its public release!</li>
+                </ul>
+            </div>
+            <div class=col1>
+                <p class=coltitle>Logging</p>
+                <p class=colsub>Never miss any server changes</p>
+                <ul class=collist>
+                    <li>Message pin, edit, delete logs</li>
                     <ul class=collist>
-                        <li><b>Message: Edit, Delete</b></li>
-                        <li><b>Channel: Create, Edit, Delete</b></li>
-                        <li><b>Role: Create, Edit, Delete</b></li>
-                        <li><b>Member: Join, Leave, Nickname, Role, Permissions</b></li>
-                        <li><b>Emoji: Create, Edit, Delete</b></li>
-                        <li>Audit log reading enables display of who changed what</li>
-                        <li>Settings can be customized invididually or by group</li>
-                        <li>Control embed color and channel</li>
-                        <li>Optional advanced mode enables embed viewer capability</li>
+                        <li>Enabling message indexing allows message logs to work even with old messages</li>
+                        <li>Message indexing allows ability to view message edit history</li>
+                        <li>Enabling attachment storing allows ability see message attachments with deleted message logs</li>
+                        <li>Enabling audit log reading displays who deleted or pinned messages</li>
                     </ul>
-                    <li>Get security rating for server or channel</li>
+                    <li>Channel create, edit, delete logs</li>
                     <ul class=collist>
-                        <li>Complex breakdown of things you may not consider</li>
+                        <li>Channel create logs display who has access to the channel</li>
+                        <li>When permission overwrites were updated, you'll see the changes broken down</li>
+                        <li>You'll see the channel's position in the list on all three log types</li>
+                        <li>See deleted message count on channel deletion if message indexing is enabled</li>
                     </ul>
-                    <li>Automation, combined with anti-spam, secures server</li>
-                    <li>Cybersecurity commands recommend improvements</li>
+                    <li>Role create, edit, delete logs</li>
+                    <ul class="collist">
+                        <li>When applicable, permission changes will be displayed on logs</li>
+                    </ul>
+                    <li>Member join, leave, update nickname, update role logs</li>
+                    <ul class="collist">
+                        <li>Member join logs will display member and invite information</li>
+                        <li>Member gain/lose role logs will display permission changes</li>
+                    </ul>
+                    <li>User name, avatar, discriminator change logs</li>
+                    <ul class="collist">
+                        <li>Avatar logs use permanent image storage so you can view media even months later</li>
+                    </ul>
+                    <li>Emoji create, update, delete logs</li>
+                    <li>Voice channel logs</li>
+                    <ul class="collist">
+                        <li>Option to only enable moderator-enforced options or all options</li>
+                        <li>Option to post activity summary upon a member ending their voice session</li>
+                    </ul>
+                    <li>Miscallaneous logs</li>
+                    <ul class="collist">
+                        <li>Ghost reaction logging</li>
+                    </ul>
+                    <li>Enabling audit log reading displays the moderator behind an action</li>
+                    <li>Option to repost a log upon its deletion if mods intend to hide their actions</li>
+                    <li>Logs provide customizable features per category</li>
+                    <ul class="collist">
+                        <li>Display only emojis, emojis and text, or only text in embed titles/descriptions</li>
+                        <li>Use unicode emojis or custom emojis consistent with the Discord UI</li>
+                        <li>Enable or disable media in embed author, thumbnail, and image fields</li>
+                        <li>Enable or disable embed timestamp fields</li>
+                        <li>Enable or disable logging of actions performed by bots</li>
+                        <li>Log in embed form or plaintext form</li>
+                        <li>Enable/Disable TTS logging </li>
+                    </ul>
                 </ul>
             </div>

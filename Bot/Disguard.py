@@ -483,7 +483,7 @@ async def _status(ctx):
     m = await ctx.send('React with what you would like my desired status to be')
     #emojis = [e for e in bot.get_cog('Cyberlog').emojis.values() if e.name in ['online', 'idle', 'dnd', 'offline', 'streaming', 'reload']]
     cog = bot.get_cog('Cyberlog')
-    reactions = (emojis['online'], emojis['idle'], emojis['dnd'], emojis['offline'], emojis['streaming'], emojis['loop'])
+    reactions = (emojis['online'], emojis['idle'], emojis['dnd'], emojis['offline'], emojis['streaming'], emojis['reload'])
     for r in reactions: await m.add_reaction(r)
     def reacCheck(r, m): return r.emoji in emojis and m.id == ctx.author.id
     r = await bot.wait_for('reaction_add', check=reacCheck)
