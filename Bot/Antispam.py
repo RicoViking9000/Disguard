@@ -141,9 +141,9 @@ class Antispam(commands.Cog):
             if not (message.channel.id in spam.get('channelExclusions') and cRE or message.author.id in spam.get('memberExclusions')): return
         else:
             if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or cRE: return
-        try: lastMessages = person.get("lastMessages")
+        try: lastMessages = person.get("lastMessages", [])
         except AttributeError: lastMessages = []
-        try: quickMessages = person.get("quickMessages")
+        try: quickMessages = person.get("quickMessages", [])
         except AttributeError: quickMessages = []
         if message.content is not None and len(message.content) > 0: lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
         if message.channel.id not in GetChannelExclusions(message.guild) and not cRE and message.author.id not in GetMemberExclusions(message.guild):
