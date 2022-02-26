@@ -1,4 +1,4 @@
-'''Contains all code relating to the Birthdays feature of Disguard'''
+'''Contains all code relating to Disguard's Birthdays module'''
 import discord
 from discord.ext import commands, tasks
 import traceback
@@ -30,56 +30,89 @@ class Birthdays(commands.Cog):
         self.bot: commands.Bot = bot
         self.loading: discord.Emoji = bot.get_cog('Cyberlog').emojis['loading']
         self.emojis: typing.Dict[str, discord.Emoji] = self.bot.get_cog('Cyberlog').emojis
-        self.whitePlus = self.emojis['whitePlus']
-        self.whiteMinus = self.emojis['whiteMinus']
-        self.whiteCheck = self.emojis['whiteCheck']
-        self.configureDailyBirthdayAnnouncements.start()
-        self.configureServerBirthdayAnnouncements.start()
-        self.configureDeleteBirthdayMessages.start()
+        # self.whitePlus = self.emojis['whitePlus']
+        # self.whiteMinus = self.emojis['whiteMinus']
+        # self.whiteCheck = self.emojis['whiteCheck']
+        # self.configureDailyBirthdayAnnouncements.start()
+        # self.configureServerBirthdayAnnouncements.start()
+        # self.configureDeleteBirthdayMessages.start()
     
     def cog_unload(self):
-        self.configureDailyBirthdayAnnouncements.cancel()
-        self.configureServerBirthdayAnnouncements.cancel()
+        pass
+        # self.configureDailyBirthdayAnnouncements.cancel()
+        # self.configureServerBirthdayAnnouncements.cancel()
+        # self.configureDeleteBirthdayMessages.cancel()
 
     @tasks.loop(hours=24)
     async def dailyBirthdayAnnouncements(self):
-        #6/10/21: So this *can* be made much faster by storing a dict with dates as keys and a list of member IDs with that birthday as the value under Disguard's data in the database. But this loop only runs once per day.
-        # Update: I have decided to do as much as possible to stop the bot from looping through every single member unless it needs to, since that number can grow expontentially as Disguard grows.
-        return
-        print('Checking daily birthday announcements')
-        birthdayDict = await database.GetBirthdayList()
-        if not birthdayDict: birthdayDict = {}
-        try:
-            for member in self.bot.users:
-                try:
-                    u = self.bot.lightningUsers[member.id]
-                    bday = u['birthday']
-                    if bday is not None and self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayDay'):
-                        if bday.strftime('%m%d%y') == datetime.datetime.utcnow().strftime('%m%d%y'):
-                            try: 
-                                if self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'age'):
-                                    age = self.bot.lightningUsers[member.id]['age']
-                                else: age = None
-                            except KeyError: age = None
-                            if age is not None:
-                                age += 1
-                                asyncio.create_task(database.SetAge(member, age))
-                            new = datetime.datetime(bday.year + 1, bday.month, bday.day)
-                            asyncio.create_task(database.SetBirthday(member, new))
-                            try: messages = self.bot.lightningUsers[member.id]['birthdayMessages']
-                            except KeyError: messages = await database.GetBirthdayMessages(member)
-                            embed=discord.Embed(title=f'''🍰 Happy {f"{age}{Cyberlog.suffix(age) if age else ''} "}Birthday, {member.name}! 🍰''', timestamp=datetime.datetime.utcnow(), color=yellow[1])
-                            if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayMessages'): messages = []
-                            if len(messages) > 0: embed.description=f'You have {len(messages)} personal messages that will be sent below this message.'
-                            else: embed.description=f'Enjoy this special day just for you, {member.name}! You waited a whole year for it to come, and it\'s finally here! Wishing you a great day filled with food, friends, and family,\n  RicoViking9000, my developer'
-                            await member.send(embed=embed)
-                            for m in messages: await member.send(embed=discord.Embed(title=f'Personal Birthday Message from {m["authName"]}', description=m['message'], timestamp=m['created'], color=yellow[1]))
-                except KeyError: pass
-        except: traceback.print_exc()
+        # print('Checking daily birthday announcements')
+        # Retrieves the global birthday dictionary to only iterate through users whose birthday is today
+        birthdayDict: typing.Dict[str, typing.List[int]] = await database.GetBirthdayList()
+        # if not birthdayDict: birthdayDict = {}
+        # try:
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        for userID in birthdayDict[datetime.date.today().strftime('%m%d')]:
+            user = self.bot.get_user(userID)
+            try: bday: datetime.datetime = self.bot.lightningUsers[userID].get('birthday')
+            except KeyError: continue #User not in cache
+            # If there's no birthday set for this user or they've disabled the birthday module, return
+            if not bday or not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
+            # If this user has an age set on their profile, increment it
+            if cyber.privacyEnabledChecker(user, 'birthdayModule', 'age'):
+                age = self.bot.lightningUsers[userID].get('age', 0) + 1
+                if age > 1: asyncio.create_task(database.SetAge(user, age))
+            # Construct their next birthday to set in the database
+            #TODO: potentially eliminate years for all this
+            newBday = datetime.date(bday.year + 1, bday.month, bday.day)
+            messages = self.bot.lightningUsers[userID].get('birthdayMessages', []) if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
+            filteredMessages = messages #TODO: extract the messages that will be delivered to the DM channel
+            # Construct the happy birthday embed
+            embed = discord.Embed(title=f'🍰 Happy {f"{age - 1}{utility.suffix(age - 1)}" if age > 1 else ""}Birthday, {user.name}! 🍰', color=yellow[1])
+            embed.description = f'Enjoy this special day just for you, {user.name}! In addition to the people you know who will hopefully send birthday wishes your way, my developer also wants to wish you only the best on your birthday. Take it easy today, and try to treat yourself in some fashion.\n\n~~RicoViking9000, developer of Disguard'
+            if filteredMessages: embed.description += f'\n\n🍰 | Friends in your servers have also composed {len(filteredMessages)} messages for your birthday! They will be displayed below this message.'
+            messageEmbeds = [embed] + [discord.Embed(title=f'✉ Birthday Message from {m["authName"]}', description=m['message'], color=yellow[1]) for m in filteredMessages]
+            # Split the embeds to send into groups of 10, since messages can hold a maximum of 10 embeds
+            embedsToSend = utility.paginate(messageEmbeds, 10)
+            try:
+                for page in embedsToSend: await user.send(embeds=page)
+            except (discord.HTTPException, discord.Forbidden): pass #Can't DM this user
+            asyncio.create_task(database.SetBirthday(user, newBday))
 
     @tasks.loop(minutes=5)
     async def serverBirthdayAnnouncements(self):
-        return
+        birthdayDict: typing.Dict[str, typing.List[int]] = await database.GetBirthdayList()
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        for userID in birthdayDict[datetime.date.today().strftime('%m%d')]:
+            user = self.bot.get_user(userID)
+            if not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
+            try: bday: datetime.datetime = self.bot.lightningUsers[userID].get('birthday')
+            except KeyError: continue #User not in cache
+            # If there's no birthday set for this user or they've disabled the birthday module, return
+            if not bday or not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
+            # TODO: Make mutual servers member to member generator to improve speed
+            # TODO: if a server set their birthday channel in the meantime and somebody queued a message, account for that. check for server ID in the message channel ID
+            servers = mutualServersMemberToMember(self, user, self.bot.user)
+            for server in servers:
+                timezone = cyber.timeZone(server)
+                started = datetime.datetime.utcnow() + datetime.timedelta(hours=timezone)
+                channel = self.bot.get_channel(self.bot.lightningLogging[server.id].get('birthday')) #Doing this instead of try/except since birthday channels usually default to 0 if not set
+                if started.strftime('%H:%M') == self.bot.lightningLogging[server.id].get('birthdate', datetime.datetime.min).strftime('%H:%M') or not channel: continue
+                # print(f'Announcing birthday for {member.name} to {server.name}')
+                messages = [a for a in self.bot.lightningUsers[user.id].get('birthdayMessages', []) if server.id in a['servers']] if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
+                messageVisibility = cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayMessages')
+                messageString = '' #Figure out how to format this
+
+                if userID == 247412852925661185:
+                    toSend = f'🍰🎊🍨🎈 Greetings {server.name}! It\'s my developer {user.mention}\'s birthday!! Let\'s wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ""}'
+                else: 
+                    if cyber.privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
+                    else: toSend = f"🍰 Greetings {server.name}! We have an anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
+                # try: 
+                m = await self.bot.get_channel(channel).send(toSend)
+                await m.add_reaction('🍰') #Consider the birthday wishes feature
+                # except discord.Forbidden as e: print(f'Birthdays error - server: {e}')
+
+
         started = datetime.datetime.utcnow()
         try:
             for server in self.bot.guilds:
@@ -116,14 +149,11 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(hours=24)
     async def deleteBirthdayMessages(self):
-        return
-        try:
-            for member in self.bot.users:
-                try: bday = self.bot.lightningUsers[member.id]['birthday']
-                except KeyError: continue
-                if bday is not None:
-                    if bday.strftime('%m%d%y') == datetime.datetime.now().strftime('%m%d%y'): await database.ResetBirthdayMessages(member)
-        except: traceback.print_exc()
+        for user in self.bot.users:
+            try: bday: datetime.datetime = self.bot.lightningUsers[user.id].get('birthday')
+            except KeyError: continue #if user not found in the cache
+            if bday:
+                if bday.strftime('%m%d%y') == datetime.datetime.now().strftime('%m%d%y'): await database.ResetBirthdayMessages(user)
 
     @tasks.loop(minutes=1)
     async def configureDailyBirthdayAnnouncements(self):
@@ -144,7 +174,7 @@ class Birthdays(commands.Cog):
             self.configureDeleteBirthdayMessages.cancel()
 
     async def updateBirthdays(self):
-        print('Updating birthdays')
+        # print('Updating birthdays')
         updated = []
         for member in self.bot.users:
             try: bday = self.bot.lightningUsers[member.id]['birthday']
@@ -155,6 +185,19 @@ class Birthdays(commands.Cog):
                     await database.SetBirthday(member, new)
                     updated.append(member)
         print(f'Updated birthdays for {len(updated)} members')
+
+    async def verifyBirthdaysDict(self):
+        '''Creates/updates the global birthday dictionary'''
+        birthdayList = collections.defaultdict(list)
+        globalList:dict = await database.GetBirthdayList()
+        for k, v in globalList.items():
+            birthdayList[k] = v
+        for user in self.bot.users:
+            try: bday: datetime.datetime = self.bot.lightningUsers[user.id].get('birthday')
+            except KeyError: bday: datetime.datetime = await database.GetMemberBirthday(user)
+            if not bday: continue
+            if user.id not in birthdayList[bday.strftime('%m%d')]: birthdayList[bday.strftime('%m%d')].append(user.id)
+        await database.SetBirthdayList(birthdayList)
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -1385,6 +1428,7 @@ class UpcomingBirthdaysView(discord.ui.View):
         self.add_item(self.buttonWriteMessage)
         if jumpStart == 1: asyncio.create_task(self.writeMessagePrompt(author))
 
+    #TODO: I think I need to fully implement privacy settings here too
 
     def fillBirthdayList(self, list, page = 0, entries = 25):
         return [f"{qlfc}\\▪️ **{m['data'].name if self.namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[page][:entries]]
