@@ -5,11 +5,14 @@ import traceback
 import datetime
 import database
 import Cyberlog
+import utility
 import asyncio
 import collections
 import copy
 import nltk
 import os
+import typing
+import re
 
 
 green = (0x008000, 0x66ff66)
@@ -24,12 +27,12 @@ birthdayCancelled = discord.Embed(title='🍰 Birthdays', description='Timed out
 
 class Birthdays(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
-        self.loading = bot.get_cog('Cyberlog').emojis['loading']
-        self.emojis = self.bot.get_cog('Cyberlog').emojis
-        self.whitePlus = bot.get_cog('Cyberlog').emojis['whitePlus']
-        self.whiteMinus = bot.get_cog('Cyberlog').emojis['whiteMinus']
-        self.whiteCheck = bot.get_cog('Cyberlog').emojis['whiteCheck']
+        self.bot: commands.Bot = bot
+        self.loading: discord.Emoji = bot.get_cog('Cyberlog').emojis['loading']
+        self.emojis: typing.Dict[str, discord.Emoji] = self.bot.get_cog('Cyberlog').emojis
+        self.whitePlus = self.emojis['whitePlus']
+        self.whiteMinus = self.emojis['whiteMinus']
+        self.whiteCheck = self.emojis['whiteCheck']
         self.configureDailyBirthdayAnnouncements.start()
         self.configureServerBirthdayAnnouncements.start()
         self.configureDeleteBirthdayMessages.start()
@@ -42,6 +45,7 @@ class Birthdays(commands.Cog):
     async def dailyBirthdayAnnouncements(self):
         #6/10/21: So this *can* be made much faster by storing a dict with dates as keys and a list of member IDs with that birthday as the value under Disguard's data in the database. But this loop only runs once per day.
         # Update: I have decided to do as much as possible to stop the bot from looping through every single member unless it needs to, since that number can grow expontentially as Disguard grows.
+        return
         print('Checking daily birthday announcements')
         birthdayDict = await database.GetBirthdayList()
         if not birthdayDict: birthdayDict = {}
@@ -75,10 +79,11 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def serverBirthdayAnnouncements(self):
+        return
         started = datetime.datetime.utcnow()
         try:
             for server in self.bot.guilds:
-                tz = Cyberlog.timeZone(server)
+                tz = self.bot.get_cog('Cyberlog').timeZone(server)
                 initial = started + datetime.timedelta(hours=tz)
                 try: channel = self.bot.lightningLogging[server.id]['birthday']
                 except KeyError: continue
@@ -93,7 +98,6 @@ class Birthdays(commands.Cog):
                                             print(f'Announcing birthday for {member.name}')
                                             try:
                                                 messages = [a for a in self.bot.lightningUsers[member.id]['birthdayMessages'] if server.id in a['servers']] if self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayMessages') else []
-                                                sentFirstMessage = self.bot.lightningLogging[server.id]['flags']['firstBirthdayAnnouncement']
                                                 newline = '\n'
                                                 messageVisibility = self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayMessages')
                                                 messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m['author']).name if m['author'] in [mb.id for mb in server.members] else m['authName']}: {m['message'] if messageVisibility else '<Content hidden due to privacy settings>'}" for m in messages])}'''
@@ -101,9 +105,6 @@ class Birthdays(commands.Cog):
                                                 else: 
                                                     if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
                                                     else: toSend = f"🍰 Greetings {server.name}! We have one anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
-                                                if not sentFirstMessage: 
-                                                    toSend += f"\n\nMessage from developer: Dear members, due to an unintentional database configuration error, all members' stored birthday information was unintentionally deleted on June 3. While this only applies to the birthday and not the age or wishlist data, it's an unfortunate event, and I am unable to recover the data. If you previously set your birthday before this event, and you would like to set your birthday again, use the `birthday` command or natural lingo by typing `my birthday is <month and day of when your birthday is e.g. july 31st>` to repopulate the Disguard birthdays index."
-                                                    await (await database.GetServerCollection()).update_one({'server_id': server.id}, {'$set': {'flags.firstBirthdayAnnouncement': True}})
                                                 try: 
                                                     m = await self.bot.get_channel(channel).send(toSend)
                                                     await m.add_reaction('🍰')
@@ -115,6 +116,7 @@ class Birthdays(commands.Cog):
 
     @tasks.loop(hours=24)
     async def deleteBirthdayMessages(self):
+        return
         try:
             for member in self.bot.users:
                 try: bday = self.bot.lightningUsers[member.id]['birthday']
@@ -201,7 +203,7 @@ class Birthdays(commands.Cog):
                 mess = await message.channel.send(embed=draft)
                 await mess.add_reaction('✅')
                 await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple processes for anyone to react to if necessary
-        ages = calculateAge(message)
+        ages = calculateAges(message)
         ages = [a for a in ages if await verifyAge(message, a)]
         try: currentAge = self.bot.lightningUsers.get(message.author.id).get('age')
         except: currentAge = await database.GetMemberBirthday(message.author) #Use database if local variables aren't available
@@ -238,7 +240,7 @@ class Birthdays(commands.Cog):
     #7/17/21:  Finished rewriting birthday command & some extras
     #@commands.guild_only() #Target for allowability in DMs
     @commands.command(aliases=['bday'])
-    async def birthday(self, ctx, *args):
+    async def birthday(self, ctx: commands.Context, *args):
         await ctx.trigger_typing()
         theme = self.colorTheme(ctx.guild) if ctx.guild else 1
         adjusted = datetime.datetime.now()
@@ -246,8 +248,7 @@ class Birthdays(commands.Cog):
             header = '👮‍♂️ » 🍰 Birthday » 🏠 Overview'
             header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 🏠 Overview'
             embed = discord.Embed(title=header, color=yellow[theme])
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar_url) #V1.5
-            #embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url) #V2.0
+            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url) #V2.0
             if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'default', 'birthdayModule'):
                 embed.description = 'Birthday module disabled. To edit your privacy settings or enable the birthday module, go [here](http://disguard.herokuapp.com/manage/profile).'
                 return await ctx.send(embed=embed)
@@ -257,7 +258,7 @@ class Birthdays(commands.Cog):
             embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
             if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
             embed.description = f'{self.loading} Processing global birthday information'
-            message = await ctx.send(embed=embed)
+            #message = await ctx.send(embed=embed)
             #SUGGESTION » 7/13/21: Basic Disguard Wiki (after website improvements of course), maintaining an information database on various disguard features
             #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
             currentServer = []
@@ -277,30 +278,31 @@ class Birthdays(commands.Cog):
                 except (AttributeError, TypeError, KeyError): pass
             currentServer.sort(key = lambda m: m.get('bday'))
             weekBirthday.sort(key = lambda m: m.get('bday'))
-            disguardSuggest.sort(key = lambda m: mutualServersMemberToMember(self, ctx.author, m['data']), reverse=True) #Servers the author and target share
+            disguardSuggest.sort(key = lambda m: len(mutualServersMemberToMember(self, ctx.author, m['data'])), reverse=True) #Servers the author and target share
             firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
             def fillBirthdayList(list, maxEntries):
                 return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
             embed.description = f'''**{"AVAILABLE OPTIONS":–^70}**\n🍰: Browse birthday profiles\n📪: View more upcoming birthdays\n📆: Update your birthday\n🕯: Update your age\n📝: {"Manage" if len(wishlist) > 0 else "Create"} your wish list\n**{"UPCOMING BIRTHDAYS":–^70}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
             embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + newline) if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + newline) if len(weekBirthday) > 0 else ""}'''
-            embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}\n\n*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday.'''
-            await message.edit(embed=embed)
-            reactions = ['🍰', '📪',  '📆', '🕯', '📝', '👮‍♂️']
+            embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}'''
+            #await message.edit(embed=embed)
+            message = await ctx.send(embed=embed)
+            reactions = ['📪',  '📆', '🕯', '📝']
             for r in reactions: await message.add_reaction(r)
             def reactionCheck(r, u): return str(r) in reactions and r.message.id == message.id and u == ctx.author
             try: result = await self.bot.wait_for('reaction_add', check=reactionCheck)
             except asyncio.TimeoutError: return await message.edit(embed=birthdayCancelled)
-            if str(result[0]) == '🍰': await messageManagement(self, ctx, message, result[1], [currentServer[:5], disguardSuggest[:5], weekBirthday[:5]])
-            elif str(result[0]) == '📪': await upcomingBirthdaysViewer(self, ctx, message, currentServer, disguardSuggest, weekBirthday)
-            elif str(result[0]) == '📆' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'birthdayDay'): await firstBirthdayContinuation(self, ctx, ctx.author, message)
-            elif str(result[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await firstAgeContinuation(self, ctx, ctx.author, message)
-            elif str(result[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await firstWishlistContinuation(self, ctx, message)
+            if str(result[0]) == '🍰': await messageManagement(self, ctx, message, result[1], [currentServer[:5], disguardSuggest[:5], weekBirthday[:5]]) #Figure out later
+            elif str(result[0]) == '📪': await upcomingBirthdaysPrep(self, ctx, message, currentServer, disguardSuggest, weekBirthday) #Current
+            elif str(result[0]) == '📆' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'birthdayDay'): await birthdayHandler(self, ctx, ctx.author, message) #Done
+            elif str(result[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await ageHandler(self, ctx, ctx.author, message) #Done
+            elif str(result[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await wishlistHandler(self, ctx, message) #Done
         else:
             embed=discord.Embed(title=f'{self.emojis["search"]} Birthdays', description=f'{self.loading} Searching', color=yellow[theme])
             message = await ctx.send(embed=embed)
             arg = ' '.join(args)
             actionList = []
-            age = calculateAge(ctx.message)
+            age = calculateAges(ctx.message)
             currentAge = self.bot.lightningUsers[ctx.author.id].get('age')
             try: age.remove(currentAge)
             except ValueError: pass
@@ -490,7 +492,7 @@ async def messageManagement(self, ctx, message, user, groups):
     await message.delete()
     await self.birthday(ctx)
         
-async def guestBirthdayViewer(self, ctx, target, cake=False):
+async def guestBirthdayViewer(self: Birthdays, ctx: commands.Context, target: discord.User, cake=False):
     '''Displays information about somebody else's birthday profile'''
     #adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
     user = self.bot.lightningUsers[target.id]
@@ -498,266 +500,43 @@ async def guestBirthdayViewer(self, ctx, target, cake=False):
     age = user.get('age')
     wishlist = user.get('wishList')
     header = '👮‍♂️ » 🍰 Birthday'
-    header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday'
+    header = f'👮‍♂️ {target.name:.{63 - len(header)}} » 🍰 Birthday'
     embed = discord.Embed(title=header, color=yellow[self.colorTheme(ctx.guild)], description=f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}')
     embed.description += f'''\n**{"AVAILABLE OPTIONS":–^70}**\n{f"{self.emojis['settings']}: Enter Action Overview" if target == ctx.author else ''}{f"{newline}🍰 (Only anyone other than {target.name}): Write a personal birthday message to {target.name}" if not cake else ''}'''
-    embed.description += f"\n\n*Note*: Unfortunately, on June 3, all the dates of members' birthdays were accidentally purged. If you're interested in the features offered by the birthday module, you can help rebuild the birthday indexes by configuring your birthday. To do that, use the `birthday` command or type `my birthday is july 31st` (replace july 31 with whenever your birthday is)\n\n"
-    embed.set_author(name=target.name, icon_url=target.avatar_url) #V1.5
-    #embed.set_author(name=target.name, icon_url=target.avatar.url) #V2.0
+    #embed.set_author(name=target.name, icon_url=target.avatar_url) #V1.5
+    embed.set_author(name=target.name, icon_url=target.avatar.url) #V2.0
     embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
     embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else age)
     return embed
 
-async def firstWishlistContinuation(self, ctx, m, cont=False, new=None):
-    wishlist = await database.GetWishlist(ctx.author) if self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have disabled birthday wishlist functionality'] if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private. Work to allow the birthday module to be used in DMs is underway.']
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📝 Wish List / 🏠 Home'.format(ctx.author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 📝 Wish List / 🏠 Home')), 
-        description='**{0:–^70}**\n{2}\n**{1:–^70}**\n{3}'.format('YOUR WISH LIST', 'OPTIONS', 'Very spacious in here! Your wishlist is currently recruiting fabulous new wishes, and you seem to know just where to find them :)' if wishlist is None or len(wishlist) < 1 else '\n'.join(['• {}'.format(w) for w in wishlist]),
-        '❌: Close this embed\n{}: Add entries to your wish list\n{}: Remove entries from your wish list'.format(self.whitePlus, self.whiteMinus)),color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-    if not cont: new = await ctx.send(embed=embed)
-    else: await new.edit(embed=embed)
-    await new.add_reaction('❌')
-    if self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist'):
-        for r in ['➕', '➖']: await new.add_reaction(r)
-    def navigChecks(r, u): return str(r) in ['❌', '➕', '➖'] and r.message.id == new.id and u == ctx.author
-    while True:
-        try: result = await self.bot.wait_for('reaction_add', check=navigChecks)
-        except asyncio.TimeoutError: return await new.delete()
-        if str(result[0]) == '❌': 
-            await m.remove_reaction('📝', ctx.author)
-            return await new.delete()
-        elif str(result[0]) == '➕': await modifyWishlistItems(self, ctx, m, new, wishlist)
-        else: await modifyWishlistItems(self, ctx, m, new, wishlist, False)
+async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Message, cont=False, new=None):
+    wishlist = ['You have disabled birthday wishlist functionality'] if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private'] if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') and ctx.guild else self.bot.lightningUsers[ctx.author.id].get('wishlist', [])
+    header = '👮‍♂️ » 🍰 Birthday » 📝 Wishlist' #TODO: implement privacy settings and potentially mimic the theme/feel of the birthday/age module
+    embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlist]) if wishlist else "Empty"}', color=yellow[self.colorTheme(ctx.guild)])
+    embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
+    new = await ctx.send(embed=embed, view=WishlistView(self, ctx, m, cont, new, wishlist, embed)) #Use default class var
 
-async def modifyWishlistItems(self, ctx, m, new, wishlist, add=True): #If add is false, remove mode is on
-    if add: 
-        verb='add'
-        preposition='to'
-    else: 
-        verb='remove'
-        preposition='from'
-    new.embeds[0].title = '🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📝 Wish List / {} {}'.format(ctx.author.name, self.whitePlus, verb[0].upper() + verb[1:], diff=63 - len('🍰 Birthdays / 👮‍♂️ / 📝 Wish List / 🏠 {}'.format(verb)))
-    d = '**{0:–^70}**\n{1}\n\nType{4} to {2} entries {3} your wish list. To {2} multiple entries in one message, separate entries with a space and a comma.{5} When you\'re done, react with ✅ to save, or react with ❌ to cancel without saving'
-    if add: new.embeds[0].description=d.format('YOUR WISH LIST', '(Empty)' if len(wishlist) == 0 else '\n'.join(['• {}'.format(w) for w in wishlist]), verb, preposition, 'the number or contents of an entry' if not add else '', 'Type `clear` to empty your wish list.' if not add else '')
-    else: new.embeds[0].description=d.format('YOUR WISH LIST', '(Empty)' if len(wishlist) == 0 else '\n'.join(['{}. {}'.format(w+1, wishlist[w]) for w in range(len(wishlist))]), verb, preposition, ' the number or text of an entry' if not add else '', ' Type `clear` to empty your wish list.' if not add else '')
-    await new.edit(embed=new.embeds[0])
-    await new.clear_reactions()
-    for r in ['❌', '✅']: await new.add_reaction(r)
-    toModify = []
-    def checkCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '✅'
-    def cancelCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '❌'
-    def addCheck(m): return m.author == ctx.author and m.channel == ctx.channel
-    while True:
-        done, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkCheck, timeout=300), self.bot.wait_for('reaction_add', check=cancelCheck, timeout=300), self.bot.wait_for('message', check=addCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
-        try: stuff = done.pop().result()
-        except asyncio.TimeoutError: await new.delete()
-        for future in p: future.cancel()
-        if type(stuff) is discord.Message:
-            if len(stuff.attachments) == 1:
-                if stuff.attachments[0].height: #We have an image or a video, so we will create a permanent URL via the private image hosting channel
-                    await stuff.add_reaction(self.loading)
-                    imageLogChannel = self.bot.get_channel(534439214289256478)
-                    tempDir = 'Attachments/Temp'
-                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), stuff.attachments[0].filename[stuff.attachments[0].filename.rfind('.')+1:]))
-                    await stuff.attachments[0].save(savePath)
-                    f = discord.File(savePath)
-                    hostMessage = await imageLogChannel.send(file=f)
-                    toModify.append(hostMessage.attachments[0].url)
-                    if os.path.exists(savePath): os.remove(savePath)
-            elif stuff.content is not None and len(stuff.content) > 0: toModify += stuff.content.split(', ')
-            try:
-                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
-                await stuff.delete()
-            except discord.Forbidden: pass
-            if add: new.embeds[0].description=d.format('YOUR WISH LIST', '\n'.join(['• {}'.format(w) for w in wishlist] + ['• **{}**'.format(w) for w in toModify]), verb, preposition, ' the number or text of an entry' if not add else '', ' Type `clear` to empty your wish list.' if not add else '')
-            else: 
-                if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist)
-                for w in wishlist:
-                    for wo in range(len(toModify)):
-                        try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
-                        except: pass
-                new.embeds[0].description=d.format('YOUR WISH LIST', '\n'.join(['{}. {}'.format(w+1,'~~{}~~'.format(wishlist[w]) if wishlist[w] in toModify else wishlist[w]) for w in range(len(wishlist))]), verb, preposition, ' the number or text of an entry' if not add else '', ' Type `clear` to empty your wish list.' if not add else '')
-            await new.edit(embed=new.embeds[0])
-        else:
-            if str(stuff[0]) == '✅':
-                new.embeds[0].description = '{} Saving...'.format(self.loading)
-                await new.edit(embed=new.embeds[0])
-                if add:
-                    for e in toModify: await database.AppendWishlistEntry(ctx.author, e)
-                else:
-                    for w in toModify: wishlist.remove(w)
-                    await database.SetWishlist(ctx.author, wishlist)
-            await new.clear_reactions()
-            await m.remove_reaction('📝', ctx.author)
-            return await firstWishlistContinuation(self, ctx, m, True, new)
+async def ageHandler(self: Birthdays, ctx: commands.Context, author: discord.Member, message: discord.Message):
+    ageHidden = ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age')
+    currentAge = self.bot.lightningUsers[author.id].get('age')
+    ageModuleDescription = 'Entering your age is a fun but optional feature of the birthday module and has no relation to Discord Inc. It will only be used to personalize the message DMd to you on your birthday. If you set your age, others can view it on your birthday profile by default. If you wish to set your age but don\'t want others to view it, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
+    instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if ageHidden else 'Type your desired age'
+    embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not currentAge else ""}{instructions}\n\nCurrent value: **{"🔒 Hidden" if ageHidden else currentAge}**', color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
+    embed.set_author(name=author.name, icon_url=author.avatar.url)
+    view = AgeView(self, ctx, message, None, embed, currentAge, ageHidden)
+    new = await ctx.send(embed=embed, view=view)
+    view.message = new
 
-async def firstAgeContinuation(self, ctx, author, message):
-    revert = copy.deepcopy(message.embeds[0])
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ❔ Query'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ❔ Query')), description='''What is your age?\n\n(Your age is currently **{}**)'''.format('not set' if await database.GetAge(author) is None else await database.GetAge(author)), color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-    embed.set_author(name=author.name, icon_url=author.avatar_url)
-    new = await ctx.send(embed=embed)
-    message.embeds[0].set_author(icon_url='https://cdn.discordapp.com/emojis/605060517861785610.gif', name='Waiting for callback...')
-    await message.edit(embed=message.embeds[0])
-    currentAge = await database.GetAge(author)
-    def messageCheck(m): return m.author == author and m.channel == ctx.channel
-    def checkCheck(r, u): return u == author and r.message.id == new.id and str(r) == '✅'
-    satisfied = False
-    while not satisfied:
-        done, pending = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkCheck, timeout=180), self.bot.wait_for('message', check=messageCheck, timeout=180)], return_when=asyncio.FIRST_COMPLETED)
-        try: stuff = done.pop().result()
-        except asyncio.TimeoutError: return await birthdayCancellation(message, birthdayCancelled, revert, new, author)
-        for future in pending: future.cancel()
-        if type(stuff) is discord.Message: #User typed an age, so we must parse it
-            result = calculateAge(stuff)[0]
-            try:
-                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
-                await stuff.delete()
-            except: pass
-            if result:
-                embed.title = '🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / {} Confirmation'.format(author.name, self.whiteCheck, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Confirmation'))
-                if result != currentAge:
-                    embed.description='**{}**\n\nIs this correct?{}eady to save it? React with ✅, otherwise type another age or wait 3 minutes for timeout'.format(result,
-                        'Looks a bit funky... but anyway, r' if result < 0 or result > 100 else ' R')
-                    await new.add_reaction('✅')
-                else:
-                    embed.description='Wow, you\'re right on top of things here; your age is already set to **{}**! 👍\n\nIf you would like to change your age, react with 🕯 again on the embed above ☝'.format(currentAge)
-                    await new.edit(embed=embed, delete_after=20)
-                    revert.set_author(name=author.name, icon_url=author.avatar_url)
-                    return await message.edit(embed=revert)
-            else: embed.description='{} isn\'t an age, please try again or wait 3 minutes for this to time out'.format(stuff.content)
-            await new.edit(embed=embed)
-        else: #user reacted with a checkmark; they are satisfied with the age they have typed
-            satisfied = True
-            embed.description='{} Please wait...'.format(self.loading)
-            await stuff[0].message.edit(embed=embed)
-            def editCheck(b, a): return a.embeds[0].footer.text is not discord.Embed.Empty and str(new.id) in a.embeds[0].footer.text
-            new = await new.channel.fetch_message(new.id)
-            done2, pending2 = await asyncio.wait([self.bot.wait_for('message_edit', check=editCheck, timeout=300), ageContinuation(self, result, author, new, embed, new.id)], return_when=asyncio.FIRST_COMPLETED)
-            try: done2.pop().result()
-            except asyncio.TimeoutError: return await birthdayCancellation(message, birthdayCancelled, revert, new, author)
-            for future in pending2: future.cancel
-            message.embeds[0].set_field_at(1, name='Your Age',value='**Age Successfully Updated**\n{}'.format(result))
-            message.embeds[0].set_author(name=author.name, icon_url=author.avatar_url)
-            await message.edit(embed=message.embeds[0])
-            await new.delete()
-            return await message.remove_reaction('🕯', stuff[1])
-
-async def ageContinuation(self, age, author, mess, draft, callback=None, partial=False):
-    '''If partial, all we're doing is confirming an age and we start here'''    
-    def ageCheck(r, u): return u == author and str(r) == '✅' and r.message.id == mess.id
-    if partial: 
-        draft.title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / {} Confirmation'.format(author.name, self.whiteCheck, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Confirmation'))
-        draft.description='Would you like to set your age as **{}**?'.format(age)
-        await mess.edit(embed=draft)
-        await mess.add_reaction('✅')
-    if callback is None: u = await self.bot.wait_for('reaction_add', check=ageCheck)
-    else: u = [None, author]
-    draft.description = '{} Saving'.format(self.loading)
-    await mess.edit(embed=draft)
-    try: await mess.clear_reactions()
-    except: pass
-    if age >= 13 and age <= 110:
-        await database.SetAge(u[1], age)
-        embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ✅ Success'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ✔ Success')),color=yellow[self.colorTheme(mess.guild)], timestamp=datetime.datetime.utcnow())
-        embed.set_author(name=author.name, icon_url=author.avatar_url)
-        embed.description = 'Your age has successfully been saved, and will be used for your next birthday announcement in your DMs.'
-        try: 
-            if not self.lightningUsers[author.id]['birthday']: embed.description = f'Your age ({age}) has successfully been saved.\n\nYou do not have a birthday configured yet - set your birthday by typing `my birthday is [date]` or using the birthday command (no args) & subsequently reacting with 🍰'
-        except: pass
-    else:
-        embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 🕯 Configure Age / ❌ Failure'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Age / ❌ Failure')),color=yellow[self.colorTheme(mess.guild)], timestamp=datetime.datetime.utcnow())
-        embed.set_author(name=author.name, icon_url=author.avatar_url)
-        embed.description = f'As of April 12, 2021, only ages between 13 and 110 will be accepted. Please try again using the casual format (`I am <age>`) or the birthday command `{self.bot.lightningLogging.get(author.guild.id).get("prefix")}birthday <age>`, without the angle brackets.'
-    if callback is not None: embed.set_footer(text='Callback: {}'.format(callback))
-    await mess.edit(embed=embed)
-
-async def firstBirthdayContinuation(self, ctx, author, message):
-    revert = copy.deepcopy(message.embeds[0])
-    bday = await database.GetMemberBirthday(author)
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / ❔ Query'.format(author.name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Query')), description='''When is your birthday?\n\n(Your birthday is currently **{}**)'''.format('not set' if bday is None else bday.strftime('%b %d')), color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-    embed.set_author(name=author.name, icon_url=author.avatar_url)
-    new = await ctx.send(embed=embed)
-    message.embeds[0].set_author(icon_url='https://cdn.discordapp.com/emojis/605060517861785610.gif', name='Waiting for callback...')
-    await message.edit(embed=message.embeds[0])
-    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(ctx.guild))
-    def messageCheck(m): return m.author == author and m.channel == ctx.channel
-    def checkCheck(r, u): return u == author and r.message.id == new.id and str(r) == '✅'
-    satisfied = False
-    while not satisfied:
-        done, pending = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkCheck, timeout=180), self.bot.wait_for('message', check=messageCheck, timeout=180)], return_when=asyncio.FIRST_COMPLETED)
-        try: stuff = done.pop().result()
-        except asyncio.TimeoutError: return await birthdayCancellation(message, birthdayCancelled, revert, new, author)
-        for future in pending: future.cancel()
-        if type(stuff) is discord.Message: #If the user typed a date
-            result = calculateDate(stuff, adjusted)
-            try:
-                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(stuff)
-                await stuff.delete()
-            except: pass
-            if result:
-                now = datetime.datetime.now()
-                if result < now: result = datetime.datetime(now.year + 1, result.month, result.day)
-                embed.title = '🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(author.name, self.whiteCheck, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation'))
-                if bday is None or result.day != bday.day:
-                    embed.description='**{}**\n\nIs this correct? Ready to save it? React with ✅, otherwise type another date or wait 3 minutes for timeout'.format(result.strftime('%A, %b %d, %Y'))
-                    await new.add_reaction('✅')
-                else:
-                    embed.description='Wow, you\'re right on top of things here; your birthday is already set to **{}**! 👍\n\nIf you would like to change your birthday, react with 📆 again on the embed above ☝'.format(result.strftime('%a %b %d'))
-                    await new.edit(embed=embed, delete_after=20)
-                    return await message.edit(embed=revert)
-            else: embed.description='{} does not seem to be a date, please try again or wait 3 minutes for timeout'.format(stuff.content)
-            await new.edit(embed=embed)
-        else: #If the user reacted with a check mark
-            satisfied = True
-            embed.description='{} Please wait...'.format(self.loading)
-            await stuff[0].message.edit(embed=embed)
-            def editCheck(b, a): return a.embeds[0].footer.text is not discord.Embed.Empty and str(new.id) in a.embeds[0].footer.text
-            new = await new.channel.fetch_message(new.id)
-            done2, pending2 = await asyncio.wait([self.bot.wait_for('message_edit', check=editCheck, timeout=300), birthdayContinuation(self, result, [author], new.embeds[0], message, new, author, new.id)], return_when=asyncio.FIRST_COMPLETED)
-            try: done2.pop().result()
-            except asyncio.TimeoutError: return await birthdayCancellation(message, birthdayCancelled, revert, new, author)
-            for future in pending2: future.cancel
-            message.embeds[0].set_field_at(0, name='Your Birthday',value='**Birthday Successfully Updated**\n{}'.format(result.strftime('%a %b %d\n(In {} days)').format((result - adjusted).days)))
-            message.embeds[0].set_author(name=author.name, icon_url=author.avatar_url)
-            await message.edit(embed=message.embeds[0])
-            await new.delete()
-            return await message.remove_reaction('📆', stuff[1])
-        
-async def birthdayContinuation(self, birthday, target, draft, message, mess, user, callback=None, partial=False):
-    def check(r, u):
-        return u == user and str(r) == '✅' and r.message.id == mess.id
-    if partial: 
-        draft.title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(target[0].name, self.whiteCheck, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation'))
-        draft.description='Would you like to set your birthday as **{}**?'.format(birthday.strftime('%A, %b %d, %Y'))
-        await mess.edit(embed=draft)
-        await mess.add_reaction('✅')
-    if callback is None: u = await self.bot.wait_for('reaction_add', check=check)
-    else:  u = [None, user]
-    draft.description = '{} Saving'.format(self.loading)
-    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(user.guild))
-    if len(target) == 1 or all([await database.GetMemberBirthday(m) == birthday for m in target if m != u[1]]): #Clear confirmation embed if only one person or if everybody already set their birthday
-        await mess.edit(embed=draft)
-        try: await mess.clear_reactions()
-        except: pass
-        await database.SetBirthday(u[1], birthday)
-    else:
-        draft.description = '{} Saving {}\'s birthday'.format(self.loading, u[1].name)
-        mess = await message.channel.send(embed=draft)
-        await database.SetBirthday(u[1], birthday)
-    embed=discord.Embed(title='🍰 Birthdays / 👮‍♂️ {:.{diff}} / 📆 Configure Birthday / ✅ Success'.format(target[0].name, diff=63 - len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Success')),color=yellow[self.colorTheme(message.guild)], timestamp=datetime.datetime.utcnow())
-    embed.description='''{}, your birthday has been successfully recorded: **{}** (which is {} days from now on a {} {} year).\nIf you would like, you can include your age in your birthday profile by typing 'I am <age>' or 'I'm <age>'\n
-        {}\n\nEveryone else, you may use the `birthday` command or react to this message with the 🍰 emoji to add a personal message that will be displayed on {}'s birthday.'''.format(u[1].name,
-        birthday.strftime('%B %d'), (await database.GetMemberBirthday(u[1]) - adjusted).days, birthday.strftime('%A'), 'this' if birthday.year == adjusted.year else 'next',
-        'Your birthday will be announced at {} {} to the channel {}'.format((await database.GetBirthdate(message.guild)).strftime('%I:%M %p'), await database.GetNamezone(message.guild), 
-        self.bot.get_channel(await database.GetBirthday(message.guild)).mention) if (await database.GetBirthday(message.guild)) > 0 else '''Moderators, please visit [my web dashboard](http://disguard.herokuapp.com/manage/{}/server) to configure
-        a channel and time for birthday announcements to be sent. If you are not currently signed in to my web dashboard, then connect your Discord account, click on this server icon [{}] on the homepage, then 'General Server Settings',
-        then you may adjust your settings.'''.format(message.guild.id, message.guild.name), u[1].name)
-    embed.set_author(icon_url=user.avatar_url, name=user.name)
-    if callback is not None: 
-        embed.set_footer(text='Callback: {} '.format(callback))
-        return await mess.edit(embed=embed)
-    await mess.edit(embed=embed)
-    await mess.add_reaction('🍰')
-    await writePersonalMessage(self, birthday, target, mess)
+async def birthdayHandler(self: Birthdays, ctx: commands.Context, author: discord.Member, message: discord.Message):
+    bdayHidden = ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay')
+    currentBday = self.bot.lightningUsers[author.id].get('birthday')
+    birthdayModuleDescription = 'The Disguard birthday module provides fun, voluntary features for those wanting to use it. Setting your birthday will allow Disguard to make an announcement on your birthday in servers with this feature enabled, and Disguard will DM you a message on your birthday. By default, others can view your birthday on your profile. If you wish to change this, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
+    instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Examples of acceptable birthday formats include Jan 1, 5/25 (mm/dd), "next tuesday", "two months from now". Disguard does not process your birth year, so just enter a month and a day.'
+    embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not currentBday else ""}{instructions}\n\nCurrent value:  **{"🔒 Hidden" if bdayHidden else currentBday.strftime("%B %d")}**', color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
+    embed.set_author(name=author.name, icon_url=author.avatar.url)
+    view = BirthdayView(self, ctx, message, None, embed, currentBday, bdayHidden)
+    new = await ctx.send(embed=embed, view=view)
+    view.message = new
 
 async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, u=None):
     '''Handles writing of a personal birthday message
@@ -845,21 +624,16 @@ async def writePersonalMessage(self, birthday, target, mess, autoTrigger=False, 
             break
         if autoTrigger: break
 
-async def upcomingBirthdaysViewer(self, ctx, message, currentServer, disguardSuggest, weekBirthday):
+async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message: discord.Message, currentServer, disguardSuggest, weekBirthday):
     namesOnly = [m['data'].name for m in currentServer + disguardSuggest + weekBirthday]
     def fillBirthdayList(list, maxEntries):
         return [f"{qlfc}\\▪️ **{m['data'].name if namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
     embed = message.embeds[0]
     embed.clear_fields()
-    embed.description = f'''The ability to expand specific sections will arrive when Discord Buttons arrive**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(fillBirthdayList(currentServer, 10))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(fillBirthdayList(disguardSuggest, 10))}\n\n__WITHIN A WEEK__\n{newline.join(fillBirthdayList(weekBirthday, 10))}'''
-    await message.edit(embed=embed)
-    try: await message.clear_reactions()
-    except: pass
-    await message.add_reaction('⬅')
-    def reactionCheck(r, u): return str(r) == '⬅' and r.message.id == message.id and u == ctx.author
-    await self.bot.wait_for('reaction_add', check=reactionCheck)
-    await message.delete() #Rework the system so we don't have to delete the message to go back
-    await self.birthday(ctx)
+    embed.description = f'''Click a button to expand that section**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(fillBirthdayList(currentServer, 8))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(fillBirthdayList(disguardSuggest, 8))}\n\n__WITHIN A WEEK__\n{newline.join(fillBirthdayList(weekBirthday, 8))}'''
+    view = UpcomingBirthdaysView(None, ctx.author, currentServer, disguardSuggest, weekBirthday, namesOnly, embed, self.bot)
+    message = await message.edit(embed=embed, view=view)
+    view.message = message
 
 def calculateDate(message, adjusted):
     '''Returns a datetime.datetime parsed from a message
@@ -869,18 +643,6 @@ def calculateDate(message, adjusted):
     longDays = collections.deque(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
     shortMonths = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
     longMonths = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-    def isLeapYear(): 
-        y = datetime.datetime.today().year
-        if y % 4 != 0: return False
-        else:
-            if y % 100 == 0:
-                if y % 400 != 0:
-                    return False
-                else:
-                    return True
-            else:
-                return True
-        return False
     ref = collections.deque([(a, b) for a, b in {1:31, 2:29 if isLeapYear() else 28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}.items()]) #Number of days in each month. As with days, this dict may need to move around
     ref.rotate(-1 * (adjusted.month - 1)) #Current month moves to the front
     #Determine if user specified long or short day/month in response
@@ -959,7 +721,7 @@ async def verifyBirthday(message, adjusted, birthday=None):
         async for m in message.channel.history(limit=10): #How many messages to check back for question words
             if any(word in m.content.lower() for word in ['when', 'what']) and any(word in m.content.lower() for word in ['your birthday', 'your bday', 'yours']): return [message.author]
 
-def calculateAge(m):
+def calculateAges(m):
     '''Returns a list of numbers found in a message'''
     ages = []
     for w in m.content.lower().split(' '):
@@ -981,7 +743,7 @@ async def verifyAge(message, age):
         if number:
             try: tail = s[s.index(str(number)):] #If there is content after the number, try to deal with it
             except: 
-                if int(s[1 + s.index(finder)]) not in calculateAge(message): return False #If the relevant age is not the same one found in the message, return
+                if int(s[1 + s.index(finder)]) not in calculateAges(message): return False #If the relevant age is not the same one found in the message, return
                 return False
             if len(tail) > 1:
                 if 'year' not in tail[1]:
@@ -1008,8 +770,8 @@ async def messageManagementTimeout(message, oldEmbed):
     await message.clear_reactions()
     for r in ['🍰', '📆', '🕯', '📝']: await message.add_reaction(r)
 
-def mutualServerMemberToMember(self, memberA, memberB):
-    '''Returns True if these two members share at least one mutual server'''
+def mutualServerMemberToMember(self: Birthdays, memberA: discord.User, memberB: discord.User):
+    '''Returns whether the two given members share at least one mutual server'''
     for g in self.bot.guilds:
         foundA = False
         foundB = False
@@ -1019,19 +781,871 @@ def mutualServerMemberToMember(self, memberA, memberB):
             if foundA and foundB: return True
     return False
 
-def mutualServersMemberToMember(self, memberA, memberB):
-    '''Returns the number of servers shared by the two given members'''
-    counter = 0
+def mutualServersMemberToMember(self: Birthdays, memberA: discord.User, memberB: discord.User):
+    '''Returns the list of servers shared by the two given members'''
+    servers: typing.List[discord.Guild] = []
     for g in self.bot.guilds:
         foundA = False
         foundB = False
         for m in g.members:
             if m.id == memberA.id: foundA = True
             elif m.id == memberB.id: foundB = True
-            if foundA and foundB: counter += 1
-    return counter
+            if foundA and foundB: 
+                servers.append(g)
+                break
+    return servers
 
+def isLeapYear(): 
+    y = datetime.datetime.today().year
+    if y % 4 != 0: return False
+    else:
+        if y % 100 == 0:
+            if y % 400 != 0:
+                return False
+            else:
+                return True
+        else:
+            return True
 
 def setup(bot):
     bot.add_cog(Birthdays(bot))
 
+class UpcomingBirthdayDict(typing.TypedDict):
+    data: discord.Member
+    bday: datetime.datetime
+
+class SuccessView(discord.ui.View):
+    def __init__(self, text):
+        super().__init__()
+        self.add_item(discord.ui.Button(label=text, style=discord.ButtonStyle.green, disabled=True))
+
+class SuccessAndDeleteView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+    
+    @discord.ui.button(label='Delete message immediately')
+    async def delete(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await interaction.message.delete()
+
+class CancelledView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(discord.ui.Button(label='You may now dismiss this message', disabled=True))
+
+class NumberInputInterface(discord.ui.View):
+    def __init__(self, finale=None):
+        super().__init__()
+        self.result = ''
+        self.finale = finale
+
+    @discord.ui.button(emoji='✖', row=3, style=discord.ButtonStyle.red, custom_id='cancel')
+    async def backspace(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result = self.result[:-1]
+        await self.postProcess(interaction)
+
+    @discord.ui.button(label='0', row=3)
+    async def zero(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '0'
+        await self.postProcess(interaction)
+    
+    @discord.ui.button(label='Submit', emoji='➡', row=3, style=discord.ButtonStyle.green, custom_id='submit')
+    async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
+        #await interaction.response.defer()
+        if self.finale: await self.finale(self.result)
+        await interaction.response.edit_message(embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
+
+    @discord.ui.button(label='1', row=2)
+    async def one(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '1'
+        await self.postProcess(interaction)
+        
+    @discord.ui.button(label='2', row=2)
+    async def two(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '2'
+        await self.postProcess(interaction)
+    
+    @discord.ui.button(label='3', row=2)
+    async def three(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '3'
+        await self.postProcess(interaction)
+        
+    @discord.ui.button(label='4', row=1)
+    async def four(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '4'
+        await self.postProcess(interaction)
+     
+    @discord.ui.button(label='5', row=1)
+    async def five(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '5'
+        await self.postProcess(interaction)
+     
+    @discord.ui.button(label='6', row=1)
+    async def six(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '6'
+        await self.postProcess(interaction)
+    
+    @discord.ui.button(label='7', row=0)
+    async def seven(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '7'
+        await self.postProcess(interaction)
+     
+    @discord.ui.button(label='8', row=0)
+    async def eight(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '8'
+        await self.postProcess(interaction)
+     
+    @discord.ui.button(label='9', row=0)
+    async def nine(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.result += '9'
+        await self.postProcess(interaction)
+
+    async def postProcess(self, interaction: discord.Interaction):
+        #await interaction.channel.send(content = (self.result, self.children[0].emoji, self.children[0].emoji == '✖'))
+        #print(self.result, self.children[0].emoji, self.children[0].emoji == '✖')
+        if not self.result:
+            if str(self.children[0].emoji) == '✖':
+                return await interaction.response.edit_message(content='Cancelled', embed=None, view=CancelledView())
+            self.children[0].emoji = '✖'
+            self.children[0].custom_id = 'cancel'
+        elif str(self.children[0].emoji) == '✖': 
+            self.children[0].emoji = '⬅'
+            self.children[0].custom_id = 'backspace'
+        await interaction.response.edit_message(content=self.result, view=self)
+
+class DateInputInterface(discord.ui.View):
+    '''Uses a lower-level implementation to save space given how many similar buttons we're using'''
+    def __init__(self, bot, message, author, finale=None):
+        super().__init__()
+        self.result: datetime.datetime = datetime.datetime(datetime.datetime.now().year, 1, 1)
+        self.bot: commands.Bot = bot
+        self.message: discord.Message = message
+        self.author: discord.User = author
+        self.finale = finale
+        self.lastInteraction = None
+        self.backButton = discord.ui.Button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='back')
+        self.add_item(self.backButton)
+        for month in 'January.February.March.April.May.June.July.August.September.October.November.December'.split('.'):
+            self.add_item(discord.ui.Button(label=month, custom_id=month))
+        asyncio.create_task(self.selectMonth())
+
+    def interactionCheck(self, i: discord.Interaction):
+        return self.author == i.user and i.channel == self.message.channel
+
+    def setupMonths(self):
+        self.clear_items()
+        self.backButton = discord.ui.Button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='back')
+        months = {1:'January', 2:'February', 3:'March', 4:'April', 5:'May', 6:'June', 7:'July', 8:'August', 9:'September', 10:'October', 11:'November', 12:'December'}
+        for i, month in enumerate(months.values(), 1):
+            self.add_item(discord.ui.Button(label=month, style=discord.ButtonStyle.blurple if self.result.month == i else discord.ButtonStyle.gray, custom_id=month))
+        asyncio.create_task(self.selectMonth(True))
+
+    async def selectMonth(self, comeFromSetup=False):
+        if comeFromSetup: await self.lastInteraction.edit_original_message(view=self)
+        try: interaction: discord.Interaction = await self.bot.wait_for('interaction', check=self.interactionCheck, timeout=300)
+        except asyncio.TimeoutError: return
+        if interaction.data['custom_id'] == 'back':
+            return await interaction.edit_original_message(content='Cancelled', embed=None, view=CancelledView())
+        months = {'January':1, 'February':2, 'March':3, 'April':4, 'May':5, 'June':6, 'July':7, 'August':8, 'September':9, 'October':10, 'November':11, 'December':12}
+        self.lastInteraction = interaction
+        self.result = self.result.replace(month = months[interaction.data['custom_id']])
+        self.backButton = discord.ui.Button(label=interaction.data['custom_id'], emoji='⬅', custom_id='back')
+        self.setupDays()
+
+    def setupDays(self):
+        self.clear_items()
+        self.add_item(self.backButton)
+        for i in range(1, 24): #The rest will be handled within the actual method
+            self.add_item(discord.ui.Button(label=i, style=discord.ButtonStyle.blurple if self.result.day == i else discord.ButtonStyle.gray, custom_id=i))
+        asyncio.create_task(self.selectDay())
+
+    async def selectDay(self):
+        daysPerMonth = {1:31, 2:29 if isLeapYear() else 28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
+        firstHalf = True
+        self.add_item(discord.ui.Button(label='Rest of month', custom_id='switch'))
+        await self.lastInteraction.edit_original_message(view=self)
+        while True:
+            try: interaction: discord.Interaction = await self.bot.wait_for('interaction', check=self.interactionCheck, timeout=300)
+            except asyncio.TimeoutError: return
+            if interaction.data['custom_id'] == 'switch':
+                self.clear_items()
+                self.add_item(self.backButton)
+                if firstHalf: bounds = (24, daysPerMonth[self.result.month] + 1)
+                else: bounds = (1, 24)
+                for i in range(*bounds):
+                    self.add_item(discord.ui.Button(label=i, style=discord.ButtonStyle.blurple if self.result.day == i else discord.ButtonStyle.gray, custom_id=i))
+                self.add_item(discord.ui.Button(label='Rest of month', custom_id='switch'))
+                firstHalf =  not firstHalf
+                await self.lastInteraction.edit_original_message(view=self)
+            elif interaction.data['custom_id'] == 'back':
+                return self.setupMonths()
+            else:
+                self.result = self.result.replace(day = int(interaction.data['custom_id']))
+                self.backButton = discord.ui.Button(label='Redo', custom_id='back')
+                break
+        asyncio.create_task(self.confirmation())
+
+    async def confirmation(self):
+        self.clear_items()
+        self.add_item(self.backButton)
+        self.add_item(discord.ui.Button(label=f'Pass {self.result:%B %d} to the original embed', style=discord.ButtonStyle.green, custom_id='submit'))
+        await self.lastInteraction.edit_original_message(view=self)
+        while True:
+            await asyncio.sleep(2)
+            break
+        try: result: discord.Interaction = await self.bot.wait_for('interaction', check=self.interactionCheck, timeout=300)
+        except asyncio.TimeoutError: return
+        if result.data['custom_id'] == 'back':
+            self.setupMonths()
+        else:
+            if self.result < datetime.datetime.now(): self.result.replace(year = self.result.year + 1)
+            if self.finale: await self.finale(self.result)
+            await result.edit_original_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
+        
+class AgeView(discord.ui.View):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentAge: int, ageHidden: bool, newAge: int = None):
+        super().__init__()
+        self.birthdays = birthdays
+        self.ctx = ctx
+        self.originalMessage = originalMessage
+        self.message = message #Current message; obtain from an interaction
+        self.embed = embed
+        self.currentAge = currentAge
+        self.newAge = newAge
+        self.usedPrivateInterface = False
+        self.ageHidden = ageHidden
+        self.finishedSetup = False
+        asyncio.create_task(self.confirmation())
+
+    @discord.ui.button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='cancelSetup')
+    async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await self.message.delete()
+        self.finishedSetup = True
+
+    @discord.ui.button(label='Edit privately', emoji='⌨')
+    async def privateInterface(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.usedPrivateInterface = True
+        for child in self.children: child.disabled = True #Disable all buttons for proper control flow
+        await interaction.message.edit(view=self)
+        embed = discord.Embed(title='Birthday age setup', description='Use the virtual keyboard to enter your desired age. Note that Disguard is unable to delete this message when you\'re done.')
+        kb = NumberInputInterface(self.submitValue)
+        await interaction.response.send_message(embed=embed, view=kb, ephemeral=True)
+        result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=lambda i: i.data['custom_id'] in ('submit', 'cancel'))
+        for child in self.children: child.disabled = False
+        if result.data['custom_id'] == 'cancel': await interaction.message.edit(view=self) #Enable buttons if cancelling virtual keybaord operation
+    
+    @discord.ui.button(label='Confirm', emoji='✔', style=discord.ButtonStyle.green, disabled=True, custom_id='confirmSetup')
+    async def confirm(self, button: discord.ui.Button, interaction: discord.Interaction):
+        button.disabled = True #set this as clicked
+        await interaction.response.edit_message(view=self)
+        await self.saveChanges()
+        self.finishedSetup = True
+
+    async def confirmation(self):
+        while not self.birthdays.bot.is_closed() and not self.finishedSetup:
+            def messageCheck(m: discord.Message): return m.author == self.ctx.author and m.channel == self.ctx.channel
+            def interactionCheck(i: discord.Interaction):
+                if i.data['custom_id'] == 'cancel': self.usedPrivateInterface = False
+                return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup')
+            if not self.usedPrivateInterface and not self.ageHidden:
+                done, pending = await asyncio.wait([self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300), self.birthdays.bot.wait_for('interaction', check=interactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+                try: result = done.pop().result()
+                except asyncio.TimeoutError: 
+                    try: await self.message.delete()
+                    except: pass
+                    break #Close the loop if we time out
+                for f in pending: f.cancel()
+                if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'): break #If the user cancels or finishes setup, close the loop
+                if not self.usedPrivateInterface: self.newAge = calculateAges(result)[0] #If private interface was used, submitValue will store the value
+                try:
+                    self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                    await result.delete()
+                except: pass
+            if self.newAge:
+                if self.newAge != self.currentAge:
+                    self.embed.description=f'{"Update" if self.currentAge else "Set"} your age to **{"the input from the virtual keyboard" if self.usedPrivateInterface else self.newAge}**?\n\nYou may also type another age'
+                    for child in self.children: child.disabled = False
+                else:
+                    self.embed.description=f'Your age is already set to **{"the value you entered" if self.usedPrivateInterface else self.newAge}** 👍\n\nYou may type another age or cancel setup'
+                    for child in self.children[:2]: child.disabled = False
+            else: self.embed.description=f'{self.birthdays.emojis["alert"]} | **{"the value you entered" if self.usedPrivateInterface else self.newAge}** isn\'t an age. You may type a new age or cancel the setup.'
+            try: await self.message.edit(embed=self.embed, view=self)
+            except discord.errors.NotFound: break
+    
+    async def saveChanges(self):
+        #TODO: add age verification
+        if self.newAge == self.currentAge: return await self.message.delete()
+        await database.SetAge(self.ctx.author, self.newAge)
+        if not self.usedPrivateInterface:
+            self.embed.description = f'✔ | Age successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newAge}'
+            if not self.birthdays.bot.lightningUsers[self.ctx.author.id].get('birthday'):
+                self.embed.description += '\n\nYou may add your birthday from the menu on the original embed if desired'
+            await self.message.edit(embed=self.embed, view=SuccessAndDeleteView(), delete_after=30)
+        else: await self.message.delete()
+        self.originalMessage.embeds[0].set_field_at(1, name='Your Age',value=f'**Age Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newAge}')
+        await self.originalMessage.edit(embed=self.originalMessage.embeds[0])
+
+    async def submitValue(self, result):
+        '''Writes the value from the KB interface to the class variable'''
+        self.newAge = int(result)       
+
+class BirthdayView(discord.ui.View):
+    '''The interface for setting one's birthday'''
+    #Almost a carbon copy from AgeView
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentBday: datetime.datetime, bdayHidden: bool, newBday: datetime.datetime = None):
+        super().__init__()
+        self.birthdays = birthdays
+        self.ctx = ctx
+        self.originalMessage = originalMessage
+        self.message = message
+        self.embed = embed
+        self.currentBday = currentBday
+        self.newBday = newBday
+        self.usedPrivateInterface = False
+        self.bdayHidden = bdayHidden
+        self.finishedSetup = False
+        asyncio.create_task(self.confirmation())
+
+    @discord.ui.button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='cancelSetup')
+    async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await self.message.delete()
+        self.finishedSetup = True
+
+    @discord.ui.button(label='Edit privately', emoji='⌨')
+    async def privateInterface(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.usedPrivateInterface = True
+        for child in self.children: child.disabled = True #Disable all buttons for proper control flow
+        await interaction.message.edit(view=self)
+        embed = discord.Embed(title='Birthday date setup', description='Use the virtual keyboard to enter your birthday. Note that Disguard is unable to delete this message when you\'re done.')
+        kb = DateInputInterface(self.birthdays.bot, self.message, self.ctx.author, self.submitValue)
+        await interaction.response.send_message(embed=embed, view=kb, ephemeral=True)
+        result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=lambda i: i.data['custom_id'] in ('submit', 'cancel'))
+        for child in self.children: child.disabled = False
+        if result.data['custom_id'] == 'cancel': await interaction.message.edit(view=self) #Enable buttons if cancelling virtual keybaord operation
+    
+    @discord.ui.button(label='Confirm', emoji='✔', style=discord.ButtonStyle.green, disabled=True, custom_id='confirmSetup')
+    async def confirm(self, button: discord.ui.Button, interaction: discord.Interaction):
+        button.disabled = True #set this as clicked
+        await interaction.response.edit_message(view=self)
+        await self.saveChanges()
+        self.finishedSetup = True
+    
+    async def confirmation(self):
+        while not self.birthdays.bot.is_closed() and not self.finishedSetup:
+            def messageCheck(m: discord.Message): return m.author == self.ctx.author and m.channel == self.ctx.channel
+            def interactionCheck(i: discord.Interaction): #TODO: needs more verification
+                if i.data['custom_id'] == 'cancel': self.usedPrivateInterface = False
+                return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup')
+            if not self.usedPrivateInterface and not self.bdayHidden:
+                done, pending = await asyncio.wait([self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300), self.birthdays.bot.wait_for('interaction', check=interactionCheck)], return_when=asyncio.FIRST_COMPLETED)
+                try: result = done.pop().result()
+                except asyncio.TimeoutError: 
+                    try: await self.message.delete()
+                    except: pass
+                    break #Close the loop if we time out
+                for f in pending: f.cancel()
+                if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'): break #If the user cancels or finishes setup, close the loop
+                if not self.usedPrivateInterface:
+                    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.birthdays.bot.lightningLogging.get(self.message.guild.id).get('offset', -5))
+                    self.newBday = calculateDate(result, adjusted) #If private interface was used, submitValue will store the value
+                try:
+                    self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                    await result.delete()
+                except: pass
+            if self.newBday:
+                if self.newBday != self.currentBday:
+                    self.embed.description=f'{"Update" if self.currentBday else "Set"} your birthday to **{"the input from the virtual keyboard" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}**?\n\nYou may also type another date'
+                    for child in self.children: child.disabled = False
+                else:
+                    self.embed.description=f'Your birthday is already set to **{"the value you entered" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}** 👍\n\nYou may type another date or cancel setup'
+                    for child in self.children[:2]: child.disabled = False
+            else: self.embed.description=f'{self.birthdays.emojis["alert"]} | Unable to parse a date from **{"the value you entered" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}**. You may type a new date or cancel the setup.'
+            try: await self.message.edit(embed=self.embed, view=self)
+            except discord.errors.NotFound: break
+    
+    async def saveChanges(self):
+        if self.newBday == self.currentBday: return await self.message.delete()
+        await database.SetBirthday(self.ctx.author, self.newBday)
+        if not self.usedPrivateInterface:
+            self.embed.description = f'✔ | Birthday successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}'
+            bdayAnnounceChannel = self.birthdays.bot.lightningLogging[self.message.guild.id].get('birthday', 0)
+            if bdayAnnounceChannel > 0: bdayAnnounceText = f'Since birthday announcements are enabled for this server, your birthday will be announced to {self.birthdays.bot.get_channel(bdayAnnounceChannel).mention}.'
+            else: bdayAnnounceText = f'Birthday announcements are not enabled for this server. Moderators may enable this feature [here](http://disguard.herokuapp.com/manage/{self.message.guild.id}/server).'
+            self.embed.description += f'\n\n{bdayAnnounceText}'
+            if not self.birthdays.bot.lightningUsers[self.ctx.author.id].get('age'):
+                self.embed.description += '\n\nYou may add your age from the menu on the original embed if desired'
+            await self.message.edit(embed=self.embed, view=SuccessAndDeleteView(), delete_after=30)
+        else: await self.message.delete()
+        self.originalMessage.embeds[0].set_field_at(1, name='Your Birthday',value=f'**Birthday Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}')
+        await self.originalMessage.edit(embed=self.originalMessage.embeds[0])
+
+    async def submitValue(self, result):
+        '''Writes the value from the KB interface to the class variable'''
+        self.newBday = result
+
+class WishlistView(discord.ui.View):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, cont: bool=False, new: discord.Message=None, wishlist: typing.List[str]=[], embed: discord.Embed=None):
+        super().__init__()
+        self.birthdays = birthdays
+        self.ctx = ctx
+        self.msg = msg
+        self.cont = cont
+        self.new = new
+        self.wishlist = wishlist
+        self.defaultEmbed = embed
+        self.add_item(self.addButton(self.birthdays))
+        self.add_item(self.removeButton(self.birthdays))
+
+    @discord.ui.button(label='Close Viewer', style=discord.ButtonStyle.red)
+    async def close(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await interaction.message.delete()
+        # and re-enable the wishlist button on original message
+
+    class addButton(discord.ui.Button):
+        def __init__(self, birthdays: Birthdays):
+            super().__init__(label='Add items', style=discord.ButtonStyle.gray, emoji=birthdays.emojis['whitePlus'])
+        
+        async def callback(self, interaction: discord.Interaction):
+            view: WishlistView = self.view
+            await view.wishlistEditPreview(interaction, add=True)
+        
+    class removeButton(discord.ui.Button):
+        def __init__(self, birthdays: Birthdays):
+            super().__init__(label='Remove items', style=discord.ButtonStyle.gray, emoji=birthdays.emojis['whiteMinus'])
+        
+        async def callback(self, interaction: discord.Interaction):
+            view: WishlistView = self.view
+            await view.wishlistEditPreview(interaction, add=False)
+
+    async def wishlistEditPreview(self, interaction: discord.Interaction, add=True):
+        '''Adds or removes items from one's wishlist, depending on the variable'''
+        verb = 'remove'
+        preposition = 'from'
+        if add: 
+            verb = 'add'
+            preposition = 'to'
+        self.new = interaction.message
+        embed = self.new.embeds[0]
+        header = f'👮‍♂️ » 📝{self.birthdays.whitePlus if add else self.birthdays.whiteMinus} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
+        embed.title = f'👮‍♂️ {self.ctx.author.name:.{63 - len(header)}} » 📝{self.birthdays.whitePlus if add else self.birthdays.whiteMinus} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
+        embed.description = f'**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}\n\nType{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.'
+        await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, interaction.message, self.new, add))
+
+class WishlistEditView(discord.ui.View):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, new: discord.Message, add=True, wishlist: typing.List[str]=[]):
+        super().__init__()
+        self.birthdays = birthdays
+        self.ctx = ctx
+        self.msg = msg
+        self.new = new
+        self.add = add
+        self.wishlist = wishlist
+        self.tempWishlist = wishlist or []
+        self.toModify = {} #First 16 chars of entries must be unique due to being used as dict keys
+        self.children[1].emoji = self.birthdays.emojis['delete']
+        asyncio.create_task(self.editWishlist(add)) #Probably don't need to pass if we're using class variables
+
+    @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red, emoji='✖')
+    async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.tempWishlist = self.wishlist or []
+        await self.new.edit(embed=self.regenEmbed(), view=WishlistView(self.birthdays, self.ctx, self.msg, False, self.new))
+        # TODO: and re-enable the wishlist button on original message
+
+    @discord.ui.button(label='Clear entries', style=discord.ButtonStyle.gray, disabled=True)
+    async def clear(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.tempWishlist = []
+        await self.refreshDisplay()
+
+    @discord.ui.button(label='Save', style=discord.ButtonStyle.green, emoji='✅')
+    async def save(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.wishlist = self.tempWishlist #Should handle local state
+        asyncio.create_task(database.SetWishlist(self.ctx.author, self.wishlist)) #And this will wrap up global state
+        await self.new.edit(embed=self.regenEmbed(), view=WishlistView(self.birthdays, self.ctx, self.msg, False, self.new)) #Maybe add some sort of banner/message to communicate to the user that their changes were saved
+        #Upon save success, edit embed to signify success and disable the buttons for about 1-2 seconds, then delete the wishlist embed & re-enable the wishlist button on the original message
+        #Need to update embed title/entry icons to signify no longer being in edit mode
+        # TODO: and re-enable the wishlist button on original message
+
+    def regenEmbed(self):
+        header = '👮‍♂️ » 🍰 Birthday » 📝 Wishlist'
+        return discord.Embed(title=f'👮‍♂️ {self.ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 📝 Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+
+    async def editWishlist(self, add=True):
+        #await new.clear_reactions()
+        #for r in ['❌', '✅']: await new.add_reaction(r)
+        #def checkCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '✅'
+        #def cancelCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '❌'
+        def addCheck(m: discord.Message): return m.author == self.ctx.author and m.channel == self.ctx.channel
+        while not self.birthdays.bot.is_closed():
+            #done, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkCheck, timeout=300), self.bot.wait_for('reaction_add', check=cancelCheck, timeout=300), self.bot.wait_for('message', check=addCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
+            #try: stuff = done.pop().result()
+            #except asyncio.TimeoutError: await new.delete()
+            #for future in p: future.cancel()
+            try: message: discord.Message = await self.birthdays.bot.wait_for('message', check=addCheck, timeout=300)
+            except asyncio.TimeoutError: return await self.new.edit(view=WishlistView)
+            #if type(stuff) is discord.Message:
+            ### Deprecedated ability to send an image attachment as a wishlist entry
+            # if len(message.attachments) > 0:
+            #     if message.attachments[0].height: #We have an image or a video, so we will create a permanent URL via the private image hosting channel
+            #         await stuff.add_reaction(self.loading)
+            #         imageLogChannel = self.bot.get_channel(534439214289256478)
+            #         tempDir = 'Attachments/Temp'
+            #         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), stuff.attachments[0].filename[stuff.attachments[0].filename.rfind('.')+1:]))
+            #         await stuff.attachments[0].save(savePath)
+            #         f = discord.File(savePath)
+            #         hostMessage = await imageLogChannel.send(file=f)
+            #         toModify.append(hostMessage.attachments[0].url)
+            #         if os.path.exists(savePath): os.remove(savePath)
+            if message.content:
+                words = message.content.split(', ') #O(n)
+                for word in words: self.toModify[word[:16]] = word #O(n)
+                self.tempWishlist += words #O(k)
+            try:
+                self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(message)
+                await message.delete()
+            except discord.Forbidden: pass
+            await self.refreshDisplay()
+            # def formatWishlistEntry(s: str):
+            #     # if add and toModify.get(s[:16]): return f'**+ {s}**'
+            #     # elif not add and toModify.get(s[:16]): return f'~~{s}~~'
+            #     # else: return f'• {s}'
+            #     return f'**+ {s}**' if add and toModify.get(s[:16]) else f'~~{s}~~' if not add and toModify.get(s[:16]) else f'• {s}'
+            # if add:
+            #     verb='add'
+            #     preposition='to'
+            # else:
+            #     verb='remove'
+            #     preposition='from'
+            #     #if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist) #TODO: add a button for this
+            #     # for w in wishlist: #Figure this stuff out - i think it shifts all the entries to the left??
+            #     #     for wo in range(len(toModify)):
+            #     #         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
+            #     #         except: pass
+            # self.new.embeds[0].description = f'Type{" the number or text of an entry" if verb != "add" else ""} to {verb} {"entries" if verb == "add" else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not tempWishlist else newline.join([formatWishlistEntry(w) for w in tempWishlist]) if add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(tempWishlist, 1)])}'
+            # await self.new.edit(embed=self.new.embeds[0])
+            # else:
+            #     if str(stuff[0]) == '✅':
+            #         new.embeds[0].description = '{} Saving...'.format(self.loading)
+            #         await new.edit(embed=new.embeds[0])
+            #         if add:
+            #             for e in toModify: await database.AppendWishlistEntry(ctx.author, e)
+            #         else:
+            #             for w in toModify: wishlist.remove(w)
+            #             await database.SetWishlist(ctx.author, wishlist)
+            #     await new.clear_reactions()
+            #     await m.remove_reaction('📝', ctx.author)
+            #     return await firstWishlistContinuation(self, ctx, m, True, new)
+    async def refreshDisplay(self):
+        def formatWishlistEntry(s: str):
+            # if add and toModify.get(s[:16]): return f'**+ {s}**'
+            # elif not add and toModify.get(s[:16]): return f'~~{s}~~'
+            # else: return f'• {s}'
+            return f'**+ {s}**' if self.add and self.toModify.get(s[:16]) else f'~~{s}~~' if not self.add and self.toModify.get(s[:16]) else f'• {s}'
+        verb = 'remove'
+        preposition = 'from'
+        if self.add:
+            verb = 'add'
+            preposition = 'to'
+        #if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist) #TODO: add a button for this
+        # for w in wishlist: #Figure this stuff out - i think it shifts all the entries to the left??
+        #     for wo in range(len(toModify)):
+        #         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
+        #         except: pass
+        self.new.embeds[0].description = f'Type{" the number or text of an entry" if self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.tempWishlist else newline.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
+        if self.tempWishlist: self.children[1].disabled = False
+        else: self.children[1].disabled = True
+        await self.new.edit(embed=self.new.embeds[0], view=self)
+
+class UpcomingBirthdaysView(discord.ui.View):
+    def __init__(self, message: discord.Message, author: discord.User, currentServer, disguardSuggest, weekBirthday, namesOnly, embed: discord.Embed, bot: commands.Bot, jumpStart=0):
+        super().__init__()
+        self.message = message
+        self.author = author
+        self.currentServer = list(self.paginate(currentServer))
+        self.disguardSuggest = list(self.paginate(disguardSuggest))
+        self.weekBirthday = list(self.paginate(weekBirthday))
+        self.bot = bot
+        self.namesOnly = namesOnly
+        self.embed = embed
+        self.currentView = (self.currentServer[0][:8] if self.currentServer else []) + (self.disguardSuggest[0][:8] if self.disguardSuggest else []) + (self.weekBirthday[0][:8] if self.weekBirthday else [])
+        self.currentPage = 0
+        self.finalPage = 0
+        self.buttonClose = self.closeButton()
+        self.buttonCurrentServer = self.currentServerButton()
+        self.buttonDisguardSuggest = self.disguardSuggestButton()
+        self.buttonWeekBirthday = self.weekBirthdayButton()
+        self.buttonWriteMessage = self.writeMessageButton()
+        self.buttonBack = self.backButton()
+        self.buttonPrev = self.prevPage()
+        self.buttonNext = self.nextPage()
+        self.buttonSearch = self.searchMembersButton()
+        self.memberDropdown = self.selectMemberDropdown()
+        self.add_item(self.buttonClose)
+        self.add_item(self.buttonCurrentServer)
+        self.add_item(self.buttonDisguardSuggest)
+        self.add_item(self.buttonWeekBirthday)
+        self.add_item(self.buttonWriteMessage)
+        if jumpStart == 1: asyncio.create_task(self.writeMessagePrompt(author))
+
+
+    def fillBirthdayList(self, list, page = 0, entries = 25):
+        return [f"{qlfc}\\▪️ **{m['data'].name if self.namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[page][:entries]]
+
+    def paginate(self, data):
+        for i in range(0, len(data), 25): yield data[i:i+25] #25 entries per page
+
+    async def loadHomepage(self):
+        self.clear_items()
+        self.add_item(self.buttonClose) #probably dont need to create new buttons all the time
+        self.add_item(self.buttonCurrentServer)
+        self.add_item(self.buttonDisguardSuggest)
+        self.add_item(self.buttonWeekBirthday)
+        self.add_item(self.buttonWriteMessage)
+        self.embed.description = f'''Click a button to expand that section**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(self.fillBirthdayList(self.currentServer, entries=8))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(self.fillBirthdayList(self.disguardSuggest, entries=8))}\n\n__WITHIN A WEEK__\n{newline.join(self.fillBirthdayList(self.weekBirthday, entries=8))}'''
+        await self.message.edit(embed=self.embed, view=self)
+    
+    class closeButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label='Close', style=discord.ButtonStyle.red)
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+    
+    class backButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(emoji='⬅', label='Back')
+            self.code = 0 #determines callback action
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            if self.code == 0: await view.loadHomepage()
+    
+    class prevPage(discord.ui.Button):
+        def __init__(self):
+            super().__init__(emoji='⏮', label='Previous Page')
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            if view.currentPage == 0: return await interaction.response.pong()
+            view.currentPage -= 1
+            if view.currentPage == 0: self.disabled = True #teething issues
+            else: self.disabled = False
+            view.embed.description = f'''Page {view.currentPage + 1} of {view.finalPage + 1}\n{newline.join(view.fillBirthdayList(view.currentView, view.currentPage))}'''
+            await view.message.edit(embed=view.embed, view=view)
+
+    class nextPage(discord.ui.Button):
+        def __init__(self):
+            super().__init__(emoji='⏭', label='Next Page')
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            if view.currentPage == view.finalPage: return await interaction.response.pong()
+            view.currentPage += 1
+            if view.currentPage == view.finalPage: self.disabled = True #teething issues
+            else: self.disabled = False
+            view.embed.description = f'''Page {view.currentPage + 1} of {view.finalPage + 1}\n{newline.join(view.fillBirthdayList(view.currentView, view.currentPage))}'''
+            await view.message.edit(embed=view.embed, view=view)
+
+    class currentServerButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label='Current Server')
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            view.clear_items()
+            view.buttonPrev.disabled = True
+            if len(view.currentServer) == 1: view.buttonNext.disabled = True
+            view.add_item(view.buttonBack)
+            view.add_item(view.buttonPrev)
+            view.add_item(view.buttonNext)
+            view.add_item(view.buttonWriteMessage)
+            view.currentView = view.currentServer
+            view.currentPage = 0
+            view.finalPage = len(view.currentView) - 1
+            view.embed.title = '🍰 Upcoming birthdays for this server'
+            view.embed.description = f'''Page 1 of {view.finalPage + 1}\n{newline.join(view.fillBirthdayList(view.currentView))}'''
+            await interaction.response.edit_message(embed=view.embed, view=view)
+
+    class disguardSuggestButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label='Disguard Suggestions')
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            view.clear_items()
+            view.buttonPrev.disabled = True
+            if len(view.currentServer) == 1: view.buttonNext.disabled = True
+            view.add_item(view.buttonBack)
+            view.add_item(view.buttonPrev)
+            view.add_item(view.buttonNext)
+            view.add_item(view.buttonWriteMessage)
+            view.currentView = view.disguardSuggest
+            view.currentPage = 0
+            view.finalPage = len(view.currentView) - 1
+            view.embed.title = '🍰 Upcoming birthdays for members you share the most servers with'
+            view.embed.description = f'''Page 1 of {view.finalPage + 1}\n{newline.join(view.fillBirthdayList(view.disguardSuggest))}'''
+            await interaction.response.edit_message(embed=view.embed, view=view)
+
+    class weekBirthdayButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label='Within a Week')
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            view.clear_items()
+            view.buttonPrev.disabled = True
+            if len(view.currentServer) == 1: view.buttonNext.disabled = True
+            view.add_item(view.buttonBack)
+            view.add_item(view.buttonPrev)
+            view.add_item(view.buttonNext)
+            view.add_item(view.buttonWriteMessage)
+            view.currentView = view.weekBirthday
+            view.currentPage = 0
+            view.finalPage = len(view.currentView) - 1
+            view.embed.title = '🍰 Upcoming global birthdays'
+            view.embed.description = f'''Page 1 of {view.finalPage + 1}\n{newline.join(view.fillBirthdayList(view.weekBirthday))}'''
+            await interaction.response.edit_message(embed=view.embed, view=view)
+    
+    class writeMessageButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(emoji='✉', label='Write message')
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            view.memberDropdown.updatePopulation(view.currentView)
+            view.clear_items()
+            view.add_item(view.memberDropdown)
+            view.add_item(view.buttonBack)
+            view.add_item(view.buttonSearch)
+            description = 'You may write a message that will be delivered to someone on their birthday. Use the dropdown to select a member listed here or the search button to find someone we share a server with.'
+            await interaction.response.edit_message(content=description, view=view)
+
+    class selectMemberDropdown(discord.ui.Select):
+        def __init__(self, population=[], custom_id = None):
+            if custom_id: super().__init__(placeholder=f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})', custom_id=custom_id)
+            else: super().__init__(placeholder=f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})')
+            view: UpcomingBirthdaysView = self.view
+            #self.row = 0
+            self.userDict: typing.Dict[int, discord.User] = {}
+            for d in population:
+                u: discord.User = d['data']
+                b: datetime.datetime = d['bday']
+                self.add_option(label=u.name[:100], value=u.id, description=f'{b.strftime("%B %d") if b else "⚠ No birthday set"}')
+                self.userDict[u.id] = u
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            await view.writeMessagePrompt(self.userDict[int(self.values[0])])
+
+        def updatePopulation(self, population, custom_id=None):
+            if custom_id: self.custom_id = custom_id
+            self.options = []
+            for d in population:
+                u: discord.User = d['data']
+                b: datetime.datetime = d['bday']
+                self.add_option(label=u.name[:100], value=u.id, description=f'{b.strftime("%B %d") if b else "⚠ No birthday set"}')
+                self.userDict[u.id] = u
+            self.placeholder = f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})'
+
+    class searchMembersButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(emoji='🔎', label='Search for someone else')
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            view.clear_items()
+            view.add_item(view.buttonBack)
+            view.embed.title= '🔎 Search members for a birthday message'
+            view.embed.description = 'Send a message to search members in across our mutual servers, then select your desired result from the dropdown'
+            select = view.memberDropdown
+            def messageCheck(m: discord.Message): return m.author == view.author and m.channel == view.message.channel
+            def selectCheck(i: discord.Interaction): return i.user == view.author and i.data['custom_id'] == str(view.message.id)
+            def getBirthday(u: discord.User): return view.bot.lightningUsers[u.id].get('birthday')
+            await interaction.response.edit_message(content=None, embed=view.embed, view=view)
+            while not view.bot.is_closed():
+                done, pending = await asyncio.wait([view.bot.wait_for('message', check=messageCheck, timeout=300), view.bot.wait_for('interaction', check=selectCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
+                try: result = done.pop().result()
+                except asyncio.TimeoutError: await view.loadHomepage()
+                for f in pending: f.cancel()
+                if type(result) is discord.Interaction: break
+                # result: discord.Message = await view.bot.wait_for('message', check=messageCheck, timeout=300)
+                result: discord.Message = result
+                cyberlog: Cyberlog.Cyberlog = view.bot.get_cog('Cyberlog')
+                results = await utility.FindMoreMembers(view.bot.users, result.content)
+                try:
+                    cyberlog.AvoidDeletionLogging(result)
+                    await result.delete()
+                except (discord.Forbidden, discord.HTTPException): pass
+                users = [r['member'] for r in results]
+                listToPass = [{'data': u, 'bday': getBirthday(u)} for u in users]
+                #select = view.selectMemberDropdown(listToPass, view.message.id)
+                select.updatePopulation(listToPass, str(view.message.id))
+                if len(view.children) == 1: view.add_item(select)
+                await view.message.edit(view=view)
+    
+    class switchToDMsButton(discord.ui.Button):
+        def __init__(self, target: discord.User):
+            super().__init__(label='Switch to DMs')
+            self.target = target
+        async def callback(self, interaction: discord.Interaction):
+            view: UpcomingBirthdaysView = self.view
+            message = await view.author.send(embed=view.embed, view=view)
+            await interaction.response.pong()
+            view.message = message
+            await view.writeMessagePrompt(self.target)
+
+    async def writeMessagePrompt(self, target: discord.User):
+        self.clear_items()
+        self.add_item(self.buttonBack)
+        if self.message.guild:
+            intro = 'Until [input forms](https://cdn.discordapp.com/attachments/697138785317814292/940761395883024424/c896cb74-1206-4632-bcb4-99eccf1c0356.png) are fully implmented, this process will take place in DMs. Make sure your DMs are open, then press the button below this embed.'
+            self.add_item(self.switchToDMsButton(target))
+        else:
+            intro = f'Type your message for {target.name}. Note that you cannot send server invites or hyperlinks in birthday messages.'
+            existingMessages = self.bot.lightningUsers[target.id].get('birthdayMessages')
+            filtered = [m for m in existingMessages if target.id == m['author']]
+            if filtered:
+                intro += f'\n\nℹ | You already have {len(filtered)} messages queued for {target.name}. If you wish to add another, you may continue by sending your desired message.'
+            if not self.bot.lightningUsers[target.id].get('birthday'): intro += f'\n\nℹ | {target.name} hasn\'t set their birthday yet. You may still write a message, but it will only be delivered if they set their birthday.'
+        self.embed.title = f'Compose birthday message for {target.name}'
+        self.embed.description = intro
+        await self.message.edit(content=None, embed=self.embed, view=self)
+        if type(self.message.channel) is not discord.DMChannel: return #ensures we only proceed if in DMs
+        def messageCheck(m: discord.Message): return m.author == self.author# and type(m.channel) is discord.DMChannel
+        satisfactoryMessage = False
+        while not satisfactoryMessage:
+            try: msgInBottle: discord.Message = await self.bot.wait_for('message', check=messageCheck, timeout=300)
+            except asyncio.TimeoutError: return await self.loadHomepage()
+            satisfactoryMessage = not re.search('.*discord.gg/.*', msgInBottle.content) and not re.search('.*htt(p|ps)://.*', msgInBottle.content) and len(msgInBottle.content) < 1024
+            if not satisfactoryMessage:
+                self.embed.description += f'\n\n⚠ | Your message contains hyperlinks, server invites, or is too long (the message must be < 1024 characters). Please try again.'
+                await self.message.channel.send(embed=self.embed)
+        self.embed.description = 'Select the destinations you want your message to be delivered to. Messages won\'t be delivered to channels with birthday announcements off unless they\'re turned on in the meantime.'
+        mutualServers = mutualServersMemberToMember(self.bot.get_cog('Birthdays'), self.bot.user, target)
+        dropdown = discord.ui.Select(min_values=1, placeholder='Select destination channels')
+        dmChannel = target.dm_channel
+        if not target.dm_channel:
+            try:
+                await target.create_dm()
+                dmChannel = target.dm_channel
+            except: dmChannel = None
+        dropdown.add_option(label=f'{target.name}\'s DMs', value=target.dm_channel.id, description='Recommended' if dmChannel else 'Unable to DM')
+        for server in mutualServers:
+            birthdayChannel = server.get_channel(self.bot.lightningLogging[server.id].get('birthday'))
+            dropdown.add_option(label=server.name, value=server.id, description=f'#{birthdayChannel.name}' if birthdayChannel else 'No announcement channel configured')
+        dropdown.max_values = len(mutualServers) + 1
+        next = discord.ui.Button(label='Next', style=discord.ButtonStyle.green, custom_id='next')
+        self.add_item(dropdown)
+        self.add_item(next)
+        await self.message.channel.send(embed=self.embed, view=self)
+        def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == 'next' and i.user == self.author# and type(i.channel) is discord.DMChannel
+        try: result = await self.bot.wait_for('interaction', check=interactionCheck, timeout=300)
+        except asyncio.TimeoutError: return await self.loadHomepage()
+        birthday = self.bot.lightningUsers[target.id].get('birthday')
+        destinations = [f'• {self.bot.get_channel(int(dropdown.values[0]))}'] + [f'• {self.bot.get_guild(int(v))}' for v in (dropdown.values[1:] if len(dropdown.values) > 1 else [])]
+        serverDestinations = [self.bot.get_guild(int(v)) for v in dropdown.values[1:]]
+        self.embed.description = f'Your message to {target.name} says `{msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nNote that if this message ends up being inapporpriate, {target.name} can flag it for investigation by Rick Astley and/or Disguard\'s developer. Learn more here.\n\nIf this all looks good, press the green button.'
+        self.clear_items()
+        self.add_item(self.buttonBack)
+        #self.add_item(discord.ui.Button(label='Restart', custom_id='restart'))
+        self.add_item(discord.ui.Button(label='Looks good', custom_id='confirm', style=discord.ButtonStyle.green))
+        await self.message.channel.send(embed=self.embed, view=self)
+        def finalCheck(i: discord.Interaction): return i.data['custom_id'] in ('restart', 'confirm') and i.user == self.author# and type(i.channel) is discord.DMChannel
+        try: result: discord.Interaction = await self.bot.wait_for('interaction', check=finalCheck, timeout=300)
+        except asyncio.TimeoutError: return await self.loadHomepage()
+        #print(result.data['custom_id'])
+        if result.data['custom_id'] == 'restart': return await self.writeMessagePrompt(target) #TODO: restart button
+        await database.SetBirthdayMessage(target, msgInBottle, self.author, serverDestinations)
+        await self.message.channel.send(f'Successfully queued the message for {target.name}')
+
+
+        
+    
