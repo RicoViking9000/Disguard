@@ -104,7 +104,7 @@ class Birthdays(commands.Cog):
 
                 if userID == 247412852925661185: toSend = f'🍰🎊🍨🎈 Greetings {server.name}! It\'s my developer {user.mention}\'s birthday!! Let\'s wish him a very special day! 🍰🎊🍨🎈'
                 else: 
-                    if cyber.privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰"
+                    if cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰"
                     else: toSend = f"🍰 Greetings {server.name}! We have an anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰"
                 if messages:
                     toSend += f'\n{messageString}'
@@ -144,16 +144,15 @@ class Birthdays(commands.Cog):
 
     async def updateBirthdays(self):
         # print('Updating birthdays')
-        updated = []
-        for member in self.bot.users:
-            try: bday = self.bot.lightningUsers[member.id]['birthday']
+        #updated = []
+        for user in self.bot.users:
+            try: bday: datetime.datetime = self.bot.lightningUsers[user.id]['birthday']
             except KeyError: continue
-            if bday is not None:
-                if bday < datetime.datetime.now():
-                    new = datetime.datetime(bday.year + 1, bday.month, bday.day)
-                    await database.SetBirthday(member, new)
-                    updated.append(member)
-        print(f'Updated birthdays for {len(updated)} members')
+            if bday and bday < datetime.datetime.now():
+                new = datetime.datetime(bday.year + 1, bday.month, bday.day)
+                await database.SetBirthday(user, new)
+                #updated.append(user)
+        #print(f'Updated birthdays for {len(updated)} members')
 
     async def verifyBirthdaysDict(self):
         '''Creates/updates the global birthday dictionary'''
