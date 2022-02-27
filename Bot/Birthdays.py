@@ -100,52 +100,21 @@ class Birthdays(commands.Cog):
                 # print(f'Announcing birthday for {member.name} to {server.name}')
                 messages = [a for a in self.bot.lightningUsers[user.id].get('birthdayMessages', []) if server.id in a['servers']] if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
                 messageVisibility = cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayMessages')
-                messageString = '' #Figure out how to format this
+                messageString = f'Members from this server also wrote {len(messages)} birthday messages to be delivered here on {user.name}\'s birthday:' if messages else ''
 
-                if userID == 247412852925661185:
-                    toSend = f'🍰🎊🍨🎈 Greetings {server.name}! It\'s my developer {user.mention}\'s birthday!! Let\'s wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ""}'
+                if userID == 247412852925661185: toSend = f'🍰🎊🍨🎈 Greetings {server.name}! It\'s my developer {user.mention}\'s birthday!! Let\'s wish him a very special day! 🍰🎊🍨🎈'
                 else: 
-                    if cyber.privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
-                    else: toSend = f"🍰 Greetings {server.name}! We have an anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
-                # try: 
-                m = await self.bot.get_channel(channel).send(toSend)
+                    if cyber.privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰"
+                    else: toSend = f"🍰 Greetings {server.name}! We have an anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰"
+                if messages:
+                    toSend += f'\n{messageString}'
+                    messageEmbeds = [discord.Embed(title=f'✉ Birthday Message from {m["authName"]}', description=m['message'], color=yellow[1]) for m in messages]
+                    embedsToSend = utility.paginate(messageEmbeds, 10)
+                m = await self.bot.get_channel(channel).send(toSend, embeds=embedsToSend[0]) #Caveat: moderators can't delete individual embeds if inappropriate
+                if len(embedsToSend) > 1:
+                    for page in embedsToSend[1:]: await self.bot.get_channel(channel).send(embeds=embedsToSend[page])
                 await m.add_reaction('🍰') #Consider the birthday wishes feature
-                # except discord.Forbidden as e: print(f'Birthdays error - server: {e}')
-
-
-        started = datetime.datetime.utcnow()
-        try:
-            for server in self.bot.guilds:
-                tz = self.bot.get_cog('Cyberlog').timeZone(server)
-                initial = started + datetime.timedelta(hours=tz)
-                try: channel = self.bot.lightningLogging[server.id]['birthday']
-                except KeyError: continue
-                if channel > 0:
-                    try:
-                        if (initial.strftime('%H:%M') == self.bot.lightningLogging[server.id]['birthdate'].strftime('%H:%M')):
-                            for member in server.members:
-                                try:
-                                    bday = self.bot.lightningUsers[member.id]['birthday']
-                                    if bday is not None:
-                                        if bday.strftime('%m%d') == initial.strftime('%m%d') and self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayDay'):
-                                            print(f'Announcing birthday for {member.name}')
-                                            try:
-                                                messages = [a for a in self.bot.lightningUsers[member.id]['birthdayMessages'] if server.id in a['servers']] if self.bot.get_cog('Cyberlog').privacyEnabledChecker(member, 'birthdayModule', 'birthdayMessages') else []
-                                                newline = '\n'
-                                                messageVisibility = self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayMessages')
-                                                messageString = f'''\n\nThey also have {len(messages)} birthday messages from server members here:\n\n{newline.join([f"• {server.get_member(m['author']).name if m['author'] in [mb.id for mb in server.members] else m['authName']}: {m['message'] if messageVisibility else '<Content hidden due to privacy settings>'}" for m in messages])}'''
-                                                if member.id == 247412852925661185: toSend = f"🍰🎊🍨🎈 Greetings {server.name}! It's my developer {member.mention}'s birthday!! Let's wish him a very special day! 🍰🎊🍨🎈{messageString if len(messages) > 0 else ''}"
-                                                else: 
-                                                    if self.bot.get_cog('Cyberlog').privacyVisibilityChecker(member, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {member.mention}\'s birthday! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
-                                                    else: toSend = f"🍰 Greetings {server.name}! We have one anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰{messageString if len(messages) > 0 else ''}"
-                                                try: 
-                                                    m = await self.bot.get_channel(channel).send(toSend)
-                                                    await m.add_reaction('🍰')
-                                                except discord.Forbidden as e: print(f'Birthdays error - server: {e}')
-                                            except KeyError: pass
-                                except KeyError: continue
-                    except KeyError: pass
-        except: traceback.print_exc()
+                #Note: if any of these loops crash, I won't know
 
     @tasks.loop(hours=24)
     async def deleteBirthdayMessages(self):
@@ -1687,7 +1656,7 @@ class UpcomingBirthdaysView(discord.ui.View):
         except asyncio.TimeoutError: return await self.loadHomepage()
         #print(result.data['custom_id'])
         if result.data['custom_id'] == 'restart': return await self.writeMessagePrompt(target) #TODO: restart button
-        await database.SetBirthdayMessage(target, msgInBottle, self.author, serverDestinations)
+        await database.SetBirthdayMessage(target, msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
         await self.message.channel.send(f'Successfully queued the message for {target.name}')
 
 
