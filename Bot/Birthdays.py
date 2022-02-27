@@ -168,14 +168,11 @@ class Birthdays(commands.Cog):
         await database.SetBirthdayList(birthdayList)
 
     @commands.Cog.listener()
-    async def on_message(self, message):
-        '''Used for parsing and handling of birthday features
-        Birthday processing is done in two phases
-        1. Find out of a valid date is in the message
-        2. Find out of someone is talking about their own birthday based on context and words in the message'''
+    async def on_message(self, message: discord.Message):
+        '''Used for parsing and handling of birthday features'''
         if message.author.bot: return
         if type(message.channel) is discord.DMChannel: return
-        if any(word in message.content.lower().split(' ') for word in ['isn', 'not', 'you', 'your']): return #Blacklisted words
+        if any(word in message.content.lower().replace("'", "").split(' ') for word in ['isnt', 'not', 'you', 'your']): return #Blacklisted words
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             if any([message.content.startswith(w) for w in [ctx.prefix + 'bday', ctx.prefix + 'birthday']]): return #Don't auto detect birthday information if the user is using a command
@@ -183,37 +180,40 @@ class Birthdays(commands.Cog):
             if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
             if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #This person disabled the birthday module
         except AttributeError: pass
-        self.bot.loop.create_task(self.messagehandler(message))
+        asyncio.create_task(self.messagehandler(message))
 
     async def messagehandler(self, message: discord.Message):
         theme = self.colorTheme(message.guild)
-        try: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(message.guild.id).get('offset'))
-        except: adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await database.GetTimezone(message.guild)) #Use database if local variables aren't available
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(message.guild.id).get('offset', -4))
         birthday = calculateDate(message, adjusted)
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
-        #First we check to see if the user is talking about themself
+        #First we make sure the user is talking about themself
         target = await verifyBirthday(message, adjusted, birthday)
         #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
-        if birthday and target is not None and len(target) > 0:
-            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add cake reaction
+        if birthday and target:
+            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1:
+                # Make user click button to proceed if the server setting is set like that
+                #TODO: make this a button
                 def cakeAutoVerify(r,u): return u == message.author and str(r) == '🍰' and r.message.id == message.id
                 await message.add_reaction('🍰')
                 await self.bot.wait_for('reaction_add', check=cakeAutoVerify)
-            bdays = {} #Local storage b/c database operations take time and resources
+            bdays: typing.Dict[int, datetime.datetime] = {}
             if birthday < adjusted: birthday = datetime.datetime(birthday.year + 1, birthday.month, birthday.day)
+            # Remove this member from the target dictionary (?) if the date they typed is already set. CONSIDER REDOING THIS to let the user know this is their birthday
             for member in target:
-                bdays[member.id] = self.bot.lightningUsers.get(member.id).get('birthday')
-                if bdays.get(member.id) is not None:
+                bdays[member.id] = self.bot.lightningUsers[member.id].get('birthday')
+                if bdays.get(member.id):
                     if bdays.get(member.id).strftime('%B %d') == birthday.strftime('%B %d'): target.remove(member)
-            if len(target) > 0:
-                draft=discord.Embed(title='🍰 Birthdays / 👮‍ {:.{diff}} / 📆 Configure Birthday / {} Confirmation'.format(target[0].name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍♂️ / 🕯 Configure Birthday / ✔ Confirmation')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
-                draft.description='{}, would you like to set your birthday as **{}**?'.format(', '.join([a.name for a in target]), birthday.strftime('%A, %B %d, %Y'))
+            if target: #If there's still at least one member referenced in the original message:
+                #TODO: spin this off to the birthday view
+                embed = discord.Embed(title='🍰 Configure Birthday', color=yellow[theme])
+                embed.description=f'{" ".join([a.name for a in target])}, would you like to set your birthday as **{birthday:%A, %B %d, %Y}**?'
                 for member in target:
-                    if bdays.get(member.id) is not None: draft.description+='\n\n{}I currently have {} as your birthday; reacting with the check will overwrite this.'.format('{}, '.format(member.name) if len(target) > 1 else '', bdays.get(member.id).strftime('%A, %B %d, %Y'))
-                draft.description+=f'\n\n*Note:* Due to a database configuration error, all members\' birthday data was unintentionally deleted on June 3. Unfortunately, there is no way for me to recover the overwritten data. If you previously had a birthday configured, or you would like to set your birthday for the first time, you can use the `birthday` command or natural lingo by typing `my birthday is <month and day of whenever your birthday is, e.g. july 31st>`.'
-                mess = await message.channel.send(embed=draft)
-                await mess.add_reaction('✅')
-                await asyncio.gather(*[birthdayContinuation(self, birthday, target, draft, message, mess, t) for t in target]) #We need to do this to start multiple processes for anyone to react to if necessary
+                    if bdays.get(member.id): embed.description+=f'\n\n{member.name}, I currently have {bdays.get(member.id):%A, %B %d, %Y} as your birthday; reacting with the check will overwrite this.'
+                message = await message.channel.send(embed=embed)
+                await age.add_reaction('✅')
+        
+        # Split this off into its own method
         ages = calculateAges(message)
         ages = [a for a in ages if await verifyAge(message, a)]
         try: currentAge = self.bot.lightningUsers.get(message.author.id).get('age')
