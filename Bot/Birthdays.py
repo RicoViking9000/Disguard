@@ -180,9 +180,12 @@ class Birthdays(commands.Cog):
             if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
             if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #This person disabled the birthday module
         except AttributeError: pass
-        asyncio.create_task(self.messagehandler(message))
+        asyncio.create_task(self.birthdayMessagehandler(message))
+        asyncio.create_task(self.ageMessageHandler(message))
 
-    async def messagehandler(self, message: discord.Message):
+    async def birthdayMessagehandler(self, message: discord.Message):
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        if not cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #User disabled the birthday features
         theme = self.colorTheme(message.guild)
         adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(message.guild.id).get('offset', -4))
         birthday = calculateDate(message, adjusted)
@@ -193,7 +196,7 @@ class Birthdays(commands.Cog):
         if birthday and target:
             if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1:
                 # Make user click button to proceed if the server setting is set like that
-                def cakeAutoVerify(r,u): return u == message.author and str(r) == '🍰' and r.message.id == message.id
+                def cakeAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🍰' and r.message.id == message.id
                 await message.add_reaction('🍰')
                 await self.bot.wait_for('reaction_add', check=cakeAutoVerify)
             bdays: typing.Dict[int, datetime.datetime] = {}
@@ -204,7 +207,6 @@ class Birthdays(commands.Cog):
                 if bdays.get(member.id):
                     if bdays.get(member.id).strftime('%B %d') == birthday.strftime('%B %d'): target.remove(member)
             if target: #If there's still at least one member referenced in the original message:
-                #TODO: spin this off to the birthday view
                 embed = discord.Embed(title='📆 Birthday date setup', color=yellow[theme])
                 cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
                 for member in target:
@@ -214,40 +216,48 @@ class Birthdays(commands.Cog):
                     view = BirthdayView(self, message.author, message, None, embed, bdays.get(member.id), bdayHidden, birthday)
                     new = await message.channel.send(embed=embed, view=view)
                     view.message = new
-        
+    
+    async def ageMessageHandler(self, message: discord.Message):
         # Split this off into its own method
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        if not cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'age'): return #User disabled the age features
+        theme = self.colorTheme(message.guild)
         ages = calculateAges(message)
         ages = [a for a in ages if await verifyAge(message, a)]
-        try: currentAge = self.bot.lightningUsers.get(message.author.id).get('age')
-        except: currentAge = await database.GetMemberBirthday(message.author) #Use database if local variables aren't available
-        try: ages.remove(currentAge) #Remove the user's current age if it's in there
+        currentAge = self.bot.lightningUsers.get(message.author.id).get('age')
+        try: ages.remove(currentAge) #Remove the user's current age if it's in there #TODO: change implementation
         except ValueError: pass
-        if len(ages) > 0:
-            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add candle reaction
-                def candleAutoVerify(r,u): return u == message.author and str(r) == '🕯' and r.message.id == message.id
-                await message.add_reaction('🕯')
-                await self.bot.wait_for('reaction_add', check=candleAutoVerify)
-            if len(ages) == 1:
-                if currentAge == ages[0]: return
-            age = ages[0]
-            letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-            draft=discord.Embed(title='🍰 Birthdays / 👮 {:.{diff}} / 🕯 Configure Age / {} Confirmation'.format(message.author.name, self.whiteCheck, diff=63-len('🍰 Birthdays / 👮‍ / 🕯 Configure Age / ✔ Confirmation')), color=yellow[theme], timestamp=datetime.datetime.utcnow())
-            if len(ages) == 1: 
-                if age >= 13 and age <= 110: draft.description='{}, would you like to set your age as **{}**?\n\nI currently have {} as your age; reacting with the check will overwrite this.'.format(message.author.name, age, currentAge)
-                else: 
-                    draft.description = f"{message.author.name}, if you're trying to set your age as {age}, you can no longer set ages outside the range of 13 to 110 years old. Please be realistic if you wish to set your age and try again."
-            else: draft.description='{}, if you would like to set your age as one of the listed values, react with the corresponding letter, otherwise you may ignore this message.\n\n{}\n\nI currently have {} as your age; reacting will overwrite this.'.format(message.author.name,
-                '\n'.join(['{}: Set your age to **{}**'.format(letters[i], ages[i]) for i in range(len(ages))]), currentAge)
-            mess = await message.channel.send(embed=draft)
-            if len(ages) > 1:
-                for r in letters[:len(ages)]: await mess.add_reaction(r)
-                def letterCheck(r, u): return u == message.author and str(r) in letters[:len(ages)] and r.message.id == mess.id
-                r = await self.bot.wait_for('reaction_add', check=letterCheck)
-                age = ages[letters.index(str(r[0]))]
-                draft.description='Great! Please react with ✅ to continue with setting your age as **{}**'.format(age)
-                await mess.edit(embed=draft)
-            await mess.add_reaction('✅')
-            await ageContinuation(self, age, message.author, mess, draft)
+        if not ages: return #No ages detected in message
+        if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add candle reaction
+            def candleAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🕯' and r.message.id == message.id
+            await message.add_reaction('🕯')
+            await self.bot.wait_for('reaction_add', check=candleAutoVerify)
+        if len(ages) == 1:
+            if currentAge == ages[0]: return #TODO: Change implementation
+        age = ages[0]
+        letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
+        embed = discord.Embed(title='🕯 Birthday age setup', color=yellow[theme])
+        ageToPass = None
+        if len(ages) == 1:
+            if age >= 13 and age <= 110: 
+                embed.description = f'{message.author.name} | Set your age as **{age}**?'
+            else: 
+                embed.description = '⚠ | Age range must be between 13 and 110, inclusive'
+        else: embed.description=f'{message.author.name} | If you wish to update your age, select the desired value from the dropdown'
+        if currentAge: embed.description += f'\n\nCurrent value: {currentAge}'
+        message = await message.channel.send(embed=embed)
+        #TODO: add select dropdown for the multi values
+        #Got here
+        #--------
+        if len(ages) > 1:
+            for r in letters[:len(ages)]: await mess.add_reaction(r)
+            def letterCheck(r, u): return u == message.author and str(r) in letters[:len(ages)] and r.message.id == mess.id
+            r = await self.bot.wait_for('reaction_add', check=letterCheck)
+            age = ages[letters.index(str(r[0]))]
+            draft.description='Great! Please react with ✅ to continue with setting your age as **{}**'.format(age)
+            await mess.edit(embed=draft)
+        await mess.add_reaction('✅')
+        await ageContinuation(self, age, message.author, mess, draft)
 
     #7/12/21:  Began rewriting birthday command & some extras
     #7/17/21:  Finished rewriting birthday command & some extras
