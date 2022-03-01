@@ -234,30 +234,37 @@ class Birthdays(commands.Cog):
             await self.bot.wait_for('reaction_add', check=candleAutoVerify)
         if len(ages) == 1:
             if currentAge == ages[0]: return #TODO: Change implementation
-        age = ages[0]
-        letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
+        ageToPass = ages[0]
+        #letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
         embed = discord.Embed(title='🕯 Birthday age setup', color=yellow[theme])
-        ageToPass = None
+        #ageToPass = None
         if len(ages) == 1:
-            if age >= 13 and age <= 110: 
-                embed.description = f'{message.author.name} | Set your age as **{age}**?'
+            if ageToPass >= 13 and ageToPass <= 110: 
+                embed.description = f'{message.author.name} | Set your age as **{ageToPass}**?'
             else: 
                 embed.description = '⚠ | Age range must be between 13 and 110, inclusive'
         else: embed.description=f'{message.author.name} | If you wish to update your age, select the desired value from the dropdown'
         if currentAge: embed.description += f'\n\nCurrent value: {currentAge}'
-        message = await message.channel.send(embed=embed)
+        #if len(ages) <= 1: message = await message.channel.send(embed=embed)
         #TODO: add select dropdown for the multi values
-        #Got here
         #--------
         if len(ages) > 1:
-            for r in letters[:len(ages)]: await mess.add_reaction(r)
-            def letterCheck(r, u): return u == message.author and str(r) in letters[:len(ages)] and r.message.id == mess.id
-            r = await self.bot.wait_for('reaction_add', check=letterCheck)
-            age = ages[letters.index(str(r[0]))]
-            draft.description='Great! Please react with ✅ to continue with setting your age as **{}**'.format(age)
-            await mess.edit(embed=draft)
-        await mess.add_reaction('✅')
-        await ageContinuation(self, age, message.author, mess, draft)
+            #for r in letters[:len(ages)]: await mess.add_reaction(r)
+            #def letterCheck(r, u): return u == message.author and str(r) in letters[:len(ages)] and r.message.id == mess.id
+            #r = await self.bot.wait_for('reaction_add', check=letterCheck)
+            tempView = discord.ui.View
+            dropdown = discord.ui.Select(placeholder='Select your age if applicable')
+            for age in ages: dropdown.add_option(label=age)
+            tempView.add_item(dropdown)
+            ageToPass = None#ages[letters.index(str(r[0]))]
+            embed.description=f'Set your age as **{ageToPass}**?'
+            tempMessage = await message.channel.send.edit(embed=embed)
+        ageHidden = message.guild and not cyber.privacyVisibilityChecker(message.author, 'birthdayModule', 'age')
+        view = AgeView(self, message.author, message, None, embed, currentAge, ageHidden, ageToPass)
+        new = await message.channel.send(embed=embed, view=view)
+        view.message = new #Probably don't need this line
+        #await mess.add_reaction('✅')
+        #await ageContinuation(self, age, message.author, mess, draft)
 
     #7/12/21:  Began rewriting birthday command & some extras
     #7/17/21:  Finished rewriting birthday command & some extras
@@ -1684,7 +1691,5 @@ class UpcomingBirthdaysView(discord.ui.View):
         if result.data['custom_id'] == 'restart': return await self.writeMessagePrompt(target) #TODO: restart button
         await database.SetBirthdayMessage(target, msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
         await self.message.channel.send(f'Successfully queued the message for {target.name}')
-
-
         
     
