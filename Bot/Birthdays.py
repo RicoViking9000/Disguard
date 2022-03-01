@@ -1015,10 +1015,10 @@ class DateInputInterface(discord.ui.View):
             await result.edit_original_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
         
 class AgeView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentAge: int, ageHidden: bool, newAge: int = None):
+    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentAge: int, ageHidden: bool, newAge: int = None):
         super().__init__()
         self.birthdays = birthdays
-        self.ctx = ctx
+        self.author = author
         self.originalMessage = originalMessage
         self.message = message #Current message; obtain from an interaction
         self.embed = embed
@@ -1027,6 +1027,11 @@ class AgeView(discord.ui.View):
         self.usedPrivateInterface = False
         self.ageHidden = ageHidden
         self.finishedSetup = False
+        self.autoDetected = False
+        if self.newAge: # Assume we're coming from message autocomplete
+            self.remove_item(self.children[1]) #Private interface button
+            self.children[1].disabled = False #Enable the confirm button
+            self.autoDetected = True
         asyncio.create_task(self.confirmation())
 
     @discord.ui.button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='cancelSetup')
@@ -1055,8 +1060,8 @@ class AgeView(discord.ui.View):
 
     async def confirmation(self):
         while not self.birthdays.bot.is_closed() and not self.finishedSetup:
-            def messageCheck(m: discord.Message): return m.author == self.ctx.author and m.channel == self.ctx.channel
-            def interactionCheck(i: discord.Interaction):
+            def messageCheck(m: discord.Message): return m.author == self.author and m.channel == self.message.channel
+            def interactionCheck(i: discord.Interaction): #TODO: needs more verification
                 if i.data['custom_id'] == 'cancel': self.usedPrivateInterface = False
                 return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup')
             if not self.usedPrivateInterface and not self.ageHidden:
@@ -1081,16 +1086,18 @@ class AgeView(discord.ui.View):
                     self.embed.description=f'Your age is already set to **{"the value you entered" if self.usedPrivateInterface else self.newAge}** 👍\n\nYou may type another age or cancel setup'
                     for child in self.children[:2]: child.disabled = False
             else: self.embed.description=f'{self.birthdays.emojis["alert"]} | **{"the value you entered" if self.usedPrivateInterface else self.newAge}** isn\'t an age. You may type a new age or cancel the setup.'
-            try: await self.message.edit(embed=self.embed, view=self)
+            try: 
+                if self.message: await self.message.edit(embed=self.embed, view=self)
+                elif self.autoDetected: break
             except discord.errors.NotFound: break
     
     async def saveChanges(self):
         #TODO: add age verification
         if self.newAge == self.currentAge: return await self.message.delete()
-        await database.SetAge(self.ctx.author, self.newAge)
+        await database.SetAge(self.author, self.newAge)
         if not self.usedPrivateInterface:
             self.embed.description = f'✔ | Age successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newAge}'
-            if not self.birthdays.bot.lightningUsers[self.ctx.author.id].get('birthday'):
+            if not self.birthdays.bot.lightningUsers[self.author.id].get('birthday'):
                 self.embed.description += '\n\nYou may add your birthday from the menu on the original embed if desired'
             await self.message.edit(embed=self.embed, view=SuccessAndDeleteView(), delete_after=30)
         else: await self.message.delete()
@@ -1119,7 +1126,7 @@ class BirthdayView(discord.ui.View):
         self.autoDetected = False
         if self.newBday: # Assume we're coming from message autocomplete
             self.remove_item(self.children[1]) #Private interface button
-            self.children[1].disabled = False #Confirm button
+            self.children[1].disabled = False #Enable the confirm button
             self.autoDetected = True
         asyncio.create_task(self.confirmation())
 
