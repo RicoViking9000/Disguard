@@ -235,9 +235,7 @@ class Birthdays(commands.Cog):
         if len(ages) == 1:
             if currentAge == ages[0]: return #TODO: Change implementation
         ageToPass = ages[0]
-        #letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
         embed = discord.Embed(title='🕯 Birthday age setup', color=yellow[theme])
-        #ageToPass = None
         if len(ages) == 1:
             if ageToPass >= 13 and ageToPass <= 110: 
                 embed.description = f'{message.author.name} | Set your age as **{ageToPass}**?'
@@ -245,26 +243,24 @@ class Birthdays(commands.Cog):
                 embed.description = '⚠ | Age range must be between 13 and 110, inclusive'
         else: embed.description=f'{message.author.name} | If you wish to update your age, select the desired value from the dropdown'
         if currentAge: embed.description += f'\n\nCurrent value: {currentAge}'
-        #if len(ages) <= 1: message = await message.channel.send(embed=embed)
-        #TODO: add select dropdown for the multi values
-        #--------
         if len(ages) > 1:
-            #for r in letters[:len(ages)]: await mess.add_reaction(r)
-            #def letterCheck(r, u): return u == message.author and str(r) in letters[:len(ages)] and r.message.id == mess.id
-            #r = await self.bot.wait_for('reaction_add', check=letterCheck)
-            tempView = discord.ui.View
-            dropdown = discord.ui.Select(placeholder='Select your age if applicable')
-            for age in ages: dropdown.add_option(label=age)
-            tempView.add_item(dropdown)
-            ageToPass = None#ages[letters.index(str(r[0]))]
+            ageView = AgeSelectView(ages)
+            tempMessage = await message.channel.send(embed=embed, view=ageView)
+            def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == ageView.select.custom_id and i.user == message.author and i.channel == message.channel
+            try: await self.bot.wait_for('interaction', check=interactionCheck, timeout=300)
+            except asyncio.TimeoutError:
+                embed.description = '⌚ | Timed out'
+                return await tempMessage.edit(embed=embed)
+            ageToPass = ageView.select.values[0]
             embed.description=f'Set your age as **{ageToPass}**?'
-            tempMessage = await message.channel.send.edit(embed=embed)
         ageHidden = message.guild and not cyber.privacyVisibilityChecker(message.author, 'birthdayModule', 'age')
         view = AgeView(self, message.author, message, None, embed, currentAge, ageHidden, ageToPass)
-        new = await message.channel.send(embed=embed, view=view)
-        view.message = new #Probably don't need this line
-        #await mess.add_reaction('✅')
-        #await ageContinuation(self, age, message.author, mess, draft)
+        if len(ages) > 1:
+            await tempMessage.edit(embed=embed, view=view)
+            view.message = tempMessage #Probably dont need this line
+        else:
+            new = await message.channel.send(embed=embed, view=view)
+            view.message = new #Probably don't need this line
 
     #7/12/21:  Began rewriting birthday command & some extras
     #7/17/21:  Finished rewriting birthday command & some extras
@@ -1118,8 +1114,9 @@ class AgeView(discord.ui.View):
                 self.embed.description += '\n\nYou may add your birthday from the menu on the original embed if desired'
             await self.message.edit(embed=self.embed, view=SuccessAndDeleteView(), delete_after=30)
         else: await self.message.delete()
-        self.originalMessage.embeds[0].set_field_at(1, name='Your Age',value=f'**Age Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newAge}')
-        await self.originalMessage.edit(embed=self.originalMessage.embeds[0])
+        if not self.autoDetected:
+            self.originalMessage.embeds[0].set_field_at(1, name='Your Age',value=f'**Age Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newAge}')
+            await self.originalMessage.edit(embed=self.originalMessage.embeds[0])
 
     async def submitValue(self, result):
         '''Writes the value from the KB interface to the class variable'''
@@ -1219,7 +1216,7 @@ class BirthdayView(discord.ui.View):
                 self.embed.description += '\n\nYou may add your age from the menu on the original embed if desired'
             await self.message.edit(embed=self.embed, view=SuccessAndDeleteView(), delete_after=30)
         else: await self.message.delete()
-        if self.autoDetected:
+        if not self.autoDetected:
             self.originalMessage.embeds[0].set_field_at(1, name='Your Birthday',value=f'**Birthday Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}')
             await self.originalMessage.edit(embed=self.originalMessage.embeds[0])
 
@@ -1692,4 +1689,17 @@ class UpcomingBirthdaysView(discord.ui.View):
         await database.SetBirthdayMessage(target, msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
         await self.message.channel.send(f'Successfully queued the message for {target.name}')
         
+class AgeSelectView(discord.ui.View):
+    def __init__(self, ages):
+        super().__init__()
+        #self.ages = ages
+        self.select = self.Dropdown(ages)
+        self.add_item(self.select)
+        #self.custom_id = custom_id
     
+    class Dropdown(discord.ui.Select):
+        def __init__(self, ages):
+            super().__init__()
+            #view: AgeSelectView = self.view
+            for age in ages: self.add_option(label=age)
+
