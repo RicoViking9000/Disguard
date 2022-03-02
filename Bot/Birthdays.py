@@ -270,21 +270,22 @@ class Birthdays(commands.Cog):
         await ctx.trigger_typing()
         theme = self.colorTheme(ctx.guild) if ctx.guild else 1
         adjusted = datetime.datetime.now()
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         if len(args) == 0:
-            header = '👮‍♂️ » 🍰 Birthday » 🏠 Overview'
-            header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 🏠 Overview'
-            embed = discord.Embed(title=header, color=yellow[theme])
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url) #V2.0
-            if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'default', 'birthdayModule'):
+            #header = '👮‍♂️ » 🍰 Birthday » 🏠 Overview'
+            #header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 🏠 Overview'
+            embed = discord.Embed(title='🍰 Birthday Overview', color=yellow[theme])
+            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
+            if not cyber.privacyEnabledChecker(ctx.author, 'default', 'birthdayModule'):
                 embed.description = 'Birthday module disabled. To edit your privacy settings or enable the birthday module, go [here](http://disguard.herokuapp.com/manage/profile).'
                 return await ctx.send(embed=embed)
             user = self.bot.lightningUsers[ctx.author.id]
             bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
-            embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
-            embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
-            if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
+            embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
+            embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
+            if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
             embed.description = f'{self.loading} Processing global birthday information'
-            #message = await ctx.send(embed=embed)
+            #message = await ctx.send(embed=embed) #Consider removing this
             #SUGGESTION » 7/13/21: Basic Disguard Wiki (after website improvements of course), maintaining an information database on various disguard features
             #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
             currentServer = []
@@ -294,8 +295,13 @@ class Birthdays(commands.Cog):
             for u in self.bot.users:
                 try:
                     #Skip members whose privacy settings show they don't want to partake in public features of the birthday module
-                    if not (self.bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(u, 'default', 'birthdayModule') and self.bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay') and self.bot.get_cog('Cyberlog').privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')): continue
-                    userBirthday = self.bot.lightningUsers[u.id].get('birthday')
+                    if not all(
+                        cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
+                        cyber.privacyVisibilityChecker(u, 'default', 'birthdayModule'),
+                        cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
+                        cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
+                        ): continue
+                    userBirthday: datetime.datetime = self.bot.lightningUsers[u.id].get('birthday')
                     if not userBirthday: continue
                     if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
                     elif mutualServerMemberToMember(self, ctx.author, u):
@@ -308,13 +314,15 @@ class Birthdays(commands.Cog):
             firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
             def fillBirthdayList(list, maxEntries):
                 return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
-            embed.description = f'''**{"AVAILABLE OPTIONS":–^70}**\n🍰: Browse birthday profiles\n📪: View more upcoming birthdays\n📆: Update your birthday\n🕯: Update your age\n📝: {"Manage" if len(wishlist) > 0 else "Create"} your wish list\n**{"UPCOMING BIRTHDAYS":–^70}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
+            embed.description = f'''**{"UPCOMING BIRTHDAYS":–^70}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
             embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + newline) if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + newline) if len(weekBirthday) > 0 else ""}'''
             embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}'''
             #await message.edit(embed=embed)
-            message = await ctx.send(embed=embed)
+            homeView = BirthdayHomepageView(self, ctx, None, currentServer, disguardSuggest, weekBirthday)
+            message = await ctx.send(embed=embed, view=homeView)
+            homeView.message = message
             reactions = ['📪',  '📆', '🕯', '📝']
-            for r in reactions: await message.add_reaction(r)
+            #for r in reactions: await message.add_reaction(r)
             def reactionCheck(r, u): return str(r) in reactions and r.message.id == message.id and u == ctx.author
             try: result = await self.bot.wait_for('reaction_add', check=reactionCheck)
             except asyncio.TimeoutError: return await message.edit(embed=birthdayCancelled)
@@ -542,25 +550,25 @@ async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Mes
     embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
     new = await ctx.send(embed=embed, view=WishlistView(self, ctx, m, cont, new, wishlist, embed)) #Use default class var
 
-async def ageHandler(self: Birthdays, ctx: commands.Context, author: discord.Member, message: discord.Message):
+async def ageHandler(self: Birthdays, ctx: commands.Context, message: discord.Message):
     ageHidden = ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age')
-    currentAge = self.bot.lightningUsers[author.id].get('age')
+    currentAge = self.bot.lightningUsers[ctx.author.id].get('age')
     ageModuleDescription = 'Entering your age is a fun but optional feature of the birthday module and has no relation to Discord Inc. It will only be used to personalize the message DMd to you on your birthday. If you set your age, others can view it on your birthday profile by default. If you wish to set your age but don\'t want others to view it, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
     instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if ageHidden else 'Type your desired age'
     embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not currentAge else ""}{instructions}\n\nCurrent value: **{"🔒 Hidden" if ageHidden else currentAge}**', color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-    embed.set_author(name=author.name, icon_url=author.avatar.url)
+    embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
     view = AgeView(self, ctx, message, None, embed, currentAge, ageHidden)
     new = await ctx.send(embed=embed, view=view)
     view.message = new
 
-async def birthdayHandler(self: Birthdays, ctx: commands.Context, author: discord.Member, message: discord.Message):
+async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: discord.Message):
     bdayHidden = ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay')
-    currentBday = self.bot.lightningUsers[author.id].get('birthday')
+    currentBday = self.bot.lightningUsers[ctx.author.id].get('birthday')
     birthdayModuleDescription = 'The Disguard birthday module provides fun, voluntary features for those wanting to use it. Setting your birthday will allow Disguard to make an announcement on your birthday in servers with this feature enabled, and Disguard will DM you a message on your birthday. By default, others can view your birthday on your profile. If you wish to change this, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
     instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Examples of acceptable birthday formats include Jan 1, 5/25 (mm/dd), "next tuesday", "two months from now". Disguard does not process your birth year, so just enter a month and a day.'
     embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not currentBday else ""}{instructions}\n\nCurrent value:  **{"🔒 Hidden" if bdayHidden else currentBday.strftime("%B %d")}**', color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-    embed.set_author(name=author.name, icon_url=author.avatar.url)
-    view = BirthdayView(self, author, message, None, embed, currentBday, bdayHidden)
+    embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
+    view = BirthdayView(self, ctx.author, message, None, embed, currentBday, bdayHidden)
     new = await ctx.send(embed=embed, view=view)
     view.message = new
 
@@ -1027,6 +1035,45 @@ class DateInputInterface(discord.ui.View):
             if self.finale: await self.finale(self.result)
             await result.edit_original_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
         
+class BirthdayHomepageView(discord.ui.View):
+    def __init__(self, birthdays, ctx, message, currentServer, disguardSuggest, weekBirthday):
+        super().__init__()
+        self.birthdays: Birthdays = birthdays
+        self.ctx: commands.Context = ctx
+        self.message: discord.Message = message
+        self.currentServer = currentServer
+        self.disguardSuggest = disguardSuggest
+        self.weekBirthday = weekBirthday
+        self.cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+
+    @discord.ui.button(label='Browse birthday profiles', emoji='📁')
+    async def profiles(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await upcomingBirthdaysPrep(self.birthdays, self.ctx, self.message, self.currentServer, self.disguardSuggest, self.weekBirthday)
+
+    @discord.ui.button(label='Edit birthday', emoji='📆')
+    async def birthday(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if self.cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'birthdayDay'):
+            await birthdayHandler(self.birthday, self.ctx, self.message)
+        else:
+            pass
+
+    @discord.ui.button(label='Edit age', emoji='🕯')
+    async def age(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if self.cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'age'):
+            await ageHandler(self.birthday, self.ctx, self.message)
+        else:
+            pass
+
+    @discord.ui.button(label='Edit wishlist', emoji='📝')
+    async def wishlist(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if self.cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'wishlist'):
+            await birthdayHandler(self.birthday, self.ctx, self.message)
+        else:
+            pass
+
+
+    
+
 class AgeView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentAge: int, ageHidden: bool, newAge: int = None):
         super().__init__()
