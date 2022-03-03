@@ -285,7 +285,7 @@ class Birthdays(commands.Cog):
             embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
             if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
             embed.description = f'{self.loading} Processing global birthday information'
-            #message = await ctx.send(embed=embed) #Consider removing this
+            message = await ctx.send(embed=embed) #Consider removing this
             #SUGGESTION » 7/13/21: Basic Disguard Wiki (after website improvements of course), maintaining an information database on various disguard features
             #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
             currentServer = []
@@ -300,7 +300,9 @@ class Birthdays(commands.Cog):
                         cyber.privacyVisibilityChecker(u, 'default', 'birthdayModule'),
                         cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
                         cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
-                        ): continue
+                        ):
+                        print(f'continuing for {u.name}')
+                        continue
                     userBirthday: datetime.datetime = self.bot.lightningUsers[u.id].get('birthday')
                     if not userBirthday: continue
                     if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
@@ -314,23 +316,28 @@ class Birthdays(commands.Cog):
             firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
             def fillBirthdayList(list, maxEntries):
                 return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
-            embed.description = f'''**{"UPCOMING BIRTHDAYS":–^70}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
+            finalSeparator = f'{"UPCOMING BIRTHDAYS":–^70}' if currentServer or weekBirthday or disguardSuggest else f'{"":–^70}'
+            embed.description = f'''**{finalSeparator}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
             embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + newline) if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + newline) if len(weekBirthday) > 0 else ""}'''
             embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}'''
             #await message.edit(embed=embed)
-            homeView = BirthdayHomepageView(self, ctx, None, currentServer, disguardSuggest, weekBirthday)
-            message = await ctx.send(embed=embed, view=homeView)
+            bdayVerb = 'Update' if bday else 'Set'
+            ageVerb = 'Update' if age else 'Set'
+            wishlistVerb = 'Update' if wishlist else 'Create'
+            homeView = BirthdayHomepageView(self, ctx, None, currentServer, disguardSuggest, weekBirthday, bdayVerb, ageVerb, wishlistVerb)
+            #message = await ctx.send(embed=embed, view=homeView)
+            await message.edit(embed=embed, view=homeView)
             homeView.message = message
-            reactions = ['📪',  '📆', '🕯', '📝']
+            #reactions = ['📪',  '📆', '🕯', '📝']
             #for r in reactions: await message.add_reaction(r)
-            def reactionCheck(r, u): return str(r) in reactions and r.message.id == message.id and u == ctx.author
-            try: result = await self.bot.wait_for('reaction_add', check=reactionCheck)
-            except asyncio.TimeoutError: return await message.edit(embed=birthdayCancelled)
-            if str(result[0]) == '🍰': await messageManagement(self, ctx, message, result[1], [currentServer[:5], disguardSuggest[:5], weekBirthday[:5]]) #Figure out later
-            elif str(result[0]) == '📪': await upcomingBirthdaysPrep(self, ctx, message, currentServer, disguardSuggest, weekBirthday) #Current
-            elif str(result[0]) == '📆' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'birthdayDay'): await birthdayHandler(self, ctx, ctx.author, message) #Done
-            elif str(result[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await ageHandler(self, ctx, ctx.author, message) #Done
-            elif str(result[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await wishlistHandler(self, ctx, message) #Done
+            #def reactionCheck(r, u): return str(r) in reactions and r.message.id == message.id and u == ctx.author
+            #try: result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+            #except asyncio.TimeoutError: return await message.edit(embed=birthdayCancelled)
+            #if str(result[0]) == '🍰': await messageManagement(self, ctx, message, result[1], [currentServer[:5], disguardSuggest[:5], weekBirthday[:5]]) #Figure out later
+            #elif str(result[0]) == '📪': await upcomingBirthdaysPrep(self, ctx, message, currentServer, disguardSuggest, weekBirthday) #Current
+            #elif str(result[0]) == '📆' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'birthdayDay'): await birthdayHandler(self, ctx, ctx.author, message) #Done
+            #elif str(result[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await ageHandler(self, ctx, ctx.author, message) #Done
+            #elif str(result[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await wishlistHandler(self, ctx, message) #Done
         else:
             embed=discord.Embed(title=f'{self.emojis["search"]} Birthdays', description=f'{self.loading} Searching', color=yellow[theme])
             message = await ctx.send(embed=embed)
@@ -1036,7 +1043,7 @@ class DateInputInterface(discord.ui.View):
             await result.edit_original_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
         
 class BirthdayHomepageView(discord.ui.View):
-    def __init__(self, birthdays, ctx, message, currentServer, disguardSuggest, weekBirthday):
+    def __init__(self, birthdays, ctx, message, currentServer, disguardSuggest, weekBirthday, bdayVerb, ageVerb, wishlistVerb):
         super().__init__()
         self.birthdays: Birthdays = birthdays
         self.ctx: commands.Context = ctx
@@ -1045,31 +1052,44 @@ class BirthdayHomepageView(discord.ui.View):
         self.disguardSuggest = disguardSuggest
         self.weekBirthday = weekBirthday
         self.cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+        self.birthdayButton = self.editBirthday(bdayVerb)
+        self.ageButton = self.editAge(ageVerb)
+        self.wishlistButton = self.editWishlist(wishlistVerb)
+        for item in [self.birthdayButton, self.ageButton, self.wishlistButton]: self.add_item(item)
 
     @discord.ui.button(label='Browse birthday profiles', emoji='📁')
     async def profiles(self, button: discord.ui.Button, interaction: discord.Interaction):
         await upcomingBirthdaysPrep(self.birthdays, self.ctx, self.message, self.currentServer, self.disguardSuggest, self.weekBirthday)
 
-    @discord.ui.button(label='Edit birthday', emoji='📆')
-    async def birthday(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if self.cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'birthdayDay'):
-            await birthdayHandler(self.birthday, self.ctx, self.message)
-        else:
-            pass
+    class editBirthday(discord.ui.Button):
+        def __init__(self, verb: str):
+            super().__init__(label=f'{verb} birthday', emoji='📆')
+        async def callback(self, interaction: discord.Interaction):
+            view: BirthdayHomepageView = self.view
+            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'birthdayDay'):
+                await birthdayHandler(view, view.ctx, view.message)
+            else:
+                pass
 
-    @discord.ui.button(label='Edit age', emoji='🕯')
-    async def age(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if self.cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'age'):
-            await ageHandler(self.birthday, self.ctx, self.message)
-        else:
-            pass
+    class editAge(discord.ui.Button):
+        def __init__(self, verb: str):
+            super().__init__(label=f'{verb} age', emoji='🕯')
+        async def callback(self, interaction: discord.Interaction):
+            view: BirthdayHomepageView = self.view
+            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'age'):
+                await ageHandler(view, view.ctx, view.message)
+            else:
+                pass
 
-    @discord.ui.button(label='Edit wishlist', emoji='📝')
-    async def wishlist(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if self.cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'wishlist'):
-            await birthdayHandler(self.birthday, self.ctx, self.message)
-        else:
-            pass
+    class editWishlist(discord.ui.Button):
+        def __init__(self, verb: str):
+            super().__init__(label=f'{verb} wishlist', emoji='📝')
+        async def callback(self, interaction: discord.Interaction):
+            view: BirthdayHomepageView = self.view
+            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'birthdayDay'):
+                await wishlistHandler(view, view.ctx, view.message)
+            else:
+                pass
 
 
     
