@@ -295,13 +295,13 @@ class Birthdays(commands.Cog):
             for u in self.bot.users:
                 try:
                     #Skip members whose privacy settings show they don't want to partake in public features of the birthday module
-                    if not all(
+                    if not all((
                         cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
-                        cyber.privacyVisibilityChecker(u, 'default', 'birthdayModule'),
+                        cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
                         cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
                         cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
-                        ):
-                        print(f'continuing for {u.name}')
+                        )):
+                        #print(f'continuing for {u.name}', cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'), cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay'))
                         continue
                     userBirthday: datetime.datetime = self.bot.lightningUsers[u.id].get('birthday')
                     if not userBirthday: continue
