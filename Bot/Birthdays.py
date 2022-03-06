@@ -895,6 +895,31 @@ class BirthdayHomepageView(discord.ui.View):
 
 
     
+class GuestBirthdayView(discord.ui.View):
+    def __init__(self, birthdays: Birthdays, author: discord.User, target: discord.User):
+        super().__init__()
+        self.birthdays = birthdays
+        self.author = author
+        self.target = target
+        if author == target: self.add_item(self.OverviewButton(birthdays))
+        self.add_item(self.MessageButton(birthdays))
+
+    
+    class OverviewButton(discord.ui.Button):
+        def __init__(self, birthdays: Birthdays):
+            super().__init__(label='Enter birthdays overview', emoji=birthdays.emojis['details'])
+        async def callback(self, interaction: discord.Interaction):
+            view = BirthdayHomepageView()
+            embed = None #view.createEmbed method or something #TODO
+            await interaction.response.edit_message(view=view, embed=embed)
+
+    class MessageButton(discord.ui.Button):
+        def __init__(self, birthdays: Birthdays):
+            super().__init__(label='Write birthday message', emoji='✉')
+        async def callback(self, interaction: discord.Interaction):
+            pass
+
+    
 
 class AgeView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentAge: int, ageHidden: bool, newAge: int = None):
