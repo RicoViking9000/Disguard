@@ -271,6 +271,8 @@ class Birthdays(commands.Cog):
         theme = self.colorTheme(ctx.guild) if ctx.guild else 1
         adjusted = datetime.datetime.now()
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        user = self.bot.lightningUsers[ctx.author.id]
+        bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
         if len(args) == 0:
             #header = '👮‍♂️ » 🍰 Birthday » 🏠 Overview'
             #header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 🏠 Overview'
@@ -279,8 +281,6 @@ class Birthdays(commands.Cog):
             if not cyber.privacyEnabledChecker(ctx.author, 'default', 'birthdayModule'):
                 embed.description = 'Birthday module disabled. To edit your privacy settings or enable the birthday module, go [here](http://disguard.herokuapp.com/manage/profile).'
                 return await ctx.send(embed=embed)
-            user = self.bot.lightningUsers[ctx.author.id]
-            bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
             embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
             embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
             if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
@@ -343,38 +343,48 @@ class Birthdays(commands.Cog):
             message = await ctx.send(embed=embed)
             arg = ' '.join(args)
             actionList = []
-            age = calculateAges(ctx.message)
+            ages = calculateAges(ctx.message)
             currentAge = self.bot.lightningUsers[ctx.author.id].get('age')
-            try: age.remove(currentAge)
+            try: ages.remove(currentAge) #TODO: change this implementation
             except ValueError: pass
-            for a in age: #Remove out of bounds of [0, 105]
+            for a in ages: #Remove out of bounds of [0, 105]
                 if a < 0 or a > 105: age.remove(a)
-            actionList += age
-            memberList = await self.bot.get_cog('Cyberlog').FindMoreMembers(self.bot.users, arg)
+            actionList += ages
+            memberList = await utility.FindMoreMembers(self.bot.users, arg)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
             memberList = [m.get('member') for m in memberList] #Only take member results with at least 33% relevance to avoid ID searches when people only want to get their age
             memberList = [m for m in memberList if mutualServerMemberToMember(self, ctx.author, m)]
             actionList += memberList
             def actionCheck(r, u): return str(r) == str(self.emojis['settings']) and u == ctx.author and r.message.id == message.id
-            date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=self.bot.lightningLogging.get(ctx.guild.id).get('offset')))
-            if date: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
-            async def makeChoice(result, message):
+            date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=self.bot.lightningLogging[ctx.guild.id].get('offset', -4)))
+            bdayHidden = ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay')
+            ageHidden = ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay')
+            if date: 
+                return await message.edit(view=BirthdayView(self, ctx.author, ctx.message, message, embed, bday, bdayHidden, date))
+                # return await birthdayHandler(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
+            async def makeChoice(result, message: discord.Message):
                 if type(result) in (discord.User, discord.ClientUser):
-                    await message.edit(embed=await guestBirthdayViewer(self, ctx, actionList[0]))
-                    if actionList[0] == ctx.author: await message.add_reaction(self.emojis['settings'])
-                    await message.add_reaction('🍰')
+                    return await message.edit(embed=await guestBirthdayHandler(self, ctx, result))
+                    # if result == ctx.author: await message.add_reaction(self.emojis['settings'])
+                    # await message.add_reaction('🍰')
                     #while True:
-                    d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=actionCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
-                    try: r = d.pop().result()
-                    except: r = None
-                    for f in p: f.cancel()
-                    if type(r) is tuple:
-                        if r[0].emoji == self.emojis['settings']:
-                            try: await message.delete()
-                            except discord.Forbidden: pass
-                            return await self.birthday(ctx)
-                elif type(result) is int: return await ageContinuation(self, actionList[index], ctx.author, message, embed, partial=True)
-                else: return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
+                    #TODO: tie a button into writePersonalMessage for this person
+                    # d, p = await asyncio.gather(*[self.bot.wait_for('reaction_add', check=actionCheck), writePersonalMessage(self, self.bot.lightningUsers.get(actionList[0].id).get('birthday'), [actionList[0]], message)])
+                    # try: r = d.pop().result()
+                    # except: r = None
+                    # for f in p: f.cancel()
+                    # if type(r) is tuple:
+                    #     if r[0].emoji == self.emojis['settings']:
+                    #         try: await message.delete()
+                    #         except discord.Forbidden: pass
+                    #         return await self.birthday(ctx)
+                elif type(result) is int:
+
+                    return await message.edit(view=AgeView(self, ctx.author, ctx.message, message, embed, age, ageHidden, actionList[index]))
+                    #return await ageContinuation(self, actionList[index], ctx.author, message, embed, partial=True)
+                else:
+                    return await message.edit(view=BirthdayView(self, ctx.author, ctx.message, message, embed, bday, bdayHidden, result))
+                    #return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
             if len(actionList) == 1 and type(actionList[0]) in (discord.User, discord.ClientUser): await makeChoice(actionList[0], message)
             elif len(actionList) == 0:
                 embed.description = f'No actions found for **{arg}**'
