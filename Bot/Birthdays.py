@@ -421,22 +421,22 @@ class Birthdays(commands.Cog):
         return self.bot.lightningLogging[s.id]['colorTheme']
                         
         
-async def guestBirthdayViewer(self: Birthdays, ctx: commands.Context, target: discord.User, cake=False):
+async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: discord.User):
     '''Displays information about somebody else's birthday profile'''
     #adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
     user = self.bot.lightningUsers[target.id]
     bday = user.get('birthday')
     age = user.get('age')
-    wishlist = user.get('wishList')
-    header = '👮‍♂️ » 🍰 Birthday'
-    header = f'👮‍♂️ {target.name:.{63 - len(header)}} » 🍰 Birthday'
-    embed = discord.Embed(title=header, color=yellow[self.colorTheme(ctx.guild)], description=f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}')
+    wishlist = user.get('wishList', []) #TODO: implement privacy settings
+    #header = '👮‍♂️ » 🍰 Birthday'
+    #header = f'👮‍♂️ {target.name:.{63 - len(header)}} » 🍰 Birthday'
+    embed = discord.Embed(description=f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}' if wishlist else '', color=yellow[self.colorTheme(ctx.guild)])
     embed.description += f'''\n**{"AVAILABLE OPTIONS":–^70}**\n{f"{self.emojis['settings']}: Enter Action Overview" if target == ctx.author else ''}{f"{newline}🍰 (Only anyone other than {target.name}): Write a personal birthday message to {target.name}" if not cake else ''}'''
-    #embed.set_author(name=target.name, icon_url=target.avatar_url) #V1.5
-    embed.set_author(name=target.name, icon_url=target.avatar.url) #V2.0
+    embed.set_author(name=f'{target.name}\'s birthday page', icon_url=target.avatar.url)
     embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
     embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else age)
-    return embed
+    view = GuestBirthdayView(self, ctx.author, target)
+    new = await ctx.send(embed=embed, view=view)
 
 async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Message, cont=False, new=None):
     wishlist = ['You have disabled birthday wishlist functionality'] if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private'] if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') and ctx.guild else self.bot.lightningUsers[ctx.author.id].get('wishlist', [])
@@ -1250,11 +1250,10 @@ class WishlistEditView(discord.ui.View):
             # elif not add and toModify.get(s[:16]): return f'~~{s}~~'
             # else: return f'• {s}'
             return f'**+ {s}**' if self.add and self.toModify.get(s[:16]) else f'~~{s}~~' if not self.add and self.toModify.get(s[:16]) else f'• {s}'
-        verb = 'remove'
+        verb, preposition = 'remove', 'from'
         preposition = 'from'
         if self.add:
-            verb = 'add'
-            preposition = 'to'
+            verb, preposition = 'add', 'to'
         #if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist) #TODO: add a button for this
         # for w in wishlist: #Figure this stuff out - i think it shifts all the entries to the left??
         #     for wo in range(len(toModify)):
@@ -1561,14 +1560,11 @@ class UpcomingBirthdaysView(discord.ui.View):
 class AgeSelectView(discord.ui.View):
     def __init__(self, ages):
         super().__init__()
-        #self.ages = ages
         self.select = self.Dropdown(ages)
         self.add_item(self.select)
-        #self.custom_id = custom_id
     
     class Dropdown(discord.ui.Select):
         def __init__(self, ages):
             super().__init__()
-            #view: AgeSelectView = self.view
             for age in ages: self.add_option(label=age)
 
