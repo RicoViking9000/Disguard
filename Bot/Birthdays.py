@@ -274,60 +274,14 @@ class Birthdays(commands.Cog):
         user = self.bot.lightningUsers[ctx.author.id]
         bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
         if len(args) == 0:
-            #header = '👮‍♂️ » 🍰 Birthday » 🏠 Overview'
-            #header = f'👮‍♂️ {ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 🏠 Overview'
-            embed = discord.Embed(title='🍰 Birthday Overview', color=yellow[theme])
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
-            if not cyber.privacyEnabledChecker(ctx.author, 'default', 'birthdayModule'):
-                embed.description = 'Birthday module disabled. To edit your privacy settings or enable the birthday module, go [here](http://disguard.herokuapp.com/manage/profile).'
-                return await ctx.send(embed=embed)
-            embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
-            embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age') else age)
-            if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
-            embed.description = f'{self.loading} Processing global birthday information'
-            message = await ctx.send(embed=embed) #Consider removing this
-            #SUGGESTION » 7/13/21: Basic Disguard Wiki (after website improvements of course), maintaining an information database on various disguard features
-            #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
-            currentServer = []
-            disguardSuggest = []
-            weekBirthday = []
-            memberIDs = set([m.id for m in ctx.guild.members]) if ctx.guild else () #June 2021 (v0.2.27): Changed from list to set to improve performance // Holds list of member IDs for the current server
-            for u in self.bot.users:
-                try:
-                    #Skip members whose privacy settings show they don't want to partake in public features of the birthday module
-                    if not all((
-                        cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
-                        cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
-                        cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
-                        cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
-                        )):
-                        #print(f'continuing for {u.name}', cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'), cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay'))
-                        continue
-                    userBirthday: datetime.datetime = self.bot.lightningUsers[u.id].get('birthday')
-                    if not userBirthday: continue
-                    if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
-                    elif mutualServerMemberToMember(self, ctx.author, u):
-                        if (userBirthday - adjusted).days < 8: weekBirthday.append({'data': u, 'bday': userBirthday})
-                        else: disguardSuggest.append({'data': u, 'bday': userBirthday})
-                except (AttributeError, TypeError, KeyError): pass
-            currentServer.sort(key = lambda m: m.get('bday'))
-            weekBirthday.sort(key = lambda m: m.get('bday'))
-            disguardSuggest.sort(key = lambda m: len(mutualServersMemberToMember(self, ctx.author, m['data'])), reverse=True) #Servers the author and target share
-            firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
-            def fillBirthdayList(list, maxEntries):
-                return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
-            finalSeparator = f'{"UPCOMING BIRTHDAYS":–^70}' if currentServer or weekBirthday or disguardSuggest else f'{"":–^70}'
-            embed.description = f'''**{finalSeparator}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
-            embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + newline) if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + newline) if len(weekBirthday) > 0 else ""}'''
-            embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}'''
-            #await message.edit(embed=embed)
-            bdayVerb = 'Update' if bday else 'Set'
-            ageVerb = 'Update' if age else 'Set'
-            wishlistVerb = 'Update' if wishlist else 'Create'
-            homeView = BirthdayHomepageView(self, ctx, None, currentServer, disguardSuggest, weekBirthday, bdayVerb, ageVerb, wishlistVerb)
-            #message = await ctx.send(embed=embed, view=homeView)
-            await message.edit(embed=embed, view=homeView)
+            homeView = BirthdayHomepageView(self, ctx, None)
+            embed = await homeView.createEmbed()
+            message: discord.Message = await ctx.send(embed=embed) #Consider removing this
             homeView.message = message
+            embed = await homeView.finishEmbed(embed)
+            await message.edit(embed=embed, view=homeView)
+            #message = await ctx.send(embed=embed, view=homeView)
+            #homeView.message = message
             #reactions = ['📪',  '📆', '🕯', '📝']
             #for r in reactions: await message.add_reaction(r)
             #def reactionCheck(r, u): return str(r) in reactions and r.message.id == message.id and u == ctx.author
@@ -845,19 +799,84 @@ class DateInputInterface(discord.ui.View):
             await result.edit_original_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
         
 class BirthdayHomepageView(discord.ui.View):
-    def __init__(self, birthdays, ctx, message, currentServer, disguardSuggest, weekBirthday, bdayVerb, ageVerb, wishlistVerb):
+    def __init__(self, birthdays, ctx, message = None):
         super().__init__()
         self.birthdays: Birthdays = birthdays
         self.ctx: commands.Context = ctx
         self.message: discord.Message = message
+        self.cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+
+    async def createEmbed(self):
+        theme = self.birthdays.colorTheme(self.ctx.guild) if self.ctx.guild else 1
+        cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+        user = self.birthdays.bot.lightningUsers[self.ctx.author.id]
+        bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
+        embed = discord.Embed(color=yellow[theme])
+        embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
+        if not cyber.privacyEnabledChecker(self.ctx.author, 'default', 'birthdayModule'):
+            embed.description = 'Birthday module disabled due to your privacy settings'
+            self.add_item(discord.ui.Button(label='Edit privacy settings', url='http://disguard.herokuapp.com/manage/profile'))
+            if not self.message: return await self.ctx.send(embed=embed, view=self)
+            else: return await self.message.edit(embed=embed, view=self)
+        embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
+        embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'age') else age)
+        if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
+        embed.description = f'{self.birthdays.loading} Processing global birthday information'
+        return embed
+
+    async def finishEmbed(self, embed: discord.Embed):
+        #Sort members into three categories: Members in the current server, Disguard suggestions (mutual servers based), and members that have their birthday in a week
+        currentServer = []
+        disguardSuggest = []
+        weekBirthday = []
+        user = self.birthdays.bot.lightningUsers[self.ctx.author.id]
+        bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
+        memberIDs = set([m.id for m in self.ctx.guild.members]) if self.ctx.guild else () #June 2021 (v0.2.27): Changed from list to set to improve performance // Holds list of member IDs for the current server
+        cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+        for u in self.birthdays.bot.users:
+            try:
+                #Skip members whose privacy settings show they don't want to partake in public features of the birthday module
+                if not all((
+                    cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
+                    cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
+                    cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
+                    cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
+                    )):
+                    #print(f'continuing for {u.name}', cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'), cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay'))
+                    continue
+                userBirthday: datetime.datetime = self.birthdays.bot.lightningUsers[u.id].get('birthday')
+                if not userBirthday: continue
+                if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
+                elif mutualServerMemberToMember(self, self.ctx.author, u):
+                    if (userBirthday - datetime.datetime.now()).days < 8: weekBirthday.append({'data': u, 'bday': userBirthday})
+                    else: disguardSuggest.append({'data': u, 'bday': userBirthday})
+            except (AttributeError, TypeError, KeyError): pass
+        currentServer.sort(key = lambda m: m.get('bday'))
+        weekBirthday.sort(key = lambda m: m.get('bday'))
+        disguardSuggest.sort(key = lambda m: len(mutualServersMemberToMember(self, self.ctx.author, m['data'])), reverse=True) #Servers the author and target share
+        firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
+        def fillBirthdayList(list, maxEntries):
+            return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
+        finalSeparator = f'{"UPCOMING BIRTHDAYS":–^70}' if currentServer or weekBirthday or disguardSuggest else f'{"":–^70}'
+        embed.description = f'''**{finalSeparator}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
+        embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + newline) if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + newline) if len(weekBirthday) > 0 else ""}'''
+        embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}'''
+        #await message.edit(embed=embed)
+        bdayVerb = 'Update' if bday else 'Set'
+        ageVerb = 'Update' if age else 'Set'
+        wishlistVerb = 'Update' if wishlist else 'Create'
         self.currentServer = currentServer
         self.disguardSuggest = disguardSuggest
         self.weekBirthday = weekBirthday
-        self.cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
         self.birthdayButton = self.editBirthday(bdayVerb)
         self.ageButton = self.editAge(ageVerb)
         self.wishlistButton = self.editWishlist(wishlistVerb)
         for item in [self.birthdayButton, self.ageButton, self.wishlistButton]: self.add_item(item)
+        #homeView = BirthdayHomepageView(self, self.ctx, None, currentServer, disguardSuggest, weekBirthday, bdayVerb, ageVerb, wishlistVerb)
+        #message = await ctx.send(embed=embed, view=homeView)
+        return embed
+        #await message.edit(embed=embed, view=homeView)
+        #homeView.message = message
 
     @discord.ui.button(label='Browse birthday profiles', emoji='📁')
     async def profiles(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -896,22 +915,25 @@ class BirthdayHomepageView(discord.ui.View):
 
     
 class GuestBirthdayView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, author: discord.User, target: discord.User):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, target: discord.User):
         super().__init__()
         self.birthdays = birthdays
-        self.author = author
+        self.ctx = ctx
         self.target = target
-        if author == target: self.add_item(self.OverviewButton(birthdays))
+        if ctx.author == target: self.add_item(self.OverviewButton(birthdays))
         self.add_item(self.MessageButton(birthdays))
 
-    
     class OverviewButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
             super().__init__(label='Enter birthdays overview', emoji=birthdays.emojis['details'])
         async def callback(self, interaction: discord.Interaction):
-            view = BirthdayHomepageView()
-            embed = None #view.createEmbed method or something #TODO
-            await interaction.response.edit_message(view=view, embed=embed)
+            view: GuestBirthdayView = self.view
+            homeView = BirthdayHomepageView(view.birthdays, view.ctx, None)
+            embed = homeView.createEmbed()
+            await interaction.message.edit(embed=embed, view=None)
+            homeView.message = interaction.message
+            embed = await homeView.finishEmbed(embed)
+            await interaction.message.edit(embed=embed, view=homeView)
 
     class MessageButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
