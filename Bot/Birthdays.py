@@ -320,7 +320,7 @@ class Birthdays(commands.Cog):
                 if type(result) in (discord.User, discord.ClientUser):
                     view = GuestBirthdayView(self, ctx, result)
                     embed = await view.createEmbed()
-                    return await message.edit(embed=embed)
+                    return await message.edit(embed=embed, view=view)
                     # if result == ctx.author: await message.add_reaction(self.emojis['settings'])
                     # await message.add_reaction('🍰')
                     #while True:
@@ -335,13 +335,13 @@ class Birthdays(commands.Cog):
                     #         except discord.Forbidden: pass
                     #         return await self.birthday(ctx)
                 elif type(result) is int:
-                    return await message.edit(view=AgeView(self, ctx.author, ctx.message, message, embed, age, ageHidden, actionList[index]))
-                    #TODO: same story, embed doesnt update
-                    #return await ageContinuation(self, actionList[index], ctx.author, message, embed, partial=True)
+                    view = AgeView(self, ctx.author, ctx.message, message, result)
+                    embed = await view.createEmbed()
+                    return await message.edit(embed=embed, view=view)
                 else:
-                    return await message.edit(view=BirthdayView(self, ctx.author, ctx.message, message, embed, bday, bdayHidden, result))
-                    #TODO ^
-                    #return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
+                    view = BirthdayView(self, ctx.author, ctx.message, message, result)
+                    embed = await view.createEmbed()
+                    return await message.edit(embed=embed, view=view)
             if len(actionList) == 1 and type(actionList[0]) in (discord.User, discord.ClientUser): await makeChoice(actionList[0], message)
             elif len(actionList) == 0:
                 embed.description = f'No actions found for **{arg}**'
@@ -392,26 +392,14 @@ async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Mes
     new = await ctx.send(embed=embed, view=WishlistView(self, ctx, m, cont, new, wishlist, embed)) #Use default class var
 
 async def ageHandler(self: Birthdays, ctx: commands.Context, message: discord.Message):
-    ageHidden = ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age')
-    currentAge = self.bot.lightningUsers[ctx.author.id].get('age')
-    ageModuleDescription = 'Entering your age is a fun but optional feature of the birthday module and has no relation to Discord Inc. It will only be used to personalize the message DMd to you on your birthday. If you set your age, others can view it on your birthday profile by default. If you wish to set your age but don\'t want others to view it, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
-    instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if ageHidden else 'Type your desired age'
-    embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not currentAge else ""}{instructions}\n\nCurrent value: **{"🔒 Hidden" if ageHidden else currentAge}**', color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-    embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
-    view = AgeView(self, ctx, message, None, embed, currentAge, ageHidden)
-    new = await ctx.send(embed=embed, view=view)
-    view.message = new
+    view = AgeView(self, ctx.author, message, None)
+    embed = await view.createEmbed()
+    await ctx.send(embed=embed, view=view)
 
 async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: discord.Message):
-    bdayHidden = ctx.guild and not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay')
-    currentBday = self.bot.lightningUsers[ctx.author.id].get('birthday')
-    birthdayModuleDescription = 'The Disguard birthday module provides fun, voluntary features for those wanting to use it. Setting your birthday will allow Disguard to make an announcement on your birthday in servers with this feature enabled, and Disguard will DM you a message on your birthday. By default, others can view your birthday on your profile. If you wish to change this, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
-    instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Examples of acceptable birthday formats include Jan 1, 5/25 (mm/dd), "next tuesday", "two months from now". Disguard does not process your birth year, so just enter a month and a day.'
-    embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not currentBday else ""}{instructions}\n\nCurrent value:  **{"🔒 Hidden" if bdayHidden else currentBday.strftime("%B %d")}**', color=yellow[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-    embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
-    view = BirthdayView(self, ctx.author, message, None, embed, currentBday, bdayHidden)
-    new = await ctx.send(embed=embed, view=view)
-    view.message = new
+    view = BirthdayView(self, ctx.author, message, None)
+    embed = await view.createEmbed()
+    await ctx.send(embed=embed, view=view)
 
 async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message: discord.Message, currentServer, disguardSuggest, weekBirthday):
     namesOnly = [m['data'].name for m in currentServer + disguardSuggest + weekBirthday]
@@ -957,17 +945,17 @@ class GuestBirthdayView(discord.ui.View):
     
 
 class AgeView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentAge: int, ageHidden: bool, newAge: int = None):
+    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, newAge: int = None):
         super().__init__()
         self.birthdays = birthdays
         self.author = author
         self.originalMessage = originalMessage
         self.message = message #Current message; obtain from an interaction
-        self.embed = embed
-        self.currentAge = currentAge
+        #self.embed = embed
+        #self.currentAge = currentAge
         self.newAge = newAge
         self.usedPrivateInterface = False
-        self.ageHidden = ageHidden
+        #self.ageHidden = ageHidden
         self.finishedSetup = False
         self.autoDetected = False
         if self.newAge: # Assume we're coming from message autocomplete
@@ -976,6 +964,20 @@ class AgeView(discord.ui.View):
             self.autoDetected = True
         asyncio.create_task(self.confirmation())
 
+    async def createEmbed(self):
+        cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+        self.ageHidden = self.originalMessage.guild and not cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'age')
+        self.currentAge = self.birthdays.bot.lightningUsers[self.author.id].get('age')
+        ageModuleDescription = 'Entering your age is a fun but optional feature of the birthday module and has no relation to Discord Inc. It will only be used to personalize the message DMd to you on your birthday. If you set your age, others can view it on your birthday profile by default. If you wish to set your age but don\'t want others to view it, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
+        instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if self.ageHidden else 'Type your desired age'
+        embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not self.currentAge else ""}{instructions}\n\nCurrent value: **{"🔒 Hidden" if self.ageHidden else self.currentAge}**', color=yellow[self.birthdays.colorTheme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
+        embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
+        self.embed = embed
+        return embed
+        #view = AgeView(self, ctx, message, None, embed, currentAge, ageHidden)
+        #new = await ctx.send(embed=embed, view=view)
+        #view.message = new
+    
     @discord.ui.button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='cancelSetup')
     async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
         await self.message.delete()
@@ -1054,17 +1056,17 @@ class AgeView(discord.ui.View):
 class BirthdayView(discord.ui.View):
     '''The interface for setting one's birthday'''
     #Almost a carbon copy from AgeView
-    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, embed: discord.Embed, currentBday: datetime.datetime, bdayHidden: bool, newBday: datetime.datetime = None):
+    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, newBday: datetime.datetime = None):
         super().__init__()
         self.birthdays = birthdays
         self.author = author
         self.originalMessage = originalMessage
         self.message = message
-        self.embed = embed
-        self.currentBday = currentBday
+        #self.embed = embed
+        #self.currentBday = currentBday
         self.newBday = newBday
         self.usedPrivateInterface = False
-        self.bdayHidden = bdayHidden
+        #self.bdayHidden = bdayHidden
         self.finishedSetup = False
         self.autoDetected = False
         if self.newBday: # Assume we're coming from message autocomplete
@@ -1073,6 +1075,17 @@ class BirthdayView(discord.ui.View):
             self.autoDetected = True
         asyncio.create_task(self.confirmation())
 
+    async def createEmbed(self):
+        cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+        self.bdayHidden = self.originalMessage.guild and not cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'birthdayDay')
+        self.currentBday = self.bot.lightningUsers[self.author.id].get('birthday')
+        birthdayModuleDescription = 'The Disguard birthday module provides fun, voluntary features for those wanting to use it. Setting your birthday will allow Disguard to make an announcement on your birthday in servers with this feature enabled, and Disguard will DM you a message on your birthday. By default, others can view your birthday on your profile. If you wish to change this, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
+        instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if self.bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Examples of acceptable birthday formats include Jan 1, 5/25 (mm/dd), "next tuesday", "two months from now". Disguard does not process your birth year, so just enter a month and a day.'
+        embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not self.currentBday else ""}{instructions}\n\nCurrent value:  **{"🔒 Hidden" if self.bdayHidden else self.currentBday.strftime("%B %d")}**', color=yellow[self.colorTheme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
+        embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
+        self.embed = embed
+        return embed
+    
     @discord.ui.button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='cancelSetup')
     async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
         await self.message.delete()
