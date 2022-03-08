@@ -575,6 +575,7 @@ def mutualServerMemberToMember(self: Birthdays, memberA: discord.User, memberB: 
         for m in g.members:
             if m.id == memberA.id: foundA = True
             elif m.id == memberB.id: foundB = True
+            elif m.id == memberA.id == memberB.id: return True
             if foundA and foundB: return True
     return False
 
@@ -587,6 +588,7 @@ def mutualServersMemberToMember(self: Birthdays, memberA: discord.User, memberB:
         for m in g.members:
             if m.id == memberA.id: foundA = True
             elif m.id == memberB.id: foundB = True
+            elif m.id == memberA.id == memberB.id: foundA, foundB = True, True
             if foundA and foundB: 
                 servers.append(g)
                 break
