@@ -811,7 +811,7 @@ class BirthdayHomepageView(discord.ui.View):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
         user = self.birthdays.bot.lightningUsers[self.ctx.author.id]
         bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
-        embed = discord.Embed(color=yellow[theme])
+        embed = discord.Embed(title = '🍰 Birthday Overview', color=yellow[theme])
         embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
         if not cyber.privacyEnabledChecker(self.ctx.author, 'default', 'birthdayModule'):
             embed.description = 'Birthday module disabled due to your privacy settings'
@@ -842,18 +842,17 @@ class BirthdayHomepageView(discord.ui.View):
                     cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
                     cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
                     )):
-                    #print(f'continuing for {u.name}', cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'), cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'), cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay'))
                     continue
                 userBirthday: datetime.datetime = self.birthdays.bot.lightningUsers[u.id].get('birthday')
                 if not userBirthday: continue
                 if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
-                elif mutualServerMemberToMember(self, self.ctx.author, u):
+                elif mutualServerMemberToMember(self.birthdays, self.ctx.author, u):
                     if (userBirthday - datetime.datetime.now()).days < 8: weekBirthday.append({'data': u, 'bday': userBirthday})
                     else: disguardSuggest.append({'data': u, 'bday': userBirthday})
             except (AttributeError, TypeError, KeyError): pass
         currentServer.sort(key = lambda m: m.get('bday'))
         weekBirthday.sort(key = lambda m: m.get('bday'))
-        disguardSuggest.sort(key = lambda m: len(mutualServersMemberToMember(self, self.ctx.author, m['data'])), reverse=True) #Servers the author and target share
+        disguardSuggest.sort(key = lambda m: len(mutualServersMemberToMember(self.birthdays, self.ctx.author, m['data'])), reverse=True) #Servers the author and target share
         firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
         def fillBirthdayList(list, maxEntries):
             return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
