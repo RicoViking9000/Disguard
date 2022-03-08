@@ -269,10 +269,7 @@ class Birthdays(commands.Cog):
     async def birthday(self, ctx: commands.Context, *args):
         await ctx.trigger_typing()
         theme = self.colorTheme(ctx.guild) if ctx.guild else 1
-        adjusted = datetime.datetime.now()
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        user = self.bot.lightningUsers[ctx.author.id]
-        bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
         if len(args) == 0:
             homeView = BirthdayHomepageView(self, ctx, None)
             embed = await homeView.createEmbed()
@@ -293,6 +290,8 @@ class Birthdays(commands.Cog):
             #elif str(result[0]) == '🕯' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'age'): await ageHandler(self, ctx, ctx.author, message) #Done
             #elif str(result[0]) == '📝' and self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist'): await wishlistHandler(self, ctx, message) #Done
         else:
+            user = self.bot.lightningUsers[ctx.author.id]
+            bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
             embed=discord.Embed(title=f'{self.emojis["search"]} Birthdays', description=f'{self.loading} Searching', color=yellow[theme])
             message = await ctx.send(embed=embed)
             arg = ' '.join(args)
@@ -302,23 +301,26 @@ class Birthdays(commands.Cog):
             try: ages.remove(currentAge) #TODO: change this implementation
             except ValueError: pass
             for a in ages: #Remove out of bounds of [0, 105]
-                if a < 0 or a > 105: age.remove(a)
+                if a < 0 or a > 105: ages.remove(a)
             actionList += ages
             memberList = await utility.FindMoreMembers(self.bot.users, arg)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
             memberList = [m.get('member') for m in memberList] #Only take member results with at least 33% relevance to avoid ID searches when people only want to get their age
             memberList = [m for m in memberList if mutualServerMemberToMember(self, ctx.author, m)]
             actionList += memberList
-            def actionCheck(r, u): return str(r) == str(self.emojis['settings']) and u == ctx.author and r.message.id == message.id
+            #def actionCheck(r, u): return str(r) == str(self.emojis['settings']) and u == ctx.author and r.message.id == message.id
             date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=self.bot.lightningLogging[ctx.guild.id].get('offset', -4)))
             bdayHidden = ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay')
             ageHidden = ctx.guild and not cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay')
             if date: 
                 return await message.edit(view=BirthdayView(self, ctx.author, ctx.message, message, embed, bday, bdayHidden, date))
+                #TODO: incomplete; need to edit the embed too ^. change this as well to embed being created in the view
                 # return await birthdayHandler(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
             async def makeChoice(result, message: discord.Message):
                 if type(result) in (discord.User, discord.ClientUser):
-                    return await message.edit(embed=await guestBirthdayHandler(self, ctx, result))
+                    view = GuestBirthdayView(self, ctx, result)
+                    embed = await view.createEmbed()
+                    return await message.edit(embed=embed)
                     # if result == ctx.author: await message.add_reaction(self.emojis['settings'])
                     # await message.add_reaction('🍰')
                     #while True:
@@ -333,22 +335,24 @@ class Birthdays(commands.Cog):
                     #         except discord.Forbidden: pass
                     #         return await self.birthday(ctx)
                 elif type(result) is int:
-
                     return await message.edit(view=AgeView(self, ctx.author, ctx.message, message, embed, age, ageHidden, actionList[index]))
+                    #TODO: same story, embed doesnt update
                     #return await ageContinuation(self, actionList[index], ctx.author, message, embed, partial=True)
                 else:
                     return await message.edit(view=BirthdayView(self, ctx.author, ctx.message, message, embed, bday, bdayHidden, result))
+                    #TODO ^
                     #return await birthdayContinuation(self, date, [ctx.author], embed, message, message, ctx.author, partial=True)
             if len(actionList) == 1 and type(actionList[0]) in (discord.User, discord.ClientUser): await makeChoice(actionList[0], message)
             elif len(actionList) == 0:
                 embed.description = f'No actions found for **{arg}**'
                 return await message.edit(embed=embed)
+            # -------------------------
             parsed = []
             for entry in actionList:
                 if type(entry) in [discord.User, discord.ClientUser]: parsed.append(f'View {entry.name}\'s birthday profile')
                 elif type(entry) is int: parsed.append(f'Set your age as **{entry}**')
                 else: parsed.append(f'Set your birthday as **{entry:%A, %b %d, %Y}**')
-            final = parsed[:20] #We only are dealing with the top 20 results
+            final = parsed[:25] #Only deal with the top 25 results
             letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
             alphabet = 'abcdefghijklmnopqrstuvwxyz'
             embed.description=f'**{"AVAILABLE ACTIONS":–^70}**\nType the letter of or react with your choice\n\n{newline.join([f"{letters[i]}: {f}" for i, f in enumerate(final)])}'
@@ -376,21 +380,9 @@ class Birthdays(commands.Cog):
                         
         
 async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: discord.User):
-    '''Displays information about somebody else's birthday profile'''
-    #adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
-    user = self.bot.lightningUsers[target.id]
-    bday = user.get('birthday')
-    age = user.get('age')
-    wishlist = user.get('wishList', []) #TODO: implement privacy settings
-    #header = '👮‍♂️ » 🍰 Birthday'
-    #header = f'👮‍♂️ {target.name:.{63 - len(header)}} » 🍰 Birthday'
-    embed = discord.Embed(description=f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}' if wishlist else '', color=yellow[self.colorTheme(ctx.guild)])
-    embed.description += f'''\n**{"AVAILABLE OPTIONS":–^70}**\n{f"{self.emojis['settings']}: Enter Action Overview" if target == ctx.author else ''}{f"{newline}🍰 (Only anyone other than {target.name}): Write a personal birthday message to {target.name}" if not cake else ''}'''
-    embed.set_author(name=f'{target.name}\'s birthday page', icon_url=target.avatar.url)
-    embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
-    embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(target, 'birthdayModule', 'birthdayDay') else age)
     view = GuestBirthdayView(self, ctx.author, target)
-    new = await ctx.send(embed=embed, view=view)
+    embed = await view.createEmbed()
+    await ctx.send(embed=embed, view=view)
 
 async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Message, cont=False, new=None):
     wishlist = ['You have disabled birthday wishlist functionality'] if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private'] if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') and ctx.guild else self.bot.lightningUsers[ctx.author.id].get('wishlist', [])
@@ -916,6 +908,7 @@ class BirthdayHomepageView(discord.ui.View):
 
     
 class GuestBirthdayView(discord.ui.View):
+    '''Displays basic information about someone's birthday profile'''
     def __init__(self, birthdays: Birthdays, ctx: commands.Context, target: discord.User):
         super().__init__()
         self.birthdays = birthdays
@@ -924,9 +917,28 @@ class GuestBirthdayView(discord.ui.View):
         if ctx.author == target: self.add_item(self.OverviewButton(birthdays))
         self.add_item(self.MessageButton(birthdays))
 
+    async def createEmbed(self):
+        #adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
+        cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+        user = self.birthdays.bot.lightningUsers[self.target.id]
+        bday = user.get('birthday')
+        age = user.get('age')
+        wishlist = user.get('wishList', []) #TODO: implement privacy settings
+        wishlistHidden = not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'wishlist')
+        #header = '👮‍♂️ » 🍰 Birthday'
+        #header = f'👮‍♂️ {target.name:.{63 - len(header)}} » 🍰 Birthday'
+        description = f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}' if wishlist and not wishlistHidden else 'Set to private by user' if wishlistHidden else ''
+        embed = discord.Embed(title = f'🍰 {self.target.name}\'s Birthday Page', description=description, color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+        embed.set_author(name=self.target.name, icon_url=self.target.avatar.url)
+        embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
+        embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else age)
+        return embed
+        #view = GuestBirthdayView(self, ctx.author, target)
+        #new = await ctx.send(embed=embed, view=view)
+
     class OverviewButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
-            super().__init__(label='Enter birthdays overview', emoji=birthdays.emojis['details'])
+            super().__init__(label='Enter action view', emoji=birthdays.emojis['details'])
         async def callback(self, interaction: discord.Interaction):
             view: GuestBirthdayView = self.view
             homeView = BirthdayHomepageView(view.birthdays, view.ctx, None)
@@ -1616,3 +1628,13 @@ class AgeSelectView(discord.ui.View):
             super().__init__()
             for age in ages: self.add_option(label=age)
 
+class BirthdayActionView(discord.ui.View):
+    def __init__(self, ages):
+        super().__init__()
+        self.select = self.Dropdown(ages)
+        self.add_item(self.select)
+    
+    class Dropdown(discord.ui.Select):
+        def __init__(self, entries):
+            super().__init__()
+            for entry in entries: self.add_option(label=entry)
