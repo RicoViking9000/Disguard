@@ -879,9 +879,7 @@ class BirthdayHomepageView(discord.ui.View):
                 await wishlistHandler(view, view.ctx, view.message)
             else:
                 pass
-
-
-    
+ 
 class GuestBirthdayView(discord.ui.View):
     '''Displays basic information about someone's birthday profile'''
     def __init__(self, birthdays: Birthdays, ctx: commands.Context, target: discord.User):
@@ -917,7 +915,7 @@ class GuestBirthdayView(discord.ui.View):
         async def callback(self, interaction: discord.Interaction):
             view: GuestBirthdayView = self.view
             homeView = BirthdayHomepageView(view.birthdays, view.ctx, None)
-            embed = homeView.createEmbed()
+            embed = await homeView.createEmbed()
             await interaction.message.edit(embed=embed, view=None)
             homeView.message = interaction.message
             embed = await homeView.finishEmbed(embed)
@@ -927,7 +925,11 @@ class GuestBirthdayView(discord.ui.View):
         def __init__(self, birthdays: Birthdays):
             super().__init__(label='Write birthday message', emoji='✉')
         async def callback(self, interaction: discord.Interaction):
-            pass
+            view: GuestBirthdayView = self.view
+            if interaction.user == view.ctx.author: await interaction.response.send_message('You can\'t write a birthday message to yourself!')
+            else:
+                pass
+            #TODO: put message composer into its own view
 
     
 
@@ -1065,10 +1067,10 @@ class BirthdayView(discord.ui.View):
     async def createEmbed(self):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
         self.bdayHidden = self.originalMessage.guild and not cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'birthdayDay')
-        self.currentBday = self.bot.lightningUsers[self.author.id].get('birthday')
+        self.currentBday = self.birthdays.bot.lightningUsers[self.author.id].get('birthday')
         birthdayModuleDescription = 'The Disguard birthday module provides fun, voluntary features for those wanting to use it. Setting your birthday will allow Disguard to make an announcement on your birthday in servers with this feature enabled, and Disguard will DM you a message on your birthday. By default, others can view your birthday on your profile. If you wish to change this, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
         instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if self.bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Examples of acceptable birthday formats include Jan 1, 5/25 (mm/dd), "next tuesday", "two months from now". Disguard does not process your birth year, so just enter a month and a day.'
-        embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not self.currentBday else ""}{instructions}\n\nCurrent value:  **{"🔒 Hidden" if self.bdayHidden else self.currentBday.strftime("%B %d")}**', color=yellow[self.colorTheme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
+        embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not self.currentBday else ""}{instructions}\n\nCurrent value:  **{"🔒 Hidden" if self.bdayHidden else self.currentBday.strftime("%B %d")}**', color=yellow[self.birthdays.colorTheme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
         embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
         self.embed = embed
         return embed
@@ -1629,12 +1631,12 @@ class AgeSelectView(discord.ui.View):
             for age in ages: self.add_option(label=age)
 
 class BirthdayActionView(discord.ui.View):
-    def __init__(self, ages):
+    def __init__(self, entries):
         super().__init__()
-        self.select = self.Dropdown(ages)
+        self.select = self.Dropdown(entries)
         self.add_item(self.select)
     
     class Dropdown(discord.ui.Select):
         def __init__(self, entries):
             super().__init__()
-            for entry in entries: self.add_option(label=entry)            for i, entry in enumerate(entries): self.add_option(label=entry, value=i)
+            for i, entry in enumerate(entries): self.add_option(label=entry, value=i)
