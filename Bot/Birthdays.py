@@ -350,30 +350,18 @@ class Birthdays(commands.Cog):
             parsed = []
             for entry in actionList:
                 if type(entry) in [discord.User, discord.ClientUser]: parsed.append(f'View {entry.name}\'s birthday profile')
-                elif type(entry) is int: parsed.append(f'Set your age as **{entry}**')
-                else: parsed.append(f'Set your birthday as **{entry:%A, %b %d, %Y}**')
+                elif type(entry) is int: parsed.append(f'Set age: {entry}')
+                else: parsed.append(f'Set birthday: {entry:%A, %b %d, %Y}')
             final = parsed[:25] #Only deal with the top 25 results
-            letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-            alphabet = 'abcdefghijklmnopqrstuvwxyz'
-            embed.description=f'**{"AVAILABLE ACTIONS":–^70}**\nType the letter of or react with your choice\n\n{newline.join([f"{letters[i]}: {f}" for i, f in enumerate(final)])}'
-            await message.edit(embed=embed)
-            for l in letters[:len(final)]: await message.add_reaction(l)
-            def messageCheck(m): return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in alphabet
-            def reacCheck(r, u): return str(r) in letters[:len(final)] and u == ctx.author and r.message.id == message.id
-            d, p = await asyncio.wait([self.bot.wait_for('message', check=messageCheck), self.bot.wait_for('reaction_add', check=reacCheck)], return_when=asyncio.FIRST_COMPLETED)
-            try: r = d.pop().result()
-            except: return
-            for f in p: f.cancel()
-            if type(r) is discord.Message: 
-                index = alphabet.index(r.content)
-                try:
-                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(r)
-                    await r.delete()
-                except: pass
-            else: index = letters.index(str(r[0]))
-            try: await message.clear_reactions()
-            except: pass
-            await makeChoice(actionList[index], message)
+            embed.description = 'Use the dropdown menu to select your desired result'
+            view = BirthdayActionView(final)
+            await message.edit(embed=embed, view=view)
+            def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == view.select.custom_id and i.user == ctx.author and i.channel == ctx.channel
+            try: await self.bot.wait_for('interaction', check=interactionCheck, timeout=300)
+            except asyncio.TimeoutError:
+                embed.description = '⌚ | Timed out'
+                return await message.edit(embed=embed)
+            await makeChoice(actionList[int(view.select.values[0])], message)
     
     def colorTheme(self, s: discord.Guild):
         return self.bot.lightningLogging[s.id]['colorTheme']
@@ -1649,4 +1637,4 @@ class BirthdayActionView(discord.ui.View):
     class Dropdown(discord.ui.Select):
         def __init__(self, entries):
             super().__init__()
-            for entry in entries: self.add_option(label=entry)
+            for entry in entries: self.add_option(label=entry)            for i, entry in enumerate(entries): self.add_option(label=entry, value=i)
