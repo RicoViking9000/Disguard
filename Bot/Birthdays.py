@@ -356,14 +356,10 @@ async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: disco
 
 async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message: discord.Message, currentServer, disguardSuggest, weekBirthday):
     namesOnly = [m['data'].name for m in currentServer + disguardSuggest + weekBirthday]
-    def fillBirthdayList(list, maxEntries):
-        return [f"{qlfc}\\▪️ **{m['data'].name if namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
-    embed = message.embeds[0]
-    embed.clear_fields()
-    embed.description = f'''Click a button to expand that section**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(fillBirthdayList(currentServer, 8))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(fillBirthdayList(disguardSuggest, 8))}\n\n__WITHIN A WEEK__\n{newline.join(fillBirthdayList(weekBirthday, 8))}'''
-    view = UpcomingBirthdaysView(None, ctx.author, currentServer, disguardSuggest, weekBirthday, namesOnly, embed, self.bot)
-    message = await message.edit(embed=embed, view=view)
-    view.message = message
+    view = UpcomingBirthdaysView(self, message, ctx, currentServer, disguardSuggest, weekBirthday, namesOnly, None, self.bot)
+    embed = await view.createEmbed()
+    await view.loadHomepage()
+    #view.message = message
 
 def calculateDate(message, adjusted):
     '''Returns a datetime.datetime parsed from a message
@@ -1292,14 +1288,16 @@ class WishlistEditView(discord.ui.View):
         await self.new.edit(embed=self.new.embeds[0], view=self)
 
 class UpcomingBirthdaysView(discord.ui.View):
-    def __init__(self, message: discord.Message, author: discord.User, currentServer, disguardSuggest, weekBirthday, namesOnly, embed: discord.Embed, bot: commands.Bot, jumpStart=0):
+    def __init__(self, birthdays: Birthdays, message: discord.Message, ctx: commands.Context, currentServer, disguardSuggest, weekBirthday, namesOnly, embed: discord.Embed, bot: commands.Bot, jumpStart=0):
         super().__init__()
         self.message = message
-        self.author = author
+        self.ctx = ctx
+        self.author = self.ctx.author
         self.currentServer = list(self.paginate(currentServer))
         self.disguardSuggest = list(self.paginate(disguardSuggest))
         self.weekBirthday = list(self.paginate(weekBirthday))
         self.bot = bot
+        self.birthdays = birthdays
         self.namesOnly = namesOnly
         self.embed = embed
         self.currentView = (self.currentServer[0][:8] if self.currentServer else []) + (self.disguardSuggest[0][:8] if self.disguardSuggest else []) + (self.weekBirthday[0][:8] if self.weekBirthday else [])
@@ -1320,9 +1318,25 @@ class UpcomingBirthdaysView(discord.ui.View):
         self.add_item(self.buttonDisguardSuggest)
         self.add_item(self.buttonWeekBirthday)
         self.add_item(self.buttonWriteMessage)
-        if jumpStart == 1: asyncio.create_task(self.writeMessagePrompt(author))
+        if jumpStart == 1: asyncio.create_task(self.writeMessagePrompt(self.author))
 
     #TODO: I think I need to fully implement privacy settings here too
+
+    async def createEmbed(self):
+        homeView = BirthdayHomepageView(self.birthdays, self.ctx, self.message)
+        embed = await homeView.createEmbed()
+        embed = await homeView.finishEmbed(embed)
+        embed.clear_fields()
+        embed.description = f'''Click a button to expand that section**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(self.fillBirthdayList(self.currentServer, 8))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(self.fillBirthdayList(self.disguardSuggest, 8))}\n\n__WITHIN A WEEK__\n{newline.join(self.fillBirthdayList(self.weekBirthday, 8))}'''
+        
+        #view = UpcomingBirthdaysView(None, ctx.author, currentServer, disguardSuggest, weekBirthday, namesOnly, embed, self.bot)
+        #message = await message.edit(embed=embed, view=view)
+        #view.message = message
+
+
+        #embed = discord.Embed()
+        self.embed = embed
+        return embed
 
     def fillBirthdayList(self, list, page = 0, entries = 25):
         return [f"{qlfc}\\▪️ **{m['data'].name if self.namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[page][:entries]]
