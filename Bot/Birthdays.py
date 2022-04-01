@@ -1645,7 +1645,7 @@ class ComposeMessageView(discord.ui.View):
 
     class switchToDMsButton(discord.ui.Button):
         def __init__(self, target: discord.User):
-            super().__init__(label='Switch to DMs')
+            super().__init__(label='Switch to DMs', style=discord.ButtonStyle.blurple)
             self.target = target
         async def callback(self, interaction: discord.Interaction):
             view: ComposeMessageView = self.view
@@ -1747,9 +1747,9 @@ class ComposeMessageView(discord.ui.View):
         self.embed.description = f'Your message to {self.target.name} says `{self.msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nNote that if this message ends up being inapporpriate, {self.target.name} can flag it for investigation by Rick Astley and/or Disguard\'s developer. Learn more here.\n\nIf this all looks good, press the green button.'
         self.clear_items()
         self.add_item(self.buttonBack)
-        #self.add_item(discord.ui.Button(label='Restart', custom_id='restart'))
+        self.add_item(discord.ui.Button(label='Restart', custom_id='restart'))
         self.add_item(discord.ui.Button(label='Looks good', custom_id='confirm', style=discord.ButtonStyle.green))
-        await self.message.channel.send(embed=self.embed, view=self)
+        msg = await self.message.channel.send(embed=self.embed, view=self)
         def finalCheck(i: discord.Interaction): return i.data['custom_id'] in ('restart', 'confirm') and i.user == self.author and type(i.channel) is not discord.TextChannel
         try: result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=finalCheck, timeout=300)
         except asyncio.TimeoutError:
@@ -1757,11 +1757,15 @@ class ComposeMessageView(discord.ui.View):
             await prev.createEmbed()
             return await prev.loadHomepage()
         #print(result.data['custom_id'])
-        if result.data['custom_id'] == 'restart': return await self.writeMessagePrompt(self.target) #TODO: restart button
+        if result.data['custom_id'] == 'restart':
+            self.clear_items()
+            self.add_item(self.buttonBack)
+            self.message = msg
+            embed = await self.createEmbed()
+            await msg.edit(embed=embed, view=self)
+            return await self.writeMessagePrompt()
         await database.SetBirthdayMessage(self.target, self.msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
         await self.message.channel.send(f'Successfully queued the message for {self.target.name}')
-
-    
 
 class AgeSelectView(discord.ui.View):
     def __init__(self, ages):
