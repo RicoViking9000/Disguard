@@ -1304,7 +1304,6 @@ class UpcomingBirthdaysView(discord.ui.View):
         self.currentView = (self.currentServer[0][:8] if self.currentServer else []) + (self.disguardSuggest[0][:8] if self.disguardSuggest else []) + (self.weekBirthday[0][:8] if self.weekBirthday else [])
         self.currentPage = 0
         self.finalPage = 0
-        self.buttonClose = self.closeButton()
         self.buttonCurrentServer = self.currentServerButton()
         self.buttonDisguardSuggest = self.disguardSuggestButton()
         self.buttonWeekBirthday = self.weekBirthdayButton()
@@ -1314,7 +1313,7 @@ class UpcomingBirthdaysView(discord.ui.View):
         self.buttonNext = self.nextPage()
         self.buttonSearch = self.searchMembersButton()
         self.memberDropdown = self.selectMemberDropdown()
-        self.add_item(self.buttonClose)
+        self.add_item(self.buttonBack)
         self.add_item(self.buttonCurrentServer)
         self.add_item(self.buttonDisguardSuggest)
         self.add_item(self.buttonWeekBirthday)
@@ -1349,7 +1348,7 @@ class UpcomingBirthdaysView(discord.ui.View):
 
     async def loadHomepage(self):
         self.clear_items()
-        self.add_item(self.buttonClose) #probably dont need to create new buttons all the time
+        self.add_item(self.buttonBack)
         self.add_item(self.buttonCurrentServer)
         self.add_item(self.buttonDisguardSuggest)
         self.add_item(self.buttonWeekBirthday)
@@ -1357,19 +1356,22 @@ class UpcomingBirthdaysView(discord.ui.View):
         self.embed.description = f'''Click a button to expand that section**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(self.fillBirthdayList(self.currentServer, entries=8))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(self.fillBirthdayList(self.disguardSuggest, entries=8))}\n\n__WITHIN A WEEK__\n{newline.join(self.fillBirthdayList(self.weekBirthday, entries=8))}'''
         await self.message.edit(embed=self.embed, view=self)
     
-    class closeButton(discord.ui.Button):
-        def __init__(self):
-            super().__init__(label='Close', style=discord.ButtonStyle.red)
-        async def callback(self, interaction: discord.Interaction):
-            view: UpcomingBirthdaysView = self.view
-    
     class backButton(discord.ui.Button):
         def __init__(self):
-            super().__init__(emoji='⬅', label='Back')
+            super().__init__(emoji='⬅', label='Back', style=discord.ButtonStyle.red)
             self.code = 0 #determines callback action
         async def callback(self, interaction: discord.Interaction):
             view: UpcomingBirthdaysView = self.view
-            if self.code == 0: await view.loadHomepage()
+            if self.code == 0:
+                homeView = BirthdayHomepageView(view.birthdays, view.ctx, view.message)
+                embed = await homeView.createEmbed()
+                await interaction.message.edit(embed=embed, view=None)
+                homeView.message = interaction.message
+                embed = await homeView.finishEmbed(embed)
+                await interaction.response.edit_message(embed=embed, view=homeView)
+            if self.code == 1:
+                view.buttonBack.code = 1
+                await view.loadHomepage()
     
     class prevPage(discord.ui.Button):
         def __init__(self):
@@ -1407,6 +1409,7 @@ class UpcomingBirthdaysView(discord.ui.View):
             view.add_item(view.buttonPrev)
             view.add_item(view.buttonNext)
             view.add_item(view.buttonWriteMessage)
+            view.buttonBack.code = 1
             view.currentView = view.currentServer
             view.currentPage = 0
             view.finalPage = len(view.currentView) - 1
@@ -1426,6 +1429,7 @@ class UpcomingBirthdaysView(discord.ui.View):
             view.add_item(view.buttonPrev)
             view.add_item(view.buttonNext)
             view.add_item(view.buttonWriteMessage)
+            view.buttonBack.code = 1
             view.currentView = view.disguardSuggest
             view.currentPage = 0
             view.finalPage = len(view.currentView) - 1
@@ -1445,6 +1449,7 @@ class UpcomingBirthdaysView(discord.ui.View):
             view.add_item(view.buttonPrev)
             view.add_item(view.buttonNext)
             view.add_item(view.buttonWriteMessage)
+            view.buttonBack.code = 1
             view.currentView = view.weekBirthday
             view.currentPage = 0
             view.finalPage = len(view.currentView) - 1
@@ -1621,7 +1626,7 @@ class ComposeMessageView(discord.ui.View):
 
     class backButton(discord.ui.Button):
         def __init__(self):
-            super().__init__(emoji='⬅', label='Back')
+            super().__init__(emoji='⬅', label='Back', style=discord.ButtonStyle.red)
         async def callback(self, interaction: discord.Interaction):
             view: ComposeMessageView = self.view
             prev: UpcomingBirthdaysView = view.previousView
