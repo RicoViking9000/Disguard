@@ -1328,19 +1328,10 @@ class UpcomingBirthdaysView(discord.ui.View):
         embed = await homeView.finishEmbed(embed)
         embed.clear_fields()
         embed.description = f'''Click a button to expand that section**\n{"UPCOMING BIRTHDAYS":-^70}**\n__THIS SERVER__\n{newline.join(self.fillBirthdayList(self.currentServer, entries = 8))}\n\n__DISGUARD SUGGESTIONS__\n{newline.join(self.fillBirthdayList(self.disguardSuggest, entries = 8))}\n\n__WITHIN A WEEK__\n{newline.join(self.fillBirthdayList(self.weekBirthday, entries = 8))}'''
-        
-        #view = UpcomingBirthdaysView(None, ctx.author, currentServer, disguardSuggest, weekBirthday, namesOnly, embed, self.bot)
-        #message = await message.edit(embed=embed, view=view)
-        #view.message = message
-
-
-        #embed = discord.Embed()
         self.embed = embed
         return embed
 
     def fillBirthdayList(self, list, page = 0, entries = 25):
-        #print(len(list), page)
-        #print(len(list[page][:entries]))
         return [f"{qlfc}\\▪️ **{m['data'].name if self.namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in (list[page][:entries] if list else [])]
 
     def paginate(self, data):
@@ -1475,7 +1466,6 @@ class UpcomingBirthdaysView(discord.ui.View):
             if custom_id: super().__init__(placeholder=f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})', custom_id=custom_id)
             else: super().__init__(placeholder=f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})')
             view: UpcomingBirthdaysView = self.view
-            #self.row = 0
             self.userDict: typing.Dict[int, discord.User] = {}
             for d in population:
                 u: discord.User = d['data']
@@ -1488,7 +1478,6 @@ class UpcomingBirthdaysView(discord.ui.View):
             embed = await newView.createEmbed()
             await interaction.response.edit_message(embed=embed, view=newView)
             await newView.writeMessagePrompt()
-            # await view.writeMessagePrompt(self.userDict[int(self.values[0])])
 
         def updatePopulation(self, population, custom_id=None):
             if custom_id: self.custom_id = custom_id
@@ -1520,7 +1509,6 @@ class UpcomingBirthdaysView(discord.ui.View):
                 except asyncio.TimeoutError: await view.loadHomepage()
                 for f in pending: f.cancel()
                 if type(result) is discord.Interaction: break
-                # result: discord.Message = await view.bot.wait_for('message', check=messageCheck, timeout=300)
                 result: discord.Message = result
                 cyberlog: Cyberlog.Cyberlog = view.bot.get_cog('Cyberlog')
                 results = await utility.FindMoreMembers(view.bot.users, result.content)
@@ -1530,85 +1518,9 @@ class UpcomingBirthdaysView(discord.ui.View):
                 except (discord.Forbidden, discord.HTTPException): pass
                 users = [r['member'] for r in results]
                 listToPass = [{'data': u, 'bday': getBirthday(u)} for u in users]
-                #select = view.selectMemberDropdown(listToPass, view.message.id)
                 select.updatePopulation(listToPass, str(view.message.id))
                 if len(view.children) == 1: view.add_item(select)
                 await view.message.edit(view=view)
-    
-    # class switchToDMsButton(discord.ui.Button):
-    #     def __init__(self, target: discord.User):
-    #         super().__init__(label='Switch to DMs')
-    #         self.target = target
-    #     async def callback(self, interaction: discord.Interaction):
-    #         view: UpcomingBirthdaysView = self.view
-    #         message = await view.author.send(embed=view.embed, view=view)
-    #         await interaction.response.pong()
-    #         view.message = message
-    #         await view.writeMessagePrompt(self.target)
-
-    # async def writeMessagePrompt(self, target: discord.User):
-    #     self.clear_items()
-    #     self.add_item(self.buttonBack)
-    #     if self.message.guild:
-    #         intro = 'Until [input forms](https://cdn.discordapp.com/attachments/697138785317814292/940761395883024424/c896cb74-1206-4632-bcb4-99eccf1c0356.png) are fully implmented, this process will take place in DMs. Make sure your DMs are open, then press the button below this embed.'
-    #         self.add_item(self.switchToDMsButton(target))
-    #     else:
-    #         intro = f'Type your message for {target.name}. Note that you cannot send server invites or hyperlinks in birthday messages.'
-    #         existingMessages = self.bot.lightningUsers[target.id].get('birthdayMessages')
-    #         filtered = [m for m in existingMessages if target.id == m['author']]
-    #         if filtered:
-    #             intro += f'\n\nℹ | You already have {len(filtered)} messages queued for {target.name}. If you wish to add another, you may continue by sending your desired message.'
-    #         if not self.bot.lightningUsers[target.id].get('birthday'): intro += f'\n\nℹ | {target.name} hasn\'t set their birthday yet. You may still write a message, but it will only be delivered if they set their birthday.'
-    #     self.embed.title = f'Compose birthday message for {target.name}'
-    #     self.embed.description = intro
-    #     await self.message.edit(content=None, embed=self.embed, view=self)
-    #     if type(self.message.channel) is not discord.DMChannel: return #ensures we only proceed if in DMs
-    #     def messageCheck(m: discord.Message): return m.author == self.author# and type(m.channel) is discord.DMChannel
-    #     satisfactoryMessage = False
-    #     while not satisfactoryMessage:
-    #         try: msgInBottle: discord.Message = await self.bot.wait_for('message', check=messageCheck, timeout=300)
-    #         except asyncio.TimeoutError: return await self.loadHomepage()
-    #         satisfactoryMessage = not re.search('.*discord.gg/.*', msgInBottle.content) and not re.search('.*htt(p|ps)://.*', msgInBottle.content) and len(msgInBottle.content) < 1024
-    #         if not satisfactoryMessage:
-    #             self.embed.description += f'\n\n⚠ | Your message contains hyperlinks, server invites, or is too long (the message must be < 1024 characters). Please try again.'
-    #             await self.message.channel.send(embed=self.embed)
-    #     self.embed.description = 'Select the destinations you want your message to be delivered to. Messages won\'t be delivered to channels with birthday announcements off unless they\'re turned on in the meantime.'
-    #     mutualServers = mutualServersMemberToMember(self.bot.get_cog('Birthdays'), self.bot.user, target)
-    #     dropdown = discord.ui.Select(min_values=1, placeholder='Select destination channels')
-    #     dmChannel = target.dm_channel
-    #     if not target.dm_channel:
-    #         try:
-    #             await target.create_dm()
-    #             dmChannel = target.dm_channel
-    #         except: dmChannel = None
-    #     dropdown.add_option(label=f'{target.name}\'s DMs', value=target.dm_channel.id, description='Recommended' if dmChannel else 'Unable to DM')
-    #     for server in mutualServers:
-    #         birthdayChannel = server.get_channel(self.bot.lightningLogging[server.id].get('birthday'))
-    #         dropdown.add_option(label=server.name, value=server.id, description=f'#{birthdayChannel.name}' if birthdayChannel else 'No announcement channel configured')
-    #     dropdown.max_values = len(mutualServers) + 1
-    #     next = discord.ui.Button(label='Next', style=discord.ButtonStyle.green, custom_id='next')
-    #     self.add_item(dropdown)
-    #     self.add_item(next)
-    #     await self.message.channel.send(embed=self.embed, view=self)
-    #     def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == 'next' and i.user == self.author# and type(i.channel) is discord.DMChannel
-    #     try: result = await self.bot.wait_for('interaction', check=interactionCheck, timeout=300)
-    #     except asyncio.TimeoutError: return await self.loadHomepage()
-    #     birthday = self.bot.lightningUsers[target.id].get('birthday')
-    #     destinations = [f'• {self.bot.get_channel(int(dropdown.values[0]))}'] + [f'• {self.bot.get_guild(int(v))}' for v in (dropdown.values[1:] if len(dropdown.values) > 1 else [])]
-    #     serverDestinations = [self.bot.get_guild(int(v)) for v in dropdown.values[1:]]
-    #     self.embed.description = f'Your message to {target.name} says `{msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nNote that if this message ends up being inapporpriate, {target.name} can flag it for investigation by Rick Astley and/or Disguard\'s developer. Learn more here.\n\nIf this all looks good, press the green button.'
-    #     self.clear_items()
-    #     self.add_item(self.buttonBack)
-    #     #self.add_item(discord.ui.Button(label='Restart', custom_id='restart'))
-    #     self.add_item(discord.ui.Button(label='Looks good', custom_id='confirm', style=discord.ButtonStyle.green))
-    #     await self.message.channel.send(embed=self.embed, view=self)
-    #     def finalCheck(i: discord.Interaction): return i.data['custom_id'] in ('restart', 'confirm') and i.user == self.author# and type(i.channel) is discord.DMChannel
-    #     try: result: discord.Interaction = await self.bot.wait_for('interaction', check=finalCheck, timeout=300)
-    #     except asyncio.TimeoutError: return await self.loadHomepage()
-    #     #print(result.data['custom_id'])
-    #     if result.data['custom_id'] == 'restart': return await self.writeMessagePrompt(target) #TODO: restart button
-    #     await database.SetBirthdayMessage(target, msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
-    #     await self.message.channel.send(f'Successfully queued the message for {target.name}')
         
 class ComposeMessageView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, target: discord.User, author: discord.User, message: discord.Message, previousView: discord.ui.View):
@@ -1686,19 +1598,6 @@ class ComposeMessageView(discord.ui.View):
         return self.embed
 
     async def writeMessagePrompt(self):
-        # if self.message.guild:
-        #     intro = 'Until [input forms](https://cdn.discordapp.com/attachments/697138785317814292/940761395883024424/c896cb74-1206-4632-bcb4-99eccf1c0356.png) are fully implmented, this process will take place in DMs. Make sure your DMs are open, then press the button below this embed.'
-        #     self.add_item(self.switchToDMsButton(target))
-        # else:
-        #     intro = f'Type your message for {target.name}. Note that you cannot send server invites or hyperlinks in birthday messages.'
-        #     existingMessages = self.bot.lightningUsers[target.id].get('birthdayMessages')
-        #     filtered = [m for m in existingMessages if target.id == m['author']]
-        #     if filtered:
-        #         intro += f'\n\nℹ | You already have {len(filtered)} messages queued for {target.name}. If you wish to add another, you may continue by sending your desired message.'
-        #     if not self.bot.lightningUsers[target.id].get('birthday'): intro += f'\n\nℹ | {target.name} hasn\'t set their birthday yet. You may still write a message, but it will only be delivered if they set their birthday.'
-        # self.embed.title = f'Compose birthday message for {target.name}'
-        # self.embed.description = intro
-        # await self.message.edit(content=None, embed=self.embed, view=self)
         if type(self.message.channel) is not discord.DMChannel: return #ensures we only proceed if in DMs
         def messageCheck(m: discord.Message): return m.author == self.author and type(m.channel) is not discord.TextChannel
         satisfactoryMessage = False
@@ -1761,7 +1660,6 @@ class ComposeMessageView(discord.ui.View):
             prev: UpcomingBirthdaysView = self.previousView
             await prev.createEmbed()
             return await prev.loadHomepage()
-        #print(result.data['custom_id'])
         if result.data['custom_id'] == 'restart':
             self.clear_items()
             self.add_item(self.buttonBack)
