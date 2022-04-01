@@ -1610,6 +1610,7 @@ class ComposeMessageView(discord.ui.View):
         super().__init__()
         self.birthdays = birthdays
         self.target = target
+        self.msgInABottle = None
         self.author = author
         self.message = message
         self.stage: int = 0
@@ -1623,21 +1624,24 @@ class ComposeMessageView(discord.ui.View):
             super().__init__(emoji='⬅', label='Back')
         async def callback(self, interaction: discord.Interaction):
             view: ComposeMessageView = self.view
+            prev: UpcomingBirthdaysView = view.previousView
             if view.stage == 0:
-                prev: UpcomingBirthdaysView = view.previousView
+                prev.message = interaction.message
                 await prev.createEmbed()
-                return await prev.loadHomepage()
-                #return await interaction.response.edit_message(embed=embed, view=view.previousView)
+                await prev.loadHomepage()
             elif view.stage == 1:
                 view.stage -= 1
-                self.emoji, self.label = '✖', 'Close'
-                view.remove_item(view.buttonBack)
+                view.clear_items()
                 view.buttonBack = self
                 view.add_item(view.buttonBack)
-                await view.writeMessagePrompt(view.target)
+                embed = await view.createEmbed()
+                await interaction.message.edit(embed=embed, view=view)
+                await view.writeMessagePrompt()
             else:
                 view.stage -= 1
-                await view.selectDestinationsPrompt(view.target)
+                view.clear_items()
+                view.add_item(view.buttonBack)
+                await view.selectDestinationsPrompt()
 
     class switchToDMsButton(discord.ui.Button):
         def __init__(self, target: discord.User):
@@ -1645,10 +1649,16 @@ class ComposeMessageView(discord.ui.View):
             self.target = target
         async def callback(self, interaction: discord.Interaction):
             view: ComposeMessageView = self.view
+            prev: UpcomingBirthdaysView = view.previousView
+            # DM the user
             message = await view.author.send(embed=view.embed, view=view)
+            # Set the previous view's message to the current message for control flow
+            prev.message = message #ok but why
+            # Prepare a button allowing the user to jump the message that was just DMd to them
             view.clear_items()
             view.add_item(discord.ui.Button(style=discord.ButtonStyle.blurple, label='Jump to message', url=message.jump_url))
             await interaction.response.edit_message(view=view)
+            # Continue setting up the DM space
             view.message = message
             embed = await view.createEmbed()
             view.clear_items()
@@ -1685,22 +1695,22 @@ class ComposeMessageView(discord.ui.View):
         # self.embed.description = intro
         # await self.message.edit(content=None, embed=self.embed, view=self)
         if type(self.message.channel) is not discord.DMChannel: return #ensures we only proceed if in DMs
-        def messageCheck(m: discord.Message): return m.author == self.author and type(m.channel) is discord.DMChannel
+        def messageCheck(m: discord.Message): return m.author == self.author and type(m.channel) is not discord.TextChannel
         satisfactoryMessage = False
         self.stage = 0
         while not satisfactoryMessage:
-            try: msgInBottle: discord.Message = await self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300)
+            try: self.msgInBottle: discord.Message = await self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300)
             except asyncio.TimeoutError:
                 prev: UpcomingBirthdaysView = self.previousView
                 await prev.createEmbed()
                 return await prev.loadHomepage()
-            satisfactoryMessage = not re.search('.*discord.gg/.*', msgInBottle.content) and not re.search('.*htt(p|ps)://.*', msgInBottle.content) and len(msgInBottle.content) < 1024
+            satisfactoryMessage = not re.search('.*discord.gg/.*', self.msgInBottle.content) and not re.search('.*htt(p|ps)://.*', self.msgInBottle.content) and len(self.msgInBottle.content) < 1024
             if not satisfactoryMessage:
                 self.embed.description += f'\n\n⚠ | Your message contains hyperlinks, server invites, or is too long (the message must be < 1024 characters). Please try again.'
                 await self.message.channel.send(embed=self.embed)
-        await self.selectDestinationsPrompt(msgInBottle)
+        await self.selectDestinationsPrompt()
         
-    async def selectDestinationsPrompt(self, msgInABottle: discord.Message):
+    async def selectDestinationsPrompt(self):
         self.stage = 1
         self.embed.description = 'Select the destinations you want your message to be delivered to. Messages won\'t be delivered to channels with birthday announcements off unless they\'re turned on in the meantime.'
         mutualServers = mutualServersMemberToMember(self.birthdays.bot.get_cog('Birthdays'), self.birthdays.bot.user, self.target)
@@ -1720,26 +1730,27 @@ class ComposeMessageView(discord.ui.View):
         self.add_item(dropdown)
         self.add_item(next)
         await self.message.channel.send(embed=self.embed, view=self)
-        def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == 'next' and i.user == self.author and type(i.channel) is discord.DMChannel
-        try: result = await self.birthdays.bot.wait_for('interaction', check=interactionCheck, timeout=300)
+        def interactionCheck(i: discord.Interaction):
+            return i.data['custom_id'] == 'next' and i.user == self.author and type(i.channel) is not discord.TextChannel
+        try: await self.birthdays.bot.wait_for('interaction', check=interactionCheck, timeout=300)
         except asyncio.TimeoutError:
             prev: UpcomingBirthdaysView = self.previousView
             await prev.createEmbed()
             return await prev.loadHomepage()
-        await self.confirmationPrompt(dropdown, msgInABottle)
+        await self.confirmationPrompt(dropdown)
         
-    async def confirmationPrompt(self, dropdown: discord.ui.Select, msgInBottle: discord.Message):
+    async def confirmationPrompt(self, dropdown: discord.ui.Select):
         self.stage = 2
         birthday = self.birthdays.bot.lightningUsers[self.target.id].get('birthday')
         destinations = [f'• {self.birthdays.bot.get_channel(int(dropdown.values[0]))}'] + [f'• {self.birthdays.bot.get_guild(int(v))}' for v in (dropdown.values[1:] if len(dropdown.values) > 1 else [])]
         serverDestinations = [self.birthdays.bot.get_guild(int(v)) for v in dropdown.values[1:]]
-        self.embed.description = f'Your message to {self.target.name} says `{msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nNote that if this message ends up being inapporpriate, {self.target.name} can flag it for investigation by Rick Astley and/or Disguard\'s developer. Learn more here.\n\nIf this all looks good, press the green button.'
+        self.embed.description = f'Your message to {self.target.name} says `{self.msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nNote that if this message ends up being inapporpriate, {self.target.name} can flag it for investigation by Rick Astley and/or Disguard\'s developer. Learn more here.\n\nIf this all looks good, press the green button.'
         self.clear_items()
         self.add_item(self.buttonBack)
         #self.add_item(discord.ui.Button(label='Restart', custom_id='restart'))
         self.add_item(discord.ui.Button(label='Looks good', custom_id='confirm', style=discord.ButtonStyle.green))
         await self.message.channel.send(embed=self.embed, view=self)
-        def finalCheck(i: discord.Interaction): return i.data['custom_id'] in ('restart', 'confirm') and i.user == self.author and type(i.channel) is discord.DMChannel
+        def finalCheck(i: discord.Interaction): return i.data['custom_id'] in ('restart', 'confirm') and i.user == self.author and type(i.channel) is not discord.TextChannel
         try: result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=finalCheck, timeout=300)
         except asyncio.TimeoutError:
             prev: UpcomingBirthdaysView = self.previousView
@@ -1747,7 +1758,7 @@ class ComposeMessageView(discord.ui.View):
             return await prev.loadHomepage()
         #print(result.data['custom_id'])
         if result.data['custom_id'] == 'restart': return await self.writeMessagePrompt(self.target) #TODO: restart button
-        await database.SetBirthdayMessage(self.target, msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
+        await database.SetBirthdayMessage(self.target, self.msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
         await self.message.channel.send(f'Successfully queued the message for {self.target.name}')
 
     
