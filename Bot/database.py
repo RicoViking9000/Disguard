@@ -704,15 +704,15 @@ async def SetAge(m: discord.Member, age):
 
 async def AppendWishlistEntry(m: discord.Member, entry):
     '''Append a wishlist entry to a member's wish list'''
-    await users.update_one({'user_id': m.id}, {'$push': {'wishList': entry}}, True)
+    await users.update_one({'user_id': m.id}, {'$push': {'wishlist': entry}}, True)
 
 async def SetWishlist(m: discord.Member, wishlist):
     '''Sets a member's wishlist to the specified list'''
-    await users.update_one({'user_id': m.id}, {'$set': {'wishList': wishlist}}, True)
+    await users.update_one({'user_id': m.id}, {'$set': {'wishlist': wishlist}}, True)
 
 async def GetWishlist(m: discord.Member):
     '''Return the wishlist of a member'''
-    return (await users.find_one({'user_id': m.id})).get('wishList')
+    return (await users.find_one({'user_id': m.id})).get('wishlist')
 
 async def SetBirthdayMode(s: discord.Guild, mode):
     '''Sets auto birthday detection mode: Disabled (0), cake only (1), enabled (2)'''

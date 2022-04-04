@@ -1125,7 +1125,7 @@ class BirthdayView(discord.ui.View):
         self.newBday = result
 
 class WishlistView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, cameFromSaved = False):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, cameFromSaved = []):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
@@ -1144,7 +1144,7 @@ class WishlistView(discord.ui.View):
     async def createEmbed(self):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
         self.wishlistHidden = self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist')
-        self.wishlist = self.birthdays.bot.lightningUsers[self.ctx.author.id].get('wishlist', []) if not self.wishlistHidden else []
+        self.wishlist = self.birthdays.bot.lightningUsers[self.ctx.author.id].get('wishlist', []) if not self.wishlistHidden and not self.cameFromSaved else self.cameFromSaved if self.cameFromSaved else []
         wishlistDisplay = ['You have set your wishlist to private'] if self.wishlistHidden else self.wishlist
         embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlistDisplay]) if wishlistDisplay else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
         embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
@@ -1197,12 +1197,12 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
         self.tempWishlist = wishlist or []
         self.toModify = {} #First 16 chars of entries must be unique due to being used as dict keys
         self.children[1].emoji = self.birthdays.emojis['delete']
-        asyncio.create_task(self.editWishlist(add)) #Probably don't need to pass if we're using class variables
+        asyncio.create_task(self.editWishlist())
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red, emoji='✖')
     async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.tempWishlist = self.wishlist or []
-        view = WishlistView(self.birthdays, self.ctx, self.msg, self.previousView, self.new)
+        view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView)
         embed = await view.createEmbed()
         await self.new.edit(embed=embed, view=view)
 
@@ -1214,21 +1214,20 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
     @discord.ui.button(label='Save', style=discord.ButtonStyle.green, emoji='✅')
     async def save(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.wishlist = self.tempWishlist #Should handle local state
-        asyncio.create_task(database.SetWishlist(self.ctx.author, self.wishlist)) #And this will wrap up global state
-        await self.new.edit(embed=self.regenEmbed(), view=WishlistView(self.birthdays, self.ctx, self.msg, False, self.new)) #Maybe add some sort of banner/message to communicate to the user that their changes were saved
-        #Upon save success, edit embed to signify success and disable the buttons for about 1-2 seconds, then delete the wishlist embed & re-enable the wishlist button on the original message
-        #Need to update embed title/entry icons to signify no longer being in edit mode
-        # TODO: and re-enable the wishlist button on original message
+        await database.SetWishlist(self.ctx.author, self.wishlist) #And this will wrap up global state
+        view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView, self.wishlist)
+        embed = await view.createEmbed()
+        await self.new.edit(embed=embed, view=view)
 
     def regenEmbed(self):
-        header = '👮‍♂️ » 🍰 Birthday » 📝 Wishlist'
-        return discord.Embed(title=f'👮‍♂️ {self.ctx.author.name:.{63 - len(header)}} » 🍰 Birthday » 📝 Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+        return discord.Embed('📝 Edit Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
 
-    async def editWishlist(self, add=True):
+    async def editWishlist(self):
         #await new.clear_reactions()
         #for r in ['❌', '✅']: await new.add_reaction(r)
         #def checkCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '✅'
         #def cancelCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '❌'
+
         def addCheck(m: discord.Message): return m.author == self.ctx.author and m.channel == self.ctx.channel
         while not self.birthdays.bot.is_closed():
             #done, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkCheck, timeout=300), self.bot.wait_for('reaction_add', check=cancelCheck, timeout=300), self.bot.wait_for('message', check=addCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
