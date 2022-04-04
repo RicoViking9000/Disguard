@@ -337,23 +337,23 @@ async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: d
     embed = await view.createEmbed()
     await ctx.send(embed=embed, view=view)
 
-async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Message, previousView, cont=False, new=None):
-    view = WishlistView(self, ctx, m, previousView, new)
+async def wishlistHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
+    view = WishlistView(self, ctx, message, None, previousView)
     embed = await view.createEmbed()
-    message = await ctx.send(embed=embed, view=view)
-    view.message = message
+    newMessage = await ctx.send(embed=embed, view=view)
+    view.message = newMessage
 
 async def ageHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
     view = AgeView(self, ctx.author, message, None, previousView)
     embed = await view.createEmbed()
-    message = await ctx.send(embed=embed, view=view)
-    view.message = message
+    newMessage = await ctx.send(embed=embed, view=view)
+    view.message = newMessage
 
 async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
     view = BirthdayView(self, ctx.author, message, None, previousView)
     embed = await view.createEmbed()
-    message = await ctx.send(embed=embed, view=view)
-    view.message = message
+    newMessage = await ctx.send(embed=embed, view=view)
+    view.message = newMessage
 
 async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message: discord.Message, currentServer, disguardSuggest, weekBirthday):
     namesOnly = [m['data'].name for m in currentServer + disguardSuggest + weekBirthday]
@@ -1125,13 +1125,14 @@ class BirthdayView(discord.ui.View):
         self.newBday = result
 
 class WishlistView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, message: discord.Message, previousView: BirthdayHomepageView, new: discord.Message=None, cameFromSaved = False):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, cameFromSaved = False):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
+        self.originalMessage = originalMessage
         self.message = message
         #self.cont = cont
-        self.new = new
+        self.new = None
         self.cameFromSaved = cameFromSaved
         self.wishlist = []
         self.previousView = previousView
@@ -1154,7 +1155,7 @@ class WishlistView(discord.ui.View):
     async def close(self, button: discord.ui.Button, interaction: discord.Interaction):
         await interaction.message.delete()
         self.previousView.wishlistButton.disabled = False
-        await self.message.edit(view=self.previousView)
+        await self.originalMessage.edit(view=self.previousView)
 
     class addButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
@@ -1181,14 +1182,15 @@ class WishlistView(discord.ui.View):
         embed = self.new.embeds[0]
         embed.title = f'📝{self.birthdays.emojis["whitePlus"] if add else self.birthdays.emojis["whiteMinus"]} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
         embed.description = f'**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}\n\nType{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.'
-        await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, interaction.message, self.new, add))
+        await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, interaction.message, self.previousView, self.new, add, self.wishlist))
 
-class WishlistEditView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, new: discord.Message, add=True, wishlist: typing.List[str]=[]):
+class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, fix this, implement previousView, rework, cleanup
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, previousView: BirthdayHomepageView, new: discord.Message, add=True, wishlist: typing.List[str]=[]):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
         self.msg = msg
+        self.previousView = previousView
         self.new = new
         self.add = add
         self.wishlist = wishlist
@@ -1200,8 +1202,9 @@ class WishlistEditView(discord.ui.View):
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red, emoji='✖')
     async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.tempWishlist = self.wishlist or []
-        await self.new.edit(embed=self.regenEmbed(), view=WishlistView(self.birthdays, self.ctx, self.msg, False, self.new))
-        # TODO: and re-enable the wishlist button on original message
+        view = WishlistView(self.birthdays, self.ctx, self.msg, self.previousView, self.new)
+        embed = await view.createEmbed()
+        await self.new.edit(embed=embed, view=view)
 
     @discord.ui.button(label='Clear entries', style=discord.ButtonStyle.gray, disabled=True)
     async def clear(self, button: discord.ui.Button, interaction: discord.Interaction):
