@@ -1125,23 +1125,26 @@ class BirthdayView(discord.ui.View):
         self.newBday = result
 
 class WishlistView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, message: discord.Message, previousView: BirthdayHomepageView, cont: bool=False, new: discord.Message=None):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, message: discord.Message, previousView: BirthdayHomepageView, new: discord.Message=None):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
         self.message = message
         #self.cont = cont
         self.new = new
-        #self.wishlist = wishlist
+        self.wishlist = []
         self.previousView = previousView
         #self.defaultEmbed = embed
+        self.wishlistHidden = False
         self.add_item(self.addButton(self.birthdays))
         self.add_item(self.removeButton(self.birthdays))
 
     async def createEmbed(self):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
-        wishlist = ['You have disabled birthday wishlist functionality'] if not cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private'] if not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist') and self.ctx.guild else self.birthdays.bot.lightningUsers[self.ctx.author.id].get('wishlist', [])
-        embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlist]) if wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+        self.wishlistHidden = self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist')
+        self.wishlist = self.birthdays.bot.lightningUsers[self.ctx.author.id].get('wishlist', []) if not self.wishlistHidden else []
+        wishlistDisplay = ['You have set your wishlist to private'] if self.wishlistHidden else self.wishlist
+        embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlistDisplay]) if wishlistDisplay else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
         embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
         return embed
     
@@ -1173,9 +1176,9 @@ class WishlistView(discord.ui.View):
         if add: 
             verb, preposition = 'add', 'to'
         self.new = interaction.message
+        wishlist = []
         embed = self.new.embeds[0]
-        header = f'👮‍♂️ » 📝{self.birthdays.whitePlus if add else self.birthdays.whiteMinus} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
-        embed.title = f'👮‍♂️ {self.ctx.author.name:.{63 - len(header)}} » 📝{self.birthdays.whitePlus if add else self.birthdays.whiteMinus} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
+        embed.title = f'📝{self.birthdays.emojis["whitePlus"] if add else self.birthdays.emojis["whiteMinus"]} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
         embed.description = f'**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}\n\nType{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.'
         await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, interaction.message, self.new, add))
 
