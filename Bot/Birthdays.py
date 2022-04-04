@@ -337,22 +337,24 @@ async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: d
     embed = await view.createEmbed()
     await ctx.send(embed=embed, view=view)
 
-async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Message, cont=False, new=None):
+async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Message, previousView, cont=False, new=None):
     wishlist = ['You have disabled birthday wishlist functionality'] if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private'] if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') and ctx.guild else self.bot.lightningUsers[ctx.author.id].get('wishlist', [])
     header = '👮‍♂️ » 🍰 Birthday » 📝 Wishlist' #TODO: implement privacy settings and potentially mimic the theme/feel of the birthday/age module
     embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlist]) if wishlist else "Empty"}', color=yellow[self.colorTheme(ctx.guild)])
     embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
-    new = await ctx.send(embed=embed, view=WishlistView(self, ctx, m, cont, new, wishlist, embed)) #Use default class var
+    new = await ctx.send(embed=embed, view=WishlistView(self, ctx, m, cont, new, wishlist, previousView, embed))
 
-async def ageHandler(self: Birthdays, ctx: commands.Context, message: discord.Message):
-    view = AgeView(self, ctx.author, message, None)
+async def ageHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
+    view = AgeView(self, ctx.author, message, None, previousView)
     embed = await view.createEmbed()
-    await ctx.send(embed=embed, view=view)
+    message = await ctx.send(embed=embed, view=view)
+    view.message = message
 
-async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: discord.Message):
-    view = BirthdayView(self, ctx.author, message, None)
+async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
+    view = BirthdayView(self, ctx.author, message, None, previousView)
     embed = await view.createEmbed()
-    await ctx.send(embed=embed, view=view)
+    message = await ctx.send(embed=embed, view=view)
+    view.message = message
 
 async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message: discord.Message, currentServer, disguardSuggest, weekBirthday):
     namesOnly = [m['data'].name for m in currentServer + disguardSuggest + weekBirthday]
@@ -817,7 +819,9 @@ class BirthdayHomepageView(discord.ui.View):
         async def callback(self, interaction: discord.Interaction):
             view: BirthdayHomepageView = self.view
             if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'birthdayDay'):
-                await birthdayHandler(view, view.ctx, view.message)
+                self.disabled = True
+                await interaction.response.edit_message(view=view)
+                await birthdayHandler(view.birthdays, view.ctx, view.message, view)
             else:
                 pass
 
@@ -827,7 +831,9 @@ class BirthdayHomepageView(discord.ui.View):
         async def callback(self, interaction: discord.Interaction):
             view: BirthdayHomepageView = self.view
             if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'age'):
-                await ageHandler(view, view.ctx, view.message)
+                self.disabled = True
+                await interaction.response.edit_message(view=view)
+                await ageHandler(view.birthdays, view.ctx, view.message, view)
             else:
                 pass
 
@@ -837,7 +843,9 @@ class BirthdayHomepageView(discord.ui.View):
         async def callback(self, interaction: discord.Interaction):
             view: BirthdayHomepageView = self.view
             if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'birthdayDay'):
-                await wishlistHandler(view, view.ctx, view.message)
+                self.disabled = True
+                await interaction.response.edit_message(view=view)
+                await wishlistHandler(view.birthdays, view.ctx, view.message, view)
             else:
                 pass
  
@@ -890,17 +898,16 @@ class GuestBirthdayView(discord.ui.View):
             if interaction.user == view.ctx.author: await interaction.response.send_message('You can\'t write a birthday message to yourself!')
             else:
                 pass
-            #TODO: put message composer into its own view
-
-    
+            #TODO: put message composer into its own view  
 
 class AgeView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, newAge: int = None):
+    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, newAge: int = None):
         super().__init__()
         self.birthdays = birthdays
         self.author = author
         self.originalMessage = originalMessage
         self.message = message #Current message; obtain from an interaction
+        self.previousView = previousView
         #self.embed = embed
         #self.currentAge = currentAge
         self.newAge = newAge
@@ -924,13 +931,12 @@ class AgeView(discord.ui.View):
         embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
         self.embed = embed
         return embed
-        #view = AgeView(self, ctx, message, None, embed, currentAge, ageHidden)
-        #new = await ctx.send(embed=embed, view=view)
-        #view.message = new
     
     @discord.ui.button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='cancelSetup')
     async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
-        await self.message.delete()
+        await interaction.message.delete()
+        self.previousView.ageButton.disabled = False
+        await self.originalMessage.edit(view=self.previousView)
         self.finishedSetup = True
 
     @discord.ui.button(label='Edit privately', emoji='⌨')
@@ -1006,12 +1012,13 @@ class AgeView(discord.ui.View):
 class BirthdayView(discord.ui.View):
     '''The interface for setting one's birthday'''
     #Almost a carbon copy from AgeView
-    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, newBday: datetime.datetime = None):
+    def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, newBday: datetime.datetime = None):
         super().__init__()
         self.birthdays = birthdays
         self.author = author
         self.originalMessage = originalMessage
         self.message = message
+        self.previousView = previousView
         #self.embed = embed
         #self.currentBday = currentBday
         self.newBday = newBday
@@ -1039,6 +1046,8 @@ class BirthdayView(discord.ui.View):
     @discord.ui.button(label='Cancel', emoji='✖', style=discord.ButtonStyle.red, custom_id='cancelSetup')
     async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
         await self.message.delete()
+        self.previousView.birthdayButton.disabled = False
+        await self.originalMessage.edit(view=self.previousView)
         self.finishedSetup = True
 
     @discord.ui.button(label='Edit privately', emoji='⌨')
@@ -1117,7 +1126,7 @@ class BirthdayView(discord.ui.View):
         self.newBday = result
 
 class WishlistView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, cont: bool=False, new: discord.Message=None, wishlist: typing.List[str]=[], embed: discord.Embed=None):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, cont: bool=False, new: discord.Message=None, wishlist: typing.List[str]=[], previousView: BirthdayHomepageView = None, embed: discord.Embed=None):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
@@ -1125,6 +1134,7 @@ class WishlistView(discord.ui.View):
         self.cont = cont
         self.new = new
         self.wishlist = wishlist
+        self.previousView = previousView
         self.defaultEmbed = embed
         self.add_item(self.addButton(self.birthdays))
         self.add_item(self.removeButton(self.birthdays))
@@ -1132,7 +1142,8 @@ class WishlistView(discord.ui.View):
     @discord.ui.button(label='Close Viewer', style=discord.ButtonStyle.red)
     async def close(self, button: discord.ui.Button, interaction: discord.Interaction):
         await interaction.message.delete()
-        # and re-enable the wishlist button on original message
+        self.previousView.wishlistButton.disabled = False
+        await self.msg.edit(view=self.previousView)
 
     class addButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
@@ -1152,11 +1163,9 @@ class WishlistView(discord.ui.View):
 
     async def wishlistEditPreview(self, interaction: discord.Interaction, add=True):
         '''Adds or removes items from one's wishlist, depending on the variable'''
-        verb = 'remove'
-        preposition = 'from'
+        verb, preposition = 'remove', 'from'
         if add: 
-            verb = 'add'
-            preposition = 'to'
+            verb, preposition = 'add', 'to'
         self.new = interaction.message
         embed = self.new.embeds[0]
         header = f'👮‍♂️ » 📝{self.birthdays.whitePlus if add else self.birthdays.whiteMinus} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
