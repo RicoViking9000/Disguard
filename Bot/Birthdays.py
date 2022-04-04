@@ -1125,13 +1125,14 @@ class BirthdayView(discord.ui.View):
         self.newBday = result
 
 class WishlistView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, message: discord.Message, previousView: BirthdayHomepageView, new: discord.Message=None):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, message: discord.Message, previousView: BirthdayHomepageView, new: discord.Message=None, cameFromSaved = False):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
         self.message = message
         #self.cont = cont
         self.new = new
+        self.cameFromSaved = cameFromSaved
         self.wishlist = []
         self.previousView = previousView
         #self.defaultEmbed = embed
@@ -1146,6 +1147,7 @@ class WishlistView(discord.ui.View):
         wishlistDisplay = ['You have set your wishlist to private'] if self.wishlistHidden else self.wishlist
         embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlistDisplay]) if wishlistDisplay else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
         embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
+        if self.cameFromSaved: embed.set_footer(text='Wishlist changes successfully saved')
         return embed
     
     @discord.ui.button(label='Close Viewer', style=discord.ButtonStyle.red)
@@ -1176,7 +1178,6 @@ class WishlistView(discord.ui.View):
         if add: 
             verb, preposition = 'add', 'to'
         self.new = interaction.message
-        wishlist = []
         embed = self.new.embeds[0]
         embed.title = f'📝{self.birthdays.emojis["whitePlus"] if add else self.birthdays.emojis["whiteMinus"]} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
         embed.description = f'**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}\n\nType{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.'
