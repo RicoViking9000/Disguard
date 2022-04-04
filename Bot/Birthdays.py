@@ -338,11 +338,10 @@ async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: d
     await ctx.send(embed=embed, view=view)
 
 async def wishlistHandler(self: Birthdays, ctx: commands.Context, m: discord.Message, previousView, cont=False, new=None):
-    wishlist = ['You have disabled birthday wishlist functionality'] if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private'] if not self.bot.get_cog('Cyberlog').privacyVisibilityChecker(ctx.author, 'birthdayModule', 'wishlist') and ctx.guild else self.bot.lightningUsers[ctx.author.id].get('wishlist', [])
-    header = '👮‍♂️ » 🍰 Birthday » 📝 Wishlist' #TODO: implement privacy settings and potentially mimic the theme/feel of the birthday/age module
-    embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlist]) if wishlist else "Empty"}', color=yellow[self.colorTheme(ctx.guild)])
-    embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
-    new = await ctx.send(embed=embed, view=WishlistView(self, ctx, m, cont, new, wishlist, previousView, embed))
+    view = WishlistView(self, ctx, m, previousView, cont, new)
+    embed = await view.createEmbed()
+    message = await ctx.send(embed=embed, view=view)
+    view.message = message
 
 async def ageHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
     view = AgeView(self, ctx.author, message, None, previousView)
@@ -1126,24 +1125,31 @@ class BirthdayView(discord.ui.View):
         self.newBday = result
 
 class WishlistView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, cont: bool=False, new: discord.Message=None, wishlist: typing.List[str]=[], previousView: BirthdayHomepageView = None, embed: discord.Embed=None):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, message: discord.Message, previousView: BirthdayHomepageView, cont: bool=False, new: discord.Message=None):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
-        self.msg = msg
-        self.cont = cont
+        self.message = message
+        #self.cont = cont
         self.new = new
-        self.wishlist = wishlist
+        #self.wishlist = wishlist
         self.previousView = previousView
-        self.defaultEmbed = embed
+        #self.defaultEmbed = embed
         self.add_item(self.addButton(self.birthdays))
         self.add_item(self.removeButton(self.birthdays))
 
+    async def createEmbed(self):
+        cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+        wishlist = ['You have disabled birthday wishlist functionality'] if not cyber.privacyEnabledChecker(self.ctx.author, 'birthdayModule', 'wishlist') else ['You have set your wishlist to private'] if not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist') and self.ctx.guild else self.birthdays.bot.lightningUsers[self.ctx.author.id].get('wishlist', [])
+        embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlist]) if wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+        embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
+        return embed
+    
     @discord.ui.button(label='Close Viewer', style=discord.ButtonStyle.red)
     async def close(self, button: discord.ui.Button, interaction: discord.Interaction):
         await interaction.message.delete()
         self.previousView.wishlistButton.disabled = False
-        await self.msg.edit(view=self.previousView)
+        await self.message.edit(view=self.previousView)
 
     class addButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
