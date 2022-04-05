@@ -1181,7 +1181,7 @@ class WishlistView(discord.ui.View):
         self.new = interaction.message
         embed = self.new.embeds[0]
         embed.title = f'📝{self.birthdays.emojis["whitePlus"] if add else self.birthdays.emojis["whiteMinus"]} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
-        embed.description = f'**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}\n\nType{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.'
+        embed.description = f'Type{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}'
         await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, interaction.message, self.previousView, self.new, add, self.wishlist))
 
 class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, fix this, implement previousView, rework, cleanup
@@ -1195,7 +1195,7 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
         self.add = add
         self.wishlist = wishlist
         self.tempWishlist = wishlist or []
-        self.toModify = {} #First 16 chars of entries must be unique due to being used as dict keys
+        self.toModify = {} #First 16 chars of entries must be unique due to being used as dict keys. Tracks changes in progress
         self.children[1].emoji = self.birthdays.emojis['delete']
         asyncio.create_task(self.editWishlist())
 
@@ -1213,6 +1213,7 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
 
     @discord.ui.button(label='Save', style=discord.ButtonStyle.green, emoji='✅')
     async def save(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not self.add: self.tempWishlist = [w for w in self.tempWishlist if not self.toModify.get(w[:16])]
         self.wishlist = self.tempWishlist #Should handle local state
         await database.SetWishlist(self.ctx.author, self.wishlist) #And this will wrap up global state
         view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView, self.wishlist)
@@ -1235,7 +1236,10 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
             #except asyncio.TimeoutError: await new.delete()
             #for future in p: future.cancel()
             try: message: discord.Message = await self.birthdays.bot.wait_for('message', check=addCheck, timeout=300)
-            except asyncio.TimeoutError: return await self.new.edit(view=WishlistView)
+            except asyncio.TimeoutError: 
+                view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView)
+                embed = await view.createEmbed()
+                return await self.new.edit(embed=embed, view=view)
             #if type(stuff) is discord.Message:
             ### Deprecedated ability to send an image attachment as a wishlist entry
             # if len(message.attachments) > 0:
@@ -1251,10 +1255,19 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
             #         if os.path.exists(savePath): os.remove(savePath)
             if message.content:
                 words = message.content.split(', ') #O(n)
-                for word in words: self.toModify[word[:16]] = word #O(n)
-                self.tempWishlist += words #O(k)
+                if self.add: 
+                    for word in words: self.toModify[word[:16]] = word #O(n)
+                    self.tempWishlist += words #O(k)
+                else:
+                    for word in words:
+                        try:
+                            number = int(word)
+                            reference = self.tempWishlist[number - 1]
+                            self.toModify[reference[:16]] = reference
+                        except ValueError: self.toModify[word[:16]] = word
             try:
-                self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(message)
+                cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
+                cyber.AvoidDeletionLogging(message)
                 await message.delete()
             except discord.Forbidden: pass
             await self.refreshDisplay()
@@ -1269,7 +1282,7 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
             # else:
             #     verb='remove'
             #     preposition='from'
-            #     #if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist) #TODO: add a button for this
+            #     #if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist)
             #     # for w in wishlist: #Figure this stuff out - i think it shifts all the entries to the left??
             #     #     for wo in range(len(toModify)):
             #     #         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
@@ -1288,12 +1301,13 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
             #     await new.clear_reactions()
             #     await m.remove_reaction('📝', ctx.author)
             #     return await firstWishlistContinuation(self, ctx, m, True, new)
+
     async def refreshDisplay(self):
         def formatWishlistEntry(s: str):
             # if add and toModify.get(s[:16]): return f'**+ {s}**'
             # elif not add and toModify.get(s[:16]): return f'~~{s}~~'
             # else: return f'• {s}'
-            return f'**+ {s}**' if self.add and self.toModify.get(s[:16]) else f'~~{s}~~' if not self.add and self.toModify.get(s[:16]) else f'• {s}'
+            return f'**+ {s}**' if self.add and self.toModify.get(s[:16]) else f'~~{s}~~' if not self.add and self.toModify.get(s[:16]) else f'• {s}' if self.add else s
         verb, preposition = 'remove', 'from'
         preposition = 'from'
         if self.add:
@@ -1303,7 +1317,7 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
         #     for wo in range(len(toModify)):
         #         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
         #         except: pass
-        self.new.embeds[0].description = f'Type{" the number or text of an entry" if self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.tempWishlist else newline.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
+        self.new.embeds[0].description = f'Type{" the number or text of an entry" if not self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.tempWishlist else newline.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
         if self.tempWishlist: self.children[1].disabled = False
         else: self.children[1].disabled = True
         await self.new.edit(embed=self.new.embeds[0], view=self)
