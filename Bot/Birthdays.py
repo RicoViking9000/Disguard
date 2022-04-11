@@ -791,7 +791,6 @@ class BirthdayHomepageView(discord.ui.View):
         embed.description = f'''**{finalSeparator}\n**{("__THIS SERVER__" + newline) if len(currentServer) > 0 else ""}'''
         embed.description+= f'''{newline.join(fillBirthdayList(currentServer, 3))}{(newline + newline) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + newline) if len(disguardSuggest) > 0 else ""}{newline.join(fillBirthdayList(disguardSuggest, 3))}{(newline + newline) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + newline) if len(weekBirthday) > 0 else ""}'''
         embed.description+= f'''{newline.join(fillBirthdayList(weekBirthday, 3))}{newline if len(weekBirthday) > 0 else ""}'''
-        #await message.edit(embed=embed)
         bdayVerb = 'Update' if bday else 'Set'
         ageVerb = 'Update' if age else 'Set'
         wishlistVerb = 'Update' if wishlist else 'Create'
@@ -802,11 +801,7 @@ class BirthdayHomepageView(discord.ui.View):
         self.ageButton = self.editAge(ageVerb)
         self.wishlistButton = self.editWishlist(wishlistVerb)
         for item in [self.birthdayButton, self.ageButton, self.wishlistButton]: self.add_item(item)
-        #homeView = BirthdayHomepageView(self, self.ctx, None, currentServer, disguardSuggest, weekBirthday, bdayVerb, ageVerb, wishlistVerb)
-        #message = await ctx.send(embed=embed, view=homeView)
         return embed
-        #await message.edit(embed=embed, view=homeView)
-        #homeView.message = message
 
     @discord.ui.button(label='Browse birthday profiles', emoji='📁')
     async def profiles(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -859,23 +854,18 @@ class GuestBirthdayView(discord.ui.View):
         self.add_item(self.MessageButton(birthdays))
 
     async def createEmbed(self):
-        #adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(ctx.guild.id).get('offset'))
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
         user = self.birthdays.bot.lightningUsers[self.target.id]
         bday = user.get('birthday')
         age = user.get('age')
         wishlist = user.get('wishList', []) #TODO: implement privacy settings
         wishlistHidden = not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'wishlist')
-        #header = '👮‍♂️ » 🍰 Birthday'
-        #header = f'👮‍♂️ {target.name:.{63 - len(header)}} » 🍰 Birthday'
         description = f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}' if wishlist and not wishlistHidden else 'Set to private by user' if wishlistHidden else ''
         embed = discord.Embed(title = f'🍰 {self.target.name}\'s Birthday Page', description=description, color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
         embed.set_author(name=self.target.name, icon_url=self.target.avatar.url)
         embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
         embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else age)
         return embed
-        #view = GuestBirthdayView(self, ctx.author, target)
-        #new = await ctx.send(embed=embed, view=view)
 
     class OverviewButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
@@ -897,7 +887,6 @@ class GuestBirthdayView(discord.ui.View):
             if interaction.user == view.ctx.author: await interaction.response.send_message('You can\'t write a birthday message to yourself!')
             else:
                 pass
-            #TODO: put message composer into its own view  
 
 class AgeView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, newAge: int = None):
