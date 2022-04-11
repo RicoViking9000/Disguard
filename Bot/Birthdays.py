@@ -1184,7 +1184,7 @@ class WishlistView(discord.ui.View):
         embed.description = f'Type{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}'
         await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, self.originalMessage, self.previousView, self.new, add, self.wishlist))
 
-class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, fix this, implement previousView, rework, cleanup
+class WishlistEditView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, previousView: BirthdayHomepageView, new: discord.Message, add=True, wishlist: typing.List[str]=[]):
         super().__init__()
         self.birthdays = birthdays
@@ -1238,35 +1238,13 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
         return discord.Embed('📝 Edit Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
 
     async def editWishlist(self):
-        #await new.clear_reactions()
-        #for r in ['❌', '✅']: await new.add_reaction(r)
-        #def checkCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '✅'
-        #def cancelCheck(r, u): return u == ctx.author and r.message.id == new.id and str(r) == '❌'
-
         def addCheck(m: discord.Message): return m.author == self.ctx.author and m.channel == self.ctx.channel
         while not self.birthdays.bot.is_closed():
-            #done, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkCheck, timeout=300), self.bot.wait_for('reaction_add', check=cancelCheck, timeout=300), self.bot.wait_for('message', check=addCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
-            #try: stuff = done.pop().result()
-            #except asyncio.TimeoutError: await new.delete()
-            #for future in p: future.cancel()
             try: message: discord.Message = await self.birthdays.bot.wait_for('message', check=addCheck, timeout=300)
             except asyncio.TimeoutError: 
                 view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView)
                 embed = await view.createEmbed()
                 return await self.new.edit(embed=embed, view=view)
-            #if type(stuff) is discord.Message:
-            ### Deprecedated ability to send an image attachment as a wishlist entry
-            # if len(message.attachments) > 0:
-            #     if message.attachments[0].height: #We have an image or a video, so we will create a permanent URL via the private image hosting channel
-            #         await stuff.add_reaction(self.loading)
-            #         imageLogChannel = self.bot.get_channel(534439214289256478)
-            #         tempDir = 'Attachments/Temp'
-            #         savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), stuff.attachments[0].filename[stuff.attachments[0].filename.rfind('.')+1:]))
-            #         await stuff.attachments[0].save(savePath)
-            #         f = discord.File(savePath)
-            #         hostMessage = await imageLogChannel.send(file=f)
-            #         toModify.append(hostMessage.attachments[0].url)
-            #         if os.path.exists(savePath): os.remove(savePath)
             if message.content:
                 words = message.content.split(', ') #O(n)
                 if self.add: 
@@ -1285,52 +1263,13 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
                 await message.delete()
             except discord.Forbidden: pass
             await self.refreshDisplay()
-            # def formatWishlistEntry(s: str):
-            #     # if add and toModify.get(s[:16]): return f'**+ {s}**'
-            #     # elif not add and toModify.get(s[:16]): return f'~~{s}~~'
-            #     # else: return f'• {s}'
-            #     return f'**+ {s}**' if add and toModify.get(s[:16]) else f'~~{s}~~' if not add and toModify.get(s[:16]) else f'• {s}'
-            # if add:
-            #     verb='add'
-            #     preposition='to'
-            # else:
-            #     verb='remove'
-            #     preposition='from'
-            #     #if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist)
-            #     # for w in wishlist: #Figure this stuff out - i think it shifts all the entries to the left??
-            #     #     for wo in range(len(toModify)):
-            #     #         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
-            #     #         except: pass
-            # self.new.embeds[0].description = f'Type{" the number or text of an entry" if verb != "add" else ""} to {verb} {"entries" if verb == "add" else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not tempWishlist else newline.join([formatWishlistEntry(w) for w in tempWishlist]) if add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(tempWishlist, 1)])}'
-            # await self.new.edit(embed=self.new.embeds[0])
-            # else:
-            #     if str(stuff[0]) == '✅':
-            #         new.embeds[0].description = '{} Saving...'.format(self.loading)
-            #         await new.edit(embed=new.embeds[0])
-            #         if add:
-            #             for e in toModify: await database.AppendWishlistEntry(ctx.author, e)
-            #         else:
-            #             for w in toModify: wishlist.remove(w)
-            #             await database.SetWishlist(ctx.author, wishlist)
-            #     await new.clear_reactions()
-            #     await m.remove_reaction('📝', ctx.author)
-            #     return await firstWishlistContinuation(self, ctx, m, True, new)
 
     async def refreshDisplay(self):
-        def formatWishlistEntry(s: str):
-            # if add and toModify.get(s[:16]): return f'**+ {s}**'
-            # elif not add and toModify.get(s[:16]): return f'~~{s}~~'
-            # else: return f'• {s}'
-            return f'**+ {s}**' if self.add and self.toModify.get(s[:16]) else f'~~{s}~~' if not self.add and self.toModify.get(s[:16]) else f'• {s}' if self.add else s
+        def formatWishlistEntry(s: str): return f'**+ {s}**' if self.add and self.toModify.get(s[:16]) else f'~~{s}~~' if not self.add and self.toModify.get(s[:16]) else f'• {s}' if self.add else s
         verb, preposition = 'remove', 'from'
         preposition = 'from'
         if self.add:
             verb, preposition = 'add', 'to'
-        #if stuff.content.lower() == 'clear': toModify = copy.copy(wishlist) #TODO: add a button for this
-        # for w in wishlist: #Figure this stuff out - i think it shifts all the entries to the left??
-        #     for wo in range(len(toModify)):
-        #         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
-        #         except: pass
         self.new.embeds[0].description = f'Type{" the number or text of an entry" if not self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.tempWishlist else newline.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
         #Now set the clear button
         if self.tempWishlist and not (all([w == self.toModify[w[:16]] for w in self.tempWishlist]) and not self.add): self.buttonClear.disabled = False
