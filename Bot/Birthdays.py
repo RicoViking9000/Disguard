@@ -817,7 +817,7 @@ class BirthdayHomepageView(discord.ui.View):
                 await interaction.response.edit_message(view=view)
                 await birthdayHandler(view.birthdays, view.ctx, view.message, view)
             else:
-                pass
+                await interaction.response.send_message('You have disabled the birthday feature of the birthday module. Review your settings: http://disguard.herokuapp.com/manage/profile', ephemeral=True)
 
     class editAge(discord.ui.Button):
         def __init__(self, verb: str):
@@ -829,19 +829,19 @@ class BirthdayHomepageView(discord.ui.View):
                 await interaction.response.edit_message(view=view)
                 await ageHandler(view.birthdays, view.ctx, view.message, view)
             else:
-                pass
+                await interaction.response.send_message('You have disabled the age feature of the birthday module. Review your settings: http://disguard.herokuapp.com/manage/profile', ephemeral=True)
 
     class editWishlist(discord.ui.Button):
         def __init__(self, verb: str):
             super().__init__(label=f'{verb} wishlist', emoji='📝')
         async def callback(self, interaction: discord.Interaction):
             view: BirthdayHomepageView = self.view
-            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'birthdayDay'):
+            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'wishlist'):
                 self.disabled = True
                 await interaction.response.edit_message(view=view)
                 await wishlistHandler(view.birthdays, view.ctx, view.message, view)
             else:
-                pass
+                await interaction.response.send_message('You have disabled the wishlist feature of the birthday module. Review your settings: http://disguard.herokuapp.com/manage/profile', ephemeral=True)
  
 class GuestBirthdayView(discord.ui.View):
     '''Displays basic information about someone's birthday profile'''
@@ -1164,6 +1164,8 @@ class WishlistView(discord.ui.View):
 
     async def wishlistEditPreview(self, interaction: discord.Interaction, add=True):
         '''Adds or removes items from one's wishlist, depending on the variable'''
+        if self.wishlistHidden and self.ctx.guild:
+            return await interaction.response.send_message('Editing your wishlist in a server is disabled since your wishlist visibility is set to private. You may retry from DMs or review your settings: http://disguard.herokuapp.com/manage/profile', ephemeral=True)
         verb, preposition = 'remove', 'from'
         if add: 
             verb, preposition = 'add', 'to'
@@ -1488,13 +1490,18 @@ class UpcomingBirthdaysView(discord.ui.View):
                 for f in pending: f.cancel()
                 if type(result) is discord.Interaction: break
                 result: discord.Message = result
-                cyberlog: Cyberlog.Cyberlog = view.bot.get_cog('Cyberlog')
+                cyber: Cyberlog.Cyberlog = view.bot.get_cog('Cyberlog')
                 results = await utility.FindMoreMembers(view.bot.users, result.content)
                 try:
-                    cyberlog.AvoidDeletionLogging(result)
+                    cyber.AvoidDeletionLogging(result)
                     await result.delete()
                 except (discord.Forbidden, discord.HTTPException): pass
-                users = [r['member'] for r in results]
+                users = [r['member'] for r in results if all((
+                    cyber.privacyEnabledChecker(r['member'], 'default', 'birthdayModule'),
+                    cyber.privacyEnabledChecker(r['member'], 'default', 'birthdayModule'),
+                    cyber.privacyEnabledChecker(r['member'], 'birthdayModule', 'birthdayDay'),
+                    cyber.privacyVisibilityChecker(r['member'], 'birthdayModule', 'birthdayDay')
+                ))] #filter out members who have designated not wanting to participate in the birthday module
                 listToPass = [{'data': u, 'bday': getBirthday(u)} for u in users]
                 select.updatePopulation(listToPass, str(view.message.id))
                 if len(view.children) == 1: view.add_item(select)
