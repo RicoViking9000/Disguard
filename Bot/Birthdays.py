@@ -1182,7 +1182,7 @@ class WishlistView(discord.ui.View):
         embed = self.new.embeds[0]
         embed.title = f'📝{self.birthdays.emojis["whitePlus"] if add else self.birthdays.emojis["whiteMinus"]} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
         embed.description = f'Type{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}'
-        await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, interaction.message, self.previousView, self.new, add, self.wishlist))
+        await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, self.originalMessage, self.previousView, self.new, add, self.wishlist))
 
 class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, fix this, implement previousView, rework, cleanup
     def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, previousView: BirthdayHomepageView, new: discord.Message, add=True, wishlist: typing.List[str]=[]):
@@ -1196,7 +1196,10 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
         self.wishlist = wishlist
         self.tempWishlist = wishlist or []
         self.toModify = {} #First 16 chars of entries must be unique due to being used as dict keys. Tracks changes in progress
-        self.children[1].emoji = self.birthdays.emojis['delete']
+        self.buttonClear = self.clearButton(self, self.birthdays)
+        self.buttonSave = self.saveButton()
+        self.add_item(self.buttonClear)
+        self.add_item(self.buttonSave)
         asyncio.create_task(self.editWishlist())
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red, emoji='✖')
@@ -1206,19 +1209,30 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
         embed = await view.createEmbed()
         await self.new.edit(embed=embed, view=view)
 
-    @discord.ui.button(label='Clear entries', style=discord.ButtonStyle.gray, disabled=True)
-    async def clear(self, button: discord.ui.Button, interaction: discord.Interaction):
-        self.tempWishlist = []
-        await self.refreshDisplay()
+    class clearButton(discord.ui.Button):
+        def __init__(self, view, birthdays: Birthdays):
+            super().__init__(label='Clear entries', style=discord.ButtonStyle.gray, emoji = birthdays.emojis['delete'])
+            view: WishlistEditView = view
+            if not view.tempWishlist: self.disabled = True
+        
+        async def callback(self, interaction: discord.Interaction):
+            view: WishlistEditView = self.view
+            view.tempWishlist = []
+            await view.refreshDisplay()
+            self.disabled = True
 
-    @discord.ui.button(label='Save', style=discord.ButtonStyle.green, emoji='✅')
-    async def save(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if not self.add: self.tempWishlist = [w for w in self.tempWishlist if not self.toModify.get(w[:16])]
-        self.wishlist = self.tempWishlist #Should handle local state
-        await database.SetWishlist(self.ctx.author, self.wishlist) #And this will wrap up global state
-        view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView, self.wishlist)
-        embed = await view.createEmbed()
-        await self.new.edit(embed=embed, view=view)
+    class saveButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label='Save', style=discord.ButtonStyle.green, emoji = '✅')
+        
+        async def callback(self, interaction: discord.Interaction):
+            view: WishlistEditView = self.view
+            if not view.add: self.tempWishlist = [w for w in self.tempWishlist if not view.toModify.get(w[:16])]
+            view.wishlist = view.tempWishlist #Should handle local state
+            await database.SetWishlist(view.ctx.author, view.wishlist) #And this will wrap up global state
+            newView = WishlistView(view.birthdays, view.ctx, view.msg, None, view.previousView, view.wishlist)
+            embed = await newView.createEmbed()
+            await view.new.edit(embed=embed, view=newView)
 
     def regenEmbed(self):
         return discord.Embed('📝 Edit Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
@@ -1318,8 +1332,9 @@ class WishlistEditView(discord.ui.View): #TODO 4/4: figure out these arguments, 
         #         try: toModify[wo] = wishlist[int(toModify[wo]) - 1]
         #         except: pass
         self.new.embeds[0].description = f'Type{" the number or text of an entry" if not self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.tempWishlist else newline.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
-        if self.tempWishlist: self.children[1].disabled = False
-        else: self.children[1].disabled = True
+        #Now set the clear button
+        if self.tempWishlist and not (all([w == self.toModify[w[:16]] for w in self.tempWishlist]) and not self.add): self.buttonClear.disabled = False
+        else: self.buttonClear.disabled = True
         await self.new.edit(embed=self.new.embeds[0], view=self)
 
 class UpcomingBirthdaysView(discord.ui.View):
