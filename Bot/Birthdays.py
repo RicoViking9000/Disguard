@@ -1171,16 +1171,16 @@ class WishlistView(discord.ui.View):
         embed = self.new.embeds[0]
         embed.title = f'📝{self.birthdays.emojis["whitePlus"] if add else self.birthdays.emojis["whiteMinus"]} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
         embed.description = f'Type{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.wishlist else newline.join([f"• {w}" for w in self.wishlist]) if add else newline.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}'
-        await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, self.originalMessage, self.previousView, self.new, add, self.wishlist))
+        await interaction.message.edit(embed=embed, view=WishlistEditView(self.birthdays, self.ctx, self.originalMessage, self.new, self.previousView, add, self.wishlist))
 
 class WishlistEditView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, ctx: commands.Context, msg: discord.Message, previousView: BirthdayHomepageView, new: discord.Message, add=True, wishlist: typing.List[str]=[]):
+    def __init__(self, birthdays: Birthdays, ctx: commands.Context, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, add=True, wishlist: typing.List[str]=[]):
         super().__init__()
         self.birthdays = birthdays
         self.ctx = ctx
-        self.msg = msg
+        self.originalMessage = originalMessage
+        self.message = message
         self.previousView = previousView
-        self.new = new
         self.add = add
         self.wishlist = wishlist
         self.tempWishlist = wishlist or []
@@ -1194,9 +1194,9 @@ class WishlistEditView(discord.ui.View):
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red, emoji='✖')
     async def cancel(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.tempWishlist = self.wishlist or []
-        view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView)
+        view = WishlistView(self.birthdays, self.ctx, self.originalMessage, None, self.previousView)
         embed = await view.createEmbed()
-        await self.new.edit(embed=embed, view=view)
+        await self.message.edit(embed=embed, view=view)
 
     class clearButton(discord.ui.Button):
         def __init__(self, view, birthdays: Birthdays):
@@ -1219,9 +1219,9 @@ class WishlistEditView(discord.ui.View):
             if not view.add: self.tempWishlist = [w for w in self.tempWishlist if not view.toModify.get(w[:16])]
             view.wishlist = view.tempWishlist #Should handle local state
             await database.SetWishlist(view.ctx.author, view.wishlist) #And this will wrap up global state
-            newView = WishlistView(view.birthdays, view.ctx, view.msg, None, view.previousView, view.wishlist)
+            newView = WishlistView(view.birthdays, view.ctx, view.originalMessage, None, view.previousView, view.wishlist)
             embed = await newView.createEmbed()
-            await view.new.edit(embed=embed, view=newView)
+            await view.message.edit(embed=embed, view=newView)
 
     def regenEmbed(self):
         return discord.Embed('📝 Edit Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
@@ -1231,9 +1231,9 @@ class WishlistEditView(discord.ui.View):
         while not self.birthdays.bot.is_closed():
             try: message: discord.Message = await self.birthdays.bot.wait_for('message', check=addCheck, timeout=300)
             except asyncio.TimeoutError: 
-                view = WishlistView(self.birthdays, self.ctx, self.msg, None, self.previousView)
+                view = WishlistView(self.birthdays, self.ctx, self.originalMessage, None, self.previousView)
                 embed = await view.createEmbed()
-                return await self.new.edit(embed=embed, view=view)
+                return await self.message.edit(embed=embed, view=view)
             if message.content:
                 words = message.content.split(', ') #O(n)
                 if self.add: 
@@ -1259,11 +1259,11 @@ class WishlistEditView(discord.ui.View):
         preposition = 'from'
         if self.add:
             verb, preposition = 'add', 'to'
-        self.new.embeds[0].description = f'Type{" the number or text of an entry" if not self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.tempWishlist else newline.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
+        self.message.embeds[0].description = f'Type{" the number or text of an entry" if not self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^70}**\n{"(Empty)" if not self.tempWishlist else newline.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else newline.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
         #Now set the clear button
         if self.tempWishlist and not (all([w == self.toModify[w[:16]] for w in self.tempWishlist]) and not self.add): self.buttonClear.disabled = False
         else: self.buttonClear.disabled = True
-        await self.new.edit(embed=self.new.embeds[0], view=self)
+        await self.message.edit(embed=self.message.embeds[0], view=self)
 
 class UpcomingBirthdaysView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, message: discord.Message, ctx: commands.Context, currentServer, disguardSuggest, weekBirthday, namesOnly, embed: discord.Embed, bot: commands.Bot, jumpStart=0):
