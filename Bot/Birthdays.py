@@ -337,8 +337,8 @@ async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: d
     embed = await view.createEmbed()
     await ctx.send(embed=embed, view=view)
 
-async def wishlistHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
-    view = WishlistView(self, ctx, message, None, previousView)
+async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
+    view = BirthdayView(self, ctx.author, message, None, previousView)
     embed = await view.createEmbed()
     newMessage = await ctx.send(embed=embed, view=view)
     view.message = newMessage
@@ -349,8 +349,8 @@ async def ageHandler(self: Birthdays, ctx: commands.Context, message: discord.Me
     newMessage = await ctx.send(embed=embed, view=view)
     view.message = newMessage
 
-async def birthdayHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
-    view = BirthdayView(self, ctx.author, message, None, previousView)
+async def wishlistHandler(self: Birthdays, ctx: commands.Context, message: discord.Message, previousView):
+    view = WishlistView(self, ctx, message, None, previousView)
     embed = await view.createEmbed()
     newMessage = await ctx.send(embed=embed, view=view)
     view.message = newMessage
