@@ -31,6 +31,8 @@ permissionDescriptions = {'create_instant_invite': '', 'kick_members': '', 'ban_
 'manage_roles': 'Members with this permission can create new roles and edit/delete roles below their highest role granting this permission', 'manage_webhooks': 'Members with this permission can create, edit, and delete webhooks',
 'manage_emojis': 'Members with this permission can create, edit, and delete custom emojis and stickers', 'use_slash_commands': '', 'request_to_speak': '', 'manage_events': '', 'manage_threads': '', 'use_private_threads': ''}
 
+def rickroll(): return 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+
 def ManageServer(member: discord.Member):
     return CheckPermissions(member, discord.Permissions(manage_guild=True), True)
 

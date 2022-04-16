@@ -4,12 +4,17 @@ This will initially only contain the Easter/April Fools Day events code, but ove
 
 import discord
 import secure
-from discord.ext import commands
+from discord.ext import commands, tasks
 import database
+import utility
 import lyricsgenius
 import re
 import asyncio
 import datetime
+import emoji
+import traceback
+import typing
+import textwrap
 
 yellow = (0xffff00, 0xffff66)
 placeholderURL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
@@ -19,12 +24,9 @@ newline = '\n'
 
 class Misc(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
-        self.emojis = bot.get_cog('Cyberlog').emojis
+        self.bot: commands.Bot = bot
+        self.emojis: typing.Dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
         self.loading = self.emojis['loading']
-        self.genius = lyricsgenius.Genius(secure.geniusToken(), remove_section_headers=True, verbose=False)
-        self.songSessions = {} #Dict key: Channel ID, Dict value: String (if song is unconfirmed) or Genius Song object
-        self.privacyUpdaterCache = {} #Key: UserID_ChannelID, Value: Message ID
     
     def getData(self):
         return self.bot.lightningLogging
@@ -33,10 +35,40 @@ class Misc(commands.Cog):
         return self.bot.lightningUsers
 
     @commands.Cog.listener()
-    async def on_message(self, message):
-        '''This message listener is currently use for: April Fools Day event [Song Lyrics] automater'''
-        return
+    async def on_message(self, message: discord.Message):
+        if message.content == f'<@!{self.bot.user.id}>': await self.sendGuideMessage(message) #See if this will work in Disguard.py
+        asyncio.create_task(self.jumpLinkQuoteContext(message))
 
+    async def jumpLinkQuoteContext(self, message: discord.Message):
+        try: enabled = self.bot.lightningLogging.get(message.guild.id).get('jumpContext')
+        except AttributeError: return
+        if message.author.id == self.bot.user.id: return
+        if enabled:
+            words = message.content.split(' ')
+            for w in words:
+                if 'https://discord.com/channels/' in w or 'https://canary.discord.com/channels' in w or 'https://discordapp.com/channels' in w: #This word is a hyperlink to a message
+                    context = await self.bot.get_context(message)
+                    messageConverter = commands.MessageConverter()
+                    result = await messageConverter.convert(context, w)
+                    if result is None: return
+                    if result.channel.is_nsfw() and not message.channel.is_nsfw():
+                        return await message.channel.send(f"{self.emojis['alert']} | This message links to a NSFW channel, so I cannot share its content")
+                    if len(result.embeds) == 0:
+                        embed=discord.Embed(description=result.content)
+                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y • %I:%M %p} {nameZone(message.guild)}')
+                        embed.set_author(name=result.author.name,icon_url=result.author.avatar_url)
+                        if len(result.attachments) > 0 and result.attachments[0].height is not None:
+                            try: embed.set_image(url=result.attachments[0].url)
+                            except: pass
+                        return await message.channel.send(embed=embed)
+                    else:
+                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y - %I:%M %p} {nameZone(message.guild)}')
+                        if result.embeds[0].author.name is discord.Embed.Empty: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar_url)
+                        return await message.channel.send(content=result.content,embed=result.embeds[0])
+
+    async def sendGuideMessage(self, message: discord.Message):
+        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(bot.latency * 1000)}ms\n\n**Prefix:** `{self.bot.lightningLogging.get(message.guild.id).get("prefix")}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
+    
     @commands.command()
     async def privacy(self, ctx):
         user = self.bot.lightningUsers[ctx.author.id]
@@ -433,6 +465,202 @@ class Misc(commands.Cog):
             try:
                 if datetime.datetime.now() > clearAt: await message.edit(content=None)
             except UnboundLocalError: await message.edit(content=None)
+
+    @commands.has_guild_permissions(manage_guild=True)
+    @commands.command()
+    async def pause(self, ctx, *args):
+        '''Pause logging or antispam for a duration'''
+        status = await ctx.send(str(self.loading) + "Please wait...")
+        status = await ctx.send(f'{self.emojis["loading"]}Pausing...')
+        args = [a.lower() for a in args]
+        defaultChannel = self.bot.get_channel(self.bot.lightningLogging[ctx.guild.id]['cyberlog']['defaultChannel'])
+        if not defaultChannel:
+            defaultChannel = self.bot.get_channel(self.bot.lightningLogging[ctx.guild.id]['antispam']['log'][1])
+            if not defaultChannel:
+                defaultChannel = ctx.channel
+        if 'logging' in args:
+            if 'logging' != args[0]:
+                return
+            key = 'cyberlog'
+        if 'antispam' in args:
+            if 'antispam' != args[0]:
+                return
+            key = 'antispam'
+        seconds = self.ParsePauseDuration((' ').join(args[1:]))
+        duration = datetime.timedelta(seconds = seconds)
+        if seconds > 0: 
+            rawUntil = datetime.datetime.utcnow() + duration
+            until = rawUntil + self.bot.get_cog('Cyberlog').timeZone(ctx.guild)
+        else: 
+            rawUntil = datetime.datetime.max
+            until = datetime.datetime.max
+        embed = discord.Embed(
+            title=f'The {args[0][0].upper()}{args[0][1:]} module was paused',
+            description=textwrap.dedent(f'''
+                👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.name})
+                {clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=utility.timeZone(ctx.guild)))}Paused at: {DisguardIntermediateTimestamp(datetime.datetime.now())}
+                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{DisguardIntermediateTimestamp(until)} ({DisguardRelativeTimestamp(until)})"}
+                '''),
+            color=yellow[colorTheme(ctx.guild)])
+        embed.set_footer(text='Resuming at: ')
+        embed.timestamp = rawUntil
+        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not ctx.author.is_avatar_animated() else 'gif'))
+        try: await ctx.author.avatar_url_as(size=1024).save(savePath)
+        except discord.HTTPException: pass
+        f = discord.File(savePath)
+        embed.set_thumbnail(url=f'attachment://{f.filename}')
+        embed.set_author(name=ctx.author.name, icon_url=f'attachment://{f.filename}')
+        await status.edit(content=None, embed=embed, file=f)
+        await database.PauseMod(ctx.guild, key)
+        self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = False
+        pauseTimedEvent = {'type': 'pause', 'target': key, 'server': ctx.guild.id}
+        if len(args) == 1: return #If the duration is infinite, we don't wait
+        await database.AppendTimedEvent(ctx.guild, pauseTimedEvent)
+        await asyncio.sleep(duration)
+        await database.ResumeMod(ctx.guild, key)
+        self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = True
+        embed.title = f'The {args[0][0].upper()}{args[0][1:]} module has resumed'
+        embed.description = ''
+        await status.edit(embed=embed)
+        
+    @commands.command()
+    async def unpause(self, ctx, *args):
+        if len(args) < 1: return await ctx.send("Please provide module `antispam` or `logging` to unpause")
+        args = [a.lower() for a in args]
+        if 'antispam' in args:
+            await database.ResumeMod(ctx.guild, 'antispam')
+            self.bot.lightningLogging[ctx.guild.id]['antispam']['enabled'] = True
+            await ctx.send("✅Successfully resumed antispam moderation")
+        if 'logging' in args:
+            await database.ResumeMod(ctx.guild, 'cyberlog')
+            self.bot.lightningLogging[ctx.guild.id]['cyberlog']['enabled'] = True
+            await ctx.send("✅Successfully resumed logging")
+
+    @commands.command()
+    async def history(self, ctx, target: typing.Optional[discord.Member] = None, *, mod = ''):
+        '''Viewer for custom status, username, and avatar history
+        •If no member is provided, it will default to the command author
+        •If no module is provided, it will default to the homepage'''
+        await ctx.trigger_typing()
+        if target is None: target = ctx.author
+        p = prefix(ctx.guild)
+        embed=discord.Embed(color=yellow[colorTheme(ctx.guild)])
+        if not self.privacyEnabledChecker(target, 'default', 'attributeHistory'):
+            if self.privacyVisibilityChecker(target, 'default', 'attributeHistory'):
+                embed.title = 'Attribute History » Feature Disabled' 
+                embed.description = f'{target.name} has disabled their attribute history' if target.id != ctx.author.id else 'You have disabled your attribute history'
+            else:
+                if not ctx.guild and target.id != ctx.author.id:
+                    embed.title = 'Attribute History » Access Restricted' 
+                    embed.description = f'{target.name} has privated their attribute history' if target.id != ctx.author.id else 'You have privated your attribute history. Use this command in DMs to access it.'
+            return await ctx.send(embed=embed)
+        letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
+        def navigationCheck(r, u): return str(r) in navigationList and u.id == ctx.author.id and r.message.id == message.id
+        async def viewerAbstraction():
+            e = copy.deepcopy(embed)
+            if not self.privacyEnabledChecker(target, 'attributeHistory', f'{mod}History'):
+                e.description = f'{target.name} has disabled their {mod} history feature' if target != ctx.author else f'You have disabled your {mod} history.'
+                return e, []
+            if not self.privacyVisibilityChecker(target, 'attributeHistory', f'{mod}History'):
+                e.description = f'{target.name} has privated their {mod} history feature' if target != ctx.author else f'You have privated your {mod} history. Use this command in DMs to access it.'
+                return e, []
+            e.description = ''
+            tailMappings = {'avatar': 'imageURL', 'username': 'name', 'customStatus': 'name'}
+            backslash = '\\'
+            data = self.bot.lightningUsers[target.id].get(f'{mod}History')
+            e.description = f'{len(data) if len(data) < 19 else 19} / {len(data)} entries shown; oldest on top\nWebsite portal coming soon™'
+            if mod == 'avatar': e.description += '\nTo set an entry as the embed thumbnail, react with that letter'
+            if mod == 'customStatus': e.description += '\nTo set a custom emoji as the embed thumbnail, react with that letter'
+            for i, entry in enumerate(data[-19:]): #first twenty entries because that is the max number of reactions
+                if i > 0:
+                    span = entry.get('timestamp') - prior.get('timestamp')
+                    hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
+                    times = [seconds, minutes, hours, span.days]
+                    distanceDisplay = []
+                    for j in range(len(times) - 1, -1, -1):
+                        if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
+                    if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
+                prior = entry
+                timestampString = f'{DisguardIntermediateTimestamp(entry.get("timestamp") - datetime.timedelta(hours=DST))}'
+                if mod in ('avatar', 'customStatus'): timestampString += f' {"• " + (backslash + letters[i]) if mod == "avatar" or (mod == "customStatus" and entry.get("emoji") and len(entry.get("emoji")) > 1) else ""}'
+                e.add_field(name=timestampString if i == 0 else f'**{distanceDisplay[0]} later** • {timestampString}', value=f'''> {entry.get("emoji") if entry.get("emoji") and len(entry.get("emoji")) == 1 else f"[Custom Emoji]({entry.get('emoji')})" if entry.get("emoji") else ""} {entry.get(tailMappings.get(mod)) if entry.get(tailMappings.get(mod)) else ""}''', inline=False)
+            headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
+            header = f'📜 Attribute History / 👮 / {headerTail}'
+            header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
+            footerText = 'Data from June 10, 2020 and on'
+            e.set_footer(text=footerText)
+            e.title = header
+            return e, data[-19:]
+        while not self.bot.is_closed():
+            embed=discord.Embed(color=yellow[colorTheme(ctx.guild)])
+            if any(attempt in mod.lower() for attempt in ['avatar', 'picture', 'pfp']): mod = 'avatar'
+            elif any(attempt in mod.lower() for attempt in ['name']): mod = 'username'
+            elif any(attempt in mod.lower() for attempt in ['status', 'emoji', 'presence', 'quote']): mod = 'customStatus'
+            elif mod != '': 
+                members = await self.FindMoreMembers(ctx.guild.members, mod)
+                members.sort(key = lambda x: x.get('check')[1], reverse=True)
+                if len(members) == 0: return await ctx.send(embed=discord.Embed(description=f'Unknown history module type or invalid user \"{mod}\"\n\nUsage: `{"." if ctx.guild is None else p}history |<member>| |<module>|`\n\nSee the [help page](https://disguard.netlify.app/history.html) for more information'))
+                target = members[0].get('member')
+                mod = ''
+            headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
+            header = f'📜 Attribute History / 👮 / {headerTail}'
+            header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
+            embed.title = header
+            navigationList = ['🖼', '📝', '💭']
+            if mod == '':
+                try: await message.clear_reactions()
+                except UnboundLocalError: pass
+                embed.description=f'Welcome to the attribute history viewer! Currently, the following options are available:\n🖼: Avatar History (`{p}history avatar`)\n📝: Username History(`{p}history username`)\n💭: Custom Status History(`{p}history status`)\n\nReact with your choice to enter the respective module'
+                try: await message.edit(embed=embed)
+                except UnboundLocalError: message = await ctx.send(embed=embed)
+                for emoji in navigationList: await message.add_reaction(emoji)
+                result = await self.bot.wait_for('reaction_add', check=navigationCheck)
+                if str(result[0]) == '🖼': mod = 'avatar'
+                elif str(result[0]) == '📝': mod = 'username'
+                elif str(result[0]) == '💭': mod = 'customStatus'
+            newEmbed, data = await viewerAbstraction()
+            try: await message.edit(embed=newEmbed)
+            except UnboundLocalError: message = await ctx.send(embed=newEmbed)
+            await message.clear_reactions()
+            navigationList = ['🏠']
+            if mod == 'avatar': navigationList += letters[:len(data)]
+            if mod == 'customStatus':
+                for letter in letters[:len(data)]:
+                    if newEmbed.fields[letters.index(letter)].name.endswith(letter): navigationList.append(letter)
+            for emoji in navigationList: await message.add_reaction(emoji)
+            cache = '' #Stores last letter reaction, if applicable, to remove reaction later on
+            while mod != '':
+                result = await self.bot.wait_for('reaction_add', check=navigationCheck)
+                if str(result[0]) == '🏠': mod = ''
+                else: 
+                    value = newEmbed.fields[letters.index(str(result[0]))].value
+                    newEmbed.set_thumbnail(url=value[value.find('>')+1:].strip() if mod == 'avatar' else value[value.find('(')+1:value.find(')')])
+                    headerTail = '🏠 Home' if mod == '' else '🖼 Avatar History' if mod == 'avatar' else '📝 Username History' if mod == 'username' else '💭 Custom Status History'
+                    header = f'📜 Attribute History / 👮 / {headerTail}'
+                    header = f'📜 Attribute History / 👮 {target.name:.{50 - len(header)}} / {headerTail}'
+                    newEmbed.title = header
+                    if cache: await message.remove_reaction(cache, result[1])
+                    cache = str(result[0])
+                    await message.edit(embed=newEmbed)
+    
+    def ParsePauseDuration(self, s: str):
+        '''Convert a string into a number of seconds to ignore antispam or logging'''
+        args = s.split(' ')                             #convert string into a list, separated by space
+        duration = 0                                    #in seconds
+        for a in args:                                  #loop through words
+            number = ""                                 #each int is added to the end of a number string, to be converted later
+            for b in a:                                 #loop through each character in a word
+                try:
+                    c = int(b)                          #attempt to convert the current character to an int
+                    number+=str(c)                      #add current int, in string form, to number
+                except ValueError:                      #if we can't convert character to int... parse the current word
+                    if b.lower() == "m":                #Parsing minutes
+                        duration+=60*int(number)
+                    elif b.lower() == "h":              #Parsing hours
+                        duration+=60*60*int(number)
+                    elif b.lower() == "d":              #Parsing days
+                        duration+=24*60*60*int(number)
+        return duration
 
 def clean(s):
     return re.sub(r'[^\w\s]', '', s.lower())

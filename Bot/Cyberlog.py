@@ -273,6 +273,7 @@ class Cyberlog(commands.Cog):
 
     @tasks.loop(hours=24)
     async def DeleteAttachments(self):
+        #This becomes less relevant with attachments stored in the image log channels
         print('Deleting attachments that are old')
         time = datetime.datetime.now()
         try:
@@ -281,80 +282,30 @@ class Cyberlog(commands.Cog):
             for server in self.bot.guilds:
                 for channel in server.text_channels:
                     try:
-                        path='Attachments/{}/{}'.format(server.id, channel.id)
-                        for fl in os.listdir(path):
-                            with open('{}/{}/{}/{}.txt'.format(indexes,server.id, channel.id, fl)) as f:
-                                timestamp = datetime.datetime.strptime(list(enumerate(f))[0][1], '%b %d, %Y - %I:%M:%S %p')
+                        with open(f'{indexes}/{server.id}/{channel.id}.json', 'r+') as f:
+                            indexData = json.load(f)
+                        path = f'Attachments/{server.id}/{channel.id}'
+                        for folder in os.listdir(path):
+                            timestamp = datetime.datetime.fromisoformat(indexData[folder]['timestamp0'])
                             if (datetime.datetime.utcnow() - timestamp).days > 365:
-                                removal.append(path+fl)
+                                removal.append(folder) #Mark year-old attachments for deletion
+                            elif not os.listdir(folder):
+                                removal.append(folder) #Mark empty folders for deletion
                     except: pass
-            for path in removal: 
+            for folder in removal: 
                 try: shutil.rmtree(path)
-                except Exception as e: print(f'Attachment Deletion fail: {e}')
+                except Exception as e: print(f'Attachment folder deletion fail: {e}')
             for fl in outstandingTempFiles:
                 try: shutil.rmtree((os.path.join(tempDir, fl)))
                 except:
                     try: os.remove(os.path.join(tempDir, fl))
                     except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
-            print('Removed {} attachments in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
-        except Exception as e: print('Fail: {}'.format(e))
-
-    @tasks.loop(hours=1)
-    async def syncRedditFeeds(self):
-        '''Goes through all servers and ensures reddit feeds are working'''
-        try:
-            for server in self.bot.guilds: asyncio.create_task(self.redditFeedHandler(server))
-        except: 
-            print(f'Reddit sync fail: ')
-            traceback.print_exc()
-    
-    async def redditFeedHandler(self, server):
-        '''Handles starting/stopping of reddit feeds for servers, along with ensuring there are no duplicates, etc.'''
-        runningFeeds = self.redditThreads.get(server.id) or []
-        proposedFeeds = [entry['subreddit'] for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if self.bot.get_channel(entry['channel'])]
-        feedsToCreate = [entry for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) or [] if entry['subreddit'] not in runningFeeds and self.bot.get_channel(entry['channel']) and not (await self.bot.reddit.subreddit(entry['subreddit'], fetch=True)).over18]
-        feedsToDelete = [entry for entry in runningFeeds if entry not in proposedFeeds]
-        for feed in feedsToCreate: asyncio.create_task(self.createRedditStream(server, feed))
-        for feed in feedsToDelete: self.redditThreads[server.id].remove(feed)
-    
-    async def createRedditStream(self, server, data, attempt=0):
-        '''Data represents a singular subreddit customization data'''
-        print(f'creating reddit stream for {server.name}: {data["subreddit"]}', attempt)
-        if attempt > 2:
-            return self.redditThreads[server.id].remove(data['subreddit']) #This will get picked up in the next syncRedditFeeds loop
-        if self.redditThreads.get(server.id) and data["subreddit"] in self.redditThreads[server.id]: return #We already have a thread running for this server & subreddit
-        reddit = self.bot.reddit
-        channel = self.bot.get_channel(data['channel'])
-        subreddit = await reddit.subreddit(data['subreddit'], fetch=True)
-        try: self.redditThreads[server.id].append(data['subreddit']) #Marks that we have a running thread for this server & subreddit
-        except KeyError: self.redditThreads[server.id] = [data['subreddit']]
-        try:
-            async for submission in subreddit.stream.submissions(skip_existing=True):
-                try:
-                    if data['subreddit'] not in self.redditThreads[server.id]: return #This feed has been cancelled
-                    embed = await self.redditSubmissionEmbed(server, submission, True, data['truncateTitle'], data['truncateText'], data['media'], data['creditAuthor'], data['color'], data['timestamp'], channel=channel)
-                    await channel.send(embed=embed)
-                except: 
-                    print(f'reddit feed submission error')
-                    traceback.print_exc()
-        except:
-            print(f"reddit feed error: {server.name} {server.id}")
-            traceback.print_exc()
-            await asyncio.sleep(60)
-            asyncio.create_task(self.createRedditStream(server, data, attempt + 1))
+            print('Removed {} items in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
+        except Exception as e: print('Attachment deletion fail: {}'.format(e))
     
     @commands.Cog.listener()
     async def on_command(self, ctx):
-        flags = self.bot.lightningUsers[ctx.author.id]['flags']
-        if flags['announcedPrivacySettings'] and flags['birthdayDataPurgeAnnouncement']: return
-        flagMessages = []
-        if not flags['announcedPrivacySettings']:
-            flagMessages.append(f'Hey {ctx.author.name}! Just wanted to let you know that you can now control some Disguard privacy settings on your new profile page on my web dashboard. Take a look: http://disguard.herokuapp.com/manage/profile')
-            await (await database.GetUserCollection()).update_one({'user_id': ctx.author.id}, {'$set': {'flags.announcedPrivacySettings': True}})
-        if not flags['birthdayDataPurgeAnnouncement']:
-            flagMessages.append(f'{ctx.author.name}, there is an announcement from my developer: please know that due to a database configuration error, all saved birthdays under my birthdays module were unintentionally deleted on June 3. I don\'t store data letting me know who saved their birthday previously, but if you *have* saved your birthday previously, set it again to restore functionality of your profile for the birthday module. Age/wishlist data has not been affected. You can set your birthday either by using the `birthday` command or by typing `my birthday is <when your birthday is>`.')
-            await (await database.GetUserCollection()).update_one({'user_id': ctx.author.id}, {'$set': {'flags.birthdayDataPurgeAnnouncement': True}})
-        await ctx.send('\n\n'.join(flagMessages))
+        pass
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -363,105 +314,33 @@ class Cyberlog(commands.Cog):
         if not serverIsGimped(message.guild): await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
         if type(message.channel) is discord.DMChannel: return
         if message.type is discord.MessageType.pins_add: await self.pinAddLogging(message)
-        if message.content == f'<@!{self.bot.user.id}>': await self.sendGuideMessage(message)
-        await asyncio.gather(*[self.saveMessage(message), self.jumpLinkQuoteContext(message), self.redditAutocomplete(message), self.redditEnhance(message)])
+        await self.saveMessage(message)
 
     async def saveMessage(self, message: discord.Message):
         path = f'{indexes}/{message.guild.id}'
-        try: os.makedirs(path)
-        except FileExistsError: pass
+        if not os.path.exists(path): os.makedirs(path)
+        #except FileExistsError: pass V1.0: Changed to an if statement to reduce computation and disk time
         try:
             async with aiofiles.open(f'{path}/{message.channel.id}.json', 'r+') as f:
                 read = await f.read()
                 try: indexData = json.loads(read)
                 except json.JSONDecodeError: indexData = {}
-                indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if message.channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
-        except (FileNotFoundError, PermissionError): 
-            indexData = {}
+                indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': utility.contentParser(message)}
+        except (FileNotFoundError, PermissionError, OSError): 
+            indexData = {message.id: {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': utility.contentParser(message)}}
         indexData = json.dumps(indexData, indent=4)
         async with aiofiles.open(f'{path}/{message.channel.id}.json', 'w+') as f:
             await f.write(indexData)
         if message.author.bot: return
         if self.bot.lightningLogging[message.guild.id]['cyberlog'].get('image') and len(message.attachments) > 0 and not message.channel.is_nsfw():
-            path2 = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-            try: os.makedirs(path2)
-            except FileExistsError: pass
+            path2 = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
+            if not os.path.exists(path2): os.makedirs(path2)
+            # except FileExistsError: pass
             for a in message.attachments:
                 if a.size / 1000000 < 8:
-                    try: await a.save(path2+'/'+a.filename)
+                    try: await a.save(f'{path2}/{a.filename}')
                     except discord.HTTPException: pass
-
-    async def jumpLinkQuoteContext(self, message: discord.Message):
-        try: enabled = self.bot.lightningLogging.get(message.guild.id).get('jumpContext')
-        except AttributeError: return
-        if message.author.id == self.bot.user.id: return
-        if enabled:
-            words = message.content.split(' ')
-            for w in words:
-                if 'https://discord.com/channels/' in w or 'https://canary.discord.com/channels' in w or 'https://discordapp.com/channels' in w: #This word is a hyperlink to a message
-                    context = await self.bot.get_context(message)
-                    messageConverter = commands.MessageConverter()
-                    result = await messageConverter.convert(context, w)
-                    if result is None: return
-                    if result.channel.is_nsfw() and not message.channel.is_nsfw():
-                        return await message.channel.send(f"{self.emojis['alert']} | This message links to a NSFW channel, so I cannot share its content")
-                    if len(result.embeds) == 0:
-                        embed=discord.Embed(description=result.content)
-                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y • %I:%M %p} {nameZone(message.guild)}')
-                        embed.set_author(name=result.author.name,icon_url=result.author.avatar_url)
-                        if len(result.attachments) > 0 and result.attachments[0].height is not None:
-                            try: embed.set_image(url=result.attachments[0].url)
-                            except: pass
-                        return await message.channel.send(embed=embed)
-                    else:
-                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y - %I:%M %p} {nameZone(message.guild)}')
-                        if result.embeds[0].author.name is discord.Embed.Empty: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar_url)
-                        return await message.channel.send(content=result.content,embed=result.embeds[0])
     
-    async def redditAutocomplete(self, message: discord.Message):
-        if 'r/' not in message.content: return
-        try: config = self.bot.lightningLogging[message.guild.id]['redditComplete']
-        except KeyError: return
-        if config == 0: return #Feature is disabled
-        if message.author.id == self.bot.user.id: return
-        for w in message.content.split(' '):
-            if w.lower().startswith('r/') and 'https://' not in w:
-                try:
-                    subSearch = w[w.find('r/') + 2:]
-                    result = await self.subredditEmbed(subSearch, config == 1)
-                    if config == 1: await message.channel.send(result)
-                    else: await message.channel.send(embed=result)
-                except: pass
-
-    async def redditEnhance(self, message: discord.Message):
-        try: config = self.bot.lightningLogging[message.guild.id]['redditEnhance']
-        except KeyError: return
-        if ('https://www.reddit.com/r/' not in message.content and 'https://old.reddit.com/r/' not in message.content) or config == (False, False): return
-        if message.author.id == self.bot.user.id: return
-        for w in message.content.split(' '):
-            if ('https://www.reddit.com/r/' in w or 'https://old.reddit.com/r/' in w) and '/comments/' in w and config[0]:
-                try:
-                    embed = await self.redditSubmissionEmbed(message.guild, w, False, channel=message.channel)
-                    await message.channel.send(embed=embed)
-                except: pass
-            elif ('https://www.reddit.com/r/' in w or 'https://old.reddit.com/r/' in w) and '/comments/' not in w and config[1]:
-                try:
-                    subSearch = w[w.find('r/') + 2:]
-                    embed = await self.subredditEmbed(subSearch, False)
-                    await message.channel.send(embed=embed)
-                    message = await message.channel.fetch_message(message.id)
-                except: pass
-            else: continue
-            message = await message.channel.fetch_message(message.id)
-            if len(message.embeds) < 1:
-                def check(b, a): return b.id == message.id and len(a.embeds) > len(b.embeds)
-                result = (await self.bot.wait_for('message_edit', check=check))[1]
-            else: result = message
-            await result.edit(suppress=True)
-            def reactionCheck(r, u): return r.emoji == self.emojis['expand'] and u.id == self.bot.user.id and r.message.id == message.id
-            reaction, user = await self.bot.wait_for('reaction_add', check=reactionCheck)
-            await message.remove_reaction(reaction, user)
-
     async def pinAddLogging(self, message: discord.Message):
         received = datetime.datetime.now()
         adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(message.guild))
