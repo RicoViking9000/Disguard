@@ -334,53 +334,59 @@ async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message:
     await view.createEmbed()
     await view.loadHomepage()
 
-def calculateDate(message, adjusted):
+def calculateDate(message: discord.Message, adjusted: datetime.datetime):
     '''Returns a datetime.datetime parsed from a message
     adjusted: Current time; with applicable timezone taken into consideration'''
+    # Initialize variables
+    birthday = None
     now = datetime.datetime.now()
     shortDays = collections.deque(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
     longDays = collections.deque(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
     shortMonths = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
     longMonths = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
-    ref = collections.deque([(a, b) for a, b in {1:31, 2:29 if isLeapYear() else 28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}.items()]) #Number of days in each month. As with days, this dict may need to move around
+    # Number of days in each month. As with days, this dict may need to move around
+    ref = collections.deque([(a, b) for a, b in {1:31, 2:29 if isLeapYear() else 28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}.items()])
     ref.rotate(-1 * (adjusted.month - 1)) #Current month moves to the front
-    #Determine if user specified long or short day/month in response
+    # Determine if user used long month format (such as March) or short (such as Mar)
     if any(c in message.content.lower().split(' ') for c in longMonths): months = longMonths
     else: months = shortMonths
+    # Determine if the user used long day format (such as Monday) or short (such as Mon)
     if any(c in message.content.lower().split(' ') for c in longDays): days = longDays
     else: days = shortDays
-    #Check if name of month is in message. Before days because some ppl may specify a day and month
-    birthday = None
+    # Check if month's short or long name or the word "the" are in the list of words in the input string (message)
     if any(c in message.content.lower().split(' ') for c in months) or 'the' in message.content.lower().split(' '):
-        #Check if month short or long (depending on context) name or the word "the" are in the list of words in the input string (message)
         words = message.content.split(' ')
+        # iterate through all passed words
         for word in words:
             before = word
+            # get rid of commas
             word = word.replace(',', '')
-            #truncate the suffix if the user provided one
+            # truncate the suffix if the user provided one
             if any(str(letter) in word for letter in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]):
                 word = word.replace('st', '')
                 word = word.replace('nd', '')
                 word = word.replace('rd', '')
                 word = word.replace('th', '')
+            # if we have the name of a month in the original message and the current word is a number, try to get a date from that
             if any(c in message.content.lower().split(' ') for c in months):
                 try: 
                     birthday = datetime.datetime(now.year, months.index([d for d in months if d in message.content.lower().split(' ')][0]) + 1, int(word))
                     break
                 except: pass
+            # if there's no month in the word and the word was succesfully truncated above, try getting a date from the current year and month (such as the user passing "the 6th")
             else:
                 if before != word:
                     try: birthday = datetime.datetime(now.year, now.month, int(word))
                     except: pass
-    #Check if day of the week is in message
+    # Check if day of the week is in message
     elif any(c in message.content.lower().split(' ') for c in days):
-        parserString = '%a' if days == shortDays else '%A' #We have to go with what's in the message
+        parserString = '%a' if days == shortDays else '%A'
         currentDay = days.index(adjusted.strftime(parserString).lower())
         targetDay = days.index([d for d in days if d in message.content.lower()][0])
         days.rotate(-1 * currentDay) #Current day is now at the start for proper calculations
         #Target is days until the day the user typed in chat. targetDay - currentDay is still the same as before the rotation
         birthday = adjusted + datetime.timedelta(days=targetDay-currentDay)
-        if birthday < adjusted and 'was' not in message.content.lower().split(' '): birthday += datetime.timedelta(days=7) #If target is a weekday already past, jump it to next week; since that's what they mean, if they didn't say 'was' in their sentence 
+        if birthday < adjusted and 'was' not in message.content.lower().split(' '): birthday += datetime.timedelta(days=7) #If target is a weekday already past, jump it to next week; since that's what they mean if they didn't say 'was' in their sentence 
     elif any(c in message.content.lower().split(' ') for c in ['today', 'yesterday', 'ago', 'tomorrow']):
         if any(word in message.content.lower() for word in ['my birthday', 'my bday' 'mine is']) and 'today' in message.content.lower().split(' '): birthday = adjusted
         elif any(word in message.content.lower() for word in ['my birthday', 'my bday' 'mine was']) and 'yesterday' in message.content.lower().split(' '): birthday = adjusted - datetime.timedelta(days=1)
@@ -396,7 +402,7 @@ def calculateDate(message, adjusted):
     else: #The user inputted either something vague or a format with slashes, etc. NEED TO TRIM WORDS TO CHECK ALL COMBINATIONS. Also check for word THE before number, above.
         '''NEXT UP: MENTIONS HANDLING: if you check for is, also check my/mine to make sure the user isnt saying 'mine is xxxx' Also ask the user if they want to set their birthday'''
         for word in message.content.split(' '):
-            try: birthday = datetime.datetime.strptime(word, "%m/%d/%y") #TODO: remove years
+            try: birthday = datetime.datetime.strptime(word, "%m/%d/%y")
             except:
                 try: birthday = datetime.datetime.strptime(word, "%m-%d-%y")
                 except:
@@ -407,7 +413,7 @@ def calculateDate(message, adjusted):
         birthday = birthday + datetime.timedelta(days= sum(a[1] for a in list(ref)[:6])) #Deal with half birthdays; jump 6 months ahead
     return birthday
 
-async def verifyBirthday(message, adjusted, birthday=None):
+async def verifyBirthday(message: discord.Message, adjusted: datetime.datetime, birthday=None):
     '''Return a list of relevant members if the program determines that the member is talking about their own birthday or someone else's birthday given a message, None otherwise'''
     if birthday is None: birthday = calculateDate(message, adjusted)
     #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
@@ -420,19 +426,19 @@ async def verifyBirthday(message, adjusted, birthday=None):
         async for m in message.channel.history(limit=10): #How many messages to check back for question words
             if any(word in m.content.lower() for word in ['when', 'what']) and any(word in m.content.lower() for word in ['your birthday', 'your bday', 'yours']): return [message.author]
 
-def calculateAges(m):
+def calculateAges(message: discord.Message):
     '''Returns a list of numbers found in a message'''
     ages = []
-    for w in m.content.lower().split(' '):
-        try: ages.append(int(w))
+    for word in message.content.lower().split(' '):
+        try: ages.append(int(word))
         except: pass
     return ages
 
-async def verifyAge(message, age):
+async def verifyAge(message: discord.Message, age):
     '''Verifies that a person was talking about their age. This is far more prone to false positives than birthday verification, and the catch all is return True, so I have to make sure I return False when necessary'''
     s = message.content.lower().split(' ')
     s = [w.replace('\'', '') for w in s] #replace any apostrophes with nothing (i'm --> im) for parsing convenience
-    t = nltk.pos_tag(nltk.word_tokenize(message.content.lower()))
+    t = nltk.pos_tag(nltk.word_tokenize(message.content.lower())) #record the parts of speech in the sentence for analysis later
     if any(word in s for word in ['im', 'i\'m']) or 'i am' in message.content.lower(): #Deal with age
         if 'i am' in message.content.lower(): finder = 'am'
         else: finder = 'im'
