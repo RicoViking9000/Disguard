@@ -130,173 +130,146 @@ class Cyberlog(commands.Cog):
                     print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
     
-    @tasks.loop(hours = 6)
+    @tasks.loop(hours=12) #V1.0: Halved frequency this loop runs
     async def syncData(self):
         global lightningUsers
         global lightningLogging
-        print('Summarizing')
+        print('Syncing data')
         started = datetime.datetime.now()
         rawStarted = datetime.datetime.now()
         try:
             if self.syncData.current_loop % 4 == 0: #This segment activates once per day
                 if self.syncData.current_loop == 0: #This segment activates only once while the bot is up (on bootup)
-                    await database.VerifyServers(self.bot, False, True)
-                    asyncio.create_task(database.VerifyUsers(self.bot))
+                    await database.Verification(self.bot)
                     asyncio.create_task(self.synchronizeDatabase(True))
                     def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
-                    await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
+                    await self.bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 else: asyncio.create_task(self.synchronizeDatabase())
-                await self.bot.get_cog('Birthdays').updateBirthdays()
+                await self.bot.get_cog('Birthdays').verifyBirthdaysDict()
             for g in self.bot.guilds:
+                timeString = f'Processing attributes for {g.name}'
                 started = datetime.datetime.now()
-                try:
-                    generalChannel, announcementsChannel, moderatorChannel = await database.CalculateGeneralChannel(g, self.bot, True), await database.CalculateAnnouncementsChannel(g, self.bot, True), await database.CalculateModeratorChannel(g, self.bot, True)
-                    print(f'{g.name}\n -general channel: {generalChannel}\n -announcements channel: {announcementsChannel}\n -moderator channel: {moderatorChannel}')
+                serverStarted = datetime.datetime.now()
+                try: asyncio.gather(database.CalculateGeneralChannel(g, self.bot, True), database.CalculateAnnouncementsChannel(g, self.bot, True), database.CalculateModeratorChannel(g, self.bot, True))
                 except: pass
-                await self.CheckDisguardServerRoles(g.members, mode=0, reason='Full verification check')
-                self.memberPermissions[g.id] = {} #Ok, so then in the future, look into collections.defaultDict for this one, just like the ghost reaction logging
+                #await self.CheckDisguardServerRoles(g.members, mode=0, reason='Full verification check') #Remove this for v1.0
+                timeString += f'\n •Default channel calculations: {(datetime.datetime.now() - started).seconds}s'
+                started = datetime.datetime.now()
+                for r in g.roles: self.roles[r.id] = r.members #This allows the bot to properly display how many members had a role before it was deleted
                 self.members[g.id] = g.members
-                for m in g.members:
-                    memberStart = datetime.datetime.now()
-                    updates = []
-                    if self.privacyEnabledChecker(m, 'default', 'attributeHistory'):
-                        if self.privacyEnabledChecker(m, 'attributeHistory', 'customStatusHistory'):
-                            try:
-                                for a in m.activities:
-                                    if a.type == discord.ActivityType.custom:
-                                        try:
-                                            if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('emoji'), 'n': self.bot.lightningUsers.get(m.id).get('customStatusHistory')[-1].get('name')}:
-                                                asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
-                                                updates.append('status')
-                                        except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                                        except (TypeError, IndexError):
-                                            if not (await database.GetUser(m)).get('customStatusHistory'):
-                                                asyncio.create_task(database.AppendCustomStatusHistory(m, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
-                                                updates.append('status')
-                            except Exception as e: print(f'Custom status error for {m.name}: {e}')
-                        if self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
-                            try:
-                                if m.name != self.bot.lightningUsers.get(m.id).get('usernameHistory')[-1].get('name'): 
-                                    asyncio.create_task(database.AppendUsernameHistory(m))
-                                    updates.append('username')
-                            except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                            except (TypeError, IndexError):
-                                asyncio.create_task(database.AppendUsernameHistory(m))
-                                updates.append('username')
-                            except Exception as e: print(f'Username error for {m.name}: {e}')
-                        if self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
-                            try:
-                                if str(m.avatar_url) != self.bot.lightningUsers.get(m.id).get('avatarHistory')[-1].get('discordURL'):
-                                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                                    await m.avatar_url_as(size=1024).save(savePath)
-                                    f = discord.File(savePath)
-                                    message = await self.imageLogChannel.send(file=f)
-                                    asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                                    if os.path.exists(savePath): os.remove(savePath)
-                                    updates.append('avatar')
-                            except (AttributeError, discord.HTTPException, aiohttp.client_exceptions.ClientPayloadError, aiohttp.client_exceptions.ClientOSError): pass
-                            except (TypeError, IndexError):
-                                try:
-                                    savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not m.is_avatar_animated() else 'gif'))
-                                    await m.avatar_url_as(size=1024).save(savePath)
-                                    f = discord.File(savePath)
-                                    message = await self.imageLogChannel.send(file=f)
-                                    asyncio.create_task(database.AppendAvatarHistory(m, message.attachments[0].url))
-                                    if os.path.exists(savePath): os.remove(savePath)
-                                    updates.append('avatar')
-                                except discord.HTTPException: pass #Filesize is too large
-                            except Exception as e: print(f'Avatar error for {m.name}: {e}')
-                        if 'avatar' in updates: await asyncio.sleep((datetime.datetime.now() - memberStart).microseconds / 1000000)
-                    self.memberPermissions[g.id][m.id] = m.guild_permissions
-                print(f'Member Management and attribute updates done in {(datetime.datetime.now() - started).seconds}s')
+                for m in g.members: self.memberPermissions[g.id][m.id] = m.guild_permissions
+                timeString += f'\n •Member cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 for c in g.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
-                    except (discord.Forbidden, aiohttp.client_exceptions.ClientOSError): pass
+                    except (discord.Forbidden): pass
                 for c in g.categories:
-                    try: self.categories[c.id] = [c for c in c.channels]
-                    except (discord.Forbidden, aiohttp.client_exceptions.ClientOSError): pass
-                try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
-                except (discord.Forbidden, aiohttp.client_exceptions.ClientOSError): pass
-                print(f'Channel management done in {(datetime.datetime.now() - started).seconds}s')
+                    try: self.categories[c.id] = c.channels
+                    except (discord.Forbidden): pass
+                try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None] #This can be made faster without a generator
+                except (discord.Forbidden): pass
+                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
                 indexesPath = f'{indexes}/{g.id}'
                 try:
                     for p in os.listdir(indexesPath):
-                        if 'json' in p and not self.bot.get_channel(int(p[:p.find('.')])):
-                            os.remove(f'{indexes}/{g.id}/{p}')
+                        if 'json' in p and not self.bot.get_channel(int(p[:p.find('.')])): os.remove(f'{indexes}/{g.id}/{p}')
                 except FileNotFoundError: pass
                 try:
                     for p in os.listdir(attachmentsPath):
-                        try: 
-                            if not self.bot.get_channel(int(p)):
-                                shutil.rmtree(f'Attachments/{g.id}/{p}')
-                        except: pass
+                        if p != 'LogArchive' and not self.bot.get_channel(int(p)): shutil.rmtree(f'Attachments/{g.id}/{p}', ignore_errors=True)
                 except FileNotFoundError: pass
-                print(f'Local file management done in {(datetime.datetime.now() - started).seconds}s')
+                timeString += f'\n •Local file management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 try:
-                    self.invites[str(g.id)] = (await g.invites())
-                    try: self.invites[str(g.id)+"_vanity"] = (await g.vanity_invite())
-                    except (discord.HTTPException, aiohttp.client_exceptions.ClientOSError): pass
-                except discord.Forbidden as e: print(f'Invite management error: Server {g.name}: {e.text}')
-                except Exception as e: print(f'Invite management error: Server {g.name}\n{e}')
-                print(f'Invite management done in {(datetime.datetime.now() - started).seconds}s')
-                for r in g.roles: self.roles[r.id] = r.members #This allows the bot to properly display how many members had a role before it was deleted
+                    self.invites[str(g.id)] = await g.invites()
+                    try: self.invites[str(g.id)+"_vanity"] = await g.vanity_invite()
+                    except (discord.HTTPException): pass
+                except: pass
+                timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
+            print('About to process users\' attribute history')
+            started = datetime.datetime.now()
+            started2 = datetime.datetime.now()
+            self.bot.useAttributeQueue = True
+            updateOperations = collections.defaultdict(dict)
+            for i, u in enumerate(self.bot.users):
+                updatedAvatar = False
+                if self.privacyEnabledChecker(u, 'default', 'attributeHistory'):
+                    for g in self.bot.guilds:
+                        m = g.get_member(u.id)
+                        if m: break
+                    cache = self.bot.lightningUsers.get(m.id)
+                    if self.privacyEnabledChecker(m, 'attributeHistory', 'customStatusHistory'):
+                        try:
+                            if m.status != discord.Status.offline:
+                                if m.activity == discord.ActivityType.custom or not m.activity:
+                                    prev = cache.get('customStatusHistory', [{}])[-1]
+                                    proposed = {'e': None if not m.activity else m.activity.emoji.url if m.activity.emoji.is_custom_emoji() else str(m.activity.emoji) if m.activity.emoji else None, 'n': m.activity.name if m.activity else None}
+                                    if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}:
+                                        updateOperations[m.id].update({'customStatusHistory': {'emoji': proposed['e'], 'name': proposed['n'], 'timestamp': discord.utils.utcnow()}})
+                        except Exception as e: print(f'Custom status error for {m.name}: {e}')
+                    if self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
+                        try:
+                            if m.name != cache.get('usernameHistory', [{}])[-1].get('name'):
+                                updateOperations[m.id].update({'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}})
+                        except Exception as e: print(f'Username error for {m.name}: {e}')
+                    if self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
+                        try:
+                            if m.display_avatar.url != cache.get('avatarHistory', [{}])[-1].get('discordURL'):
+                                updateOperations[m.id].update({'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': await self.imageToURL(m.display_avatar), 'timestamp': discord.utils.utcnow()}})
+                                updatedAvatar = True
+                        except Exception as e: print(f'Avatar error for {m.name}: {e}')
+                    if updatedAvatar: await discord.utils.sleep_until(datetime.datetime.now() + datetime.timedelta(seconds=1)) #To prevent ratelimiting if Disguard sends a message to retrieve the image URL
+                    if i % 1000 == 0 and i > 0:
+                        print(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
+                        started = datetime.datetime.now()
+            print(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
+            started = datetime.datetime.now()
+            asyncio.create_task(database.BulkUpdateHistory(updateOperations))
+            print(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
+            self.bot.useAttributeQueue = False
+            await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
+            self.bot.attributeHistoryQueue = []
+            started = datetime.datetime.now()
             if self.syncData.current_loop % 4 == 0:
                 if self.syncData.current_loop == 0:
-                    started = datetime.datetime.now()
-                    self.syncRedditFeeds.start()
-                    print(f'Full post-verification done in {(datetime.datetime.now() - started).seconds}s')
+                    self.bot.get_cog('Reddit').syncRedditFeeds.start()
                 for g in self.bot.guilds:
-                    await verifyLogChannel(self.bot, g)
-            started = datetime.datetime.now()                
-            memberList = self.bot.get_all_members()
-            await asyncio.gather(*[updateLastOnline(m, datetime.datetime.now()) for m in memberList if m.status != discord.Status.offline]) #This line was the source of members having no username. For some reason, their user data was not created, perhaps because they were added between then and now? Just make sure the methods that trigger when the bot encounters new members works properly.
-            print(f'Status management done in {(datetime.datetime.now() - started).seconds}s')
+                    try: await verifyLogChannel(self.bot, g)
+                    except: pass
+            await updateLastOnline([m for m in self.bot.get_all_members() if m.status != discord.Status.offline], datetime.datetime.now())
+            print(f'Finished everything else in {(datetime.datetime.now() - started).seconds}s')
             print(f'Garbage collection: {gc.collect()} objects')
-            #self.bot.lightningLogging = lightningLogging
-            ## Commented out as of patch 0.2.25 - remove next patch. Reason: I find this obsolete as synchronizeDatabase handles this the first time, and trackChanges keeps them updated thereafter
-            lightningLogging = self.bot.lightningLogging
-            lightningUsers = self.bot.lightningUsers
-            await self.imageLogChannel.send('Completed')
         except Exception as e: 
             print('Summarize error: {}'.format(traceback.format_exc()))
             traceback.print_exc()
+        finally: await self.imageLogChannel.send('Completed') #Moved this into finally so that message indexing and other bootup tasks can commence even if this fails
         print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
 
     async def synchronizeDatabase(self, notify=False):
         '''This method downloads data from the database and puts it in the lightningLogging/Users variables, then is kept updated in the motorMongo changeStream method (trackChanges)'''
-        try:
-            started = datetime.datetime.now()
-            print('Synchronizing Database')
-            global lightningLogging
-            global lightningUsers
-            async for s in await database.GetAllServers():
-                if self.bot.get_guild(s['server_id']):
-                    print(f'Bootup sync: {s["name"]}')
-                    self.bot.lightningLogging[s['server_id']] = s
-                    lightningLogging[s['server_id']] = s
-                else: 
-                    attachmentsPath = f'Attachments/{s["server_id"]}'
-                    indexesPath = f'{indexes}/{s["server_id"]}'
-                    try: shutil.rmtree(attachmentsPath)
-                    except FileNotFoundError: pass
-                    try: shutil.rmtree(indexesPath)
-                    except FileNotFoundError: pass
-                    await database.DeleteServer(s['server_id'], self.bot)
-            print('bootup sync: got to the users')
-            async for u in await database.GetAllUsers():
-                if self.bot.get_user(u['user_id']):
-                    self.bot.lightningUsers[u['user_id']] = u
-                    lightningUsers[u['user_id']] = u
-                else: await database.DeleteUser(u['user_id'], self.bot)
-        except Exception as e:
-            print('Database sync error:')
-            traceback.print_exc()
+        started = datetime.datetime.now()
+        print('Synchronizing Database')
+        global lightningLogging
+        global lightningUsers
+        async for s in await database.GetAllServers():
+            if self.bot.get_guild(s['server_id']):
+                self.bot.lightningLogging[s['server_id']] = s
+                lightningLogging[s['server_id']] = s
+            else: 
+                attachmentsPath = f'Attachments/{s["server_id"]}'
+                indexesPath = f'{indexes}/{s["server_id"]}'
+                try: shutil.rmtree(attachmentsPath)
+                except FileNotFoundError: pass
+                try: shutil.rmtree(indexesPath)
+                except FileNotFoundError: pass
+        async for u in await database.GetAllUsers():
+            if self.bot.get_user(u['user_id']):
+                self.bot.lightningUsers[u['user_id']] = u
+                lightningUsers[u['user_id']] = u
         if notify: await self.imageLogChannel.send('Synchronized')
-        print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s', notify)
+        print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s')
 
     @tasks.loop(hours=24)
     async def DeleteAttachments(self):
