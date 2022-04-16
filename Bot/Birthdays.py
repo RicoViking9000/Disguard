@@ -63,7 +63,7 @@ class Birthdays(commands.Cog):
                 if age > 1: asyncio.create_task(database.SetAge(user, age))
             # Construct their next birthday to set in the database
             messages = self.bot.lightningUsers[userID].get('birthdayMessages', []) if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
-            filteredMessages = messages #TODO: extract the messages that will be delivered to the DM channel
+            filteredMessages = [m for m in messages if user.dm_channel.id in m['servers']]
             # Construct the happy birthday embed
             embed = discord.Embed(title=f'🍰 Happy {f"{age - 1}{utility.suffix(age - 1)}" if age > 1 else ""}Birthday, {user.name}! 🍰', color=yellow[1])
             embed.description = f'Enjoy this special day just for you, {user.name}! In addition to the people you know who will hopefully send birthday wishes your way, my developer also wants to wish you only the best on your birthday. Take it easy today, and try to treat yourself in some fashion.\n\n~~RicoViking9000, developer of Disguard'
@@ -90,7 +90,6 @@ class Birthdays(commands.Cog):
             # If there's no birthday set for this user or they've disabled the birthday module, return
             if not bday or not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
             # TODO: Make mutual servers member to member generator to improve speed
-            # TODO: if a server set their birthday channel in the meantime and somebody queued a message, account for that. check for server ID in the message channel ID
             servers = mutualServersMemberToMember(self, user, self.bot.user)
             for server in servers:
                 timezone = cyber.timeZone(server)
@@ -99,9 +98,7 @@ class Birthdays(commands.Cog):
                 if started.strftime('%H:%M') == self.bot.lightningLogging[server.id].get('birthdate', datetime.datetime.min).strftime('%H:%M') or not channel: continue
                 # print(f'Announcing birthday for {member.name} to {server.name}')
                 messages = [a for a in self.bot.lightningUsers[user.id].get('birthdayMessages', []) if server.id in a['servers']] if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
-                messageVisibility = cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayMessages')
                 messageString = f'Members from this server also wrote {len(messages)} birthday messages to be delivered here on {user.name}\'s birthday:' if messages else ''
-
                 if userID == 247412852925661185: toSend = f'🍰🎊🍨🎈 Greetings {server.name}! It\'s my developer {user.mention}\'s birthday!! Let\'s wish him a very special day! 🍰🎊🍨🎈'
                 else: 
                     if cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰"
