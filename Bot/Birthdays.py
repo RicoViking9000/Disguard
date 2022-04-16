@@ -300,6 +300,14 @@ class Birthdays(commands.Cog):
                 return await message.edit(embed=embed)
             await makeChoice(actionList[int(view.select.values[0])], message)
     
+    @commands.command(aliases=['setage'])
+    async def age(self, ctx: commands.Context, newAge: int):
+        return await self.birthday(ctx, str(newAge))
+
+    @commands.command()
+    async def wishlist(self, ctx: commands.Context):
+        return await wishlistHandler(self, ctx, None, None)
+    
     def colorTheme(self, s: discord.Guild):
         return self.bot.lightningLogging[s.id]['colorTheme']
                         
