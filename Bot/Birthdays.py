@@ -26,22 +26,19 @@ qlfc = ' '
 birthdayCancelled = discord.Embed(title='🍰 Birthdays', description='Timed out')
 
 class Birthdays(commands.Cog):
-    def __init__(self, bot):
-        self.bot: commands.Bot = bot
-        self.loading: discord.Emoji = bot.get_cog('Cyberlog').emojis['loading']
-        self.emojis: typing.Dict[str, discord.Emoji] = self.bot.get_cog('Cyberlog').emojis
-        # self.whitePlus = self.emojis['whitePlus']
-        # self.whiteMinus = self.emojis['whiteMinus']
-        # self.whiteCheck = self.emojis['whiteCheck']
-        # self.configureDailyBirthdayAnnouncements.start()
-        # self.configureServerBirthdayAnnouncements.start()
-        # self.configureDeleteBirthdayMessages.start()
+    def __init__(self, bot: commands.Bot):
+        cyber: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
+        self.bot = bot
+        self.loading: discord.Emoji = cyber.emojis['loading']
+        self.emojis: typing.Dict[str, discord.Emoji] = cyber.emojis
+        self.configureDailyBirthdayAnnouncements.start()
+        self.configureServerBirthdayAnnouncements.start()
+        self.configureDeleteBirthdayMessages.start()
     
     def cog_unload(self):
-        pass
-        # self.configureDailyBirthdayAnnouncements.cancel()
-        # self.configureServerBirthdayAnnouncements.cancel()
-        # self.configureDeleteBirthdayMessages.cancel()
+        self.configureDailyBirthdayAnnouncements.cancel()
+        self.configureServerBirthdayAnnouncements.cancel()
+        self.configureDeleteBirthdayMessages.cancel()
 
     @tasks.loop(hours=24)
     async def dailyBirthdayAnnouncements(self):
@@ -138,18 +135,6 @@ class Birthdays(commands.Cog):
         if datetime.datetime.now().strftime('%H:%M') == '23:50':
             self.deleteBirthdayMessages.start()
             self.configureDeleteBirthdayMessages.cancel()
-
-    async def updateBirthdays(self):
-        # print('Updating birthdays')
-        #updated = []
-        for user in self.bot.users:
-            try: bday: datetime.datetime = self.bot.lightningUsers[user.id]['birthday']
-            except KeyError: continue
-            if bday and bday < datetime.datetime.now():
-                new = datetime.datetime(bday.year + 1, bday.month, bday.day)
-                await database.SetBirthday(user, new)
-                #updated.append(user)
-        #print(f'Updated birthdays for {len(updated)} members')
 
     async def verifyBirthdaysDict(self):
         '''Creates/updates the global birthday dictionary'''
@@ -1093,12 +1078,10 @@ class WishlistView(discord.ui.View):
         self.ctx = ctx
         self.originalMessage = originalMessage
         self.message = message
-        #self.cont = cont
         self.new = None
         self.cameFromSaved = cameFromSaved
         self.wishlist = []
         self.previousView = previousView
-        #self.defaultEmbed = embed
         self.wishlistHidden = False
         self.add_item(self.addButton(self.birthdays))
         self.add_item(self.removeButton(self.birthdays))
