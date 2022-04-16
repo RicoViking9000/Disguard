@@ -284,21 +284,22 @@ class Birthdays(commands.Cog):
             elif len(actionList) == 0:
                 embed.description = f'No actions found for **{arg}**'
                 return await message.edit(embed=embed)
-            parsed = []
-            for entry in actionList:
-                if type(entry) in [discord.User, discord.ClientUser]: parsed.append(f'View {entry.name}\'s birthday profile')
-                elif type(entry) is int: parsed.append(f'{"⚠ " if entry < 13 or entry > 105 else ""}Set age: {entry}')
-                else: parsed.append(f'Set birthday: {entry:%A, %b %d}')
-            final = parsed[:25] #Only deal with the top 25 results
-            embed.description = 'Use the dropdown menu to select your desired result'
-            view = BirthdayActionView(final)
-            await message.edit(embed=embed, view=view)
-            def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == view.select.custom_id and i.user == ctx.author and i.channel == ctx.channel
-            try: await self.bot.wait_for('interaction', check=interactionCheck, timeout=300)
-            except asyncio.TimeoutError:
-                embed.description = '⌚ | Timed out'
-                return await message.edit(embed=embed)
-            await makeChoice(actionList[int(view.select.values[0])], message)
+            elif len(actionList) > 1:
+                parsed = []
+                for entry in actionList:
+                    if type(entry) in [discord.User, discord.ClientUser]: parsed.append(f'View {entry.name}\'s birthday profile')
+                    elif type(entry) is int: parsed.append(f'{"⚠ " if entry < 13 or entry > 105 else ""}Set age: {entry}')
+                    else: parsed.append(f'Set birthday: {entry:%A, %b %d}')
+                final = parsed[:25] #Only deal with the top 25 results
+                embed.description = 'Use the dropdown menu to select your desired result'
+                view = BirthdayActionView(final)
+                await message.edit(embed=embed, view=view)
+                def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == view.select.custom_id and i.user == ctx.author and i.channel == ctx.channel
+                try: await self.bot.wait_for('interaction', check=interactionCheck, timeout=300)
+                except asyncio.TimeoutError:
+                    embed.description = '⌚ | Timed out'
+                    return await message.edit(embed=embed)
+                await makeChoice(actionList[int(view.select.values[0])], message)
     
     @commands.command(aliases=['setage'])
     async def age(self, ctx: commands.Context, newAge: int):
@@ -859,7 +860,6 @@ class GuestBirthdayView(discord.ui.View):
                 embed = await newView.createEmbed()
                 await interaction.response.edit_message(embed=embed, view=newView)
                 await newView.writeMessagePrompt()
-
 
 class AgeView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, newAge: int = None):
