@@ -208,6 +208,15 @@ async def invite(ctx):
 #     await ctx.send("https://disguard.netlify.app/privacybasic")
 
 @bot.command()
+async def delete(ctx: commands.Context, messageID: int):
+    '''Deletes a message from DMs with the user'''
+    try:
+        message = await ctx.author.fetch_message(messageID)
+        await message.delete()
+        await ctx.message.add_reaction('✅')
+    except: await ctx.message.add_reaction('❌')
+
+@bot.command()
 async def dashboard(ctx):
     await ctx.send(f"https://disguard.herokuapp.com/manage/{ctx.guild.id if ctx.guild else ''}\n\nUpon clicking the link, please allow a few seconds for the server to wake up")
 

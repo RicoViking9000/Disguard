@@ -62,8 +62,6 @@ class Birthdays(commands.Cog):
                 age = self.bot.lightningUsers[userID].get('age', 0) + 1
                 if age > 1: asyncio.create_task(database.SetAge(user, age))
             # Construct their next birthday to set in the database
-            #TODO: potentially eliminate years for all this
-            newBday = datetime.date(bday.year + 1, bday.month, bday.day)
             messages = self.bot.lightningUsers[userID].get('birthdayMessages', []) if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
             filteredMessages = messages #TODO: extract the messages that will be delivered to the DM channel
             # Construct the happy birthday embed
@@ -71,12 +69,14 @@ class Birthdays(commands.Cog):
             embed.description = f'Enjoy this special day just for you, {user.name}! In addition to the people you know who will hopefully send birthday wishes your way, my developer also wants to wish you only the best on your birthday. Take it easy today, and try to treat yourself in some fashion.\n\n~~RicoViking9000, developer of Disguard'
             if filteredMessages: embed.description += f'\n\n🍰 | Friends in your servers have also composed {len(filteredMessages)} messages for your birthday! They will be displayed below this message.'
             messageEmbeds = [embed] + [discord.Embed(title=f'✉ Birthday Message from {m["authName"]}', description=m['message'], color=yellow[1]) for m in filteredMessages]
+            # Add a disclaimer footer to the last embed sent
+            if filteredMessages:
+                messageEmbeds[-1].set_footer('The developer of Disguard and server moderators have no say in the contents of messages sent by other users. If any of these messages are inappropriate, please contact the moderator of a server you share with the user, or get in contact with Disguard\'s developer. You may also delete one of these messages from our DMs with `.delete <ID of message containing offensive message>`.')
             # Split the embeds to send into groups of 10, since messages can hold a maximum of 10 embeds
             embedsToSend = utility.paginate(messageEmbeds, 10)
             try:
                 for page in embedsToSend: await user.send(embeds=page)
             except (discord.HTTPException, discord.Forbidden): pass #Can't DM this user
-            asyncio.create_task(database.SetBirthday(user, newBday))
 
     @tasks.loop(minutes=5)
     async def serverBirthdayAnnouncements(self):
@@ -1609,7 +1609,8 @@ class ComposeMessageView(discord.ui.View):
         birthday = self.birthdays.bot.lightningUsers[self.target.id].get('birthday')
         destinations = [f'• {self.birthdays.bot.get_channel(int(dropdown.values[0]))}'] + [f'• {self.birthdays.bot.get_guild(int(v))}' for v in (dropdown.values[1:] if len(dropdown.values) > 1 else [])]
         serverDestinations = [self.birthdays.bot.get_guild(int(v)) for v in dropdown.values[1:]]
-        self.embed.description = f'Your message to {self.target.name} says `{self.msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nNote that if this message ends up being inapporpriate, {self.target.name} can flag it for investigation by Rick Astley and/or Disguard\'s developer. Learn more here.\n\nIf this all looks good, press the green button.'
+        self.embed.description = f'Your message to {self.target.name} says `{self.msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nBy composing this message, you affirm the message conforms with Discord\'s [community guidelines](https://discord.com/guidelines).'
+        self.embed.description+= f'If this message is not appropriate for Discord, the recipient(s) may flag it for further action by server moderators or the developer of Disguard.\n\nIf this all looks good, press the green button.'
         self.clear_items()
         self.add_item(self.buttonBack)
         self.add_item(discord.ui.Button(label='Restart', custom_id='restart'))
