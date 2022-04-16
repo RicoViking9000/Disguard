@@ -861,11 +861,8 @@ class AgeView(discord.ui.View):
         self.originalMessage = originalMessage
         self.message = message #Current message; obtain from an interaction
         self.previousView = previousView
-        #self.embed = embed
-        #self.currentAge = currentAge
         self.newAge = newAge
         self.usedPrivateInterface = False
-        #self.ageHidden = ageHidden
         self.finishedSetup = False
         self.autoDetected = False
         if self.newAge: # Assume we're coming from message autocomplete
@@ -902,7 +899,8 @@ class AgeView(discord.ui.View):
         embed = discord.Embed(title='Birthday age setup', description='Use the virtual keyboard to enter your desired age. Note that Disguard is unable to delete this message when you\'re done.')
         kb = NumberInputInterface(self.submitValue)
         await interaction.response.send_message(embed=embed, view=kb, ephemeral=True)
-        result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=lambda i: i.data['custom_id'] in ('submit', 'cancel'))
+        def iCheck(i: discord.Interaction): return i.data['custom_id'] in ('submit', 'cancel') and i.user == self.author and i.message.id == self.message.id
+        result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=iCheck)
         for child in self.children: child.disabled = False
         if result.data['custom_id'] == 'cancel': await interaction.message.edit(view=self) #Enable buttons if cancelling virtual keybaord operation
     
@@ -918,7 +916,7 @@ class AgeView(discord.ui.View):
             def messageCheck(m: discord.Message): return m.author == self.author and m.channel == self.message.channel
             def interactionCheck(i: discord.Interaction): #TODO: needs more verification
                 if i.data['custom_id'] == 'cancel': self.usedPrivateInterface = False
-                return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup')
+                return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup') and i.user == self.author and i.message.id == self.message.id
             if not self.usedPrivateInterface and not self.ageHidden:
                 done, pending = await asyncio.wait([self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300), self.birthdays.bot.wait_for('interaction', check=interactionCheck)], return_when=asyncio.FIRST_COMPLETED)
                 try: result = done.pop().result()
@@ -976,11 +974,8 @@ class BirthdayView(discord.ui.View):
         self.originalMessage = originalMessage
         self.message = message
         self.previousView = previousView
-        #self.embed = embed
-        #self.currentBday = currentBday
         self.newBday = newBday
         self.usedPrivateInterface = False
-        #self.bdayHidden = bdayHidden
         self.finishedSetup = False
         self.autoDetected = False
         if self.newBday: # Assume we're coming from message autocomplete
@@ -1017,7 +1012,8 @@ class BirthdayView(discord.ui.View):
         embed = discord.Embed(title='Birthday date setup', description='Use the virtual keyboard to enter your birthday. Note that Disguard is unable to delete this message when you\'re done.')
         kb = DateInputInterface(self.birthdays.bot, self.message, self.author, self.submitValue)
         await interaction.response.send_message(embed=embed, view=kb, ephemeral=True)
-        result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=lambda i: i.data['custom_id'] in ('submit', 'cancel'))
+        def iCheck(i: discord.Interaction): return i.data['custom_id'] in ('submit', 'cancel') and i.user == self.author and i.message.id == self.message.id
+        result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=iCheck)
         for child in self.children: child.disabled = False
         if result.data['custom_id'] == 'cancel': await interaction.message.edit(view=self) #Enable buttons if cancelling virtual keybaord operation
     
@@ -1033,7 +1029,7 @@ class BirthdayView(discord.ui.View):
             def messageCheck(m: discord.Message): return m.author == self.author and m.channel == self.message.channel
             def interactionCheck(i: discord.Interaction): #TODO: needs more verification
                 if i.data['custom_id'] == 'cancel': self.usedPrivateInterface = False
-                return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup')
+                return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup') and i.user == self.author and i.message.id == self.message.id
             if not self.usedPrivateInterface and not self.bdayHidden and not self.newBday:
                 done, pending = await asyncio.wait([self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300), self.birthdays.bot.wait_for('interaction', check=interactionCheck)], return_when=asyncio.FIRST_COMPLETED)
                 try: result = done.pop().result()
