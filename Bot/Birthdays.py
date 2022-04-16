@@ -198,16 +198,10 @@ class Birthdays(commands.Cog):
                 def cakeAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🍰' and r.message.id == message.id
                 await message.add_reaction('🍰')
                 await self.bot.wait_for('reaction_add', check=cakeAutoVerify)
-            bdays: typing.Dict[int, datetime.datetime] = {}
             if birthday < adjusted: birthday = datetime.datetime(birthday.year + 1, birthday.month, birthday.day)
-            # Remove this member from the target dictionary (?) if the date they typed is already set. CONSIDER REDOING THIS to let the user know this is their birthday
-            for member in target:
-                bdays[member.id] = self.bot.lightningUsers[member.id].get('birthday')
-                if bdays.get(member.id):
-                    if bdays.get(member.id).strftime('%B %d') == birthday.strftime('%B %d'): target.remove(member)
             if target: #If there's still at least one member referenced in the original message:
                 for member in target:
-                    view = BirthdayView(self, message.author, message, None, None, birthday)
+                    view = BirthdayView(self, member, message, None, None, birthday)
                     embed = await view.createEmbed()
                     await message.channel.send(embed=embed, view=view)
     
@@ -216,16 +210,11 @@ class Birthdays(commands.Cog):
         if not cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'age'): return #User disabled the age features
         ages = calculateAges(message)
         ages = [a for a in ages if await verifyAge(message, a)]
-        currentAge = self.bot.lightningUsers.get(message.author.id).get('age')
-        try: ages.remove(currentAge) #Remove the user's current age if it's in there #TODO: change implementation
-        except ValueError: pass
         if not ages: return #No ages detected in message
         if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add candle reaction
             def candleAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🕯' and r.message.id == message.id
             await message.add_reaction('🕯')
             await self.bot.wait_for('reaction_add', check=candleAutoVerify)
-        if len(ages) == 1:
-            if currentAge == ages[0]: return #TODO: Change implementation
         ageToPass = ages[0]
         view = AgeView(self, message.author, message, None, None, ageToPass)
         embed = await view.createEmbed()
@@ -265,8 +254,8 @@ class Birthdays(commands.Cog):
             currentAge = self.bot.lightningUsers[ctx.author.id].get('age')
             try: ages.remove(currentAge) #TODO: change this implementation
             except ValueError: pass
-            for a in ages: #Remove ages outside of [0, 105]
-                if a < 0 or a > 105: ages.remove(a)
+            # for a in ages: #Remove ages outside of [0, 105]
+            #     if a < 0 or a > 105: ages.remove(a)
             actionList += ages
             memberList = await utility.FindMoreMembers(self.bot.users, arg)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
@@ -298,8 +287,8 @@ class Birthdays(commands.Cog):
             parsed = []
             for entry in actionList:
                 if type(entry) in [discord.User, discord.ClientUser]: parsed.append(f'View {entry.name}\'s birthday profile')
-                elif type(entry) is int: parsed.append(f'Set age: {entry}')
-                else: parsed.append(f'Set birthday: {entry:%A, %b %d, %Y}')
+                elif type(entry) is int: parsed.append(f'{"⚠ " if entry < 13 or entry > 105 else ""}Set age: {entry}')
+                else: parsed.append(f'Set birthday: {entry:%A, %b %d}')
             final = parsed[:25] #Only deal with the top 25 results
             embed.description = 'Use the dropdown menu to select your desired result'
             view = BirthdayActionView(final)
@@ -343,7 +332,6 @@ async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message:
     view = UpcomingBirthdaysView(self, message, ctx, currentServer, disguardSuggest, weekBirthday, namesOnly, None, self.bot)
     await view.createEmbed()
     await view.loadHomepage()
-    #view.message = message
 
 def calculateDate(message, adjusted):
     '''Returns a datetime.datetime parsed from a message
@@ -876,8 +864,9 @@ class AgeView(discord.ui.View):
         self.finishedSetup = False
         self.autoDetected = False
         if self.newAge: # Assume we're coming from message autocomplete
-            self.remove_item(self.children[1]) #Private interface button
-            self.children[1].disabled = False #Enable the confirm button
+            if 13 <= self.newAge <= 105:
+                self.remove_item(self.children[1]) #Private interface button
+                self.children[1].disabled = False #Enable the confirm button
             self.autoDetected = True
         asyncio.create_task(self.confirmation())
 
@@ -886,7 +875,7 @@ class AgeView(discord.ui.View):
         self.ageHidden = self.originalMessage.guild and not cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'age')
         self.currentAge = self.birthdays.bot.lightningUsers[self.author.id].get('age')
         ageModuleDescription = 'Entering your age is a fun but optional feature of the birthday module and has no relation to Discord Inc. It will only be used to personalize the message DMd to you on your birthday. If you set your age, others can view it on your birthday profile by default. If you wish to set your age but don\'t want others to view it, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
-        instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if self.ageHidden else 'Type your desired age' if not self.newAge else f'{self.author.name} | Update your age to **{self.newAge}**?'
+        instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if self.ageHidden else 'Type your desired age' if not self.newAge else f'{self.author.name} | Update your age to **{self.newAge}**?' if 13 <= self.newAge <= 105 else f'⚠ | **{self.newAge}** falls outside the age range of 13 to 105, inclusive. Please type a new age.'
         embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not self.currentAge else ""}{instructions}\n\nCurrent value: {"🔒 Hidden" if self.ageHidden else self.currentAge}', color=yellow[self.birthdays.colorTheme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
         embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
         self.embed = embed
