@@ -251,11 +251,6 @@ class Birthdays(commands.Cog):
             arg = ' '.join(args)
             actionList = []
             ages = calculateAges(ctx.message)
-            currentAge = self.bot.lightningUsers[ctx.author.id].get('age')
-            try: ages.remove(currentAge) #TODO: change this implementation
-            except ValueError: pass
-            # for a in ages: #Remove ages outside of [0, 105]
-            #     if a < 0 or a > 105: ages.remove(a)
             actionList += ages
             memberList = await utility.FindMoreMembers(self.bot.users, arg)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
