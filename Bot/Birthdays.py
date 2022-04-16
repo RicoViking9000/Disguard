@@ -850,11 +850,16 @@ class GuestBirthdayView(discord.ui.View):
     class MessageButton(discord.ui.Button):
         def __init__(self, birthdays: Birthdays):
             super().__init__(label='Write birthday message', emoji='✉')
+            self.birthdays = birthdays
         async def callback(self, interaction: discord.Interaction):
             view: GuestBirthdayView = self.view
-            if interaction.user == view.ctx.author: await interaction.response.send_message('You can\'t write a birthday message to yourself!')
+            if interaction.user == view.target: await interaction.response.send_message('You can\'t write a birthday message to yourself!', ephemeral=True)
             else:
-                pass
+                newView = ComposeMessageView(self.birthdays, view.target, view.ctx.author, interaction.message, view)
+                embed = await newView.createEmbed()
+                await interaction.response.edit_message(embed=embed, view=newView)
+                await newView.writeMessagePrompt()
+
 
 class AgeView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, author: discord.User, originalMessage: discord.Message, message: discord.Message, previousView: BirthdayHomepageView, newAge: int = None):
@@ -1499,6 +1504,9 @@ class ComposeMessageView(discord.ui.View):
             super().__init__(emoji='⬅', label='Back', style=discord.ButtonStyle.red)
         async def callback(self, interaction: discord.Interaction):
             view: ComposeMessageView = self.view
+            if type(view.previousView) is GuestBirthdayView and view.stage == 0:
+                embed = await view.previousView.createEmbed()
+                return await interaction.response.edit_message(embed=embed, view=view.previousView)
             prev: UpcomingBirthdaysView = view.previousView
             if view.stage == 0:
                 prev.message = interaction.message
