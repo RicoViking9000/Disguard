@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands, tasks
 import database
+import utility
+import Reddit
 import datetime
 import asyncio
 import os
@@ -61,105 +63,30 @@ newline='\n'
 newlineQuote = '\n> '
 qlf = '  ' #Two special characters to represent quoteLineFormat
 
-permissionKeys = {'create_instant_invite': 'Create Invite', 'kick_members': 'Kick Members', 'ban_members': 'Ban Members', 'administrator': 'Administrator',
-'manage_channels': 'Manage Channels', 'manage_guild': 'Manage Server', 'add_reactions': 'Add Reactions', 'view_audit_log': 'View Audit Log',
-'priority_speaker': 'Priority Speaker', 'stream': 'Go Live', 'read_messages': 'Read Messages', 'send_messages': 'Send Messages', 
-'send_tts_messages': 'Send TTS Messages', 'manage_messages': 'Manage Messages', 'embed_links': 'Embed Links', 'attach_files': 'Attach Files',
-'read_message_history': 'Read Message History', 'mention_everyone': 'Mention @everyone, @here, and All Roles', 'external_emojis': 'Use External Emojis', 'view_guild_insights': 'View Server Insights',
-'connect': 'Connect', 'speak': 'Speak', 'mute_members': 'Mute Members', 'deafen_members': 'Deafen Members', 'move_members': 'Move members',
-'use_voice_activation': 'Use Voice Activity', 'change_nickname': 'Change Nickname', 'manage_nicknames': 'Manage Nicknames', 'manage_roles': 'Manage Roles', 'manage_webhooks': 'Manage Webhooks', 'manage_emojis': 'Manage Emojis'}
-
-permissionDescriptions = {'create_instant_invite': '', 'kick_members': '', 'ban_members': '', 'administrator': 'Members with this permission have every permission and also bypass channel specific permissions',
-'manage_channels': 'Members with this permission can create, edit, and delete channels', 'manage_guild': 'Members with this permission can change the server\'s name, region, icon, and other settings',
-'add_reactions': 'Members with this permission can add **new** reactions to a message (this permission is not needed for members to add to an existing reaction)',
-'view_audit_log': 'Members with this permission have access to view the server audit logs',
-'priority_speaker': 'Members with this permission have the ability to be more easily heard when talking. When activated, the volume of others without this permission will be automatically lowered. This power is activated using the push to talk keybind.',
-'stream': 'Members with this permission can stream applications or screenshare in voice channels', 'read_messages': '', 'send_messages': '', 'send_tts_messages': 'Members with this permission can send text-to-speech messages by starting a message with /tts. These messages can be heard by everyone focused on the channel',
-'manage_messages': 'Members with this permission can delete messages authored by other members and can pin/unpin any message', 'embed_links': '', 'attach_files': '',
-'read_message_history': '', 'mention_everyone': 'Members with this permission can use @everyone or @here to ping all members **in this channel**. They can also @mention all roles, even if that role is not normally mentionable',
-'external_emojis': 'Use External Emojis', 'view_guild_insights': 'View Server Insights', 'connect': '', 'speak': '', 'mute_members': '', 'deafen_members': '', 'move_members': 'Members with this permission can drag members into and out of voice channels',
-'use_voice_activation': 'Members must use Push-To-Talk if this permission is disabled', 'change_nickname': 'Members with this permission can change their own nickname', 'manage_nicknames': 'Manage Nicknames',
-'manage_roles': 'Members with this permission can create new roles and edit/delete roles below their highest role granting this permission', 'manage_webhooks': 'Members with this permission can create, edit, and delete webhooks',
-'manage_emojis': 'Members with this permission can use custom emojis from other servers in this server'}
-
-class MessageEditObject(object):
-    def __init__(self, content, message, time):
-        self.history = [MessageEditEntry(content, message.content, time)]
-        self.message = message
-        self.created = message.created_at
-
-    def add(self, before, after, time):
-        self.history.append(MessageEditEntry(before, after, time))
-    
-    def update(self, message):
-        self.message = message
-
-class MessageEditEntry(object):
-    def __init__(self, before, after, time):
-        self.before = before
-        self.after = after
-        self.time = time
-
-class ServerSummary(object):
-    def __init__(self, queue=[]):
-        self.queue = queue
-        self.summarized = []
-        self.id = 0
-        self.smarts = []
-        self.sorted = 0 #0: Category, 1: Timestamp
-    
-    def add(self, mod, classification, timestamp, data, embed, content=None, reactions=[]): #append summary
-        self.queue.append(vars(Summary(mod, classification, timestamp, data, embed, content, reactions)))
-
-    def categorize(self): #sort by category
-        self.queue = sorted(self.queue, key = lambda x: x.get('category'))
-        self.sorted = 0
-    
-    def chronologicalize(self): #sort by timestamp
-        self.queue = sorted(self.queue, key = lambda x: x.get('timestamp'))
-        self.sorted = 1
-
-class Summary(object):
-    def __init__(self, mod, classification, timestamp, data, embed, content=None, reactions=None):
-        self.mod = mod #Which module is it under
-        self.category = classification #Sticky notes
-        self.timestamp = timestamp
-        self.data = data
-        self.embed = embed.to_dict()
-        self.content = content
-        self.reactions = reactions
-
-class InfoResult(object):
-    def __init__(self, obj, mainKey, relevance):
-        self.obj = obj
-        self.mainKey = mainKey
-        self.relevance = relevance
-
 class Cyberlog(commands.Cog):
-    def __init__(self, bot):
-        self.emojis = {}
+    def __init__(self, bot: commands.Bot):
+        self.emojis: typing.Dict[int, discord.Emoji] = {}
         #Emoji consortium: https://drive.google.com/drive/folders/14ttnIp6MkHdooCgMP167KNbgO-eeD3e8?usp=sharing
         for server in [560457796206985216, 403327720714665994, 495263898002522144]: #Disguard & RicoBot servers are currently being used for emoji hosting - with Pen Wars server being available for overflow reserves
             for e in bot.get_guild(server).emojis: self.emojis[e.name] = e
         self.bot = bot
         self.bot.lightningLogging = {}
         self.bot.lightningUsers = {}
-        self.imageLogChannel = bot.get_channel(534439214289256478)
-        self.globalLogChannel = bot.get_channel(566728691292438538)
-        self.loading = self.emojis['loading']
+        self.bot.attributeHistoryQueue = collections.defaultdict(dict)
+        self.bot.useAttributeQueue = False
+        self.imageLogChannel: discord.TextChannel = bot.get_channel(534439214289256478)
+        self.globalLogChannel: discord.TextChannel = bot.get_channel(566728691292438538)
+        self.loading: discord.Emoji = self.emojis['loading']
         self.channelKeys = {'text': self.emojis['textChannel'], 'voice': self.emojis['voiceChannel'], 'category': self.emojis['folder'], 'private': self.emojis['hiddenVoiceChannel'], 'news': self.emojis['announcementsChannel'], 'store': self.emojis['storeChannel']}
-        #self.permissionStrings = {} 0.2.25: Not used
-        self.repeatedJoins = {}
-        self.pins = {}
-        self.categories = {}
-        self.members = {}
+        self.repeatedJoins: typing.Dict[str, typing.List[datetime.datetime]] = {}
+        self.pins: typing.Dict[int, typing.List[int]] = {}
+        self.categories: typing.Dict[int, typing.List[discord.abc.GuildChannel]] = {}
+        self.members: typing.Dict[int, typing.List[discord.Member]] = {}
         self.invites = {}
-        self.roles = {}
+        self.roles: typing.Dict[int, discord.Member] = {}
         self.reactions = {}
-        self.redditThreads = {}
-        self.memberPermissions = {}
+        self.memberPermissions = collections.defaultdict(lambda: collections.defaultdict(dict))
         self.memberVoiceLogs = {}
-        #self.rawMessages = {} 0.2.25: Not used
         self.pauseDelete = []
         self.resumeToken = None
         self.channelCacheHelper = {}
@@ -177,27 +104,30 @@ class Cyberlog(commands.Cog):
         #The global variables exist for the rare instances the cache data needs to be accessed outside of the Cyberlog class instance, in a read-only mode.
         global lightningUsers
         global lightningLogging
+        reddit: Reddit.Reddit = self.bot.get_cog('Reddit')
         try:
-            async with database.getDatabase().watch(full_document='updateLookup', resume_after = self.resumeToken) as change_stream:
+            async with database.getDatabase().watch(full_document='updateLookup', resume_after=self.resumeToken) as change_stream:
                 async for change in change_stream:
                     self.resumeToken = change_stream.resume_token
                     if change['operationType'] == 'delete': 
                         print(f"{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}")
                         continue
                     fullDocument = change['fullDocument']
-                    objectID = list(fullDocument.values())[1]
                     collection = change['ns']['coll']
-                    if collection == 'servers': 
+                    if collection == 'disguard': continue
+                    elif collection == 'servers': 
                         name = 'name'
+                        objectID = fullDocument['server_id']
                         self.bot.lightningLogging[objectID] = fullDocument
                         lightningLogging[objectID] = fullDocument
                     elif collection == 'users': 
                         name = 'username'
+                        objectID = fullDocument['user_id']
                         self.bot.lightningUsers[objectID] = fullDocument
                         lightningUsers[objectID] = fullDocument
-                    if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys(): asyncio.create_task(self.redditFeedHandler(self.bot.get_guild(objectID)))
-                    if change['operationType'] == 'update' and any([word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]): continue
-                    print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=5):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
+                    if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys(): asyncio.create_task(reddit.redditFeedHandler(self.bot.get_guild(objectID)))
+                    if change['operationType'] == 'update' and any([word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]): continue #Add attribute history probably
+                    print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
     
     @tasks.loop(hours = 6)
