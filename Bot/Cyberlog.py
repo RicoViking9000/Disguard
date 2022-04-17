@@ -282,7 +282,7 @@ class Cyberlog(commands.Cog):
             for server in self.bot.guilds:
                 for channel in server.text_channels:
                     try:
-                        with open(f'{indexes}/{server.id}/{channel.id}.json', 'r+') as f:
+                        async with aiofiles.open(f'{indexes}/{server.id}/{channel.id}.json', 'r+') as f:
                             indexData = json.load(f)
                         path = f'Attachments/{server.id}/{channel.id}'
                         for folder in os.listdir(path):
@@ -305,7 +305,7 @@ class Cyberlog(commands.Cog):
     
     @commands.Cog.listener()
     async def on_command(self, ctx):
-        pass
+        pass #But eventually add command statistics
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -319,7 +319,6 @@ class Cyberlog(commands.Cog):
     async def saveMessage(self, message: discord.Message):
         path = f'{indexes}/{message.guild.id}'
         if not os.path.exists(path): os.makedirs(path)
-        #except FileExistsError: pass V1.0: Changed to an if statement to reduce computation and disk time
         try:
             async with aiofiles.open(f'{path}/{message.channel.id}.json', 'r+') as f:
                 read = await f.read()
@@ -335,7 +334,6 @@ class Cyberlog(commands.Cog):
         if self.bot.lightningLogging[message.guild.id]['cyberlog'].get('image') and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path2 = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
             if not os.path.exists(path2): os.makedirs(path2)
-            # except FileExistsError: pass
             for a in message.attachments:
                 if a.size / 1000000 < 8:
                     try: await a.save(f'{path2}/{a.filename}')
@@ -343,32 +341,29 @@ class Cyberlog(commands.Cog):
     
     async def pinAddLogging(self, message: discord.Message):
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(message.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(message.guild))
         destination = logChannel(message.guild, 'message')
-        if destination is None: return
+        if not destination: return
         #These variables are explained in detail in the MessageEditHandler method
         settings = getCyberAttributes(message.guild, 'message')
         if settings['botLogging'] == 0 and message.author.bot: return #The server is set to not log actions performed by bots
         elif settings['botLogging'] == 1 and message.author.bot: settings['plainText'] = True #The server is set to only use plainText logging for actions performed by bots
         pinned = (await message.channel.pins())[0]
-        color = blue[colorTheme(message.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+        color = blue[self.colorTheme(message.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
         embed=discord.Embed(
             title=f'''{(f'{self.emojis["thumbtack"]}' if settings['library'] > 0 else "📌") if settings['context'][0] > 0 else ""}{"Message was pinned" if settings['context'][0] < 2 else ''}''',
             description=textwrap.dedent(f'''
                 {"👮‍♂️" if settings['context'][1] > 0 else ""}{"Pinned by" if settings['context'][1] < 2 else ""}: {message.author.mention} ({message.author.name})
                 {(self.emojis["member"] if settings['library'] > 0 else "👤") if settings['context'][1] > 0 else ""}{"Authored by" if settings['context'][1] < 2 else ""}: {pinned.author.mention} ({pinned.author.name})
-                {self.channelEmoji(pinned.channel) if settings['context'][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {pinned.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings['context'][1] > 0 else "[Jump to message]"}({pinned.jump_url} 'Jump to message')
-                {f"{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}'''),
+                {utility.channelEmoji(self, pinned.channel) if settings['context'][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {pinned.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({message.jump_url} 'Jump to message')
+                {f"{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}'''),
             color=color)
-        if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+        if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
         if any(a > 1 for a in (settings['thumbnail'], settings['author'])): #Moderator image saving; target doesn't apply here since the target is the pinned message
-            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not message.author.is_avatar_animated() else 'gif'))
-            try: await message.author.avatar_url_as(size=1024).save(savePath)
-            except discord.HTTPException: pass
-            url = await self.uploadFiles(savePath)
+            url = await self.imageToURL(message.author.display_avatar)
             if settings['thumbnail'] > 1: embed.set_thumbnail(url=url)
             if settings['author'] > 1: embed.set_author(name=message.author.name, icon_url=url)
-        embed.add_field(name='Message', value=contentParser(pinned, destination))
+        embed.add_field(name='Message', value=utility.contentParser(pinned))
         embed.set_footer(text=f'Pinned message ID: {pinned.id}')
         for a in pinned.attachments:
             if any(w in a.filename.lower() for w in ['.png', '.jpg', '.gif', '.jpeg', '.webp']):
@@ -383,14 +378,13 @@ class Cyberlog(commands.Cog):
                 embed.set_image(url=url)
                 break
         plainText = f'{message.author} pinned {"this" if settings["plainText"] else "a"} message to #{pinned.channel.name}'
-        #m = await destination.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, file=f, tts=settings['tts'], reference=pinned if settings['plainText'] else None, allowed_mentions=discord.AllowedMentions(users=False))
-        m = await destination.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+        m: discord.Message = await destination.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
         self.archiveLogEmbed(message.guild, m.id, embed, 'Message Pin')
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await m.edit(content=None)
         try: self.pins[pinned.channel.id].append(pinned.id)
         except KeyError: self.pins[pinned.channel.id] = [pinned.id]
-        def reactionCheck(r, u): return r.message.id == m.id and not u.bot
-        while not self.bot.is_closed():
+        def reactionCheck(r:discord.Reaction, u:discord.User): return r.message.id == m.id and not u.bot
+        while not self.bot.is_closed(): #This stuff has never been reliable...
             result = await self.bot.wait_for('reaction_add', check=reactionCheck)
             if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(m.embeds) > 0:
                 await m.edit(content=plainText, embed=None)
@@ -401,11 +395,68 @@ class Cyberlog(commands.Cog):
                 await m.clear_reactions()
                 if settings['plainText']: await m.add_reaction(self.emojis['collapse'])
 
-    async def sendGuideMessage(self, message: discord.Message):
-        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(bot.latency * 1000)}ms\n\n**Prefix:** `{self.bot.lightningLogging.get(message.guild.id).get("prefix")}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
-
+    async def pinRemoveLogging(self, message: discord.Message, received: datetime.datetime, adjusted: datetime.datetime, logChannel: discord.TextChannel):
+        #These variables represent customization options that are used in multiple places
+        #Notably: Embed data field descriptions will now need to be split up - the emoji part & the text part - since there are options to have either one or the other or both.
+        #I will be multilining lots of code to account for the myriad of new customization settings - for organization purposes which I'll definitely need later
+        #V1.0: Consider splitting the unpin stuff into its own method; the message edit handler here is a bit long
+        settings = getCyberAttributes(message.guild, 'message')
+        color = blue[self.colorTheme(message.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+        content = f'Someone unpinned a message from #{message.channel.name}'
+        embed=discord.Embed(
+            title=f'''{(f'{self.emojis["thumbtack"]}❌' if settings['library'] > 0 else "📌❌") if settings['context'][0] > 0 else ""}{"Message was unpinned" if settings['context'][0] < 2 else ""}''',
+            description='',
+            color=color)
+        if readPerms(message.guild, 'message'):
+            try:
+                log = await message.guild.audit_logs().get(action=discord.AuditLogAction.message_pin)
+                if settings['botLogging'] == 0 and log.user.bot: return
+                elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
+                embed.description += f'{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Unpinned by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
+                if settings['thumbnail'] > 1 or settings['author'] > 1:
+                    url = await self.imageToURL(log.user.display_avatar)
+                    if settings['thumbnail'] > 1: embed.set_thumbnail(url=url)
+                    if settings['author'] > 1: embed.set_author(name=log.user.name, icon_url=url)
+                content = f'{log.user} unpinned a message from #{message.channel.name}'
+                if message.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'unpinned a message')
+            except: pass #the message on audit log fails will be phased out by permissions showing on the dashboard. this also allows us to swallow conditions when we may fail to retrieve the audit log
+        embed.description += textwrap.dedent(f'''
+            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {message.author.mention} ({message.author.name})
+            {utility.channelEmoji(self, message.channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {message.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({message.jump_url} 'Jump to message')
+            {f"{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}'''),
+        if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
+        embed.add_field(name=f'Message', value=utility.contentParser(message))
+        embed.set_footer(text=f'Unpinned message ID: {message.id}')
+        for a in message.attachments:
+            if any(w in a.filename.lower() for w in ['.png', '.jpg', '.gif', '.jpeg', '.webp']):
+                savePath = f'Attachments/Temp/{a.filename}'
+                await a.save(savePath)
+                url = await self.uploadFiles(savePath)
+                embed.set_image(url=url)
+                break
+        #Sometime, learn regex to possibly improve the efficiency of this stuff, especially when the antispam module is redone
+        for extension in ('.png', '.jpg', '.gif', '.jpeg', '.webp'):
+            if extension in message.content.lower() and '://' in message.content:
+                url = message.content[message.content.find('http'):message.content.find(extension)+len(extension)+1]
+                embed.set_image(url=url)
+                break
+        msg: discord.Message = await logChannel.send(content=content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+        if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
+        self.pins[message.channel.id].remove(message.id)
+        def reactionCheck(r:discord.Reaction, u:discord.User): return r.message.id == msg.id and not u.bot
+        while not self.bot.is_closed():
+            result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+            if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
+                await msg.edit(content=content, embed=None)
+                await msg.clear_reactions()
+                if not settings['plainText']: await msg.add_reaction(self.emojis['expand'])
+            elif (result[0].emoji in (self.emojis['expand'], '⏬', '⬇', '🔽') or settings['plainText']) and len(msg.embeds) < 1:
+                await msg.edit(content=None, embed=embed)
+                await msg.clear_reactions()
+                if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
+    
     @commands.Cog.listener()
-    async def on_raw_reaction_add(self, p):
+    async def on_raw_reaction_add(self, p: discord.RawReactionActionEvent):
         '''Discord.py event listener: When a reaction is added to a message'''
         #Layer style: Message ID > User ID > Reaction (emoji)
         u = self.bot.get_user(p.user_id)
@@ -416,7 +467,7 @@ class Cyberlog(commands.Cog):
         m = p.message_id
         if self.reactions: layerObject = self.reactions
         else: layerObject = collections.defaultdict(lambda: collections.defaultdict(dict))
-        layerObject[m][u.id][p.emoji.name] = {'timestamp': datetime.datetime.utcnow(), 'guild': g.id}
+        layerObject[m][u.id][p.emoji.name] = {'timestamp': discord.utils.utcnow(), 'guild': g.id}
         self.reactions = layerObject 
         sleepTime = self.bot.lightningLogging[g.id]['cyberlog']['ghostReactionTime']
         await asyncio.sleep(sleepTime)
@@ -424,7 +475,7 @@ class Cyberlog(commands.Cog):
         except: pass
 
     @commands.Cog.listener()
-    async def on_raw_reaction_remove(self, p):
+    async def on_raw_reaction_remove(self, p: discord.RawReactionActionEvent):
         '''Discord.py event listener: When a reaction is removed from a message'''
         u = self.bot.get_user(p.user_id)
         if not serverIsGimped(self.bot.get_guild(p.guild_id)): await updateLastActive(u, datetime.datetime.now(), 'removed a reaction')
@@ -432,7 +483,7 @@ class Cyberlog(commands.Cog):
         g = self.bot.get_guild(p.guild_id)
         if not g: return
         m = p.message_id
-        c = bot.get_channel(p.channel_id)
+        c: discord.TextChannel = self.bot.get_channel(p.channel_id)
         try:
             layerObject = self.reactions[m][u.id][p.emoji.name]
             if not layerObject: return
@@ -441,30 +492,26 @@ class Cyberlog(commands.Cog):
         if seconds < self.bot.lightningLogging[g.id]['cyberlog']['ghostReactionTime']:
             settings = getCyberAttributes(g, 'misc')
             received = datetime.datetime.now()
-            adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(g))
-            color = blue[colorTheme(g)] if settings['color'][1] == 'auto' else settings['color'][1]
+            adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(g))
+            color = blue[self.colorTheme(g)] if settings['color'][1] == 'auto' else settings['color'][1]
             result = await c.fetch_message(m)
-            if result.author.id == self.bot.user.id and len(result.embeds) > 0: return
+            if result.author.id == self.bot.user.id: return
             rawEmoji = emojis.decode(p.emoji.name).replace(':', '') #Use the python Emojis module to get the name of an emoji - remove the colons so it doesn't get embedded into Discord. Only applies to unicode emojis.
             content = f'{u} removed the {rawEmoji} reaction from their message in #{c.name} {seconds} seconds after adding it' #There is a zero-width space in this line, after the first colon
             emojiLine = f'{self.emojis["emoji"] if settings["context"][1] > 0 else ""}{"Reaction" if settings["context"][1] < 2 else ""}: {p.emoji} ({rawEmoji})'
             userLine = f'{(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Member" if settings["context"][1] < 2 else ""}: {u.mention} ({u.name})'
             channelLine = f'''{self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {c.mention} ({c.name}) {f'{self.emojis["reply"]}[Jump]({result.jump_url})' if result else ""}'''
             ghostTimeLine = f'{self.emojis["slowmode"] if settings["context"][1] > 0 else ""}{"Timespan" if settings["context"][1] < 2 else ""}: Removed {seconds}s after being added'
-            timeLine = f'{(clockEmoji(adjusted) if settings["library"] > 0 else "🕰") if settings["context"][1] > 0 else ""}{"Timestamp" if settings["context"][1] < 2 else ""}: {DisguardLongTimestamp(received)}'
+            timeLine = f'{(utility.clockEmoji(adjusted) if settings["library"] > 0 else "🕰") if settings["context"][1] > 0 else ""}{"Timestamp" if settings["context"][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)}'
             embed = discord.Embed(
                 title=f'''{f'{self.emojis["emoji"]}👻' if settings["context"][0] > 0 else ""}{"Ghost message reaction" if settings["context"][0] < 2 else ""}''',
                 description=f'{content}\n\n{emojiLine}\n{ghostTimeLine}\n{userLine}\n{channelLine}\n{timeLine if settings["embedTimestamp"] > 1 else ""}',
                 color=color
             )
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             embed.set_footer(text=f'Message ID: {m}')
-            f = None
             if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not u.is_avatar_animated() else 'gif'))
-                try: await u.avatar_url_as(size=1024).save(savePath)
-                except discord.HTTPException: pass
-                url = await self.uploadFiles(savePath)
+                url = await self.imageToURL(u.display_avatar)
                 if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4): embed.set_author(name=u.name, icon_url=url)
             try: 
@@ -478,8 +525,8 @@ class Cyberlog(commands.Cog):
     def parseEdits(self, beforeWordList, afterWordList, findChanges=False):
         '''Returns truncated version of differences given before/after list of words
         -if findChanges is True, then one of the lists merely contains an additional word compared to the other one'''
-        beforeC = "" #String that will be displayed in the embed - old content
-        afterC = "" #String that will be displayed in the embed - new content
+        beforeC = '' #String that will be displayed in the embed - old content
+        afterC = '' #String that will be displayed in the embed - new content
         beforeBooleans = [b in afterWordList for b in beforeWordList] #Used for determining placement when one list has more elements than the other; Falses will decrease the iterator
         afterBooleans = [a in beforeWordList for a in afterWordList]
         i = 0 #Iterator variable
@@ -489,10 +536,10 @@ class Cyberlog(commands.Cog):
             if beforeWordList[i] not in afterWordList: #If the old word is not in the list of words in the new message...
                 offset = len([b for b in beforeBooleans[:i] if not b]) #How many words aren't in the after list, up to the current iterator index i; used to determine offset
                 if i > 2: 
-                    beforeC += '...{} **{}**'.format(' '.join(beforeWordList[i - 2 : i]), beforeWordList[i]) #If it's the 3rd word or later, append three dots first
-                    if findChanges: afterC += '...{}'.format(' '.join(afterWordList[i - 2 - offset : i - offset])) #If findChanges, add this context to the after String
+                    beforeC += f'…{" ".join(beforeWordList[i-2 : i])} **{beforeWordList[i]}**' #If it's the 3rd word or later, append three dots first
+                    if findChanges: afterC += f'…{" ".join(afterWordList[i-2-offset : i-offset])}' #If findChanges, add this context to the after String
                 else: 
-                    beforeC += '{} **{}**'.format(' '.join(beforeWordList[:i]), beforeWordList[i]) #Otherwise, add everything in the old message up to what's at the current iterator i
+                    beforeC += f'{" ".join(beforeWordList[:i])} **{beforeWordList[i]}**' #Otherwise, add everything in the old message up to what's at the current iterator i
                     if findChanges: afterC += ' '.join(afterWordList[:i - offset]) #If applicable, add all words up to i to the after content string
                 matchScanner = i + 1 #Set this value to one number above i; it will go through the rest of the old message to scan for more words that aren't in the new message
                 altScanner = i - 1 #This is for the findChanges variable; for tracking through the new words list
@@ -509,17 +556,17 @@ class Cyberlog(commands.Cog):
                 for match in range(len(matches)): #Iterate through the generated list of booleans
                     if matches[match]: #If True (current word *is* in new message)...
                         confirmCount += 1
-                        beforeC += ' {}'.format(beforeWordList[match + i + 1]) #Add this word (without bolding) to the result string
+                        beforeC += f' {beforeWordList[match + i + 1]}' #Add this word (without bolding) to the result string
                     else: 
-                        beforeC += ' **{}**'.format(beforeWordList[match + i + 1]) #Otherwise, add this word (with bolding) to the result string
+                        beforeC += f' **{beforeWordList[match + i + 1]}**' #Otherwise, add this word (with bolding) to the result string
                         altScanner += 1 #If a word has been removed then append this by 1
                     if findChanges:
-                        try: afterC += ' {}'.format(afterWordList[match + altScanner + 1]) #Attempt to add the equivalent word (without bolding) to the result string
+                        try: afterC += f' {afterWordList[match + altScanner + 1]}' #Attempt to add the equivalent word (without bolding) to the result string
                         except IndexError:
-                            if match + altScanner > i: afterC += ' {}'.format(' '.join(afterWordList[match + altScanner - 1:])) #If out of bounds occurs due to the end of the message, simply add the rest of the message
+                            if match + altScanner > i: afterC += f' {" ".join(afterWordList[match + altScanner - 1:])}' #If out of bounds occurs due to the end of the message, simply add the rest of the message
                     if confirmCount == len([m for m in matches if m]) and not findChanges: break #If all same word matches have been found, and findChanges is False, break out of this and move on to the next iteration of the **while** loop
-                if matchScanner < len(beforeWordList): beforeC+= '... ' #If we aren't at the end of the word list, then add triple periods because the tail of the message will be truncated
-                if altScanner < len(afterWordList) - 1 and findChanges: afterC += '... ' #Append triple periods if the remaining content is truncated
+                if matchScanner < len(beforeWordList): beforeC+= '… ' #If we aren't at the end of the word list, then add triple periods because the tail of the message will be truncated
+                if altScanner < len(afterWordList) - 1 and findChanges: afterC += '… ' #Append triple periods if the remaining content is truncated
                 i = matchScanner + 1 #Jump i ahead to the number after matchScanner because everything up to matchScanner has been parsed for differences already
             if i == iteratorAtStart: i += 1 #If no difference was found (i would equal iteratorAtStart), then simply iterate i by 1
         i=0 #Reset the iterator
@@ -529,10 +576,10 @@ class Cyberlog(commands.Cog):
             if afterWordList[i] not in beforeWordList:
                 offset = len([a for a in afterBooleans[:i] if not a])
                 if i > 2: 
-                    afterC += '...{} **{}**'.format(' '.join(afterWordList[i - 2 : i]), afterWordList[i])
-                    if findChanges: beforeC += '...{}'.format(' '.join(beforeWordList[i - 2 - offset: i - offset]))
+                    afterC += f'…{" ".join(afterWordList[i - 2 : i])} **{afterWordList[i]}**'
+                    if findChanges: beforeC += f'…{" ".join(beforeWordList[i - 2 - offset : i - offset])}'
                 else: 
-                    afterC += '{} **{}**'.format(' '.join(afterWordList[:i]), afterWordList[i])
+                    afterC += f'{" ".join(afterWordList[:i])} **{afterWordList[i]}**'
                     if findChanges: beforeC += ' '.join(beforeWordList[:i - offset])
                 matchScanner = i + 1
                 altScanner = i - 1
@@ -548,14 +595,14 @@ class Cyberlog(commands.Cog):
                 for match in range(len(matches)):
                     if matches[match]:
                         confirmCount += 1 
-                        afterC += ' {}'.format(afterWordList[match + i + 1]) 
+                        afterC += f' {afterWordList[match + i + 1]}'
                     else: 
-                        afterC += ' **{}**'.format(afterWordList[match + i + 1])
+                        afterC += f' **{afterWordList[match + i + 1]}**'
                         altScanner += 1
                     if findChanges: 
-                        try: beforeC += ' {}'.format(beforeWordList[match + altScanner + 1])
+                        try: beforeC += f' {beforeWordList[match + altScanner + 1]}'
                         except IndexError: 
-                            if match + altScanner > i: beforeC += ' {}'.format(' '.join(beforeWordList[match + altScanner - 1:]))
+                            if match + altScanner > i: beforeC += f' {" ".join(beforeWordList[match + altScanner - 1:])}'
                     if confirmCount == len([m for m in matches if m]) and not findChanges: break
                 if matchScanner < len(afterWordList): afterC+='... '
                 if altScanner < len(beforeWordList) - 1 and findChanges: beforeC += '... '
@@ -563,7 +610,7 @@ class Cyberlog(commands.Cog):
             if i == iteratorAtStart: i += 1
         return beforeC, afterC
 
-    async def MessageEditHandler(self, before, after, timestamp, footerAppendum = ''):
+    async def MessageEditHandler(self, before, after: discord.Message, timestamp):
         #Variables to hold essential data
         guild = after.guild
         author = after.author
@@ -573,110 +620,55 @@ class Cyberlog(commands.Cog):
         c = logChannel(guild, 'message')
         settings = getCyberAttributes(guild, 'message')
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(guild))
-        utcTimestamp = timestamp - datetime.timedelta(hours=timeZone(guild))
-        color = blue[colorTheme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
-        if c is None: return #Invalid log channel or bot logging is disabled
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(guild))
+        utcTimestamp = timestamp - datetime.timedelta(hours=self.timeZone(guild))
+        color = blue[self.colorTheme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+        if not c: return #Invalid log channel or bot logging is disabled
         if settings['botLogging'] == 0 and after.author.bot: botIgnore = True
         elif settings['botLogging'] == 1 and after.author.bot: settings['plainText'] = True
         if type(before) is discord.Message:
             b4 = before
             before = before.content
-        def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
-        if after.id in self.pins.get(after.channel.id) and not after.pinned and not botIgnore: #Message was unpinned
-            #These variables represent customization options that are used in multiple places
-            #Notably: Embed data field descriptions will now need to be split up - the emoji part & the text part - since there are options to have either one or the other or both.
-            try: eventMessage = [m for m in await after.channel.history(limit=5).flatten() if m.type is discord.MessageType.pins_add][0] #Attempt to find who pinned a new message, if applicable - they were likely to unpin the old one
-            except IndexError: eventMessage = None
-            #I will be multilining lots of code to account for the myriad of new customization settings - for organization purposes which I'll definitely need later
-            embed=discord.Embed(
-                title=f'''{(f'{self.emojis["thumbtack"]}❌' if settings['library'] > 0 else "📌❌") if settings['context'][0] > 0 else ""}{"Message was unpinned" if settings['context'][0] < 2 else ""}''',
-                description=textwrap.dedent(f'''
-                    {f'{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Unpinned by" if settings["context"][1] < 2 else ""}: {eventMessage.author.mention} ({eventMessage.author.name})' if eventMessage else ""}
-                    {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {after.author.mention} ({after.author.name})
-                    {self.channelEmoji(after.channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {after.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
-                    {f"{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}'''),
-                color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
-            if any(a > 1 for a in (settings['thumbnail'], settings['author'])): #Moderator image saving; target doesn't apply here since the target is the pinned message
-                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
-                try: await after.author.avatar_url_as(size=1024).save(savePath)
-                except discord.HTTPException: pass
-                url = await self.uploadFiles(savePath)
-                if settings['thumbnail'] > 1: embed.set_thumbnail(url=url)
-                if settings['author'] > 1: embed.set_author(name=after.author.name, icon_url=url)
-            embed.add_field(name=f'Message', value=contentParser(after, c))
-            embed.set_footer(text=f'Unpinned message ID: {after.id}')
-            for a in after.attachments:
-                if any(w in a.filename.lower() for w in ['.png', '.jpg', '.gif', '.jpeg', '.webp']):
-                    savePath = f'Attachments/Temp/{a.filename}'
-                    await a.save(savePath)
-                    url = await self.uploadFiles(savePath)
-                    embed.set_image(url=url)
-                    break
-            for extension in ('.png', '.jpg', '.gif', '.jpeg', '.webp'):
-                if extension in after.content.lower() and '://' in after.content:
-                    url = after.content[after.content.find('http'):after.content.find(extension)+len(extension)+1]
-                    embed.set_image(url=url)
-                    break
-            plainText = f'{eventMessage.author if eventMessage else "Someone"} unpinned a message from #{after.channel.name}'
-            #m = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, file=f, tts=settings['tts'], reference=after if settings['plainText'] else None, allowed_mentions=discord.AllowedMentions.none())
-            msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
-            if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
-            self.pins[channel.id].remove(after.id)
-            while not self.bot.is_closed():
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
-                if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
-                    await msg.edit(content=plainText, embed=None)
-                    await msg.clear_reactions()
-                    if not settings['plainText']: await msg.add_reaction(self.emojis['expand'])
-                elif (result[0].emoji in (self.emojis['expand'], '⏬', '⬇', '🔽') or settings['plainText']) and len(msg.embeds) < 1:
-                    await msg.edit(content=None, embed=embed)
-                    await msg.clear_reactions()
-                    if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
+        if after.id in self.pins.get(after.channel.id, []) and not after.pinned and not botIgnore: #Message was unpinned
+            await self.pinRemoveLogging(after, received, adjusted, logChannel)
         elif b4 and not b4.flags.suppress_embeds and after.flags.suppress_embeds and self.bot.lightningLogging[after.guild.id]['undoSuppression']:
             await after.add_reaction(self.emojis['expand'])
-            def check(r, u): return r.emoji == self.emojis['expand'] and ManageServer(u) and r.message.id == after.id and not u.bot
+            def check(r: discord.Reaction, u: discord.Member): return r.emoji == self.emojis['expand'] and utility.ManageServer(u) and r.message.id == after.id and not u.bot
             await self.bot.wait_for('reaction_add', check=check)
             await after.edit(suppress=False)
             after = await after.channel.fetch_message(after.id)
             for r in after.reactions:
-                if r.emoji == self.emojis['expand']: 
-                    return await r.clear()
+                if r.emoji == self.emojis['expand']: return await r.clear()
         if botIgnore or after.author.id == self.bot.user.id: return
         if after.content.strip() == before.strip(): return #If the text before/after is the same, and after unpinned message log if applicable
-        if any(w in before.strip() for w in ['attachments>', '<1 attachment:', 'embed>']): return
-        beforeWordList = before.split(" ") #A list of words in the old message
-        afterWordList = after.content.split(" ") #A list of words in the new message
+        if any(w in before.strip() for w in ['attachments>', '<1 attachment:', 'embed>']): return #Disguard's format for message content inside the indexes if the message has no regular content. Improve with regex in the future
+        beforeWordList = before.split(' ') #A list of words in the old message
+        afterWordList = after.content.split(' ') #A list of words in the new message
         beforeParsed = [f'**{word}**' if word not in afterWordList else word for word in beforeWordList]
         afterParsed = [f'**{word}**' if word not in beforeWordList else word for word in afterWordList]
         beforeC, afterC = self.parseEdits(beforeWordList, afterWordList)
         if any([len(m) == 0 for m in [beforeC, afterC]]): beforeC, afterC = self.parseEdits(beforeWordList, afterWordList, True)
-        if len(beforeC) >= 1024: beforeC = 'Message content too long to display in embed field'
-        if len(afterC) >= 1024: afterC = 'Message content too long to display in embed field'
+        if len(beforeC) >= 1024: beforeC = 'Message content too long to display'
+        if len(afterC) >= 1024: afterC = 'Message content too long to display'
         embed = discord.Embed(
             title=f'''{(self.emojis['messageEdit'] if settings['library'] > 1 else f"📜✏") if settings['context'][0] > 0 else ''}{"Message was edited" if settings['context'][0] < 2 else ""}''',
-            description=f'''{self.emojis['loading']} Finalyzing log''',
+            description=f'''{self.emojis['loading']} Finalizing log''',
             color=color)
-        if settings['embedTimestamp']: embed.timestamp = utcTimestamp
-        embed.set_footer(text=f'Message ID: {after.id} {footerAppendum}')
+        if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
+        embed.set_footer(text=f'Message ID: {after.id}')
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
-            try: await author.avatar_url_as(size=1024).save(savePath)
-            except discord.HTTPException: pass
-            url = await self.uploadFiles(savePath)
+            url = await self.imageToURL(after.author.display_avatar)
             if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4): embed.set_author(name=after.author.name, icon_url=url)
         path = f'{indexes}/{after.guild.id}/{after.channel.id}.json'
-        with open(path) as fl: #Open up index data to append the message edit history entry
+        async with aiofiles.open(path) as fl: #Open up index data to append the message edit history entry
             indexData = json.load(fl) #importing the index data from the filesystem
             number = len(indexData[str(after.id)].keys()) // 3 #This represents the suffix to the key names, because dicts need to have unique key names, and message edit history requires multiple entries
-            indexData[str(after.id)].update({f'author{number}': after.author.id, f'timestamp{number}': datetime.datetime.utcnow().isoformat(), f'content{number}': after.content if len(after.content) > 0 else f"<{len(after.attachments)} attachment{'s' if len(after.attachments) > 1 else f':{after.attachments[0].filename}'}>" if len(after.attachments) > 0 else f"<{len(after.embeds)} embed>" if len(after.embeds) > 0 else "<No content>"})
+            indexData[str(after.id)].update({f'author{number}': after.author.id, f'timestamp{number}': discord.utils.utcnow().isoformat(), f'content{number}': utility.contentParser(after)})
             indexData = json.dumps(indexData, indent=4)
         plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{beforeParsed if len(beforeParsed) < 1024 else beforeC}`\nAfter:`{afterParsed if len(afterParsed) < 1024 else afterC}\n`{after.jump_url}'
         try: 
-            #msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, file=f, tts=settings['tts'], reference=after if settings['plainText'] else None, allowed_mentions=discord.AllowedMentions(users=False))
-            msg = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            msg: discord.Message = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             if not settings['plainText']: 
                 try: await msg.add_reaction(self.emojis['threeDots'])
                 except: pass
@@ -685,18 +677,15 @@ class Cyberlog(commands.Cog):
             fl.write(indexData) #push the changes to the json file
         embed.description=f'''
             {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Author" if settings["context"][1] < 2 else ""}: {author.mention} ({author.name})
-            {self.channelEmoji(channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
-            {f"{(clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}'''
+            {utility.channelEmoji(self, channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
+            {f"{(utility.clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}'''
         rng = random.randint(1, 50) == 1 #2% chance to display the help guide
         embed.add_field(name=f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}Before{" • Hover for full message" if rng and settings["context"][1] < 2 else ""}', value=f'''[{beforeC if len(beforeC) > 0 else f'<Quick parser found no new content; {self.emojis["threeDots"]} to see full changes>'}]({msg.jump_url} '{before.strip()}')''',inline=False)
         embed.add_field(name=f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}After{" • Hover for full message" if rng and settings["context"][1] < 2 else ""}', value=f'''[{afterC if len(afterC) > 0 else f'<Quick parser found no new content; {self.emojis["threeDots"]} to see full changes>'}]({msg.jump_url} '{after.content.strip()}')''',inline=False)
-        if len(embed.fields[0].value) > 1024: embed.set_field_at(0, name=embed.fields[0].name, value=beforeC if len(beforeC) in range(0, 1024) else '<Content is too long to be displayed>', inline=False)
-        if len(embed.fields[1].value) > 1024: embed.set_field_at(1, name=embed.fields[1].name, value=afterC if len(afterC) in range(0, 1024) else '<Content is too long to be displayed>', inline=False)
+        if len(embed.fields[0].value) > 1024: embed.set_field_at(0, name=embed.fields[0].name, value=beforeC if len(beforeC) <= 1024 else '<Content is too long to be displayed>', inline=False)
+        if len(embed.fields[1].value) > 1024: embed.set_field_at(1, name=embed.fields[1].name, value=afterC if len(afterC) <= 1024 else '<Content is too long to be displayed>', inline=False)
         await msg.edit(content=None if any((settings['tts'], settings['flashText'])) and not settings['plainText'] else msg.content, embed=None if settings['plainText'] else embed)
         self.archiveLogEmbed(after.guild, msg.id, embed, 'Message Edit')
-        try: 
-            if os.path.exists(savePath): os.remove(savePath)
-        except: pass
         oldEmbed=copy.deepcopy(embed)
         oldContent=plainText
         if not serverIsGimped(guild): await updateLastActive(author, datetime.datetime.now(), 'edited a message')
@@ -707,7 +696,7 @@ class Cyberlog(commands.Cog):
                 authorID = result[1].id
                 embed.description += '\n\nNAVIGATION\n⬅: Go back to compressed view\nℹ: Full edited message\n📜: Message edit history\n🗒: Message in context'
                 while not self.bot.is_closed():
-                    if len(embed.author.name) < 1: embed.set_author(icon_url=result[1].avatar_url, name=f'{result[1].name} - Navigating')
+                    if len(embed.author.name) < 1: embed.set_author(icon_url=result[1].display_avatar.url, name=f'{result[1].name} - Navigating')
                     def optionsCheck(r, u): return str(r) in ['ℹ', '⬅', '📜', '🗒', self.emojis['collapse']] and r.message.id == msg.id and u.id == authorID
                     if not result:
                         try: result = await self.bot.wait_for('reaction_add',check=optionsCheck, timeout=180)
@@ -717,14 +706,14 @@ class Cyberlog(commands.Cog):
                         embed.clear_fields()
                         embed.add_field(name='Before', value=' '.join(beforeParsed), inline=False)
                         embed.add_field(name='After', value=' '.join(afterParsed), inline=False)
-                        embed.description=embed.description[:embed.description.find({DisguardLongTimestamp(received)}) + len({DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n> **ℹ: Full edited message**\n{qlf}📜: Message edit history\n{qlf}🗒: Message in context'
+                        embed.description=embed.description[:embed.description.find({utility.DisguardLongTimestamp(received)}) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n> **ℹ: Full edited message**\n{qlf}📜: Message edit history\n{qlf}🗒: Message in context'
                         await msg.edit(content=None, embed=embed)
                         for r in ['⬅', '📜', '🗒']: await msg.add_reaction(r)
                     elif str(result[0]) == '📜': 
                         try:
                             await msg.clear_reactions()
                             embed.clear_fields()
-                            embed.description=embed.description[:embed.description.find({DisguardLongTimestamp(received)}) + len({DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
+                            embed.description=embed.description[:embed.description.find({utility.DisguardLongTimestamp(received)}) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
                             with open(f'{indexes}/{guild.id}/{channel.id}.json', 'r+') as f:
                                 indexData = json.load(f)
                                 currentMessage = indexData[str(after.id)]
@@ -733,7 +722,7 @@ class Cyberlog(commands.Cog):
                                     for i in range(0, len(enum), 3): yield enum[i:i+3]
                                 entries = list(makeHistory()) #This will always have a length of 2 or more
                             for i, entry in enumerate(entries): 
-                                embed.add_field(name=f'{DisguardLongTimestamp(datetime.datetime.fromisoformat(entry[1][1]) + datetime.timedelta(hours=timeZone(guild)))}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',value=entry[-1][1], inline=False)
+                                embed.add_field(name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry[1][1]) + datetime.timedelta(hours=self.timeZone(guild)))}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',value=entry[-1][1], inline=False)
                             await msg.edit(embed=embed)
                             for r in ['⬅', 'ℹ', '🗒']: await msg.add_reaction(r)
                         except (discord.Forbidden, discord.HTTPException) as e:
@@ -743,14 +732,14 @@ class Cyberlog(commands.Cog):
                     elif str(result[0]) == '🗒':
                         try:
                             embed.clear_fields()
-                            embed.description=embed.description[:embed.description.find({DisguardLongTimestamp(received)}) + len({DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
+                            embed.description=embed.description[:embed.description.find({utility.DisguardLongTimestamp(received)}) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
                             messagesBefore = list(reversed(await after.channel.history(limit=6, before=after).flatten()))
                             messagesAfter = await after.channel.history(limit=6, after=after, oldest_first=True).flatten()
                             combinedMessages = messagesBefore + [after] + messagesAfter
                             combinedLength = sum(len(m.content) for m in combinedMessages)
-                            if combinedLength > 1850: combinedMessageContent = [m.content[:1850 // len(combinedMessages)] for m in combinedMessages]
-                            else: combinedMessageContent = [f"<{len(m.attachments)} attachment{'s' if len(m.attachments) > 1 else ''}>" if len(m.attachments) > 0 else f"<{len(m.embeds)} embed>" if len(m.embeds) > 0 else m.content if len(m.content) > 0 else "<Error retrieving content>" for m in combinedMessages]
-                            for m in range(len(combinedMessages)): embed.add_field(name=f'**{combinedMessages[m].author.name}** • {DisguardLongTimestamp(combinedMessages[m].created_at + datetime.timedelta(hours=timeZone(guild)))}',value=combinedMessageContent[m] if combinedMessages[m].id != after.id else f'**[{combinedMessageContent[m]}]({combinedMessages[m].jump_url})**', inline=False)
+                            if combinedLength > 1850: combinedMessageContent = [utility.contentParser(m)[:1850 // len(combinedMessages)] for m in combinedMessages]
+                            else: combinedMessageContent = [utility.contentParser(m) for m in combinedMessages]
+                            for m in range(len(combinedMessages)): embed.add_field(name=f'**{combinedMessages[m].author.name}** • {utility.DisguardLongTimestamp(combinedMessages[m].created_at + datetime.timedelta(hours=self.timeZone(guild)))}',value=combinedMessageContent[m] if combinedMessages[m].id != after.id else f'**[{combinedMessageContent[m]}]({combinedMessages[m].jump_url})**', inline=False)
                             await msg.edit(embed=embed)
                             for r in ['⬅', 'ℹ', '📜']: await msg.add_reaction(r)
                         except (discord.Forbidden, discord.HTTPException) as e:
@@ -772,8 +761,8 @@ class Cyberlog(commands.Cog):
     async def on_message_edit(self, before, after):
         '''[DISCORD API METHOD] Called when message is edited'''
         if not after.guild: return #We don't deal with DMs
-        received = datetime.datetime.utcnow() + datetime.timedelta(hours=timeZone(after.guild)) #Timestamp of receiving the message edit event
-        if not serverIsGimped(after.guild): asyncio.create_task(updateLastActive(after.author, datetime.datetime.now(), 'edited a message'))
+        received = datetime.datetime.utcnow() + datetime.timedelta(hours=self.timeZone(after.guild)) #Timestamp of receiving the message edit event
+        if after.guild.id not in gimpedServers: asyncio.create_task(updateLastActive(after.author, datetime.datetime.now(), 'edited a message'))
         if self.pins.get(after.channel.id) is None: return
         g = after.guild
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
@@ -788,22 +777,20 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
         '''[DISCORD API METHOD] Called when raw message is edited'''
-        try: g = self.bot.get_guild(int(payload.data.get('guild_id'))) #Get the server of the edited message, return if not found (DMs; we don't track DM edits)
+        try: g = self.bot.get_guild(int(payload.data.get('guild_id'))) #Get the server of the edited message
         except: return #We don't deal with DMs
-        received = datetime.datetime.utcnow() + datetime.timedelta(hours=timeZone(g)) #Timestamp of receiving the message edit event
-        footerAppendum = ''
+        received = datetime.datetime.utcnow() + datetime.timedelta(hours=self.timeZone(g)) #Timestamp of receiving the message edit event
         before = ''
-        if payload.cached_message: return #If the message is stored internally (created after bot restart), it will get dealt with above, where searching the filesystem (which takes time, and stress on the SSD) isn't necessary
-        #self.rawMessages[payload.message_id] = payload.data #Save message data to dict for later use
+        if payload.cached_message: return #If the message is stored internally (created after bot restart), it will get dealt with above, where searching the local indexes isn't necessary
         channel = self.bot.get_channel(int(payload.data.get('channel_id'))) #Get the channel of the edited message
         try: after = await channel.fetch_message(payload.message_id) #Get the message object, and return if not found
         except discord.NotFound: return
         except discord.Forbidden: 
-            print('{} lacks permissions for message edit for some reason'.format(bot.get_guild(int(payload.data.get('guild_id'))).name))
+            print('{} lacks permissions for message edit for some reason'.format(g.name))
             return
-        author = g.get_member(after.author.id) #Get the member of the edited message, and if not found, return (this should always work, and if not, then it isn't a server and we can let it error and Tdon't need to proceed)
-        if not self.pins.get(channel.id): return
-        if not serverIsGimped(g): asyncio.create_task(updateLastActive(author, datetime.datetime.now(), 'edited a message'))
+        author = g.get_member(after.author.id) #Get the member of the edited message
+        if g.id not in gimpedServers: asyncio.create_task(updateLastActive(author, datetime.datetime.now(), 'edited a message'))
+        #if not self.pins.get(channel.id): return #V1.0: I have no clue what the purpose of this line is
         if not logEnabled(g, 'message'): return #If the message edit log module is not enabled, return
         try:
             if not logExclusions(after.channel, author): return #Check the exclusion settings
@@ -819,10 +806,10 @@ class Cyberlog(commands.Cog):
                 indexData = json.load(f)
                 currentMessage = indexData[str(after.id)]
                 before = currentMessage[f'content{len(currentMessage.keys()) // 3 - 1}']
-        except (FileNotFoundError, KeyError) as e: before = f'<Data retrieval error>' #If we can't find the file, then we say this
+        except (FileNotFoundError, KeyError): before = f'<Data retrieval error>' #If we can't find the file, then we say this
         except IndexError: before = after.content #Author is bot, and indexes aren't kept for bots; keep this for pins only
-        try: await self.MessageEditHandler(before, after, received, footerAppendum)
-        except UnboundLocalError: await self.MessageEditHandler('<Data retrieval error>', after, received, footerAppendum) #If before doesn't exist
+        try: await self.MessageEditHandler(before, after, received)
+        except UnboundLocalError: await self.MessageEditHandler('<Data retrieval error>', after, received) #If before doesn't exist
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
