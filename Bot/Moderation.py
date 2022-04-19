@@ -5,6 +5,7 @@ from discord.ext import commands
 import database
 import datetime
 import Cyberlog #Used to prevent delete logs upon purging
+import utility
 import asyncio
 import os
 import traceback
@@ -53,6 +54,27 @@ class Moderation(commands.Cog):
         self.emojis = self.bot.get_cog('Cyberlog').emojis
         self.roleCache = {}
         self.permissionsCache = {}
+
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_roles=True)
+    @commands.command()
+    async def warmup(self, ctx: commands.Context, arg: str):
+        '''A command to set the duration a member must remain in the server before chatting'''
+        duration, unit = arg[:-1], arg[:-1]
+        # define multipliers to convert higher units into seconds
+        minutes = 60
+        hours = 60 * minutes
+        days = 24 * hours
+        weeks = 7 * days
+        # define relational dictionary
+        conversion = {'s': 1, 'm': minutes, 'h': hours, 'd': days, 'w': weeks},
+        units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week'}
+        # now, set the final amount in seconds
+        warmup = duration * conversion[unit]
+        await database.SetWarmup(ctx.guild, warmup)
+        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{duration} {units[unit]}{"s" if duration != 1 else ""}** before chatting')
+        view = WarmupActionView(self.bot)
+        await ctx.send(embed=embed, view=view)
 
     @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
@@ -912,3 +934,26 @@ def setup(bot):
     global loading
     bot.add_cog(Moderation(bot))
     loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
+
+class WarmupActionView(discord.ui.View):
+    def __init__(self, bot: commands.Bot):
+        super().__init__()
+        self.bot = bot
+    
+    @discord.ui.button
+    async def apply(self, button: discord.ui.Button, interaction: discord.Interaction):
+        button.disabled = True
+        await interaction.response.edit_message(view=self)
+        antispam = self.bot.lightningLogging.get(interaction.guild_id).get('antispam')
+        warmup = antispam.get('warmup', 0)
+        embed = interaction.message.embeds[0]
+        muted = 0
+        for member in interaction.guild.members:
+            serverAge: datetime.datetime = discord.utils.utcnow() - member.joined_at
+            if serverAge.second < warmup:
+                muteTime = (member.joined_at + datetime.timedelta(seconds=warmup)) - discord.utils.utcnow()
+                if muteTime > discord.utils.utcnow():
+                    await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=muteTime, reason=f'[Antispam: Warmup] This new member will be able to begin chatting at {utility.DisguardStandardTimestamp(discord.utils.utcnow() + muteTime)}.')
+                    muted += 1
+        embed.description += f'\n\nApplied filters and muted {muted} members for now'
+        await interaction.message.edit(embed=embed, view=self)
