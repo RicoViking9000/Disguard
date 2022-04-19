@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 import database
 import utility
 import Reddit
+import Info
 import datetime
 import asyncio
 import os
@@ -758,7 +759,7 @@ class Cyberlog(commands.Cog):
                 await msg.clear_reactions()
 
     @commands.Cog.listener()
-    async def on_message_edit(self, before, after):
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
         '''[DISCORD API METHOD] Called when message is edited'''
         if not after.guild: return #We don't deal with DMs
         received = datetime.datetime.utcnow() + datetime.timedelta(hours=self.timeZone(after.guild)) #Timestamp of receiving the message edit event
@@ -814,42 +815,43 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
         '''[DISCORD API METHOD] Called when message is deleted (RAW CONTENT)'''
-        g = bot.get_guild(payload.guild_id)
+        g = self.bot.get_guild(payload.guild_id)
         if not g: return #We don't deal with DM message deletions
         received = datetime.datetime.now()
         if serverPurge.get(payload.guild_id): return
         if not logEnabled(g, 'message'): return
         try: 
             message = payload.cached_message
-            if message.type != discord.MessageType.default: return
+            if message.type != discord.MessageType.default: return #For system messages like pins add/member join, do nothing
         except AttributeError: message = None
-        def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
+        def reactionCheck(r: discord.Reaction, u: discord.User): return r.message.id == msg.id and not u.bot
         c = logChannel(g, 'message')
         settings = getCyberAttributes(g, 'message')
         fileError = ''
-        color = red[colorTheme(g)] if settings['color'][2] == 'auto' else settings['color'][2]
+        color = red[self.colorTheme(g)] if settings['color'][2] == 'auto' else settings['color'][2]
         if payload.message_id in self.pauseDelete: return self.pauseDelete.remove(payload.message_id)
         embed=discord.Embed(
             title=f'''{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["delete"])}') if settings["context"][0] > 0 else ""}{"Message was deleted" if settings["context"][0] < 2 else ""}''',
             description='',
             color=color)
-        if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+        if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {payload.message_id}')
         attachments = [] #List of files sent with this message
-        path = 'Attachments/{}/{}/{}'.format(payload.guild_id,payload.channel_id, payload.message_id) #Where to retrieve message attachments from
+        path = f'Attachments/{g.id}/{payload.channel_id}/{payload.message_id}' #Where to retrieve message attachments from
         try:
             for directory in os.listdir(path):
                 savePath = f'{path}/{directory}'
                 try: 
-                    if any([ext in directory.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]) and embed.image.url == discord.Embed.Empty:
-                        URL = await self.uploadFiles(savePath)
-                        embed.set_image(url=URL)
+                    if any([ext in directory.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]) and utility.empty(embed.image.url):
+                        url = await self.uploadFiles(savePath)
+                        embed.set_image(url=url)
                     else: attachments.append(savePath)
                 except discord.HTTPException:
                     fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
         except OSError: pass
-        if message is not None:
-            author = self.bot.get_user(message.author.id)
+        if message:
+            author = message.author
+            if not author: author = await self.bot.fetch_user(message.author.id)
             channel, created, content = message.channel, message.created_at, message.content
         else:
             try:
@@ -857,17 +859,19 @@ class Cyberlog(commands.Cog):
                 with open(filePath) as fl:
                     indexData = json.load(fl)
                     currentMessage = indexData[str(payload.message_id)]
-                    authorID, created, content = tuple(currentMessage.values())[-3:]
+                    authorID, created, content = tuple(currentMessage.values())[-3:] #Take the 3 most recent entries, in cases where the message has been edited
                     author, channel, created = await self.bot.fetch_user(authorID), self.bot.get_channel(payload.channel_id), datetime.datetime.fromisoformat(created)
                     indexData.pop(str(payload.message_id))
                 with open(filePath, 'w+') as fl:
                     fl.write(json.dumps(indexData, indent=4))
             except (FileNotFoundError, IndexError, KeyError):
                 try: channel = channel.mention
-                except UnboundLocalError: channel = payload.channel_id
-                embed.description=f'{self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel}\n\nUnable to provide information beyond what is here; this message was sent before my last restart, and I am unable to locate the indexed file locally to retrieve more information'
-                plainText = f'''Somebody deleted their message in #{channel.name if type(channel) is discord.TextChannel else channel}\n\nUnable to provide more information about this event'''
-                msg = await c.send(content=plainText if 'audit log' in plainText or 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+                except UnboundLocalError: 
+                    channel = self.bot.get_channel(payload.channel_id)
+                    if not channel: channel = payload.channel_id
+                embed.description=f'{self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel}\n\nError retrieving further information'
+                plainText = f'''Somebody deleted their message in #{channel}\n\nUnable to provide more information about this event'''
+                msg: discord.Message = await c.send(content=plainText if 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
                 while not self.bot.is_closed():
                     result = await self.bot.wait_for('reaction_add', check=reactionCheck)
@@ -880,14 +884,11 @@ class Cyberlog(commands.Cog):
                         await msg.clear_reactions()
                         if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
         if settings['botLogging'] == 1 and author.bot: settings['plainText'] = True
-        if datetime.datetime.utcnow() > created: #This makes negative time rather than posting some super weird timestamps. No, negative time doesn't exist but it makes more sense than what this would do otherwise
-            mult = 1
-            deletedAfter = datetime.datetime.utcnow() - created
-        else:
-            mult = -1
-            deletedAfter = created - datetime.datetime.utcnow()
+        if discord.utils.utcnow() > created: mult = 1
+        else: mult = -1 #This makes negative time rather than posting some super weird timestamps. No, negative time doesn't exist but it makes more sense than what this would do otherwise
+        deletedAfter: datetime.datetime = abs(created - discord.utils.utcnow())
         hours, minutes, seconds = deletedAfter.seconds // 3600, (deletedAfter.seconds // 60) % 60, deletedAfter.seconds - (deletedAfter.seconds // 3600) * 3600 - ((deletedAfter.seconds // 60) % 60)*60
-        times = [seconds*mult, minutes*mult, hours*mult, deletedAfter.days*mult] #This is the list of units for the deletedAfter
+        times = [seconds*mult, minutes*mult, hours*mult, deletedAfter.days*mult] #This is the list of units for the deletedAfter. Because of potential negative values, use this code instead of the utility function
         units = ['second', 'minute', 'hour', 'day'] #Full words, but we'll only be using the first letter in the final result
         display = [] #This will be joined in the embed to combine the units and values
         for i in range(len(times)):
@@ -903,7 +904,7 @@ class Cyberlog(commands.Cog):
                     except: logArchives = {}
                 if payload.message_id in [int(k) for k in logArchives.keys()]:
                     self.updateLogEmbed(g, payload.message_id, {'customKeyMessageIsDeleted': True})
-            if author.bot or not logExclusions(channel, memberObject): return
+            if (author.bot and not self.bot.lightningLogging[g.id]['cyberlog'].get('disguardLogRecursion')) or not logExclusions(channel, memberObject): return
         except: pass
         try: messageAfter = (await channel.history(limit=1, after=created, oldest_first=True).flatten())[0] #The message directly after the deleted one, if this is N/A the embed will have no hyperlink for this
         except IndexError: messageAfter = ''
@@ -911,48 +912,42 @@ class Cyberlog(commands.Cog):
         except IndexError: messageBefore = ''
         created -= datetime.timedelta(hours=DST)
         embed.description=textwrap.dedent(f'''
-            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {author.mention} ({author.name}){ '(No longer in this server)' if not memberObject else ''}
-            {self.channelEmoji(channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} • Jump to message [before]({messageBefore.jump_url if messageBefore else ''} \'{messageBefore.content if messageBefore else ''}\') or [after]({messageAfter.jump_url if messageAfter else ''} \'{messageAfter.content if messageAfter else ''}\') this one
-            {self.emojis['sendMessage'] if settings["context"][1] > 0 else ""}{"Sent" if settings["context"][1] < 2 else ""}: {DisguardLongTimestamp(created)}
-            {self.emojis['delete'] if settings["context"][1] > 0 else ""}{"Deleted" if settings["context"][1] < 2 else ""}: {DisguardLongTimestamp(received)} ({' '.join(reversed(display))} later)''')
-        if message: embed.add_field(name="Content",value=message.content[:1024] if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<Error retrieving content>")
-        else: embed.add_field(name='Content',value='<No content>' if len(content) < 1 else content[:1024])
+            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {author.mention} ({author.name}){' (No longer here)' if not memberObject else ''}
+            {utility.channelEmoji(self, channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} • Jump to [previous]({messageBefore.jump_url if messageBefore else ''} \'{messageBefore.content if messageBefore else ''}\') or [next]({messageAfter.jump_url if messageAfter else ''} \'{messageAfter.content if messageAfter else ''}\') message
+            {self.emojis['sendMessage'] if settings["context"][1] > 0 else ""}{"Sent" if settings["context"][1] < 2 else ""}: {utility.DisguardLongTimestamp(created)}
+            {self.emojis['delete'] if settings["context"][1] > 0 else ""}{"Deleted" if settings["context"][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)} ({' '.join(reversed(display))} later)''')
+        if message: embed.add_field(name='Content', value=message.content[:1024] if len(message.content) > 0 else utility.contentParser(message))
+        else: embed.add_field(name='Content' ,value='<No content>' if not content else content[:1024])
         for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
             if ext in content.lower():
                 if '://' in content:
                     url = content[message.content.find('http'):content.find(ext)+len(ext)+1]
                     embed.set_image(url=url)
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not author.is_avatar_animated() else 'gif'))
-            try: await author.avatar_url_as(size=1024).save(savePath)
-            except discord.HTTPException: pass
-            url = await self.uploadFiles(savePath)
+            url = await self.imageToURL(author.display_avatar)
             if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4): embed.set_author(name=author.name, icon_url=url)
         modDelete = False
         plainText = ''
         log = None
-        if readPerms(g, "message"):
+        if readPerms(g, 'message'):
             try:
                 log = (await g.audit_logs(limit=1).flatten())[0]
-                if log.action in (discord.AuditLogAction.message_delete, discord.AuditLogAction.message_bulk_delete) and absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=20)) and log.target.id in (author.id, channel.id) and log.user != author:
-                    embed.description+=f'''\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{"Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name})'''
+                if log.action in (discord.AuditLogAction.message_delete, discord.AuditLogAction.message_bulk_delete) and utility.absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=5)) and log.target.id in (author.id, channel.id) and log.user != author:
+                    embed.description += f'''\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{"Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name})'''
                     embed.title = f'''{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["modDelete"])}') if settings["context"][0] > 0 else ""}{"Message was deleted" if settings["context"][1] < 2 else ''}'''
                     if not serverIsGimped(g): await updateLastActive(log.user, datetime.datetime.now(), 'deleted a message')
                     modDelete = True
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                        try: await log.user.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                        if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                 else: 
-                    if not serverIsGimped(g): await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
-            except Exception as e: plainText += f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+                    if g.id not in gimpedServers: await updateLastActive(author, datetime.datetime.now(), 'deleted a message')
+            except: pass
         if settings['botLogging'] in [0, 2] and author.bot: 
             #Check to see if the recursion deletion mode is enabled for Disguard log messages
-            if author.id == self.bot.user.id and self.bot.lightningLogging[g.id]['cyberlog']['disguardLogRecursion']:
+            if author.id == self.bot.user.id and self.bot.lightningLogging[g.id]['cyberlog'].get('disguardLogRecursion'):
                 channels = [self.bot.lightningLogging[g.id]['cyberlog']['defaultChannel']]
                 for w in logUnits: channels.append(self.bot.lightningLogging[g.id]['cyberlog'][w]['channel'])
                 if channel.id in channels: #We have a log channel
@@ -970,7 +965,7 @@ class Cyberlog(commands.Cog):
                     msg = await c.send(content=content, embed=embed, allowed_mentions=discord.AllowedMentions(users=False))
                     self.archiveLogEmbed(g, msg.id, embed, 'Message Delete (Recursion Clone)')
             if settings['botLogging'] == 0: return
-        plainText=f'''{log.user if modDelete else author} deleted {f"{author}'s" if modDelete else "their"} message in #{channel.name if type(channel) is discord.TextChannel else channel}\n\n{'<No content>' if len(content) < 1 else content[:1900]}\n\n{plainText}'''
+        plainText=f'''{log.user if modDelete else author} deleted {f"{author}'s" if modDelete else "their"} message in #{channel.name if type(channel) is discord.TextChannel else channel}\n\n{'<No content>' if not content else content[:1900]}\n\n{plainText}'''
         a = 0
         while a < len(attachments):
             f = attachments[a]
@@ -1006,37 +1001,33 @@ class Cyberlog(commands.Cog):
         content=''
         savePath = None
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(channel.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(channel.guild))
         msg = None
         if logEnabled(channel.guild, "channel"):
             settings = getCyberAttributes(channel.guild, 'channel')
-            color = green[colorTheme(channel.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
+            color = green[self.colorTheme(channel.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             keytypes = {discord.Member: '👤', discord.Role: '🚩'}
             content = f'A moderator created a new {channel.type[0]} channel called {channel.name}'
             embed=discord.Embed(
-                title=f'''{self.channelEmoji(channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["darkGreenPlus"]) if settings["context"][0] > 0 else ""}{f"{channel.type[0][0].upper() + channel.type[0][1:]} Channel was created" if settings["context"][0] < 2 else ""}''',
+                title=f'''{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["darkGreenPlus"]) if settings["context"][0] > 0 else ""}{f"{channel.type[0][0].upper() + channel.type[0][1:]} Channel was created" if settings["context"][0] < 2 else ""}''',
                 description=f'{self.channelKeys[channel.type[0] if settings["context"][1] > 0 else ""]}{"Channel" if settings["context"][1] < 2 else ""}: {f"{channel.mention} ({channel.name})" if channel.type[0] == "text" else channel.name}',
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
-            if readPerms(channel.guild, "channel"):
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
+            if readPerms(channel.guild, 'channel'):
                 try:
-                    log = (await channel.guild.audit_logs(limit=1).flatten())[0]
-                    if log.action == discord.AuditLogAction.channel_create:
-                        if settings['botLogging'] == 0 and log.user.bot: return
-                        elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                        embed.description+=f'''\n{"👮‍♂️" if settings['context'][1] > 0 else ""}{"Created by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                            try: await log.user.avatar_url_as(size=1024).save(savePath)
-                            except discord.HTTPException: pass
-                            url = await self.uploadFiles(savePath)
-                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                            if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                        content = f'{log.user} created a new {channel.type[0]} channel called {channel.name}'
-                        await updateLastActive(log.user, datetime.datetime.now(), 'created a channel')
-                except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+                    log = await channel.guild.audit_logs().get(action=discord.AuditLogAction.channel_create)
+                    if settings['botLogging'] == 0 and log.user.bot: return
+                    elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
+                    embed.description+=f'''\n{"👮‍♂️" if settings['context'][1] > 0 else ""}{"Created by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                    content = f'{log.user} created a new {channel.type[0]} channel called {channel.name}'
+                    if channel.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'created a channel')
+                except: pass
             embed.set_footer(text=f'Channel ID: {channel.id}')
-            msg = await logChannel(channel.guild, "channel").send(content=content if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            msg: discord.Message = await logChannel(channel.guild, "channel").send(content=content if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             defaultRead = channel.overwrites_for(channel.guild.default_role).read_messages
             if defaultRead == False: 
                 accessible = [o[0] for o in list(iter(channel.overwrites.items())) if o[1].read_messages]
@@ -1070,10 +1061,10 @@ class Cyberlog(commands.Cog):
                 elif len(trimmedAccessibleString) + len(tempUnaccessibleString) < 1900: embed.description+=f'{trimmedAccessibleString}{tempUnaccessibleString}'
                 elif len(trimmedAccessibleString) + len(trimmedUnaccessibleString) < 1900: embed.description+=f'{trimmedAccessibleString}{trimmedUnaccessibleString}'
             else: embed.description+=f'{tempAccessibleString}{tempUnaccessibleString}'
-            singleQuoteMark = "'"
+            #singleQuoteMark = "'"
             #plainTextAccessibleString = f"{tempAccessibleString[tempAccessibleString.find('[') + 1:tempAccessibleString.find(']')]}{newline}{tempAccessibleString[tempAccessibleString.find(singleQuoteMark) + 1:tempAccessibleString.find(')') - 1]}"
             #plainTextUnaccessibleString = f"{tempUnaccessibleString[tempUnaccessibleString.find('[') + 1:tempUnaccessibleString.find(']')]}{newline}{tempUnaccessibleString[tempUnaccessibleString.find(singleQuoteMark) + 1:tempUnaccessibleString.find(')') - 1]}"
-            if settings['embedTimestamp'] > 1: embed.description += f'''\n{(clockEmoji(adjusted) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {DisguardLongTimestamp(received)}'''
+            if settings['embedTimestamp'] > 1: embed.description += f'''\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)}'''
             if channel.type[0] != 'category':
                 channelList = channel.category.channels if channel.category is not None else [c for c in channel.guild.channels if c.category is None]
                 cIndexes = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList))
@@ -1092,9 +1083,9 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden: pass
         if type(channel) is discord.TextChannel:
             self.pins[channel.id] = []
-            asyncio.create_task(database.VerifyServer(channel.guild, bot, includeMembers=False))
+            asyncio.create_task(database.VerifyChannel(channel, True))
         if msg:
-            def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
+            def reactionCheck(r:discord.Reaction, u:discord.User): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
                 result = await self.bot.wait_for('reaction_add', check=reactionCheck)
                 if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
@@ -1110,7 +1101,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when server channel is updated'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(after.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(after.guild))
         f = None
         msg = None
         channelPosFlag = False
@@ -1119,32 +1110,27 @@ class Cyberlog(commands.Cog):
             content=f'A moderator updated the {after.type[0]} channel called {before.name}'
             savePath = None
             settings = getCyberAttributes(after.guild, 'channel')
-            color = blue[colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+            color = blue[self.colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed=discord.Embed(
-                title=f'''{self.channelEmoji(after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{f"{after.type[0][0].upper() + after.type[0][1:]} Channel was updated (ℹ for channel info)" if settings["context"][0] < 2 else ""}''',
+                title=f'''{utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{f"{after.type[0][0].upper() + after.type[0][1:]} Channel was updated (ℹ for channel info)" if settings["context"][0] < 2 else ""}''',
                 description=f'{self.channelKeys[after.type[0]] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {f"{after.mention} ({after.name})" if after.type[0] == "text" else after.name}',
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             reactions = ['ℹ']
             if readPerms(before.guild, "channel"):
                 try:
-                    log = (await before.guild.audit_logs(limit=1).flatten())[0]
-                    if log.action in (discord.AuditLogAction.channel_update, discord.AuditLogAction.overwrite_create, discord.AuditLogAction.overwrite_update, discord.AuditLogAction.overwrite_delete):
-                        if log.user.id == self.bot.user.id and before.overwrites != after.overwrites: return
-                        if log.user.id == 814971588214390827 and after.guild.id == 460611346837405696: return
-                        if settings['botLogging'] == 0 and log.user.bot: return
-                        elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                        embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                            try: await log.user.avatar_url_as(size=1024).save(savePath)
-                            except discord.HTTPException: pass
-                            url = await self.uploadFiles(savePath)
-                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                            if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                        content = f'{log.user} updated the {after.type[0]} channel called {before.name}'
-                        await updateLastActive(log.user, datetime.datetime.now(), 'edited a channel')
-                except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+                    log = await before.guild.audit_logs().find(lambda x: x.action in (discord.AuditLogAction.channel_update, discord.AuditLogAction.overwrite_create, discord.AuditLogAction.overwrite_update, discord.AuditLogAction.overwrite_delete))
+                    if log.user.id == self.bot.user.id and before.overwrites != after.overwrites: return #Avoid logging Disguard updates to channel overwrites
+                    if settings['botLogging'] == 0 and log.user.bot: return
+                    elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
+                    embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                    content = f'{log.user} updated the {after.type[0]} channel called {before.name}'
+                    if after.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'edited a channel')
+                except: pass# Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             embed.set_footer(text=f'Channel ID: {before.id}')
             if before.category == after.category != None:
                 bc = self.categories.get(before.category.id)
@@ -1187,8 +1173,8 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name='Old Category', value='Old')
                 embed.add_field(name='New Category', value='New')
             if len(embed.fields) > 0:
-                content += embedToPlaintext(embed)
-                msg = await logChannel(before.guild, "channel").send(content=content if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+                content += utility.embedToPlaintext(embed)
+                msg: discord.Message = await logChannel(before.guild, "channel").send(content=content if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if type(before) is not discord.CategoryChannel and before.category != after.category:
                     oldChannelList = self.categories.get(before.category.id) if before.category is not None else self.categories.get(before.guild.id)
                     newChannelList = after.category.channels if after.category is not None else [c[1] for c in after.guild.by_category() if c[0] is None]
@@ -1222,14 +1208,14 @@ class Cyberlog(commands.Cog):
                             #If the current permission_name: Value key is different than the previous value, make note of it
                             if not set({kk: vv}.items()).issubset(b4.get(k).items()):
                                 #String format: Permission Name, left aligned with spaces to fill 50 character gap, Pipestem, (emoji symbol, centered (3 characters)) right aligned, with spaces to fill the left, pipestem right aligned,
-                                displayString.append(f'''   {permissionKeys[kk]:<42} | {f"{english[b4[k][kk]]:^3}":^9} -|- {f"{english[vv]:^3}":^9} |''')
+                                displayString.append(f'''   {utility.getPermission(kk):<42} | {f"{english[b4[k][kk]]:^3}":^9} -|- {f"{english[vv]:^3}":^9} |''')
                     for k,v in b4.items(): #Added in January update because apparently this code leaves out instances of overwrites being completely removed
                         if af.get(k) is None: #An overwrite for role/member was deleted
                             af[k] = {key: None for key in v.keys()}
                             displayString.append(f'{classification[type(k)]}{k.name}{" (❌Removed)":-<71}')
                             for kk,vv in v.items():
                                 if not set({kk: vv}.items()).issubset(af.get(k).items()):
-                                    displayString.append(f'''   {permissionKeys[kk]:<42} | {f"{english[vv]:^3}":^9} -|- {f"{english[af[k][kk]]:^3}":^9} |''')
+                                    displayString.append(f'''   {utility.getPermission(kk):<42} | {f"{english[vv]:^3}":^9} -|- {f"{english[af[k][kk]]:^3}":^9} |''')
                     permissionString = f'''```{"Permission overwrites updated":<45} | {"Before":^10} | {"After":^10} |\n{newline.join([line.replace('-|-', '|') for line in displayString])}```'''
                     #permissionString = '```{0:<56}|{1:^13}|{2:^20}\n{3}```'.format('Permission overwrites updated', 'Before', 'After', '\n'.join(displayString))
                     for i, f in enumerate(embed.fields):
@@ -1260,12 +1246,12 @@ class Cyberlog(commands.Cog):
                         if v.get('gained') is not None: gainedKeys[v.get('gained')] = [after.guild.get_member(k)]
                 joinKeys = (' 👤 ', ' • ')
                 #Figure out what to do about the hover links.
-                gainDescription = (f'''{newline.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} gained {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([permissionKeys.get(p, 'Unknown Permission ('+p+')') for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([permissionKeys.get(p, 'Unknown Permission ('+p+')') for p in k.split(' ')])}')" for k, v in gainedKeys.items()])}{newline if len(removedKeys) > 0 and len(gainedKeys) > 0 else ''}''') if len(gainedKeys) > 0 else ''
-                removeDescription = f'''{newline.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} lost {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([permissionKeys.get(p, 'Unknown Permission ('+p+')') for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([permissionKeys.get(p, 'Unknown Permission ('+p+')') for p in k.split(' ')])}')" for k,v in removedKeys.items()])}''' if len(removedKeys) > 0 else ''
+                gainDescription = (f'''{newline.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} gained {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([utility.GetPermission(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([utility.GetPermission(p) for p in k.split(' ')])}')" for k, v in gainedKeys.items()])}{newline if len(removedKeys) > 0 and len(gainedKeys) > 0 else ''}''') if len(gainedKeys) > 0 else ''
+                removeDescription = f'''{newline.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} lost {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([utility.GetPermission(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([utility.GetPermission(p) for p in k.split(' ')])}')" for k,v in removedKeys.items()])}''' if len(removedKeys) > 0 else ''
                 if len(gainDescription) > 0 or len(removeDescription) > 0: embed.description+=f'{newline if len(gainDescription) > 0 or len(removeDescription) > 0 else ""}{gainDescription}{removeDescription}'
                 else: 
                     if before.overwrites != after.overwrites: embed.description+='\nPermissions were updated, but no members were affected'
-                if settings['embedTimestamp'] > 1: embed.description+=f'''\n{(clockEmoji(adjusted) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {DisguardLongTimestamp(received)}'''
+                if settings['embedTimestamp'] > 1: embed.description+=f'''\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)}'''
                 try: await msg.edit(content = content if settings['plainText'] else None, embed=None if settings['plainText'] else embed)
                 except discord.HTTPException: await msg.edit(content = content if settings['plainText'] else None)
                 self.archiveLogEmbed(after.guild, msg.id, embed, 'Channel Update')
@@ -1278,7 +1264,7 @@ class Cyberlog(commands.Cog):
             try: self.channelCacheHelper[after.guild.id].append(channelPosTimekey)
             except: self.channelCacheHelper[after.guild.id] = [channelPosTimekey]
             asyncio.create_task(self.delayedUpdateChannelIndexes(after.guild, channelPosTimekey))
-        if type(before) is discord.TextChannel and before.name != after.name: await asyncio.gather(database.VerifyServer(after.guild, bot, includeMembers=False))
+        if type(before) is discord.TextChannel and before.name != after.name: asyncio.create_task(database.VerifyChannel(after))
         try:
             if msg:
                 final = copy.deepcopy(embed)
@@ -1293,9 +1279,10 @@ class Cyberlog(commands.Cog):
                         await msg.edit(content=None)
                     elif str(r[0]) == 'ℹ':
                         await msg.clear_reactions()
-                        if 'Loading channel information' not in embed.description: embed.description+='\n\n{} Loading channel information: {}'.format(self.loading, after.name)
+                        if 'Loading channel information' not in embed.description: embed.description+=f'\n\n{self.loading} Loading channel information: {after.name}'
                         await msg.edit(embed=embed)
-                        result = await self.ChannelInfo(after, None if after.type[0] == 'category' else await after.invites(), None if after.type[0] != 'text' else await after.pins(), await after.guild.audit_logs(limit=None).flatten())
+                        info: Info.Info = self.bot.get_cog('Info')
+                        result = await info.ChannelInfo(after, None if after.type[0] == 'category' else await after.invites(), None if after.type[0] != 'text' else await after.pins(), await after.guild.audit_logs(limit=None).flatten())
                         await msg.edit(content=result[0], embed=result[1])
                         await msg.add_reaction('⬅')
                         def backCheck(rr, u): return str(rr) == '⬅' and rr.message.id == msg.id and u.id == r[1].id
@@ -1316,7 +1303,7 @@ class Cyberlog(commands.Cog):
         except UnboundLocalError: return
 
     async def delayedUpdateChannelIndexes(self, g: discord.Guild, timekey):
-        '''Updates channel cache data after 3 seconds, to account for logging
+        '''Updates channel cache data after 1 second, to account for logging
         Timekey: Unique key based on timestamp that allows the update process to go through only if it hasn't already, reducing inaccuracies in data
         '''
         await asyncio.sleep(1)
@@ -1332,40 +1319,34 @@ class Cyberlog(commands.Cog):
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when channel is deleted'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(channel.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(channel.guild))
         msg = None
-        if logEnabled(channel.guild, "channel"):
+        if logEnabled(channel.guild, 'channel'):
             content=f'A moderator deleted the {channel.type[0]} channel named {channel.name}'
-            f = None
-            savePath = None
             settings = getCyberAttributes(channel.guild, 'channel')
-            color = red[colorTheme(channel.guild)] if settings['color'][2] == 'auto' else settings['color'][2]
+            color = red[self.colorTheme(channel.guild)] if settings['color'][2] == 'auto' else settings['color'][2]
             embed=discord.Embed(
-                title=f'''{self.channelEmoji(channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelDelete"] if settings["library"] > 1 else self.emojis["delete"]) if settings["context"][0] > 0 else ""}{f"{channel.type[0][0].upper() + channel.type[0][1:]} Channel was deleted" if settings['context'][0] < 2 else ''}''',
+                title=f'''{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelDelete"] if settings["library"] > 1 else self.emojis["delete"]) if settings["context"][0] > 0 else ""}{f"{channel.type[0][0].upper() + channel.type[0][1:]} Channel was deleted" if settings['context'][0] < 2 else ''}''',
                 description=f'{self.channelKeys.get(channel.type[0]) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.name}',
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             if readPerms(channel.guild, "channel"):
                 try:
-                    log = (await channel.guild.audit_logs(limit=1).flatten())[0]
-                    if log.action == discord.AuditLogAction.channel_delete:
-                        if settings['botLogging'] == 0 and log.user.bot: return
-                        elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                        embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Deleted by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                            try: await log.user.avatar_url_as(size=1024).save(savePath)
-                            except discord.HTTPException: pass
-                            url = await self.uploadFiles(savePath)
-                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                            if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                        content = f'{log.user} deleted the {channel.type[0]} channel named {channel.name}'
-                        await updateLastActive(log.user, datetime.datetime.now(), 'deleted a channel')
-                except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
-            if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
+                    log = await channel.guild.audit_logs().get(action=discord.AuditLogAction.channel_delete)
+                    if settings['botLogging'] == 0 and log.user.bot: return
+                    elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
+                    embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Deleted by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                    content = f'{log.user} deleted the {channel.type[0]} channel named {channel.name}'
+                    if channel.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'deleted a channel')
+                except: pass
+            if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
             embed.set_footer(text=f'Channel ID: {channel.id}')
-            content += embedToPlaintext(embed)
-            msg = await logChannel(channel.guild, "channel").send(content=content if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            content += utility.embedToPlaintext(embed)
+            msg: discord.Message = await logChannel(channel.guild, "channel").send(content=content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             if channel.type[0] != 'category':
                 channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)                
                 startEnd = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList))
@@ -1389,8 +1370,7 @@ class Cyberlog(commands.Cog):
                 self.pins.pop(channel.id, None)
             await msg.edit(content = None if not settings['plainText'] else content, embed=embed)
             self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
-            if os.path.exists(savePath): os.remove(savePath)
-        if type(channel) is discord.TextChannel: asyncio.create_task(database.VerifyServer(channel.guild, bot, includeMembers=False))
+        if type(channel) is discord.TextChannel: asyncio.create_task(database.VerifyServer(channel.guild, self.bot)) #Look into database methods to remove channels without needing to call the VeriftServer method
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
