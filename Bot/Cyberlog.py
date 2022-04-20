@@ -3157,891 +3157,43 @@ class Cyberlog(commands.Cog):
 
     @commands.guild_only()
     @commands.command(aliases=['archives'])
-    async def archive(self, ctx, filter='all'):
+    async def archive(self, ctx: commands.Context, filter='all'):
         await ctx.trigger_typing()
-        embed = discord.Embed(title=f'Log Archives', description=f'{self.emojis["loading"]}', color=yellow[colorTheme(ctx.guild)])
+        embed = discord.Embed(title=f'Log Archives', description=f'{self.emojis["loading"]}', color=yellow[self.colorTheme(ctx.guild)])
         m = await ctx.send(embed=embed)
         p = f'Attachments/{ctx.guild.id}/LogArchive/modLogs.json'
         f = discord.File(p)
-        await m.delete()
-        await ctx.send(file=f)
-    
-    @commands.guild_only()
-    @commands.command()
-    async def info(self, ctx, *args): #queue system: message, embed, every 3 secs, check if embed is different, edit message to new embed
-        import emoji
-        arg = ' '.join([a.lower() for a in args])
-        message = await ctx.send('{}Searching'.format(self.loading))
-        mainKeys=[]
-        main=discord.Embed(title='Info results viewer', color=yellow[colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
-        embeds=[]
-        PartialEmojiConverter = commands.PartialEmojiConverter()
-        if len(arg) > 0:
-            members, roles, channels, emojis = tuple(await asyncio.gather(*[self.FindMembers(ctx.guild, arg), self.FindRoles(ctx.guild, arg), self.FindChannels(ctx.guild, arg), self.FindEmojis(ctx.guild, arg)]))
-            logs, invites, bans, webhooks = None, None, None, None
-        else:
-            await message.edit(content=f'{self.loading}Loading content')
-            members = []
-            roles = []
-            channels = []
-            emojis = []
-        relevance = []
-        indiv=None
-        for m in members:
-            mainKeys.append(f'{self.emojis["member"]}{m[0].name}')
-            embeds.append(m[0])
-            relevance.append(m[1])
-        for r in roles:
-            mainKeys.append(f'🚩{r[0].name}')
-            embeds.append(r[0])
-            relevance.append(r[1])
-        for c in channels:
-            types = {discord.TextChannel: self.emojis['textChannel'], discord.VoiceChannel: self.emojis['voiceChannel'], discord.CategoryChannel: self.emojis['folder']}
-            mainKeys.append('{}{}'.format(types.get(type(c)), c[0].name))
-            embeds.append(c[0])
-            relevance.append(c[1])
-        for e in emojis:
-            mainKeys.append(f'{e[0]}{e[0].name}')
-            embeds.append(e[0])
-            relevance.append(e[1])
-        if 'server' == arg or 'guild' == arg:
-            mainKeys.append('ℹServer information')
-            indiv = await self.ServerInfo(ctx.guild, logs, bans, webhooks, invites)
-        if 'roles' == arg:
-            mainKeys.append('ℹRole list information')
-            indiv = await self.RoleListInfo(ctx.guild.roles, logs)
-        if any(s==arg for s in ['members', 'people', 'users', 'bots', 'humans']):
-            mainKeys.append('ℹMember list information')
-            indiv = await self.MemberListInfo(ctx.guild.members)
-        if 'channels' == arg:
-            mainKeys.append('ℹChannel list information')
-            indiv = await self.ChannelListInfo(ctx.guild.channels, logs)
-        if 'emoji' == arg or 'emotes' == arg:
-            mainKeys.append('ℹEmoji information')
-            indiv = await self.EmojiListInfo(ctx.guild.emojis, logs)
-        if 'invites' == arg:
-            mainKeys.append('ℹInvites information')
-            indiv = await self.InvitesListInfo(invites, logs, ctx.guild)
-        if 'bans' == arg:
-            mainKeys.append('ℹBans information')
-            indiv = await self.BansListInfo(bans, logs, ctx.guild)
-        if len(arg) == 0:
-            await message.edit(content=f'{self.loading}Loading content') 
-            mainKeys.append('ℹInformation about you :)')
-            indiv = await asyncio.create_task(self.MemberInfo(ctx.author, calculatePosts=False))
-        if 'me' == arg:
-            await message.edit(content=f'{self.loading}Loading content')
-            mainKeys.append('ℹInformation about you :)')
-            indiv = await self.MemberInfo(ctx.author)
-        if any(s == arg for s in ['him', 'her', 'them', 'it', '^']):
-            await message.edit(content='{}Loading content'.format(self.loading))
-            def pred(m): return m.author != ctx.guild.me and m.author != ctx.author
-            author = sorted((await ctx.channel.history(limit=100).filter(pred).flatten()), key = lambda m: m.created_at, reverse=True)[-1].author
-            mainKeys.append(f'ℹInformation about the person above you ({author.name})')
-            indiv = await self.MemberInfo(author)
-        if 'hardware' == arg:
-            mainKeys.append('Information about me')
-            indiv = await self.BotInfo(await self.bot.application_info(), ctx.guild)
-        #Calculate relevance
-        await message.edit(content='{}Loading content'.format(self.loading))
-        reactions = ['⬅']
-        priority = None
-        if len(embeds) > 0 and indiv is None: 
-            priority = embeds[relevance.index(max(relevance))]
-            indiv=await self.evalInfo(priority, ctx.guild, logs)
-            indiv.set_author(name='⭐Best match ({}% relevant)\n(React ⬅ to see all results)'.format(relevance[embeds.index(priority)]))
-        else:
-            if indiv is not None: 
-                indiv.set_author(name='⭐Best match: {}'.format(mainKeys[0]))
-            if len(embeds) == 0 and indiv is None: 
-                main.description='{}0 results for *{}*, but I\'m still searching advanced results'.format(self.loading, arg)
-                reactions = []
-                indiv = main.copy()
-        if len(arg) == 0: 
-            await message.edit(content=None,embed=indiv)
-            for i, f in enumerate(indiv.fields):
-                if '📜Messages' == f.name: 
-                    indiv.set_field_at(i, name=f.name, value=await self.MemberPosts(ctx.author))
-                    await message.edit(embed=indiv)
-                    break
-            await message.add_reaction('🍰')
-            def birthdayCheck(r,u): return u == ctx.author and r.message.id == message.id and str(r) == '🍰'
-            await self.bot.wait_for('reaction_add',check=birthdayCheck)
-            try: await message.delete()
-            except: pass
-            return await self.bot.get_cog('Birthdays').birthday(ctx, str(ctx.author.id))
-        if len(embeds) > 1 or indiv is not None: 
-            await message.edit(content='{}Still working'.format(self.loading),embed=indiv)
-        members, roles, channels, inv, emojis = tuple(await asyncio.gather(*[self.FindMoreMembers(ctx.guild.members, arg), self.FindMoreRoles(ctx.guild, arg), self.FindMoreChannels(ctx.guild, arg), self.FindMoreInvites(ctx.guild, arg), self.FindMoreEmojis(ctx.guild, arg)]))
-        counter = 0
-        while counter < 2:
-            #print(counter, logs)
-            if 'server' == arg or 'guild' == arg:
-                mainKeys.append('ℹServer information')
-                indiv = await self.ServerInfo(ctx.guild, logs, bans, webhooks, invites)
-            if 'roles' == arg:
-                mainKeys.append('ℹRole list information')
-                indiv = await self.RoleListInfo(ctx.guild.roles, logs)
-            if any(s==arg for s in ['members', 'people', 'users', 'bots', 'humans']):
-                mainKeys.append('ℹMember list information')
-                indiv = await self.MemberListInfo(ctx.guild.members)
-            if 'channels' == arg:
-                mainKeys.append('ℹChannel list information')
-                indiv = await self.ChannelListInfo(ctx.guild.channels, logs)
-            if 'emoji' == arg or 'emotes' == arg:
-                mainKeys.append('ℹEmoji information')
-                indiv = await self.EmojiListInfo(ctx.guild.emojis, logs)
-            if 'invites' == arg:
-                mainKeys.append('ℹInvites information')
-                indiv = await self.InvitesListInfo(invites, logs, ctx.guild)
-            if 'bans' == arg:
-                mainKeys.append('ℹBans information')
-                indiv = await self.BansListInfo(bans, logs, ctx.guild)
-            if len(arg) == 0:
-                mainKeys.append('ℹInformation about you :)')
-                indiv = await asyncio.create_task(self.MemberInfo(ctx.author, calculatePosts=False))
-            if 'me' == arg:
-                mainKeys.append('ℹInformation about you :)')
-                indiv = await self.MemberInfo(ctx.author)
-            if any(s == arg for s in ['him', 'her', 'them', 'it']):
-                author = sorted((await ctx.channel.history(limit=100).filter(pred).flatten()), key = lambda m: m.created_at, reverse=True)[-1].author
-                mainKeys.append('ℹInformation about the person above you ({})'.format(author.name))
-                indiv = await self.MemberInfo(author)
-            if 'hardware' == arg:
-                mainKeys.append('Information about me')
-                indiv = await self.BotInfo(await self.bot.application_info(), ctx.guild)
-            every=[]
-            types = {discord.TextChannel: self.emojis['textChannel'], discord.VoiceChannel: self.emojis['voiceChannel'], discord.CategoryChannel: '📂'}
-            for m in members: every.append(InfoResult(m.get('member'), '👤{} - {} ({}% match)'.format(m.get('member').name, m.get('check')[0], m.get('check')[1]), m.get('check')[1]))
-            for r in roles: every.append(InfoResult(r.get('role'), '🚩{} - {} ({}% match)'.format(r.get('role').name, r.get('check')[0], r.get('check')[1]), r.get('check')[1]))
-            for c in channels: every.append(InfoResult(c.get('channel'), '{}{} - {} ({}% match)'.format(types.get(type(c.get('channel'))), c.get('channel').name, c.get('check')[0], c.get('check')[1]), c.get('check')[1]))
-            for i in inv: every.append(InfoResult(i.get('invite'), '💌discord.gg/{} - {} ({}% match)'.format(i.get('invite').code.replace(arg, '**{}**'.format(arg)), i.get('check')[0], i.get('check')[1]), i.get('check')[1]))
-            for e in emojis: every.append(InfoResult(e.get('emoji'), '{}{} - {} ({}% match)'.format(e.get('emoji'), e.get('emoji').name, e.get('check')[0], e.get('check')[1]), e.get('check')[1]))
-            if arg not in emoji.UNICODE_EMOJI and arg not in [str(emoji.get('emoji')) for emoji in emojis]:
-                try:
-                    partial = await PartialEmojiConverter.convert(ctx, arg)
-                    every.append(InfoResult(partial, f'{partial}{partial.name}', 100))
-                except: pass
-            if 'server' in arg or 'guild' in arg or arg in ctx.guild.name.lower() or ctx.guild.name.lower() in arg: every.append(InfoResult((await self.ServerInfo(ctx.guild, logs, bans, webhooks, invites)), 'ℹServer information', compareMatch('server', arg)))
-            if 'roles' in arg: every.append(InfoResult((await self.RoleListInfo(ctx.guild.roles, logs)), 'ℹRole list information', compareMatch('roles', arg)))
-            if any(s in arg for s in ['members', 'people', 'users', 'bots', 'humans']): every.append(InfoResult((await self.MemberListInfo(ctx.guild.members)), 'ℹMember list information', compareMatch('members', arg)))
-            if 'channels' in arg: every.append(InfoResult((await self.ChannelListInfo(ctx.guild.channels, logs)), 'ℹChannel list information', compareMatch('channels', arg)))
-            if 'emoji' in arg or 'emotes' in arg: every.append(InfoResult((await self.EmojiListInfo(ctx.guild.emojis, logs)), 'ℹEmoji information', compareMatch('emoji', arg)))
-            if 'invites' in arg: every.append(InfoResult((await self.InvitesListInfo(invites, logs, ctx.guild)), 'ℹInvites information', compareMatch('invites', arg)))
-            if 'bans' in arg: every.append(InfoResult((await self.BansListInfo(bans, logs, ctx.guild)), 'ℹBans information', compareMatch('bans', arg)))
-            if any(s in arg for s in ['dev', 'owner', 'master', 'creator', 'author', 'disguard', 'bot', 'you']): every.append(InfoResult((await self.BotInfo(await bot.application_info(), ctx.guild)), '{}Information about me'.format(bot.get_emoji(569191704523964437)), compareMatch('disguard', arg)))
-            every.sort(key=lambda x: x.relevance, reverse=True)
-            md = 'Viewing {} - {} of {} results for *{}*{}\n**Type the number of the option to view**\n'
-            md2=[]
-            used = md.format(1 if len(every) >= 1 else 0, 20 if len(every) >= 20 else len(every), len(every), arg, ' (Arrows to scroll)' if len(every) >= 20 else '')
-            main.description=used
-            for result in range(len(every)): md2.append('\n{}: {}'.format(result + 1, every[result].mainKey))
-            main.description+=''.join(md2[:20])
-            main.set_author(name='{}: {}'.format(ctx.author.name, ctx.author.id),icon_url=ctx.author.avatar_url)
-            if len(main.description) > 2048: main.description = main.description[:2048]
-            if len(every) == 0 and indiv is None: return await message.edit(embed=main)
-            elif len(every) == 1 and counter == 0 and type(every[0].obj) is not discord.Member: 
-                temp = await self.evalInfo(every[0].obj, ctx.guild, logs)
-                temp.set_author(name='⭐{}% relevant ({})'.format(every[0].relevance, every[0].mainKey))
-                await message.edit(embed=temp)
-            elif len(reactions) == 0: 
-                await message.edit(embed=main)
-            elif len(embeds) > 1 or indiv is not None: 
-                #pass
-                #await asyncio.sleep(5)
-                await message.edit(embed=indiv)
-            if type(priority) is discord.Member:
-                for i, f in enumerate(message.embeds[0].fields):
-                    if '📜Messages' == f.name: 
-                        message.embeds[0].set_field_at(i, name=f.name, value=await self.MemberPosts(every[0].obj))
-                        await message.edit(embed=message.embeds[0])
-                        break
-            if counter == 0:
-                try: logs = await ctx.guild.audit_logs(limit=None).flatten()
-                except: logs = False #signify failure to the end user
-                try: invites = await ctx.guild.invites()
-                except: invites = False
-                try: bans = await ctx.guild.bans()
-                except: bans = False
-                try: webhooks = await ctx.guild.webhooks()
-                except: webhooks = False
-            counter += 1
-        loadContent = discord.Embed(title='{}Loading {}', color=yellow[colorTheme(ctx.guild)])
-        if message.content is not None: await message.edit(content=None)
-        past = False
-        while not self.bot.is_closed():
-            if past or message.embeds[0].author.name is not discord.Embed.Empty and '⭐' in message.embeds[0].author.name: 
-                if len(every) > 0: 
-                    for r in ['⬅']: await message.add_reaction(r)
-                try: desired = ctx.guild.get_member(int(message.embeds[0].footer.text[message.embeds[0].footer.text.find(':') + 1:]))
-                except: desired = None
-                def checkBday(r, u): return u == desired and not u.bot and r.message.id == message.id and str(r) == '🍰'
-                def checkBack(r, u): return u == ctx.author and r.message.id == message.id and str(r) == '⬅'
-                if 'member details' in message.embeds[0].title.lower() and desired: await message.add_reaction('🍰')
-                d, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkBack), self.bot.wait_for('reaction_add', check=checkBday)], return_when=asyncio.FIRST_COMPLETED)
-                try: r = d.pop().result()
-                except: pass
-                for f in p: f.cancel()
-                if str(r[0]) == '⬅':
-                    try: await message.clear_reactions()
-                    except: pass
-                    await message.edit(embed=main)
-                else: 
-                    await message.delete()
-                    return await self.bot.get_cog('Birthdays').birthday(ctx, str(ctx.author.id))
-            if len(every) >= 20:
-                for r in ['◀', '▶']: await message.add_reaction(r)
-            def check(m):
-                try: return m.author==ctx.author and int(m.content) <= len(every)
-                except: return False
-            past = False
-            def reacCheck(r, u): return str(r) in ['◀', '▶'] and u==ctx.author
-            while not past:
-                done, pending = await asyncio.wait([bot.wait_for('message', check=check, timeout=300), bot.wait_for('reaction_add', check=reacCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
-                try: stuff = done.pop().result()
-                except: return
-                for future in pending: future.cancel()
-                if type(stuff) is tuple:
-                    await message.remove_reaction(stuff[0], stuff[1])
-                    coords = int(used[used.find('Viewing')+8:used.find('-')-1]), int(used[used.find('-')+2:used.find('of')-1])
-                    if str(stuff[0]) == '◀': coords = coords[0] - 20, coords[1] - 20
-                    if str(stuff[0]) == '▶': coords = coords[0] + 20, coords[1] + 20
-                    if coords[0] < 0: coords = 0, 20 if len(every) > 20 else len(every)
-                    if coords[1] > len(every): coords = coords[0], len(every)
-                    used = md.format(coords[0], coords[1], len(every), arg, ' (Arrows to scroll)' if len(every) >= 20 else '')+''.join(md2[coords[0]-1:coords[1]])
-                    main.description=used
-                    await message.edit(embed=main)
-                else:
-                    past = True
-                    try: await message.clear_reactions()
-                    except: pass
-                    loadContent.title = loadContent.title.format(self.loading, str(every[int(stuff.content) - 1].obj))
-                    await message.edit(content=None, embed=loadContent)
-                    self.AvoidDeletionLogging(stuff)
-                    try: await stuff.delete()
-                    except: pass
-                    await message.edit(content=None,embed=(await self.evalInfo(every[int(stuff.content)-1].obj, ctx.guild, logs)))
-                    if type(every[int(stuff.content) - 1].obj) is discord.Member:
-                        for i, f in enumerate(message.embeds[0].fields):
-                            if '📜Messages' == f.name: 
-                                message.embeds[0].set_field_at(i, name=f.name, value=await self.MemberPosts(every[0].obj))
-                                await message.edit(embed=message.embeds[0])
-                                break
-                    await message.add_reaction('⬅')
-                    if 'member details' in message.embeds[0].title.lower(): await message.add_reaction('🍰')
+        try: 
+            await ctx.send(file=f)
+            await m.delete()
+        except: 
+            embed.description = 'Unable to upload Log Archive file'
+            await m.edit(emned=embed)
 
-    def ParsePauseDuration(self, s: str):
-        '''Convert a string into a number of seconds to ignore antispam or logging'''
-        args = s.split(' ')                             #convert string into a list, separated by space
-        duration = 0                                    #in seconds
-        for a in args:                                  #loop through words
-            number = ""                                 #each int is added to the end of a number string, to be converted later
-            for b in a:                                 #loop through each character in a word
-                try:
-                    c = int(b)                          #attempt to convert the current character to an int
-                    number+=str(c)                      #add current int, in string form, to number
-                except ValueError:                      #if we can't convert character to int... parse the current word
-                    if b.lower() == "m":                #Parsing minutes
-                        duration+=60*int(number)
-                    elif b.lower() == "h":              #Parsing hours
-                        duration+=60*60*int(number)
-                    elif b.lower() == "d":              #Parsing days
-                        duration+=24*60*60*int(number)
-        return duration
-
-    async def ServerInfo(self, s: discord.Guild, logs, bans, hooks, invites):
-        '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
-        embed=discord.Embed(title=s.name, description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description), timestamp=datetime.datetime.utcnow(), color=yellow[colorTheme(s)])
-        mfa = {0: 'No', 1: 'Yes'}
-        veri = {'none': 'None', 'low': 'Email', 'medium': 'Email, account age > 5 mins', 'high': 'Email, account 5 mins old, server member for 10 mins', 'extreme': 'Phone number'}
-        perks0=['None yet']
-        perks1 = ['100 emoji limit, 128kbps bitrate', 'animated server icon, custom server invite background'] #First half doesn't get added to string for later levels
-        perks2 = ['150 emoji limit, 256kbps bitrate, 50MB upload limit', 'server banner']
-        perks3 = ['250 emoji limit, 384kbps bitrate, 100MB upload limit', 'vanity URL']
-        perkDict = {0: 2, 1: 10, 2: 50, 3: '∞'}
-        if s.premium_tier==3: perks=[perks3[0], perks3[1],perks2[1],perks1[1]]
-        elif s.premium_tier==2: perks=[perks2[0],perks2[1],perks1[1]]
-        elif s.premium_tier==1: perks = perks1
-        else: perks = perks0
-        messages = 0
-        for c in s.text_channels: 
-            with open(f'{indexes}/{c.guild.id}/{c.id}.json') as f: 
-                messages += len(json.load(f).keys())
-        created = s.created_at - datetime.timedelta(hours=DST)
-        txt='{}Text Channels: {}'.format(self.emojis["textChannel"], len(s.text_channels))
-        vc='{}Voice Channels: {}'.format(self.emojis['voiceChannel'], len(s.voice_channels))
-        cat='{}Category Channels: {}'.format(self.emojis['folder'], len(s.categories))
-        embed.description+=('**Channel count:** {}\n{}\n{}\n{}'.format(len(s.channels),cat, txt, vc))
-        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in s.members if m.status != discord.Status.offline]), len(s.members), round(len([m for m in s.members if m.status != discord.Status.offline]) / len(s.members) * 100))
-        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in s.members if m.status == discord.Status.offline]), len(s.members), round(len([m for m in s.members if m.status == discord.Status.offline]) / len(s.members) * 100))
-        online='{}Online: {}'.format(self.emojis["online"], len([m for m in s.members if m.status == discord.Status.online]))
-        idle='{}Idle: {}'.format(self.emojis["idle"], len([m for m in s.members if m.status == discord.Status.idle]))
-        dnd='{}Do not disturb: {}'.format(self.emojis["dnd"], len([m for m in s.members if m.status == discord.Status.dnd]))
-        offline='{}Offline/invisible: {}'.format(self.emojis["offline"], len([m for m in s.members if m.status == discord.Status.offline]))
-        embed.description+='\n\n**Member count:** {}{}\n{}'.format(len(s.members),'' if s.max_members is None else '/{}'.format(s.max_members) if s.max_members - len(s.members) < 500 else '','\n'.join([onlineGeneral, offlineGeneral, online, idle, dnd, offline]))
-        embed.description+='\n\n**Features:** {}'.format(', '.join(s.features) if len(s.features) > 0 else 'None')
-        embed.description+='\n\n**Nitro boosters:** {}/{}, **perks:** {}'.format(s.premium_subscription_count,perkDict.get(s.premium_tier),', '.join(perks))
-        #embed.set_thumbnail(url=s.icon_url)
-        embed.add_field(name='Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})',inline=False)
-        embed.add_field(name='Region',value=str(s.region))
-        embed.add_field(name='AFK Timeout',value='{}s --> {}'.format(s.afk_timeout, s.afk_channel))
-        if s.max_presences is not None: embed.add_field(name='Max Presences',value='{} (BETA)'.format(s.max_presences))
-        embed.add_field(name='Mods need 2FA',value=mfa.get(s.mfa_level))
-        embed.add_field(name='Verification',value=veri.get(str(s.verification_level)))
-        embed.add_field(name='Explicit filter',value=s.explicit_content_filter)
-        embed.add_field(name='Default notifications',value=str(s.default_notifications)[str(s.default_notifications).find('.')+1:])
-        try: embed.add_field(name='Locale',value=s.preferred_locale)
-        except: pass
-        embed.add_field(name='Audit logs',value=self.loading if logs is None else '🔒Unable to obtain audit logs' if logs is False else len(logs) if logs else 'N/A')
-        if s.system_channel is not None: embed.add_field(name='System channel',value='{}: {}'.format(s.system_channel.mention, ', '.join([k[0] for k in (iter(s.system_channel_flags))])))
-        embed.add_field(name='Role count',value=len(s.roles) - 1)
-        embed.add_field(name='Owner',value=s.owner.mention)
-        embed.add_field(name='Banned members',value=self.loading if bans is None else '🔒Unable to obtain server bans' if bans is False else len(bans) if bans else 'N/A')
-        embed.add_field(name='Webhooks',value=self.loading if hooks is None else '🔒Unable to obtain webhooks' if hooks is False else len(hooks) if hooks else 'N/A')
-        embed.add_field(name='Invites',value=self.loading if invites is None else '🔒Unable to obtain invites' if invites is False else len(invites) if invites else 'N/A')
-        embed.add_field(name='Emojis',value='{}/{}'.format(len(s.emojis), s.emoji_limit))
-        embed.add_field(name='Messages', value=f'about {messages}')
-        embed.set_footer(text='Server ID: {}'.format(s.id))
-        return embed
-
-    async def ChannelInfo(self, channel: discord.abc.GuildChannel, invites, pins, logs):
-        permString = None
-        details = discord.Embed(title=f'{self.channelEmoji(channel)}{channel.name}', description='',color=yellow[colorTheme(channel.guild)], timestamp=datetime.datetime.utcnow())
-        details.set_footer(text='Channel ID: {}'.format(channel.id))
-        if type(channel) is discord.TextChannel: details.description+=channel.mention
-        if type(channel) is not discord.CategoryChannel:
-            #details.description+='\n\n**Channels {}**\n{}'.format('without a category' if channel.category is None else 'in category {}'.format(channel.category.name), '\n'.join(['{}'.format('{}{}{}{}'.format('**' if chan==channel else '', types.get(type(chan)), chan.name, '**' if chan==channel else '')) for chan in channel.category.channels]))
-            details.description+='\n**Category:** {}'.format('None' if channel.category is None else channel.category.name)
-        else: details.description+='\n\n**Channels in this category**\n{}'.format('\n'.join(['{}{}'.format(self.channelEmoji(chan), chan.name) for chan in channel.channels]))
-        perms = {}
-        formatted = {} #Key (read_messages, etc): {role or member: deny or allow, role or member: deny or allow...}
-        temp=[]
-        english = {True: '✔', False: '✖'} #Symbols becuase True, False, None is confusing
-        for k,v in channel.overwrites.items(): perms.update({k: dict(iter(v))})
-        for k,v in perms.items():
-            for kk,vv in v.items():
-                if vv is not None: 
-                    try: formatted.get(kk).update({k: vv})
-                    except: formatted.update({kk: {k: vv}})
-        for k,v in formatted.items():
-            temp.append('{:<60s}'.format(permissionKeys.get(k, f'Unknown Permission ({k})')))
-            string='\n'.join(['     {}: {:>{diff}}'.format(kk.name, english.get(vv), diff=25 - len(kk.name)) for kk,vv in iter(v.items())])
-            temp.append(string)
-            permString = '```Channel permission overwrites\n{}```'.format('\n'.join(temp))
-        created=channel.created_at - datetime.timedelta(hours=DST)
-        updated = None
-        if logs:
-            for log in logs:
-                if log.action == discord.AuditLogAction.channel_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
-                    if log.target.id == channel.id:
-                        updated = log.created_at - datetime.timedelta(hours=DST)
-                        break
-        if updated is None: updated = created
-        details.add_field(name='Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
-        details.add_field(name='Last updated',value=f'{DisguardIntermediateTimestamp(updated)} ({DisguardRelativeTimestamp(updated)})' if logs != None else self.loading if logs is None else '🔒Unable to obtain audit logs' if not logs else 'N/A')
-        inviteCount = []
-        if invites:
-            for inv in iter(invites): inviteCount.append(inv.inviter)
-        details.add_field(name='Invites to here',value=self.loading if invites is None else '🔒Unable to retrieve invites' if invites is False else 'None' if len(inviteCount) == 0 or not logs else ', '.join(['{} by {}'.format(a[1], a[0].name) for a in iter(collections.Counter(inviteCount).most_common())]))
-        if type(channel) is discord.TextChannel:
-            details.add_field(name='Topic',value='{}{}'.format('<No topic>' if channel.topic is None or len(channel.topic) < 1 else channel.topic[:100], '' if channel.topic is None or len(channel.topic)<=100 else '...'),inline=False)
-            details.add_field(name='Slowmode',value='{}s'.format(channel.slowmode_delay))
-            with open(f'{indexes}/{channel.guild.id}/{channel.id}.json') as f: details.add_field(name='Message count',value=len(json.load(f).keys()))
-            details.add_field(name='NSFW',value=channel.is_nsfw())
-            details.add_field(name='News channel?',value=channel.is_news())
-            details.add_field(name='Pins count',value=len(pins) if pins else self.loading if pins is False else '🔒Unable to retrieve pins')
-        if type(channel) is discord.VoiceChannel:
-            details.add_field(name='Bitrate',value='{} kbps'.format(int(channel.bitrate / 1000)))
-            details.add_field(name='User limit',value=channel.user_limit)
-            details.add_field(name='Members currently in here',value='None' if len(channel.members)==0 else ', '.join([member.mention for member in channel.members]))
-        if type(channel) is discord.CategoryChannel:
-            details.add_field(name='NSFW',value=channel.is_nsfw())
-        return [permString, details]
-
-    async def RoleInfo(self, r: discord.Role, logs):
-        #sortedRoles = sorted(r.guild.roles, key = lambda x: x.position, reverse=True)
-        #start = r.position - 3
-        #if start < 0: start = 0
-        created = r.created_at - datetime.timedelta(hours=DST)
-        updated = None
-        if logs:
-            for log in logs:
-                if log.action == discord.AuditLogAction.role_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
-                    if log.target.id == r.id:
-                        updated = log.created_at - datetime.timedelta(hours=DST)
-                        break
-        if updated is None: updated = created
-        embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
-        #embed.description+='\n**Position**:\n{}'.format('\n'.join(['{0}{1}{0}'.format('**' if sortedRoles[role] == r else '', sortedRoles[role].name) for role in range(start, start+6)]))
-        embed.add_field(name='Displayed separately',value=r.hoist)
-        embed.add_field(name='Externally managed',value=r.managed)
-        embed.add_field(name='Mentionable',value=r.mentionable)
-        embed.add_field(name='Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
-        embed.add_field(name='Last updated',value=f'{DisguardIntermediateTimestamp(updated)} ({DisguardRelativeTimestamp(updated)})' if logs != None else self.loading if logs is None else '🔒Unable to obtain audit logs' if not logs else 'N/A')
-        embed.add_field(name='Belongs to',value='{} members'.format(len(r.members)))
-        embed.set_footer(text='Role ID: {}'.format(r.id))
-        return embed
-
-    async def MemberInfo(self, m: discord.Member, *, addThumbnail=True, calculatePosts=True):
-        if calculatePosts: postCount = await self.MemberPosts(m)
-        else: postCount = self.loading
-        #tz = timeZone(m.guild)
-        #nz = nameZone(m.guild)
-        embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=m.color)
-        mA = lastActive(m) #The dict (timestamp and reason) when a member was last active
-        activeTimestamp = mA.get('timestamp')# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
-        onlineTimestamp = lastOnline(m)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
-        onlineDelta = (datetime.datetime.now() - onlineTimestamp) #the timedelta between now and member's last online appearance
-        activeDelta = (datetime.datetime.now() - activeTimestamp) #The timedelta between now and when a member was last active
-        units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
-        hours, minutes, seconds = activeDelta.seconds // 3600, (activeDelta.seconds // 60) % 60, activeDelta.seconds - (activeDelta.seconds // 3600) * 3600 - ((activeDelta.seconds // 60) % 60)*60
-        activeTimes = [seconds, minutes, hours, activeDelta.days] #List of self explanatory values
-        hours, minutes, seconds = onlineDelta.seconds // 3600, (onlineDelta.seconds // 60) % 60, onlineDelta.seconds - (onlineDelta.seconds // 3600) * 3600 - ((onlineDelta.seconds // 60) % 60)*60
-        onlineTimes = [seconds, minutes, hours, onlineDelta.days]
-        activeDisplay = []
-        onlineDisplay = []
-        offline = self.emojis['offline']
-        for i in range(len(activeTimes)):
-            if activeTimes[i] != 0: activeDisplay.append('{}{}'.format(activeTimes[i], units[i][0]))
-            if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
-        if len(activeDisplay) == 0: activeDisplay = ['0s']
-        activities = {discord.Status.online: self.emojis['online'], discord.Status.idle: self.emojis['idle'], discord.Status.dnd: self.emojis['dnd'], discord.Status.offline: self.emojis['offline']}
-        lastOnlineString = f'''\nLast online {f"{DisguardRelativeTimestamp(onlineTimestamp)}{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > lastOnline(m) and m.status == discord.Status.offline else ''}" if self.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
-        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{DisguardRelativeTimestamp(activeTimestamp)} ({mA['reason']})" if self.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}{lastOnlineString if m.status == discord.Status.offline else ""}'''
-        if len(m.activities) > 0:
-            current=[]
-            for act in m.activities:
-                try:
-                    if act.type is discord.ActivityType.playing: 
-                        try: current.append(f'playing {act.name}: {act.details}{(", " + act.state) if act.state is not None else ""}{" (⭐Visible under username)" if act == m.activity else ""}')
-                        except AttributeError: current.append(f'playing {act.name}{" (⭐Visible under username)" if act == m.activity else ""}')
-                    elif act.type is discord.ActivityType.custom: current.append(f'{act.emoji if act.emoji is not None else ""} {act.name if act.name is not None else ""}{" (⭐Visible under username)" if act == m.activity else ""}')
-                    elif act.type is discord.ActivityType.streaming: current.append(f'streaming {act.name}{" (⭐Visible under username)" if act == m.activity else ""}')
-                    elif act.type is discord.ActivityType.listening and act.name == 'Spotify': current.append(f'Listening to Spotify{" (⭐Visible under username)" if act == m.activity else ""}\n 🎵 {act.title}\n 👤 {", ".join(act.artists)}\n 💿 {act.album}')
-                    elif act.type is discord.ActivityType.watching: current.append(f'watching {act.name}{" (⭐Visible under username)" if act == m.activity else ""}')
-                except:
-                    current.append('Error parsing activity')
-            embed.description+='\n\n • {}'.format('\n • '.join(current))
-        embed.description+='\n\n**Roles ({}):** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(len(m.roles) - 1, ' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(m.guild_permissions) if p[1]]))
-        boosting = m.premium_since
-        joined = m.joined_at - datetime.timedelta(hours=DST)
-        created = m.created_at - datetime.timedelta(hours=DST)
-        if m.voice is None: voice = 'None'
-        else:
-            voice = '{}{} in {}{}'.format('🔇' if m.voice.mute or m.voice.self_mute else '', '🤐' if m.voice.deaf or m.voice.self_deaf else '','N/A' if m.voice.channel is None else m.voice.channel.name, ', AFK' if m.voice.afk else '')
-        if boosting is None: embed.add_field(name='Boosting server',value='Nope')
-        else:
-            embed.add_field(name='Boosting server',value=f'Since {DisguardRelativeTimestamp(boosting - datetime.timedelta(hours=DST))}')
-        embed.add_field(name='📆Account created',value=f'{DisguardRelativeTimestamp(created)}') #V1.5
-        #embed.add_field(name='📆Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nz, (datetime.datetime.now(datetime.timezone.utc)-created).days)) #v2.0
-        embed.add_field(name='📆Joined server',value=f'{DisguardRelativeTimestamp(joined)}')
-        embed.add_field(name='📜Messages',value=postCount)
-        embed.add_field(name='🎙Voice Chat',value=voice)
-        if addThumbnail: embed.set_thumbnail(url=m.avatar_url) #V1.5
-        #if addThumbnail: embed.set_thumbnail(url=m.avatar.url) #V2.0
-        embed.set_footer(text='Member ID: {}'.format(m.id))
-        return embed
-        
-    async def EmojiInfo(self, e: discord.Emoji, owner):
-        created = e.created_at - datetime.timedelta(hours=DST)
-        embed = discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(e.guild)])
-        embed.set_image(url=e.url)
-        embed.set_footer(text='Emoji ID: {}'.format(e.id))
-        embed.add_field(name='Twitch emoji',value=e.managed)
-        if owner is not None: embed.add_field(name='Uploaded by',value='{} ({})'.format(owner.mention, owner.name))
-        embed.add_field(name='Server',value=e.guild.name)
-        embed.add_field(name='📆Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
-        return embed
-
-    async def PartialEmojiInfo(self, e: discord.PartialEmoji, s: discord.Guild):
-        embed=discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
-        embed.set_image(url=e.url)
-        embed.set_footer(text='Emoji ID: {}'.format(e.id))
-        return embed
-
-    async def InviteInfo(self, i: discord.Invite, s): #s: server
-        embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
-        embed.set_thumbnail(url=i.guild.icon_url)
-        #expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
-        expires=datetime.datetime.now() + datetime.timedelta(seconds=i.max_age)
-        created = i.created_at - datetime.timedelta(hours=DST)
-        embed.add_field(name='📆Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
-        embed.add_field(name='⏰Expires',value=f'{DisguardRelativeTimestamp(expires)}' if i.max_age > 0 else 'Never')
-        embed.add_field(name='Server',value=i.guild.name)
-        embed.add_field(name='Channel',value=i.channel.mention)
-        embed.add_field(name='Author',value='{} ({})'.format(i.inviter.mention, i.inviter.name))
-        embed.add_field(name='Used',value='{}/{} times'.format(i.uses, '∞' if i.max_uses == 0 else i.max_uses))
-        embed.set_footer(text='Invite server ID: {}'.format(i.guild.id))
-        #In the future, once bot is more popular, integrate server stats from other servers
-        return embed
-
-    async def BotInfo(self, app: discord.AppInfo, s: discord.Guild):
-        bpg = 1073741824 #Bytes per gig
-        embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
-        embed.description+=f'\n\nDISGUARD HOST SYSTEM INFORMATION\nCPU: {cpuinfo.get_cpu_info().get("brand")}\n•   Usage: {psutil.cpu_percent()}%\n​•   Core count: {psutil.cpu_count(logical=False)} cores, {psutil.cpu_count()} threads\n​​​​​​‍‍‍​​​•   {(psutil.cpu_freq().current / 1000):.2f} GHz current clock speed; {(psutil.cpu_freq().max / 1000):.2f} GHz max clock speed'
-        embed.description+=f'\n​RAM: {(psutil.virtual_memory().total / bpg):.1f}GB total ({(psutil.virtual_memory().used / bpg):.1f}GB used, {(psutil.virtual_memory().free / bpg):.1f}GB free)'
-        embed.description+=f'\nSTORAGE: {psutil.disk_usage("/").total // bpg}GB total ({psutil.disk_usage("/").used // bpg}GB used, {psutil.disk_usage("/").free // bpg}GB free)'
-        embed.set_footer(text='My ID: {}'.format(app.id))
-        embed.set_thumbnail(url=app.icon_url)
-        embed.add_field(name='Developer',value=app.owner)
-        embed.add_field(name='Public Bot',value=app.bot_public)
-        embed.add_field(name='In development since',value='March 20, 2019')
-        embed.add_field(name='Website with information',value=f'[Disguard Website](https://disguard.netlify.com/ \'https://disguard.netlify.com/\')')
-        embed.add_field(name='Servers',value=len(bot.guilds))
-        embed.add_field(name='Emojis',value=len(bot.emojis))
-        embed.add_field(name='Users',value=len(bot.users))
-        return embed
-
-    async def EmojiListInfo(self, emojis, logs):
-        '''Prereq: len(emojis) > 0'''
-        embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(emojis[0].guild)])
-        static = [str(e) for e in emojis if not e.animated]
-        animated = [str(e) for e in emojis if e.animated]
-        if len(static) > 0: embed.add_field(name='Static emojis: {}/{}'.format(len(static), emojis[0].guild.emoji_limit),value=''.join(static)[:1023],inline=False)
-        if len(animated) > 0: embed.add_field(name='Animated emojis: {}/{}'.format(len(animated), emojis[0].guild.emoji_limit),value=''.join(animated)[:1023],inline=False)
-        if logs: embed.add_field(name='Total emojis ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.emoji_create])))
-        elif logs is None: embed.add_field(name='Total emojis ever created',value=self.loading)
-        else: embed.add_field(name='Total emojis ever created',value='🔒Unable to obtain audit logs')
-        return embed
-
-    async def ChannelListInfo(self, channels, logs):
-        '''Prereq: len(channels) > 0'''
-        embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(channels[0].guild)])
-        none=['(No category)'] if len([c for c in channels if type(c) is not discord.CategoryChannel and c.category is None]) else []
-        none += ['|{}{}'.format(self.channelEmoji(c), c.name) for c in channels if type(c) is not discord.CategoryChannel and c.category is None]
-        for chan in channels[0].guild.categories:
-            none.append('{}{}'.format(self.channelEmoji(chan), chan.name))
-            none+=['|{}{}'.format(self.channelEmoji(c), c.name) for c in chan.channels]
-        embed.description='Total channels: {}\n\n{}'.format(len(channels), '\n'.join(none))
-        if logs: embed.add_field(name='Total channels ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.channel_create])))
-        elif logs is None: embed.add_field(name='Total channels ever created',value=self.loading)
-        else: embed.add_field(name='Total channels ever created',value='🔒Unable to obtain audit logs')
-        return embed
-
-    async def RoleListInfo(self, roles, logs):
-        '''Prereq: len(roles) > 0'''
-        embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(roles[0].guild)])
-        embed.description='Total roles: {}\n\n • {}'.format(len(roles), '\n • '.join([r.name for r in roles]))
-        embed.add_field(name='Roles displayed separately',value=len([r for r in roles if r.hoist]))
-        embed.add_field(name='Mentionable roles',value=len([r for r in roles if r.mentionable]))
-        embed.add_field(name='Externally managed roles',value=len([r for r in roles if r.managed]))
-        embed.add_field(name='Roles with manage server',value=len([r for r in roles if r.permissions.manage_guild]))
-        embed.add_field(name='Roles with administrator',value=len([r for r in roles if r.permissions.administrator]))
-        if logs: embed.add_field(name='Total roles ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.role_create])))
-        elif logs is None: embed.add_field(name='Total roles ever created',value=self.loading)
-        else: embed.add_field(name='Total roles ever created',value='🔒Unable to obtain audit logs')
-        return embed
-
-    async def MemberListInfo(self, members):
-        embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(members[0].guild)])
-        posts=[]
-        for channel in members[0].guild.text_channels:
-            with open(f'{indexes}/{members[0].guild.id}/{channel.id}.json') as f: 
-                posts += [message['author0'] for message in json.load(f).values()]
-        most = ['{} with {}'.format(bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
-        online=self.emojis['online']
-        idle=self.emojis['idle']
-        dnd=self.emojis['dnd']
-        offline=self.emojis['offline']
-        humans='👤Humans: {}'.format(len([m for m in members if not m.bot]))
-        bots='🤖Bots: {}\n'.format(len([m for m in members if m.bot]))
-        onlineGeneral = 'Online: {} / {} ({}%)'.format(len([m for m in members if m.status != discord.Status.offline]), len(members), round(len([m for m in members if m.status != discord.Status.offline]) / len(members) * 100))
-        offlineGeneral = 'Offline: {} / {} ({}%)'.format(len([m for m in members if m.status == discord.Status.offline]), len(members), round(len([m for m in members if m.status == discord.Status.offline]) / len(members) * 100))
-        online='{} Online: {}'.format(online, len([m for m in members if m.status == discord.Status.online]))
-        idle='{} Idle: {}'.format(idle, len([m for m in members if m.status == discord.Status.idle]))
-        dnd='{} Do not disturb: {}'.format(dnd, len([m for m in members if m.status == discord.Status.dnd]))
-        offline='{} Offline/invisible: {}'.format(offline, len([m for m in members if m.status == discord.Status.offline]))
-        embed.description+='\n\n**Member count:** {}{}\n{}'.format(len(members),'' if members[0].guild.max_members is None else '/{}'.format(members[0].guild.max_members),'\n'.join([humans, bots, onlineGeneral, offlineGeneral, online, idle, dnd, offline]))
-        embed.add_field(name='Playing/Listening/Streaming',value=len([m for m in members if len(m.activities) > 0]))
-        embed.add_field(name='Members with nickname',value=len([m for m in members if m.nick is not None]))
-        embed.add_field(name='On mobile',value=len([m for m in members if m.is_on_mobile()]))
-        embed.add_field(name='In voice channel',value=len([m for m in members if m.voice is not None]))
-        embed.add_field(name='Most posts',value=most)
-        embed.add_field(name='Moderators',value=len([m for m in members if m.guild_permissions.manage_guild]))
-        embed.add_field(name='Administrators',value=len([m for m in members if m.guild_permissions.administrator]))
-        return embed
-
-    async def InvitesListInfo(self, invites, logs, s: discord.Guild):
-        embed=discord.Embed(title=f'{invites[0].guild.name if invites else "This server"}\'s invites', timestamp=datetime.datetime.utcnow(), color=yellow[colorTheme(s)])
-        if invites: embed.description='Total invites: {}\n\n • {}'.format(len(invites), '\n • '.join(['discord.gg/**{}**: Goes to {}, created by {}'.format(i.code, i.channel.name, i.inviter.name) for i in invites]))[:2047]
-        else: embed.description=f'Total invites: {self.loading if invites is None else "🔒Unable to obtain invites"}'
-        if logs: embed.add_field(name='Total invites ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.invite_create])))
-        elif logs is None: embed.add_field(name='Total invites ever created',value=self.loading)
-        else: embed.add_field(name='Total invites ever created',value='🔒Unable to obtain audit logs')
-        return embed
-
-    async def BansListInfo(self, bans, logs, s): #s=server
-        embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
-        embed.description=f'Users currently banned: {len(bans) if bans else self.loading if bans is None else "🔒Missing ban retrieval permissions"}'
-        if not logs:
-            if logs is None: embed.add_field(name='Banned previously', value=self.loading)
-            else: embed.add_field(name='Banned previously', value='🔒Unable to obtain audit logs')
-        if not bans and not logs: return embed
-        null = embed.copy()
-        array = []
-        current = []
-        for b in bans:
-            for l in logs:
-                if l.action == discord.AuditLogAction.ban and l.target == b.user:
-                    created = l.created_at + datetime.timedelta(hours=timeZone(s))
-                    array.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/%Y@%H:%M'), '(No reason specified)' if b.reason is None else b.reason))
-                    current.append(b.user)
-        other=[]
-        for l in logs:
-            if l.action == discord.AuditLogAction.ban and l.target not in current:
-                created = l.created_at + datetime.timedelta(hours=timeZone(s))
-                other.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/%Y@%H:%M'), '(No reason specified)' if l.reason is None else l.reason))
-                current.append(b.user)
-        for b in bans:
-            if b.user not in current: array.append('{}: Banned because {}'.format(b.user.name, '(No reason specified)' if b.reason is None else b.reason))
-        embed.add_field(name='Banned now',value='\n'.join(array)[:1023],inline=False)
-        if len(array) == 0: 
-            null.description='Sparkly clean ban history here!'
-            return null
-        embed.add_field(name='Banned previously',value='\n\n'.join([' • {}'.format(o) for o in other])[:1023])
-        return embed
-
-    async def MemberPosts(self, m: discord.Member):
-        messageCount=0
-        for channel in m.guild.text_channels: 
-            with open(f'{indexes}/{m.guild.id}/{channel.id}.json') as f:
-                loaded = json.load(f)
-                messageCount += len([k for k, v in loaded.items() if m.id == v['author0']])
-        return messageCount
-
-    # async def calculateMemberPosts(self, m: discord.Member, p):
-    #     try: return len([f for f in os.listdir(p) if str(m.id) in f])
-    #     except FileNotFoundError: return 0
-
-    # async def MostMemberPosts(self, g: discord.Guild):
-    #     posts=[]
-    #     for channel in g.text_channels: posts += await self.bot.loop.create_task(self.calculateMostMemberPosts(f'{indexes}/{g.id}/{channel.id}'))
-    #     return ['{} with {}'.format(bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
-
-    # async def calculateMostMemberPosts(self, p):
-    #     with open(p) as f:
-    #         return [int(v['author0']) for v in json.load(f).values()]
-    #     #return [int(f[f.find('_')+1:f.find('.')]) for f in os.listdir(p)]
-
-    # async def calculateChannelPosts(self, c):
-    #     return len(os.listdir(f'{indexes}/{c.guild.id}/{c.id}'))
-
-    def FindMember(self, g: discord.Guild, arg):
-        def check(m): return any([arg.lower() == m.nick,
-            arg.lower() in m.name.lower(),
-            arg in m.discriminator,
-            arg in str(m.id)]) 
-        return discord.utils.find(check, g.members)
-
-    async def FindMembers(self, g: discord.Guild, arg):
-        '''Used for smart info command. Finds anything matching the filter'''
-        arg = arg.lower()
-        def check(m):
-            if m.nick is not None and m.nick.lower() == arg: return compareMatch(arg, m.nick)
-            if arg in m.name.lower(): return compareMatch(arg, m.name)
-            if arg in m.discriminator: return compareMatch(arg, m.discriminator)
-            if arg in str(m.id): return compareMatch(arg, str(m.id))
-            return None
-        return [(mem, check(mem)) for mem in g.members if check(mem) is not None]
-
-    async def FindRoles(self, g: discord.Guild, arg):
-        arg = arg.lower()
-        def check(r):
-            if arg in r.name.lower(): return compareMatch(arg, r.name)
-            if arg in str(r.id): return compareMatch(arg, str(r.id))
-            return None
-        return [(rol, check(rol)) for rol in g.roles if check(rol) is not None]
-
-    async def FindChannels(self, g: discord.Guild, arg):
-        arg=arg.lower()
-        def check(c): 
-            if arg in c.name.lower(): return compareMatch(arg, c.name)
-            if arg in str(c.id): return compareMatch(arg, str(c.id))
-            return None
-        return [(cha, check(cha)) for cha in g.channels if check(cha) is not None]
-
-    async def FindEmojis(self, g: discord.Guild, arg):
-        arg=arg.lower()
-        def check(e): 
-            if arg in e.name.lower(): return compareMatch(arg, e.name)
-            if arg in str(e.id): return compareMatch(arg, str(e.id))
-            return None
-        return [(emo, check(emo)) for emo in g.emojis if check(emo) is not None]
-
-    '''Split between initial findings and later findings - optimizations'''
-
-    async def FindMoreMembers(self, members, arg):
-        arg=arg.lower()
-        def check(m):
-            try:
-                if not m: return None
-                if type(m) is discord.Member and m.nick is not None and m.nick.lower() == arg.lower(): return 'Nickname is \'{}\''.format(m.nick.replace(arg, '**{}**'.format(arg))), compareMatch(arg, m.nick)
-                if arg in m.name.lower(): return 'Username is \'{}\''.format(m.name).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.name)
-                if arg in m.discriminator: return 'Discriminator is \'{}\''.format(m.discriminator).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.discriminator)
-                if arg in str(m.id): return 'ID matches: \'{}\''.format(m.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(m.id))
-                if arg in '<@!{}>'.format(m.id): return 'Mentioned', 100
-                if type(m) is discord.Member and len(m.activities) > 0:
-                    if any(arg in a.name.lower() for a in m.activities if a.name is not None): return 'Playing \'{}\''.format([a.name for a in m.activities if a.name is not None and arg in a.name.lower()][0]).replace(arg, '**{}**'.format(arg)), compareMatch(arg, [a.name for a in m.activities if arg in a.name.lower()][0])
-                    if any(a.type is discord.ActivityType.listening for a in m.activities):
-                        for a in m.activities:
-                            try:
-                                if a.type is discord.ActivityType.listening:
-                                    if arg in a.title.lower(): return 'Listening to {} by {}'.format(a.title.replace(arg, '**{}**'.format(arg)), ', '.join(a.artists)), compareMatch(arg, a.title)
-                                    elif any([arg in s.lower() for s in a.artists]): return 'Listening to {} by {}'.format(a.title, ', '.join(a.artists).replace(arg, '**{}**'.format(arg))), compareMatch(arg, [s for s in a.artists if arg in s.lower()][0])
-                            except: pass
-                if type(m) is discord.Member and arg in m.joined_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Server join date appears to match your search', compareMatch(arg, m.created_at.strftime('%A%B%d%Y%B%Y'))
-                if arg in m.created_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Account creation date appears to match your search', compareMatch(arg, m.created_at.strftime('%A%B%d%Y%B%Y'))
-                if type(m) is discord.Member and arg in str(m.status): return 'Member is \'{}\''.format(str(m.status).replace(arg, '**{}**'.format(arg))), compareMatch(arg, str(m.status))
-                if type(m) is discord.Member and any(s in arg for s in ['mobile', 'phone']) and m.is_on_mobile(): return 'Is on mobile app'.replace(arg, '**{}**'.format(arg)), compareMatch(arg, 'mobile')
-                if type(m) is discord.Member and (any(arg in r.name.lower() for r in m.roles) or any(arg in str(r.id) for r in m.roles)): return 'Has role matching **{}**'.format(arg), compareMatch(arg, [r.name for r in m.roles if arg in r.name.lower() or arg in str(r.id)][0])
-                if type(m) is discord.Member and any([arg in [p[0] for p in iter(m.guild_permissions) if p[1]]]): return 'Has permissions: \'{}\''.format([p[0] for p in iter(m.guild_permissions) if p[1] and arg in p[0]][0].replace(arg, '**{}**'.format(arg))), compareMatch(arg, [p[0] for p in iter(m.guild_permissions) if p[1] and arg in p[0]][0])
-                if 'bot' in arg and m.bot: return 'Bot account', compareMatch(arg, 'bot')
-                if type(m) is not discord.Member: return None
-                if m.voice is None: return None #Saves multiple checks later on since it's all voice attribute matching
-                if any(s in arg for s in ['voice', 'audio', 'talk']): return 'In voice chat', compareMatch(arg, 'voice')
-                if 'mute' in arg and (m.voice.mute or m.voice.self_mute): return 'Muted', compareMatch(arg, 'mute')
-                if 'deaf' in arg and (m.voice.deaf or m.voice.self_deaf): return 'Deafened', compareMatch(arg, 'deaf')
-                if arg in m.voice.channel.name.lower(): return 'Current voice channel matches **{}**'.format(arg), compareMatch(arg, m.voice.channel.name)
-                return None
-            except: return None
-        return [{'member': m, 'check': check(m)} for m in members if check(m) is not None] #list of dicts
-        
-    async def FindMoreRoles(self, g: discord.Guild, arg):
-        arg=arg.lower()
-        def check(r):
-            if arg in r.name.lower(): return 'Role name is \'{}\''.format(r.name.replace(arg, '**{}**'.format(arg))), compareMatch(arg, r.name)
-            if arg in str(r.id): return 'Role ID is \'{}\''.format(r.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(r.id))
-            if any([arg in [p[0] for p in iter(r.permissions) if p[1]]]): return 'Role has permissions: \'{}\''.format([p[0] for p in iter(r.permissions) if p[1] and arg in p[0]][0].replace(arg, '**{}**'.format(arg))), compareMatch(arg, [p[0] for p in iter(r.permissions) if p[1] and arg in p[0]][0])
-            if any(['hoist' in arg, all(s in arg for s in ['display', 'separate'])]) and r.hoist: return 'Role is displayed separately', compareMatch(arg, 'separate')
-            if 'managed' in arg and r.managed: return 'Role is externally managed', compareMatch(arg, 'managed')
-            if 'mentionable' in arg and r.mentionable: return 'Role is mentionable', compareMatch(arg, 'mentionable')
-            if arg in r.created_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Role creation date appears to match your search', compareMatch(arg, r.created_at.strftime('%A%B%d%Y%B%Y'))
-            return None
-        return [{'role': r, 'check': check(r)} for r in g.roles if check(r) is not None] #List of dicts
-
-    async def FindMoreChannels(self, g: discord.Guild, arg):
-        arg=arg.lower()
-        def check(c):
-            if arg in c.name.lower(): return 'Name is \'{}\''.format(c.name.replace(arg, '**{}**'.format(arg))), compareMatch(arg, c.name)
-            if arg in str(c.id): return 'ID is \'{}\''.format(c.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(c.id))
-            if arg in c.created_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Creation date appears to match your search', compareMatch(arg, c.created_at.strftime('%A%B%d%Y%B%Y'))
-            if type(c) is discord.TextChannel and c.topic is not None and arg in c.topic: return 'Topic contains **{}**'.format(arg), compareMatch(arg, c.topic)
-            if type(c) is discord.TextChannel and c.slowmode_delay > 0 and arg in str(c.slowmode_delay): return 'Slowmode is {}s'.format(c.slowmode_delay), compareMatch(arg, c.slowmode_delay)
-            if type(c) is discord.TextChannel and c.is_news() and 'news' in arg: return 'News channel', compareMatch(arg, 'news')
-            if type(c) is discord.VoiceChannel and arg in str(c.bitrate / 1000): return 'Bitrate: {}'.format(round(c.bitrate/1000)).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(round(c.bitrate/1000)))
-            if type(c) is discord.VoiceChannel and c.user_limit > 0 and arg in str(c.user_limit): return 'User limit is {}'.format(c.user_limit).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(c.user_limit))
-            if type(c) is not discord.VoiceChannel and c.is_nsfw() and 'nsfw' in arg: return 'NSFW', compareMatch(arg, 'nsfw')
-            return None
-        return [{'channel': c, 'check': check(c)} for c in g.channels if check(c) is not None]
-
-    async def FindMoreInvites(self, g: discord.Guild, arg):
-        arg=arg.lower()
-        def check(i):
-            if arg in i.code.lower(): return i.code.replace(arg, '**{}**'.format(arg)), compareMatch(arg, i.code)
-            if arg in i.created_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Creation date appears to match your search', compareMatch(arg, i.created_at.strftime('%A%B%d%Y%B%Y'))
-            if i.temporary and 'temp' in arg: return 'Invite is temporary'
-            if arg in str(i.uses): return 'Used {} times'.format(i.uses), compareMatch(arg, str(i.uses))
-            if arg in str(i.max_uses): return 'Can be used {} times'.format(i.max_uses), compareMatch(arg, str(i.uses))
-            if arg in i.inviter.name or arg in str(i.inviter.id): return 'Created by {}'.format(i.inviter.name).replace(arg, '**{}**'.format(arg)), compareMatch(arg, i.inviter.name)
-            if arg in i.channel.name or arg in str(i.channel.id): return 'Goes to {}'.format(i.channel.name).replace(arg, '**{}**'.format(arg)), compareMatch(arg, i.channel.name)
-            return None
-        try: return [{'invite': i, 'check': check(i)} for i in (await g.invites()) if check(i) is not None]
-        except: return []
-
-    async def FindMoreEmojis(self, g: discord.Guild, arg):
-        arg=arg.lower()
-        def check(e):
-            if arg in e.name.lower(): return 'Emoji name is {}'.format(e.name.replace(arg, '**{}**'.format(arg))), compareMatch(arg, e.name)
-            if arg == str(e): return 'Emoji typed in search query', 100
-            if arg in str(e.id): return 'ID is \'{}\''.format(e.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(e.id))
-            if 'animated' in arg and e.animated: return 'Emoji is animated', compareMatch(arg, 'animated')
-            if 'managed' in arg and e.managed: return 'Emoji is externally managed', compareMatch(arg, 'managed')
-            if arg in e.created_at.strftime('%A %B %d %Y %B %Y').lower(): return 'Role creation date appears to match your search', compareMatch(arg, e.created_at.strftime('%A%B%d%Y%B%Y'))
-            return None
-        return [{'emoji': e, 'check': check(e)} for e in g.emojis if check(e) is not None]
-
-    async def evalInfo(self, obj, g: discord.Guild, logs):
-        if type(obj) is discord.Embed: return obj
-        if type(obj) is discord.Member: return await self.MemberInfo(obj, calculatePosts = False)
-        if type(obj) is discord.Role: return await self.RoleInfo(obj, logs)
-        if type(obj) in [discord.TextChannel, discord.VoiceChannel, discord.CategoryChannel]: 
-            try: invites = await obj.invites()
-            except: invites = False
-            try: pins = await obj.pins()
-            except: pins = False
-            return (await self.ChannelInfo(obj, invites, pins, logs))[1]
-        if type(obj) is discord.Emoji: return await self.EmojiInfo(obj, (await obj.guild.fetch_emoji(obj.id)).user)
-        if type(obj) is discord.Invite: return await self.InviteInfo(obj, g)
-        if type(obj) is discord.PartialEmoji: return await self.PartialEmojiInfo(obj, g)
-
-    def AvoidDeletionLogging(self, messages):
+    def AvoidDeletionLogging(self, messages: typing.Union[typing.List[discord.Message], discord.Message]):
         '''Don't log the deletion of passed messages'''
         if type(messages) is list: self.pauseDelete += [m.id for m in messages]
         else: self.pauseDelete.append(messages.id)
 
-    def getServerMember(self, m):
-        '''Gets the member data given a member object'''
-        for member in self.bot.lightningLogging[m.guild.id]['members']:
-            if member['id'] == m.id: return member
-        return None
+    def nameZone(self, s: discord.Guild):
+        return self.getServer(s).get('tzname', 'EST')
 
-    def channelEmoji(self, c,):
-        '''Gives us the proper new emoji for the channel - good for varying channels in a single list'''
-        if c.type == discord.ChannelType.category: return self.emojis['folder']
-        elif c.type == discord.ChannelType.private: return self.emojis['member']
-        elif c.type == discord.ChannelType.group: return self.emojis['members']
-        elif c.type == discord.ChannelType.store: return self.emojis['storeChannel']
-        elif c.type == discord.ChannelType.news: return self.emojis['announcementsChannel']
-        else:
-            private = c.overwrites_for(c.guild.default_role).read_messages == False
-            if c.type == discord.ChannelType.text:
-                if c.is_nsfw(): return self.emojis['nsfwChannel']
-                elif c.guild.rules_channel and c.id == c.guild.rules_channel.id: return self.emojis['rulesChannel']
-                elif private: return self.emojis['privateTextChannel']
-                else: return self.emojis['textChannel']
-            elif c.type == discord.ChannelType.voice:
-                if private: return self.emojis['privateVoiceChannel']
-                else: return self.emojis['voiceChannel']
-        return '❔'
+    def timeZone(self, s: discord.Guild):
+        return self.getServer(s).get('offset', -4)
 
-    def channelIsHidden(self, c, member):
-        '''Returns a boolean representing whether a channel is visible to the given member'''
-        return not c.permissions_for(member).read_messages
+    def prefix(self, s: discord.Guild):
+        return self.getServer(s).get('prefix', '.')
 
-    async def CheckDisguardServerRoles(self, memb, *, mode=0, reason=None):
-        '''Automatic scan for Alpha Tester/VIP Alpha Tester for Disguard's official server. Mode - 0=Add&Remove, 1=Add, 2=Remove'''
-        #If we pass a solitary member, convert it to a list with a single entry, otherwise, leave it alone
-        #COMMENT THE REST OF MY WORK. make the update good
-        if self.bot.user.id != 558025201753784323: return
-        if type(memb) in (discord.User, discord.Member): members = [memb]
-        else: members = memb
-        disguardServer = bot.get_guild(560457796206985216) #Disguard official server
-        disguardServerMemberList = [m.id for m in disguardServer.members] #List of member IDs in Disguard Official server
-        disguardAlphaTester = disguardServer.get_role(571367278860304395) #Alpha Testers role in Disguard Official server
-        disguardVIPTester = disguardServer.get_role(571367775163908096) #VIP Alpha Testers role in Disguard Official server
-        alphaMembers = [member.id for member in disguardAlphaTester.members] #ID list of members who have the Alpha Testers role
-        vipMembers = [member.id for member in disguardVIPTester.members] #ID list of members who have the VIP Alpha Testers role
-        #Loop through all members passed in the argument
-        for m in members:
-            #If this member is in Disguard Official server
-            if m.id in disguardServerMemberList:
-                #Loop iteration member equivalent in Disguard server
-                disguardMember = disguardServer.get_member(m.id)
-                if mode != 2: #Handles adding of roles
-                    if m.id == m.guild.owner.id: await disguardMember.add_roles(disguardVIPTester, reason=f'Automatic Scan: {reason}')
-                    elif m.guild_permissions.manage_guild: await disguardMember.add_roles(disguardAlphaTester, reason=f'Automatic Scan: {reason}')
-                if mode != 1: #Handles removing of roles
-                    if m.id in alphaMembers or m.id in vipMembers:
-                        memberServers = [server for server in bot.guilds if m.id in [member.id for member in server.members]]
-                        if not any([m.id == s.owner.id for s in memberServers]) and m.id in vipMembers: await disguardMember.remove_roles(disguardVIPTester, reason=f'Automatic Scan: {reason}')
-                        if not any([s.get_member(m.id).guild_permissions.manage_guild for s in memberServers]) and m.id in alphaMembers: await disguardMember.remove_roles(disguardAlphaTester, reason=f'Automatic Scan: {reason}')
+    def colorTheme(self, s):
+        return self.getServer(s).get('colorTheme', 0)
 
-    def colorTheme(self, s: discord.Guild):
-        return self.bot.lightningLogging[s.id]['colorTheme']
+    def getServer(self, s: discord.Guild):
+        return self.bot.lightningLogging.get(s.id)
 
-    def privacyEnabledChecker(self, u, parent, child):
+    def privacyEnabledChecker(self, u: discord.User, parent, child):
         try: p = self.bot.lightningUsers[u.id]['privacy']
-        except KeyError: return False
+        except KeyError: 
+            return False
         if p[child][0] == 2: return self.privacyEnabledChecker(u, 'default', parent)
         return p[child][0] == 1
 
@@ -4054,9 +3206,20 @@ class Cyberlog(commands.Cog):
     async def uploadFiles(self, f):
         #if type(f) is not list: f = [f]
         try:
-            message = await self.imageLogChannel.send(file=discord.File(f) if type(f) is not list else None, files=[discord.File(fi) for fi in f] if type(f) is list else None)
+            message: discord.Message = await self.imageLogChannel.send(file=discord.File(f) if type(f) is not list else None, files=[discord.File(fi) for fi in f] if type(f) is list else None)
             return [attachment.url for attachment in message.attachments] if type(f) is list else message.attachments[0].url
         except discord.HTTPException: return ''
+
+    #Compare with uploadFiles
+    async def imageToURL(self, asset: discord.Asset):
+        '''Given an image asset, retrieve a new Discord CDN URL from it for permanent use'''
+        savePath = f'{tempDir}/{datetime.datetime.utcnow():%m%d%Y%H%M%S%f}.{"gif" if asset.is_animated() else "png"}'
+        await asset.replace(size=1024, static_format='png').save(savePath)
+        f = discord.File(savePath)
+        message = await self.imageLogChannel.send(file=f)
+        try: os.remove(savePath)
+        except: pass
+        return message.attachments[0].url
 
     def archiveLogEmbed(self, server, id, embed, flavorText):
         p = f'Attachments/{server.id}/LogArchive/modLogs.json'
@@ -4085,164 +3248,81 @@ class Cyberlog(commands.Cog):
         with open(p, 'w+') as f:
             f.write(logArchives)
 
-    def PermissionChanges(self, membersInput, message, embed, mod='role'):
-        members = {}
-        removedKeys = {}
-        gainedKeys = {}
-        g = membersInput[0].guild
+    #Review this monstrosity
+    def PermissionChanges(self, membersInput: typing.List[discord.Member], message: discord.Message, embed: discord.Embed, mod:str='role', permissionsChanged=True):
+        '''Given an embed, modify and return it to describe how members' permissions changed by comparing current permissions against the internal cache. Does not update the members permission cache.'''
+        members: typing.Dict[int, typing.Dict[str, str]] = {}
+        removedKeys: typing.Dict[str, typing.List[discord.Member]] = {}
+        gainedKeys: typing.Dict[str, typing.List[discord.Member]] = {}
+        g = message.guild
         settings = getCyberAttributes(g, mod)
         for m in membersInput:
             oldPerms = self.memberPermissions[g.id][m.id]
-            removed = ' '.join([p[0] for p in oldPerms if p[1] and p[0] not in [pp[0] for pp in m.guild_permissions if pp[1]]])
-            gained = ' '.join([p[0] for p in m.guild_permissions if p[1] and p[0] not in [pp[0] for pp in oldPerms if pp[1]]])
-            if len(removed) > 0: 
+            #Technically can be made faster by calling each of the loops once separately rather than twice in a gen
+            removed = ' '.join([p[0] for p in oldPerms if p[1] and p[0] not in [pp[0] for pp in m.guild_permissions if pp[1]]]) #Permissions that were set to true previously and aren't currently set to True
+            gained = ' '.join([p[0] for p in m.guild_permissions if p[1] and p[0] not in [pp[0] for pp in oldPerms if pp[1]]]) #Same but permissions that are set to True not but weren't before
+            if removed: 
                 try: members[m.id].update({'removed': removed})
                 except KeyError: members[m.id] = {'removed': removed}
-            if len(gained) > 0: 
+            if gained > 0: 
                 try: members[m.id].update({'gained': gained})
                 except KeyError: members[m.id] = {'gained': gained}
         for k, v in members.items():
-            try: removedKeys[v.get('removed')].append(g.get_member(k))
+            try: removedKeys[v['removed']].append(g.get_member(k))
             except AttributeError: removedKeys[v.get('removed')] = [g.get_member(k)]
             except KeyError:
-                if v.get('removed') is not None: removedKeys[v.get('removed')] = [g.get_member(k)]
+                if v.get('removed'): removedKeys[v['removed']] = [g.get_member(k)]
             try: gainedKeys[v.get('gained')].append(g.get_member(k))
-            except AttributeError: gainedKeys[v.get('gained')] = [g.get_member(k)]
+            except AttributeError: gainedKeys[v['gained']] = [g.get_member(k)]
             except KeyError:
-                if v.get('gained') is not None: gainedKeys[v.get('gained')] = [g.get_member(k)]
-        embedDescriptionLines = []
+                if v.get('gained'): gainedKeys[v['gained']] = [g.get_member(k)]
+        embedDescriptionLines: typing.List[str] = []
         for k, v in gainedKeys.items():
             embedDescriptionLines.append((f'''📥 {k}''', f'''{", ".join(m.name for m in v) if len(v) < 5 else f"[Hover to view the {len(v)} members]({message.jump_url} '{newline.join(m.name for m in v)}')" if len(v) < 30 else f"{len(v)} members"}'''))
         for k, v in removedKeys.items():
             embedDescriptionLines.append((f'''📤 {k}''', f'''{", ".join(m.name for m in v) if len(v) < 5 else f"[Hover to view the {len(v)} members]({message.jump_url} '{newline.join(m.name for m in v)}')" if len(v) < 30 else f"{len(v)} members"}'''))
-        if len(embedDescriptionLines) == 0: embed.description += f'''\n{self.emojis['details'] if settings['context'][1] > 0 else ''}No members were affected by the permissions changes'''
+        if len(embedDescriptionLines) == 0 and permissionsChanged: embed.description += f'''\n{self.emojis['details'] if settings['context'][1] > 0 else ''}No members were affected by the permissions changes'''
         else:
             embed.description += f'''\n{self.emojis['edit'] if settings['context'][1] > 0 else ''}{len(members)} members had their permissions updated (see bottom)'''
             for tup in embedDescriptionLines[:25]:
                 individualTup = tup[0].split(' ')
-                overshoot = len(', '.join([permissionKeys[i] for i in tup[0].split(' ')[1:]])) + 1 - 256 #256 is embed field name character limit, +1 accounts for the emoji at the beginning
-                #If we have 40 characters (or more) to spare, use the more concise custom emoji (yet it takes up many characters rather than 1 like the unicode emojis)
+                overshoot = len(', '.join([utility.getPermission(i) for i in tup[0].split(' ')[1:]])) + 1 - 256 #256 is embed field name character limit, +1 accounts for the emoji at the beginning
                 if overshoot > 0:
                     truncatePerWord = math.ceil(overshoot / len(individualTup[1:])) #how many letters to cut per word, +1 at the end to include the triple periods character with length 1
                     if truncatePerWord > 1:
                         tup = [[], tup[1]]
                         for i in individualTup[1:]:
-                            pki = permissionKeys[i]
+                            pki = utility.getPermission(i)
                             offset = 0
                             if truncatePerWord % 2 == 0: offset -= 1
                             if len(pki) % 2 == 0: offset += 1
                             tup[0].append(f"{pki[:(len(pki) - truncatePerWord) // 2]}…{pki[(len(pki) + truncatePerWord) // 2 + offset:]}")
                     embed.add_field(name=individualTup[0] + ', '.join(tup[0]), value=tup[1], inline=False)
-                else: 
+                else: #If we have 40 characters (or more) to spare, use the more concise custom emoji (yet it takes up many characters rather than 1 like the unicode emojis)
                     if overshoot < -40 and settings['library'] > 0: individualTup[0] = individualTup[0].replace('📥', str(self.emojis['memberJoin'])).replace('📤', str(self.emojis['memberLeave']))
-                    embed.add_field(name=individualTup[0] + ', '.join([permissionKeys[i] for i in tup[0][2:].split(' ')]), value=tup[1], inline=False)
+                    embed.add_field(name=individualTup[0] + ', '.join([utility.getPermission(i) for i in tup[0][2:].split(' ')]), value=tup[1], inline=False)
         return embed
-
-    async def subredditEmbed(self, search, plainText = False):
-        reddit = self.bot.reddit
-        subreddit = await reddit.subreddit(search, fetch=True)
-        url = f'https://www.reddit.com{subreddit.url}'
-        if plainText: return f'<{url}>'
-        else:
-            keyColor = subreddit.key_color or subreddit.primary_color or '#2E97E5' #The last one is the default blue
-            embed = discord.Embed(
-                title=f'r/{subreddit.display_name}',
-                description=f'''{subreddit.public_description}\n\n{subreddit.subscribers} subscribers • {subreddit.active_user_count} online\n{f"{self.emojis['alert']}This subreddit is NSFW" if subreddit.over18 else ""}''',
-                color=hexToColor(keyColor),
-                url=url)
-            embed.set_thumbnail(url=subreddit.icon_img)
-            embed.set_image(url=subreddit.banner_background_image)
-            return embed
-    
-    async def redditSubmissionEmbed(self, g, source, redditFeed=False, truncateTitle=100, truncateText=400, media=3, creditAuthor=True, color='colorCode', timestamp=True, channel=None):
-        '''Media - 0: All off, 1: Only thumbnail, 2: Only images, 3: All on'''
-        if truncateTitle < 1: truncateTitle = 256
-        if truncateText < 1: truncateText = 1900
-        reddit = self.bot.reddit
-        if type(source) is str:
-            if 'https://' in source: submission = await reddit.submission(url=source)
-            else: submission = await reddit.submission(id=source)
-        else: submission = source
-        author = submission.author
-        await author.load()
-        subreddit = submission.subreddit
-        await subreddit.load()
-        if submission.is_self: submissionType, linkFlavor = 'text', ''
-        elif submission.is_video:
-            submissionType, url = 'video', submission.media['reddit_video']['fallback_url'][:submission.media['reddit_video']['fallback_url'].find('?source=')]
-            linkFlavor = f"\n[Direct video link]({url} '{url}')"
-        elif 'i.redd.it' in submission.url: submissionType, linkFlavor = 'image', ''
-        elif 'www.reddit.com/gallery' in submission.url: submissionType, linkFlavor = 'gallery', f"\n[Gallery view]({submission.url} '{submission.url}')"
-        else: submissionType, linkFlavor = 'link', f"\n[{basicURL(submission.url)}]({submission.url} '{submission.url}')"
-        flagForNSFW = submission.over_18 and channel and not channel.is_nsfw()
-        typeKeys = {'text': '📜', 'video': self.emojis['camera'], 'image': self.emojis['images'], 'link': '🔗', 'gallery': self.emojis['details']}
-        awards = submission.total_awards_received
-        keyColor = subreddit.key_color or subreddit.primary_color or '#2E97E5' #The last one is the default blue
-        if redditFeed: description=f'''{typeKeys(submissionType[0])}{submissionType[0].upper()}{submissionType[1:]} post • r/{subreddit.display_name}{linkFlavor}{f"{newline}👀(Spoiler)" if submission.spoiler else ""}{f"{newline}{self.emojis['alert']} NSFW" if submission.over_18 else ""}'''
-        else: description=f'''{submissionType[0].upper()}{submissionType[1:]} post\n{submission.score} upvote{"s" if submission.score != 1 else ""} • {round(submission.upvote_ratio * 100)}% upvoted{f" • {awards} awards" if awards > 0 else ""}{f" • {submission.view_count} " if submission.view_count else ""} • {submission.num_comments} comment{"s" if submission.num_comments != 1 else ""} on r/{subreddit.display_name}{linkFlavor}{f"{newline}👀(Spoiler)" if submission.spoiler else ""}{f"{newline}{self.emojis['alert']}(NSFW)" if submission.over_18 else ""}'''
-        embed = discord.Embed(
-            title=f'{"🔒" if submission.locked and not redditFeed else ""}{"📌" if submission.stickied and not redditFeed else ""}{(submission.title[:truncateTitle] + "…") if len(submission.title) > truncateTitle else submission.title}', 
-            description=description,
-            color=hexToColor(keyColor) if color == 'colorCode' else hexToColor(color), url=f'https://www.reddit.com{submission.permalink}')
-        if submissionType == 'text': embed.description += f'\n\n{(submission.selftext[:truncateText] + "…") if len(submission.selftext) > truncateText else submission.selftext}'
-        if creditAuthor > 0:
-            embed.set_author(name=author.name if creditAuthor != 2 else discord.Embed.Empty, icon_url=author.icon_img if creditAuthor != 1 else discord.Embed.Empty)
-        if media > 0 and not flagForNSFW:
-            if media != 2: embed.set_thumbnail(url=subreddit.icon_img)
-            if submissionType == 'image': 
-                if redditFeed and media != 1: embed.set_image(url=submission.url)
-                elif not redditFeed: embed.set_thumbnail(url=submission.url)
-        if timestamp and not flagForNSFW: embed.set_footer(text=f'{"Posted " if not redditFeed else ""}{(datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=submission.created_utc) + datetime.timedelta(hours=timeZone(g))):%b %d, %Y • %I:%M %p} {nameZone(g)}')
-        if channel and flagForNSFW:
-            embed.title = f"{self.emojis['alert']} | Title hidden: NSFW submission & this is not a NSFW channel"
-            embed.description = f"r/{subreddit.display_name}\n\nTo comply with Discord guidelines, I cannot share content from NSFW reddit submissions to SFW Discord channels"
-        return (embed, submission.over_18) if not channel else embed
-
-def compareMatch(arg, search):
-    return round(len(arg) / len(search) * 100)
-
-async def VerifyLightningLogs(m: discord.Message, mod):
-    '''Used to update things for the new lightning logging feature'''
-    if not logEnabled(m.guild, mod): return await m.delete()
-    if m.channel != logChannel(m.guild, mod):
-        new = await logChannel(m.guild, mod).send(content=m.content,embed=m.embeds[0],attachments=m.attachments)
-        for reac in m.reactions: await new.add_reaction(str(reac))
-        return await m.delete()
 
 async def updateServer(s: discord.Guild):
     lightningLogging[s.id] = await database.GetServer(s)
 
-def ConfigureSummaries(b):
-    global summaries
-    for server in b.guilds:
-        summaries[str(server.id)] = ServerSummary()
-
-def modElement(s: discord.Guild, mod):
+#TODO: Delete for V1.0: Leftover from unused cyberlog redesign
+def modElement(s: discord.Guild, mod: str):
     '''Return the placement of the desired log module'''
     return lightningLogging.get(s.id).get('cyberlog').get('modules').index([x for x in lightningLogging.get(s.id).get('cyberlog').get('modules') if x.get('name').lower() == mod][0])
 
-def logEnabled(s: discord.Guild, mod):
-    # return all([lightningLogging.get(s.id).get('cyberlog').get('modules')[modElement(s, mod)].get('enabled'),
-    # lightningLogging.get(s.id).get('cyberlog').get('enabled'),
-    # [any([lightningLogging.get(s.id).get('cyberlog').get('modules')[modElement(s, mod)].get('channel') is not None,
-    # lightningLogging.get(s.id).get('cyberlog').get('modules')[modElement(s, mod)].get('defaultChannel') is not None])]])
-
+def logEnabled(s: discord.Guild, mod: str):
     return all([lightningLogging.get(s.id).get('cyberlog').get(mod).get('enabled'),
     lightningLogging.get(s.id).get('cyberlog').get('enabled'),
     [any([lightningLogging.get(s.id).get('cyberlog').get(mod).get('channel') is not None,
     lightningLogging.get(s.id).get('cyberlog').get(mod).get('defaultChannel') is not None])]])
 
-def logChannel(s: discord.Guild, mod):
-    # modular = lightningLogging.get(s.id).get('cyberlog').get('modules')[modElement(s, mod)].get('channel')
-    # default = lightningLogging.get(s.id).get('cyberlog').get('defaultChannel')
-    # return s.get_channel(default) if modular is None else s.get_channel(modular)
-
+def logChannel(s: discord.Guild, mod: str):
     modular = lightningLogging.get(s.id).get('cyberlog').get(mod).get('channel')
     default = lightningLogging.get(s.id).get('cyberlog').get('defaultChannel')
     return s.get_channel(default) if modular is None else s.get_channel(modular)
 
 async def verifyLogChannel(bot, s: discord.Guild):
-    #modular = lightningLogging.get(s.id).get('cyberlog').get('modules')[modElement(s, mod)].get('channel')
     try: default = lightningLogging.get(s.id).get('cyberlog').get('defaultChannel')
     except: return
     if default == None: return
@@ -4323,81 +3403,34 @@ def getCyberAttributes(s: discord.Guild, mod):
         result[word] = cyberAttribute(s, mod, word)
     return result
 
-def clockEmoji(timestamp):
-    '''Returns clock emoji in proper hand position, based on timestamp'''
-    return f':clock{int(timestamp.strftime("%I"))}{"30" if int(f"{timestamp:%M}") in range(15, 46) else ""}:' #Converting to int in the first part removes padded zeros, and actually converts for range comparison in the second part
-
-def absTime(x, y, distance):
-    '''Checks to ensure x and y (date objects (date, datetime, or time)) are within `distance` (timedelta) of each other - essentially an absolute value mathod'''
-    return x - y < distance or y - x < distance
-
-def embedToPlaintext(e: discord.Embed):
-    '''Returns a string composed of fields/values in the embed. Cleans up the content too.'''
-    result = ''
-    for f in e.fields:
-        result += f'\n{f.name}: {multiLineQuote(f.value) if len(f.value) < 300 else "<Truncated>"}'
-    #This somewhat intensive loop has to go character by character to clean up emojis and the like
-    parsed = ''
-    append = True #Whether to add characters into the parsed result (used for custom emojis, since those have angle brackets)
-    for char in result:
-        if char == '<': append = False #Pause appending for content inside of angle brackets
-        if char == '>': append = True #Resume appending for content outside of angle brackets
-        if char in string.printable and append: parsed += char
-    return discord.utils.escape_mentions(parsed).replace('**', '').replace('*', '').replace('__', '')[:2000]
-
-def multiLineQuote(s):
-    '''Converts a string containing newlines in it to a block quote'''
-    if '\n' in s: return '\n'.join([f'> {line}' for line in s.split('\n')])
-    else: return '\n'.join([line for line in s.split('\n')])
-
-def contentParser(message: discord.Message, channel):
-    return '<Hidden due to channel being NSFW>' if message.channel.is_nsfw() and not channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"
-
-def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
-    if member.id == member.guild.owner.id: return True
-    if member.id == 247412852925661185: return True
-    for a in member.roles:
-        if a.permissions.administrator or a.permissions.manage_guild:
-            return True
-    return False
-
-def nameZone(s: discord.Guild):
-    return getServer(s).get('tzname', 'EST')
-
-def timeZone(s: discord.Guild):
-    return getServer(s).get('offset', -4)
-
-def prefix(s: discord.Guild):
-    return getServer(s).get('prefix', '.')
-
-def getServer(s: discord.Guild):
-    return bot.lightningLogging.get(s.id)
-
-def colorTheme(s):
-    return getServer(s)['colorTheme']
-
-def serverIsGimped(s: discord.Guild):
-    return s.member_count > 250
-
 def lastActive(u: discord.User):
-    try: return lightningUsers.get(u.id).get('lastActive')
-    except AttributeError: return {'timestamp': datetime.datetime.min, 'reason': 'not tracked yet'}
+    return lightningUsers.get(u.id, {}).get('lastActive', {'timestamp': datetime.datetime.min, 'reason': 'not tracked yet'})
 
-async def updateLastActive(u: discord.User, timestamp, reason):
-    if bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'profile', 'lastActive'):
-        try: lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
-        except: pass
-        asyncio.create_task(database.SetLastActive(u, timestamp, reason))
+async def updateLastActive(users: typing.Union[discord.User, typing.List[discord.User]], timestamp: datetime.datetime, reason: str):
+    toUpdate = []
+    if type(users) is not list: users = [users]
+    for u in users:
+        if bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'profile', 'lastActive'):
+            try: lightningUsers[u.id]['lastActive'] = {'timestamp': timestamp, 'reason': reason}
+            except: pass
+            if u not in toUpdate: toUpdate.append(u)
+    asyncio.create_task(database.SetLastActive(toUpdate, timestamp, reason))
 
 def lastOnline(u: discord.User):
-    try: return lightningUsers.get(u.id).get('lastOnline')
-    except AttributeError: return datetime.datetime.min
+    return lightningUsers.get(u.id, {}).get('lastOnline', datetime.datetime.min)
 
-async def updateLastOnline(u: discord.User, timestamp):
-    if bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'profile', 'lastOnline'):
-        try: lightningUsers[u.id]['lastOnline'] = timestamp
-        except: pass
-        asyncio.create_task(database.SetLastOnline(u, timestamp))
+async def updateLastOnline(users: typing.Union[discord.User, typing.List[discord.User]], timestamp: datetime.datetime):
+    toUpdate = []
+    if type(users) is not list: users = [users]
+    for u in users:
+        if bot.get_cog('Cyberlog').privacyEnabledChecker(u, 'profile', 'lastOnline'):
+            try: lightningUsers[u.id]['lastOnline'] = timestamp
+            except: pass
+            if u not in toUpdate: toUpdate.append(u)
+    asyncio.create_task(database.SetLastOnline(toUpdate, timestamp))
+
+def serverIsGimped(s: discord.Guild):
+    return False
 
 def beginPurge(s: discord.Guild):
     '''Prevent logging of purge'''
@@ -4405,69 +3438,6 @@ def beginPurge(s: discord.Guild):
 
 def endPurge(s: discord.Guild):
     serverPurge[s.id] = False
-
-def suffix(count: int):
-    sfx='th'
-    if count % 100 in [11, 12, 13]:
-        sfx='th'
-    elif count%10==1:
-        sfx='st'
-    elif count%10==2:
-        sfx='nd'
-    elif count%10==3:
-        sfx='rd'
-    return sfx
-
-def hexToColor(string):
-    '''Convert a hex code (including if it's a string) to a discord color'''
-    string = str(string).replace('#', '') #In case it isn't already
-    if len(string) != 6: return discord.Color.default() #Invalid value
-    try: 
-        r, g, b = int(string[:2], 16), int(string[2:4], 16), int(string[4:], 16)
-        return discord.Color.from_rgb(r, g, b)
-    except: return discord.Color.default()
-
-def basicURL(url):
-    '''Return the URL only containing site domain'''
-    return url[url.find('//') + 2:url.find('/', url.find('//') + 2)]
-    
-
-def elapsedDuration(timeSpan, joinString=True, fullUnits=True, *, onlyTimes=False):
-    '''Returns a list of string representing elapsed time, given a dateTime. joinString determines return type'''
-    hours, minutes, seconds = timeSpan.seconds // 3600, (timeSpan.seconds // 60) % 60, timeSpan.seconds - (timeSpan.seconds // 3600) * 3600 - ((timeSpan.seconds // 60) % 60)*60
-    timeList = [seconds, minutes, hours, timeSpan.days]
-    if onlyTimes: return list(reversed(timeList))
-    display = []
-    for i, v in reversed(tuple(enumerate(timeList))): #v stands for value
-        if v != 0: display.append(f'{v} {units[i] if fullUnits else units[i][0]}{"s" if v != 1 and fullUnits else ""}')
-    if len(display) == 0: display = ['0 seconds']
-    if joinString: return f"{', '.join(display[:-1])} and {display[-1]}" if len(display) > 1 else display[0]
-    else: return display #This is a list that will be joined as appropriate at my discretion in the parent method, if I don't want to use the default joiner above
-
-def DisguardShortTimestamp(t):
-    '''Given a datetime module object, returns a Discord-UI based timestamp with <HH:MM> format'''
-    r = round(t.timestamp())
-    return f'<t:{r}:t>'
-
-def DisguardShortmonthTimestamp(t):
-    '''Given a datetime module object, returns a Discord-UI based timestamp with <MM/DD/YYYY> <HH:MM:SS AM/PM> format'''
-    r = round(t.timestamp())
-    return f'<t:{r}:d> <t:{r}:T>'
-
-def DisguardIntermediateTimestamp(t):
-    '''Given a datetime module object, returns a Discord-UI based timestamp with <MMMM DD, YYYY HH:MM AM/PM> format'''
-    r = round(t.timestamp())
-    return f'<t:{r}:f>'
-
-def DisguardLongTimestamp(t):
-    '''Given a datetime module object, returns a Discord-UI based timestamp with <MMMM DD, YYYY> <HH:MM:SS AM/PM> format'''
-    r = round(t.timestamp())
-    return f'<t:{r}:D> <t:{r}:T>'
-
-def DisguardRelativeTimestamp(t):
-    '''Given a datetime module object, returns a Discord-UI based timestamp with relative <In x days> format'''
-    r = round(t.timestamp())
-    return f'<t:{r}:R>'
 
 def setup(Bot):
     global bot
