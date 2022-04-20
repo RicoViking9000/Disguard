@@ -2824,336 +2824,16 @@ class Cyberlog(commands.Cog):
         if c.guild and not serverIsGimped(c.guild): await updateLastActive(u, datetime.datetime.now(), 'started typing somewhere') #9/29/21: Changed behavior to not work in DMs
 
     @commands.Cog.listener()
-    async def on_webhooks_update(self, c):
-        await asyncio.sleep(5)
-        await updateLastActive((await c.guild.audit_logs(limit=1).flatten())[0].user, datetime.datetime.now(), 'updated webhooks')
+    async def on_webhooks_update(self, c: discord.TextChannel):
+        await updateLastActive(await c.guild.audit_logs(limit=3).find(lambda x: x.action in (discord.AuditLogAction.webhook_create, discord.AuditLogAction.webhook_update, discord.AuditLogAction.webhook_delete)), 'updated webhooks')
 
-    # @commands.Cog.listener()
-    # async def on_command_error(self, ctx, error):
-    #     encounter = datetime.datetime.now()
-    #     if isinstance(error, commands.CommandNotFound): return
-    #     embed = None
-    #     alert = self.emojis['alert']
-    #     traceback.print_exception(type(error), error, error.__traceback__)
-    #     originalView = discord.ui.View(timeout=None)
-    #     originalView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, label='View error information'))
-    #     m = await ctx.send(f'{alert} {error}', view=originalView)
-    #     if type(error) in (commands.MissingPermissions, commands.MissingRequiredArgument): return
-    #     filename = datetime.datetime.now().strftime('%m%d%Y%H%M%S%f')
-    #     p = f'{tempDir}/Tracebacks/{filename}.txt'
-    #     try: os.makedirs(f'{tempDir}/Tracebacks')
-    #     except FileExistsError: pass
-    #     with codecs.open(p, 'w+', encoding='utf-8-sig') as f:
-    #         f.write(''.join(traceback.format_exception(type(error), error, error.__traceback__)))
-    #     while not self.bot.is_closed():
-    #         #await m.add_reaction(self.emojis['information'])
-    #         #def optionsCheck(r, u): return r.emoji == self.emojis['information'] and u.id == ctx.author.id and r.message.id == m.id
-    #         def optionsCheck(i): return i.type == discord.InteractionType.component and i.user.id == ctx.author.id and i.message.id == m.id
-    #         await self.bot.wait_for('interaction', check=optionsCheck)
-    #         #try: await m.clear_reactions()
-    #         #except: pass
-    #         #await m.edit(content=self.loading)
-    #         #### Upload traceback to image log channel, use URL button for link ####
-    #         if not embed:
-    #             embed=discord.Embed(
-    #                 title=f'{alert} An error has occured {alert}',
-    #                 #description=f"{error}\n\n{self.emojis['collapse']}: Collapse information\n{self.emojis['disguard']}: Forward this embed to my official server for my developer to view\n🎟: Open a support ticket with my developer\n\nSystem: Traceback is saved to {os.path.abspath(p)}",
-    #                 description=f"{error}\n\nSystem: Traceback is saved to {os.path.abspath(p)}. [Click here to download it from Discord's CDN.]({''})",
-    #                 color=red[colorTheme(ctx.guild)])
-    #             embed.add_field(name='Command',value=f'{ctx.prefix}{ctx.command}')
-    #             embed.add_field(name='Server',value=f'{ctx.guild.name}\n{ctx.guild.id}' if ctx.guild else 'N/A')
-    #             embed.add_field(name='Channel',value=f'{self.channelEmoji(ctx.channel)}{ctx.channel.name}\n{ctx.channel.id}')
-    #             embed.add_field(name='Author',value=f'{ctx.author.name}\n{ctx.author.id}')
-    #             embed.add_field(name='Message',value=f'{ctx.message.content}\n{ctx.message.id}')
-    #             embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y • %I:%M %p EST'))
-    #         intermediateView = discord.ui.View(timeout=None)
-    #         intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['collapse'], label='Collapse embed', custom_id='collapse'))
-    #         intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['arrowRight'], label='Forward to Disguard Official Server', custom_id='forward'))
-    #         intermediateView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji='🎟', label='Open a support ticket', custom_id='ticket'))
-    #         await m.edit(content=None, embed=embed, view=intermediateView)
-    #         #reactions = [self.emojis['collapse'], self.emojis["disguard"], '🎟']
-    #         #for r in reactions: await m.add_reaction(r)
-    #         #def navigCheck(r,u): return r.emoji in reactions and u.id == ctx.author.id and r.message.id == m.id
-    #         #r = await self.bot.wait_for('reaction_add', check=navigCheck)
-    #         r = await self.bot.wait_for('interaction', check=optionsCheck)
-    #         print(r.data)
-    #         if r.id == 'forward':
-    #         #if r[0].emoji == self.emojis['disguard']:
-    #             errorChannel = bot.get_channel(620787092582170664)
-    #             if os.path.exists(p): f = discord.File(p)
-    #             else: f = None
-    #             log = await errorChannel.send(embed=embed, file=f)
-    #             successView = discord.ui.View(timeout=None)
-    #             successView.add_item(discord.ui.Button(style=discord.ButtonStyle.link, emoji=self.emojis['disguard'], label='Join Disguard server', url='https://discord.gg/xSGujjz'))
-    #             successView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=self.emojis['modDelete'], label='Retract diagnostic report', custom_id='retract'))
-    #             successView.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, emoji='🎟', label='Open a support ticket', custom_id='ticket'))
-    #             await m.edit(content=f'A copy of this embed has been sent to my official server ({errorChannel.mention}).', view=successView)# You may retract the error message from there by reacting with {self.emojis["modDelete"]}. You may still quickly open a support ticket with 🎟 or by using the command ({prefix(ctx.guild) if ctx.guild else "."}ticket)')
-    #             #reactions = [self.emojis['modDelete'], '🎟']
-    #             while not self.bot.is_closed():
-    #                 #for r in reactions: await m.add_reaction(r)
-    #                 r = await self.bot.wait_for('interaction', check=optionsCheck)
-    #                 #try: await m.remove_reaction(r[0], r[1])
-    #                 #except: pass
-    #                 #if r[0].emoji == self.emojis['modDelete']:
-    #                 if r.id == 'retract':
-    #                     await m.edit(content=self.loading)
-    #                     await log.delete()
-    #                     break
-    #                 elif r.id == 'ticket':
-    #                     #I guess I never implemented opening a ticket from here
-    #                     command = self.bot.get_command('support')
-    #                     await command.invoke(ctx)
-    #         elif r.id == 'ticket':
-    #             #I guess I never implemented opening a ticket from here
-    #             command = self.bot.get_command('support')
-    #             print(command)
-    #             await command.invoke(ctx)
-    #         #try: await m.clear_reactions()
-    #         #except: pass
-    #         await m.edit(content=f'{alert} {error}', embed=None, view=originalView)
-
+    #TODO: Implement views
     @commands.Cog.listener()
-    async def on_command_error(self, ctx, error):
-        encounter = datetime.datetime.now()
+    async def on_command_error(self, ctx: commands.Context, error: Exception):
+        occurrence = discord.utils.utcnow()
         if isinstance(error, commands.CommandNotFound): return
-        embed = None
-        alert = self.emojis['alert']
-        traceback.print_exception(type(error), error, error.__traceback__)
-        m = await ctx.send(f'{alert} {error}')
-        if type(error) in (commands.MissingPermissions, commands.MissingRequiredArgument): return
-        filename = datetime.datetime.now().strftime('%m%d%Y%H%M%S%f')
-        p = f'{tempDir}/Tracebacks/{filename}.txt'
-        try: os.makedirs(f'{tempDir}/Tracebacks')
-        except FileExistsError: pass
-        with codecs.open(p, 'w+', encoding='utf-8-sig') as f:
-            f.write(''.join(traceback.format_exception(type(error), error, error.__traceback__)))
-        while not self.bot.is_closed():
-            await m.add_reaction(self.emojis['information'])
-            def optionsCheck(r, u): return r.emoji == self.emojis['information'] and u.id == ctx.author.id and r.message.id == m.id
-            await self.bot.wait_for('reaction_add', check=optionsCheck)
-            try: await m.clear_reactions()
-            except: pass
-            await m.edit(content=self.loading)
-            if not embed:
-                embed=discord.Embed(
-                    title=f'{alert} An error has occured {alert}',
-                    description=f"{error}\n\n{self.emojis['collapse']}: Collapse information\n{self.emojis['disguard']}: Forward this embed to my official server for my developer to view\n🎟: Open a support ticket with my developer\n\nSystem: Traceback is saved to {os.path.abspath(p)}",
-                    timestamp=datetime.datetime.utcnow(),
-                    color=red[colorTheme(ctx.guild)])
-                embed.add_field(name='Command',value=f'{ctx.prefix}{ctx.command}')
-                embed.add_field(name='Server',value=f'{ctx.guild.name}\n{ctx.guild.id}' if ctx.guild else 'N/A')
-                embed.add_field(name='Channel',value=f'{self.channelEmoji(ctx.channel)}{ctx.channel.name}\n{ctx.channel.id}')
-                embed.add_field(name='Author',value=f'{ctx.author.name}\n{ctx.author.id}')
-                embed.add_field(name='Message',value=f'{ctx.message.content}\n{ctx.message.id}')
-                embed.add_field(name='Occurence',value=encounter.strftime('%b %d, %Y • %I:%M %p EST'))
-            await m.edit(content=None, embed=embed)
-            reactions = [self.emojis['collapse'], self.emojis["disguard"], '🎟']
-            for r in reactions: await m.add_reaction(r)
-            def navigCheck(r,u): return r.emoji in reactions and u.id == ctx.author.id and r.message.id == m.id
-            r = await self.bot.wait_for('reaction_add', check=navigCheck)
-            if r[0].emoji == self.emojis['disguard']:
-                errorChannel = bot.get_channel(620787092582170664)
-                if os.path.exists(p): f = discord.File(p)
-                else: f = None
-                log = await errorChannel.send(embed=embed, file=f)
-                await m.edit(content=f'A copy of this embed has been sent to my official server ({errorChannel.mention}). You may retract the error message from there by reacting with {self.emojis["modDelete"]}. You may still quickly open a support ticket with 🎟 or by using the command ({prefix(ctx.guild) if ctx.guild else "."}ticket)')
-                reactions = [self.emojis['modDelete'], '🎟']
-                while not self.bot.is_closed():
-                    for r in reactions: await m.add_reaction(r)
-                    r = await bot.wait_for('reaction_add', check=navigCheck)
-                    try: await m.remove_reaction(r[0], r[1])
-                    except: pass
-                    if r[0].emoji == self.emojis['modDelete']:
-                        await m.edit(content=self.loading)
-                        await log.delete()
-                        break
-                    elif r[0].emoji == '🎟':
-                        command = self.bot.get_command('support')
-                        await command.invoke(ctx)
-            elif r[0].emoji == '🎟':
-                #I guess I never implemented opening a ticket from here
-                command = self.bot.get_command('support')
-                await command.invoke(ctx)
-            try: await m.clear_reactions()
-            except: pass
-            await m.edit(content=f'{alert} {error}', embed=None)
-
-    @commands.has_guild_permissions(manage_guild=True)
-    @commands.command()
-    async def pause(self, ctx, *args):
-        '''Pause logging or antispam for a duration'''
-        status = await ctx.send(str(self.loading) + "Please wait...")
-        status = await ctx.send(f'{self.emojis["loading"]}Pausing...')
-        args = [a.lower() for a in args]
-        defaultChannel = self.bot.get_channel(self.bot.lightningLogging[ctx.guild.id]['cyberlog']['defaultChannel'])
-        if not defaultChannel:
-            defaultChannel = self.bot.get_channel(self.bot.lightningLogging[ctx.guild.id]['antispam']['log'][1])
-            if not defaultChannel:
-                defaultChannel = ctx.channel
-        if 'logging' in args:
-            if 'logging' != args[0]:
-                return
-            key = 'cyberlog'
-        if 'antispam' in args:
-            if 'antispam' != args[0]:
-                return
-            key = 'antispam'
-        seconds = self.ParsePauseDuration((' ').join(args[1:]))
-        duration = datetime.timedelta(seconds = seconds)
-        if seconds > 0: 
-            rawUntil = datetime.datetime.utcnow() + duration
-            until = rawUntil + timeZone(ctx.guild)
-        else: 
-            rawUntil = datetime.datetime.max
-            until = datetime.datetime.max
-        embed = discord.Embed(
-            title=f'The {args[0][0].upper()}{args[0][1:]} module was paused',
-            description=textwrap.dedent(f'''
-                👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.name})
-                {clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=timeZone(ctx.guild)))}Paused at: {DisguardIntermediateTimestamp(datetime.datetime.now())}
-                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{DisguardIntermediateTimestamp(until)} ({DisguardRelativeTimestamp(until)})"}
-                '''),
-            color=yellow[colorTheme(ctx.guild)])
-        embed.set_footer(text='Resuming at: ')
-        embed.timestamp = rawUntil
-        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not ctx.author.is_avatar_animated() else 'gif'))
-        try: await ctx.author.avatar_url_as(size=1024).save(savePath)
-        except discord.HTTPException: pass
-        f = discord.File(savePath)
-        embed.set_thumbnail(url=f'attachment://{f.filename}')
-        embed.set_author(name=ctx.author.name, icon_url=f'attachment://{f.filename}')
-        await status.edit(content=None, embed=embed, file=f)
-        await database.PauseMod(ctx.guild, key)
-        self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = False
-        pauseTimedEvent = {'type': 'pause', 'target': key, 'server': ctx.guild.id}
-        if len(args) == 1: return #If the duration is infinite, we don't wait
-        await database.AppendTimedEvent(ctx.guild, pauseTimedEvent)
-        await asyncio.sleep(duration)
-        await database.ResumeMod(ctx.guild, key)
-        self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = True
-        embed.title = f'The {args[0][0].upper()}{args[0][1:]} module has resumed'
-        embed.description = ''
-        await status.edit(embed=embed)
-        
-    @commands.command()
-    async def unpause(self, ctx, *args):
-        if len(args) < 1: return await ctx.send("Please provide module `antispam` or `logging` to unpause")
-        args = [a.lower() for a in args]
-        if 'antispam' in args:
-            await database.ResumeMod(ctx.guild, 'antispam')
-            self.bot.lightningLogging[ctx.guild.id]['antispam']['enabled'] = True
-            await ctx.send("✅Successfully resumed antispam moderation")
-        if 'logging' in args:
-            await database.ResumeMod(ctx.guild, 'cyberlog')
-            self.bot.lightningLogging[ctx.guild.id]['cyberlog']['enabled'] = True
-            await ctx.send("✅Successfully resumed logging")
-
-    @commands.command()
-    async def history(self, ctx, target: typing.Optional[discord.Member] = None, *, mod = ''):
-        '''Viewer for custom status, username, and avatar history
-        •If no member is provided, it will default to the command author
-        •If no module is provided, it will default to the homepage'''
-        await ctx.trigger_typing()
-        if target is None: target = ctx.author
-        p = prefix(ctx.guild)
-        embed=discord.Embed(color=yellow[colorTheme(ctx.guild)])
-        if not self.privacyEnabledChecker(target, 'default', 'attributeHistory'):
-            if self.privacyVisibilityChecker(target, 'default', 'attributeHistory'):
-                embed.title = 'Attribute History » Feature Disabled' 
-                embed.description = f'{target.name} has disabled their attribute history' if target.id != ctx.author.id else 'You have disabled your attribute history'
-            else:
-                if not ctx.guild and target.id != ctx.author.id:
-                    embed.title = 'Attribute History » Access Restricted' 
-                    embed.description = f'{target.name} has privated their attribute history' if target.id != ctx.author.id else 'You have privated your attribute history. Use this command in DMs to access it.'
-            return await ctx.send(embed=embed)
-        letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-        def navigationCheck(r, u): return str(r) in navigationList and u.id == ctx.author.id and r.message.id == message.id
-        async def viewerAbstraction():
-            e = copy.deepcopy(embed)
-            if not self.privacyEnabledChecker(target, 'attributeHistory', f'{mod}History'):
-                e.description = f'{target.name} has disabled their {mod} history feature' if target != ctx.author else f'You have disabled your {mod} history.'
-                return e, []
-            if not self.privacyVisibilityChecker(target, 'attributeHistory', f'{mod}History'):
-                e.description = f'{target.name} has privated their {mod} history feature' if target != ctx.author else f'You have privated your {mod} history. Use this command in DMs to access it.'
-                return e, []
-            e.description = ''
-            tailMappings = {'avatar': 'imageURL', 'username': 'name', 'customStatus': 'name'}
-            backslash = '\\'
-            data = self.bot.lightningUsers[target.id].get(f'{mod}History')
-            e.description = f'{len(data) if len(data) < 19 else 19} / {len(data)} entries shown; oldest on top\nWebsite portal coming soon™'
-            if mod == 'avatar': e.description += '\nTo set an entry as the embed thumbnail, react with that letter'
-            if mod == 'customStatus': e.description += '\nTo set a custom emoji as the embed thumbnail, react with that letter'
-            for i, entry in enumerate(data[-19:]): #first twenty entries because that is the max number of reactions
-                if i > 0:
-                    span = entry.get('timestamp') - prior.get('timestamp')
-                    hours, minutes, seconds = span.seconds // 3600, (span.seconds // 60) % 60, span.seconds - (span.seconds // 3600) * 3600 - ((span.seconds // 60) % 60) * 60
-                    times = [seconds, minutes, hours, span.days]
-                    distanceDisplay = []
-                    for j in range(len(times) - 1, -1, -1):
-                        if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
-                    if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
-                prior = entry
-                timestampString = f'{DisguardIntermediateTimestamp(entry.get("timestamp") - datetime.timedelta(hours=DST))}'
-                if mod in ('avatar', 'customStatus'): timestampString += f' {"• " + (backslash + letters[i]) if mod == "avatar" or (mod == "customStatus" and entry.get("emoji") and len(entry.get("emoji")) > 1) else ""}'
-                e.add_field(name=timestampString if i == 0 else f'**{distanceDisplay[0]} later** • {timestampString}', value=f'''> {entry.get("emoji") if entry.get("emoji") and len(entry.get("emoji")) == 1 else f"[Custom Emoji]({entry.get('emoji')})" if entry.get("emoji") else ""} {entry.get(tailMappings.get(mod)) if entry.get(tailMappings.get(mod)) else ""}''', inline=False)
-            headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
-            header = f'📜 Attribute History / 👮 / {headerTail}'
-            header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
-            footerText = 'Data from June 10, 2020 and on'
-            e.set_footer(text=footerText)
-            e.title = header
-            return e, data[-19:]
-        while not self.bot.is_closed():
-            embed=discord.Embed(color=yellow[colorTheme(ctx.guild)])
-            if any(attempt in mod.lower() for attempt in ['avatar', 'picture', 'pfp']): mod = 'avatar'
-            elif any(attempt in mod.lower() for attempt in ['name']): mod = 'username'
-            elif any(attempt in mod.lower() for attempt in ['status', 'emoji', 'presence', 'quote']): mod = 'customStatus'
-            elif mod != '': 
-                members = await self.FindMoreMembers(ctx.guild.members, mod)
-                members.sort(key = lambda x: x.get('check')[1], reverse=True)
-                if len(members) == 0: return await ctx.send(embed=discord.Embed(description=f'Unknown history module type or invalid user \"{mod}\"\n\nUsage: `{"." if ctx.guild is None else p}history |<member>| |<module>|`\n\nSee the [help page](https://disguard.netlify.app/history.html) for more information'))
-                target = members[0].get('member')
-                mod = ''
-            headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
-            header = f'📜 Attribute History / 👮 / {headerTail}'
-            header = f'📜 Attribute History / 👮 {target.name:.{63 - len(header)}} / {headerTail}'
-            embed.title = header
-            navigationList = ['🖼', '📝', '💭']
-            if mod == '':
-                try: await message.clear_reactions()
-                except UnboundLocalError: pass
-                embed.description=f'Welcome to the attribute history viewer! Currently, the following options are available:\n🖼: Avatar History (`{p}history avatar`)\n📝: Username History(`{p}history username`)\n💭: Custom Status History(`{p}history status`)\n\nReact with your choice to enter the respective module'
-                try: await message.edit(embed=embed)
-                except UnboundLocalError: message = await ctx.send(embed=embed)
-                for emoji in navigationList: await message.add_reaction(emoji)
-                result = await self.bot.wait_for('reaction_add', check=navigationCheck)
-                if str(result[0]) == '🖼': mod = 'avatar'
-                elif str(result[0]) == '📝': mod = 'username'
-                elif str(result[0]) == '💭': mod = 'customStatus'
-            newEmbed, data = await viewerAbstraction()
-            try: await message.edit(embed=newEmbed)
-            except UnboundLocalError: message = await ctx.send(embed=newEmbed)
-            await message.clear_reactions()
-            navigationList = ['🏠']
-            if mod == 'avatar': navigationList += letters[:len(data)]
-            if mod == 'customStatus':
-                for letter in letters[:len(data)]:
-                    if newEmbed.fields[letters.index(letter)].name.endswith(letter): navigationList.append(letter)
-            for emoji in navigationList: await message.add_reaction(emoji)
-            cache = '' #Stores last letter reaction, if applicable, to remove reaction later on
-            while mod != '':
-                result = await self.bot.wait_for('reaction_add', check=navigationCheck)
-                if str(result[0]) == '🏠': mod = ''
-                else: 
-                    value = newEmbed.fields[letters.index(str(result[0]))].value
-                    newEmbed.set_thumbnail(url=value[value.find('>')+1:].strip() if mod == 'avatar' else value[value.find('(')+1:value.find(')')])
-                    headerTail = '🏠 Home' if mod == '' else '🖼 Avatar History' if mod == 'avatar' else '📝 Username History' if mod == 'username' else '💭 Custom Status History'
-                    header = f'📜 Attribute History / 👮 / {headerTail}'
-                    header = f'📜 Attribute History / 👮 {target.name:.{50 - len(header)}} / {headerTail}'
-                    newEmbed.title = header
-                    if cache: await message.remove_reaction(cache, result[1])
-                    cache = str(result[0])
-                    await message.edit(embed=newEmbed)
+        view = ErrorView(self, ctx, error, occurrence)
+        await ctx.send(f'{self.emojis["alert"]} | {error}', view=view)
 
     @commands.guild_only()
     @commands.command(aliases=['archives'])
@@ -3466,7 +3146,123 @@ def beginPurge(s: discord.Guild):
 def endPurge(s: discord.Guild):
     serverPurge[s.id] = False
 
-def setup(Bot):
+def setup(Bot: commands.Bot):
     global bot
     Bot.add_cog(Cyberlog(Bot))
     bot = Bot
+
+class ErrorView(discord.ui.View):
+    def __init__(self, cyberlog: Cyberlog, ctx: commands.Context, error: Exception, occurrence: datetime.datetime):
+        super().__init__(timeout=600)
+        self.cyberlog = cyberlog
+        self.ctx = ctx
+        self.error = error
+        self.occurrence = occurrence
+        self.errorDetailsView = None
+        self.embed = None
+        self.button = self.viewDetailsButton(cyberlog, ctx)
+        self.add_item(self.button)
+        asyncio.create_task(self.writeError())
+
+    async def writeError(self):
+        consoleLogChannel: discord.TextChannel = self.cyberlog.bot.get_channel(873069122458615849)
+        self.filename = self.occurrence.strftime('%m%d%Y%H%M%S%f')
+        self.path = f'{tempDir}/Tracebacks/{self.filename}.txt'
+        try: os.makedirs(f'{tempDir}/Tracebacks')
+        except FileExistsError: pass
+        with codecs.open(self.path, 'w+', encoding='utf-8-sig') as f:
+            f.write(''.join(traceback.format_exception(type(self.error), self.error, self.error.__traceback__)))
+        if os.path.exists(self.path): f = discord.File(self.path)
+        else: f = None
+        await consoleLogChannel.send(file=f)
+
+    class viewDetailsButton(discord.ui.Button):
+        def __init__(self, cyberlog: Cyberlog, ctx: commands.Context):
+            super().__init__(emoji=cyberlog.emojis['details'], label='View error information', custom_id=f'{ctx.message.id}-viewinfo')
+        async def callback(self, interaction: discord.Interaction):
+            view: ErrorView = self.view
+            embed = discord.Embed(title=f'{view.cyberlog.emojis["alert"]} An error has occured', description=str(view.error), color=red[view.cyberlog.colorTheme(view.ctx.guild)])
+            embed.add_field(name='Command', value=f'{view.ctx.prefix}{view.ctx.command}')
+            embed.add_field(name='Server', value=f'{view.ctx.guild.name}\n{view.ctx.guild.id}' if view.ctx.guild else 'N/A')
+            embed.add_field(name='Channel', value=f'{utility.channelEmoji(view.cyberlog, view.ctx.channel)}{view.ctx.channel.name}\n{view.ctx.channel.id}')
+            embed.add_field(name='Author', value=f'{view.ctx.author.name}\n{view.ctx.author.id}')
+            embed.add_field(name='Author/Bot Permissions', value=f'{view.ctx.author.guild_permissions.value}\n{view.ctx.guild.me.guild_permissions.value}')
+            embed.add_field(name='Occurrence', value=utility.DisguardLongTimestamp(view.occurrence))
+            view.embed = embed
+            if not view.errorDetailsView: view.errorDetailsView = ErrorDetailsView(view)
+            await interaction.response.edit_message(content=interaction.message.content if view.errorDetailsView.buttonSend.disabled else None, embed=embed, view=view.errorDetailsView)
+        
+class ErrorDetailsView(discord.ui.View):
+    def __init__(self, errorView: ErrorView):
+        super().__init__()
+        self.cyberlog = errorView.cyberlog
+        self.error = errorView.error
+        self.ctx = errorView.ctx
+        self.errorView = errorView
+        self.report = None
+        self.buttonCollapse = self.collapseButton(self.cyberlog, self.ctx)
+        self.buttonSend = self.sendButton(self.cyberlog, self.ctx)
+        self.buttonTicket = self.openTicketButton(self.cyberlog, self.ctx)
+        self.add_item(self.buttonCollapse)
+        self.add_item(self.buttonSend)
+        self.add_item(self.buttonTicket)
+    
+    class collapseButton(discord.ui.Button):
+        def __init__(self, cyberlog: Cyberlog, ctx: commands.Context):
+            super().__init__(emoji=cyberlog.emojis['collapse'], label='Collapse embed', custom_id=f'{ctx.message.id}-collapse')
+        async def callback(self, interaction: discord.Interaction):
+            view: ErrorDetailsView = self.view
+            await interaction.response.edit_message(content=f'{view.cyberlog.emojis["alert"]} | {view.error}' if not view.buttonSend.disabled else '', embed=None, view=view.errorView)
+    
+    class sendButton(discord.ui.Button):
+        def __init__(self, cyberlog: Cyberlog, ctx: commands.Context):
+            super().__init__(emoji=cyberlog.emojis['sendMessage'], label='Send diagnostic data', custom_id=f'{ctx.message.id}-forward')
+        async def callback(self, interaction: discord.Interaction):
+            view: ErrorDetailsView = self.view
+            embed = discord.Embed(title='Send diagnostic data', description='Want to help squash these bugs? Sending diagnostic data will forward this embed to a channel visible only to my developer in Disguard\'s Official Server, along with contextually relevant information as appropriate. For more information, check out [Disguard\'s privacy policy](https://disguard.netlify.app/privacy#appendixG). If this sounds alright, then click the green button.')
+            await interaction.response.edit_message(embed=embed, view=ErrorDiagnosticConfirmationView(view))
+    
+    class openTicketButton(discord.ui.Button):
+        def __init__(self, cyberlog: Cyberlog, ctx: commands.Context):
+            super().__init__(emoji='🎟', label='Open support ticket', custom_id=f'{ctx.message.id}-ticket')
+        async def callback(self, interaction: discord.Interaction):
+            view: ErrorDetailsView = self.view
+            command = view.cyberlog.bot.get_command('support')
+            await command.invoke(view.ctx)
+
+class ErrorDiagnosticConfirmationView(discord.ui.View):
+    def __init__(self, errorDetailsView: ErrorDetailsView):
+        super().__init__()
+        self.errorDetailsView = errorDetailsView
+        self.add_item(self.noButton(errorDetailsView))
+        self.add_item(self.yesButton(errorDetailsView))
+    
+    class noButton(discord.ui.Button):
+        def __init__(self, errorDetailsView: ErrorDetailsView):
+            super().__init__(style=discord.ButtonStyle.red, label='Cancel', custom_id=f'{errorDetailsView.ctx.message.id}-no')
+        async def callback(self, interaction: discord.Interaction):
+            view: ErrorDiagnosticConfirmationView = self.view
+            await interaction.response.edit_message(embed=view.errorDetailsView.errorView.embed, view=view.errorDetailsView)
+
+    class yesButton(discord.ui.Button):
+        def __init__(self, errorDetailsView: ErrorDetailsView):
+            super().__init__(style=discord.ButtonStyle.green, label='Confirm', custom_id=f'{errorDetailsView.ctx.message.id}-yes')
+        async def callback(self, interaction: discord.Interaction):
+            view: ErrorDiagnosticConfirmationView = self.view
+            #TODO: advanced traceback
+            view.errorDetailsView.buttonSend.disabled = True
+            filename = view.errorDetailsView.errorView.occurrence.strftime('%m%d%Y%H%M%S%f')
+            path = f'{tempDir}/Tracebacks/{filename}-detailed.txt'
+            if not os.path.exists(f'{tempDir}/Tracebacks'): os.makedirs(f'{tempDir}/Tracebacks')
+            header = f'Occurrence: {utility.DisguardStandardTimestamp(view.errorDetailsView.errorView.occurrence)} UTC\nServer: {view.errorDetailsView.ctx.guild.name} ({view.errorDetailsView.ctx.guild.id}) • {view.errorDetailsView.ctx.guild.member_count} members\n'
+            header+= f'Channel: {view.errorDetailsView.ctx.channel.name} ({view.errorDetailsView.ctx.channel.id})\nMember: {view.errorDetailsView.ctx.author.name} ({view.errorDetailsView.ctx.author.id})\nMember permissions: {utility.outputPermissions(view.errorDetailsView.ctx.author.guild_permissions)}\n'
+            header+= f'Bot permissions: {utility.outputPermissions(view.errorDetailsView.ctx.guild.me.guild_permissions)}\nMessage: {view.errorDetailsView.ctx.message.content}'
+            with codecs.open(path, 'w+', encoding='utf-8-sig') as f:
+                f.write(f'{header}\n\n{"".join(traceback.format_exception(type(view.errorDetailsView.error), view.errorDetailsView.error, view.errorDetailsView.error.__traceback__))}')
+            if os.path.exists(path): f = discord.File(path)
+            else: f = None
+            errorChannel: discord.TextChannel = view.errorDetailsView.cyberlog.bot.get_channel(620787092582170664)
+            await errorChannel.send(file=f)
+            await interaction.response.edit_message(content=f'Diagnostic data was successfully submitted to my developer via Disguard\'s Official Server: <https://discord.gg/xSGujjz>. Thanks for making it easier to fix bugs!', view=view.errorDetailsView)
+            # TODO: bug bounty
+

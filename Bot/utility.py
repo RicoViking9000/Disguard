@@ -40,37 +40,37 @@ def CheckPermissions(member: discord.Member, permissions: discord.Permissions, i
     '''Compares a given permissions with the server permissions of the given member'''
     return member.id in (member.guild.owner_id, 247412852925661185 if includeDev else 0) or member.guild_permissions.is_superset(permissions)
 
-# async def ManageRoles(member: discord.Member):
-#     '''Does this member have the Manage Roles permission'''
-#     if member.id == member.guild.owner.id: return True
-#     for a in member.roles:
-#         if a.permissions.administrator or a.permissions.manage_roles:
-#             return True
-#     return False
+async def ManageRoles(member: discord.Member):
+    '''Does this member have the Manage Roles permission'''
+    if member.id == member.guild.owner.id: return True
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.manage_roles:
+            return True
+    return False
 
-# async def ManageChannels(member: discord.Member):
-#     '''Does this member have the Manage Channels permission'''
-#     if member.id == member.guild.owner.id: return True
-#     for a in member.roles:
-#         if a.permissions.administrator or a.permissions.manage_channels:
-#             return True
-#     return False
+async def ManageChannels(member: discord.Member):
+    '''Does this member have the Manage Channels permission'''
+    if member.id == member.guild.owner.id: return True
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.manage_channels:
+            return True
+    return False
 
-# async def KickMembers(member: discord.Member):
-#     '''Does this member have the Kick Members permission'''
-#     if member.id == member.guild.owner.id: return True
-#     for a in member.roles:
-#         if a.permissions.administrator or a.permissions.kick_members:
-#             return True
-#     return False
+async def KickMembers(member: discord.Member):
+    '''Does this member have the Kick Members permission'''
+    if member.id == member.guild.owner.id: return True
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.kick_members:
+            return True
+    return False
 
-# async def BanMembers(member: discord.Member):
-#     '''Does this member have the Ban Members permission'''
-#     if member.id == member.guild.owner.id: return True
-#     for a in member.roles:
-#         if a.permissions.administrator or a.permissions.ban_members:
-#             return True
-#     return False
+async def BanMembers(member: discord.Member):
+    '''Does this member have the Ban Members permission'''
+    if member.id == member.guild.owner.id: return True
+    for a in member.roles:
+        if a.permissions.administrator or a.permissions.ban_members:
+            return True
+    return False
 
 def rawStringifyPermissions(p: discord.Permissions):
     '''Turn a permissions object into a raw stringified version'''
@@ -79,6 +79,10 @@ def rawStringifyPermissions(p: discord.Permissions):
 def stringifyPermissions(p: discord.Permissions):
     '''Turn a permissions object into a stringified version using the official Discord UI descriptions'''
     return [permissionKeys.get(a[0], a[0]) for a in iter(p) if a[1]]
+
+def outputPermissions(p: discord.Permissions):
+    '''Converts stringifyPermissions(p) to a comma-separated string'''
+    return ', '.join(stringifyPermissions(p))
 
 def getPermission(p: str):
     '''Given a String in the form of a raw permission string value (aka the keys in <permissionKeys>), return its Discord-UI friendly form if possible'''
@@ -140,7 +144,8 @@ def contentParser(message: discord.Message):
     return '<Hidden due to channel being NSFW>' if message.channel.is_nsfw() and not message.channel.is_nsfw() else message.content if message.content else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f': {message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"
     
 def empty(value):
-    return value == discord.Embed.Empty
+    '''Compares an embed field to its delegated empty value (in d.py 2.0, changed from Embed.Empty to None'''
+    return value == None
 
 def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChannel]):
     '''Gives us the proper new emoji for the channel - good for varying channels in a single list'''
@@ -202,6 +207,9 @@ def DisguardRelativeTimestamp(t):
     '''Given a datetime module object, returns a Discord-UI based timestamp with relative <In x days> format'''
     r = round(t.timestamp())
     return f'<t:{r}:R>'
+
+def DisguardStandardTimestamp(t: datetime.datetime):
+    return f'{t:%B %d, %Y • %I:%M%S %p}'
 
 def paginate(input, perPage):
     '''Splits a list (input) into segments with perPage items in each segment'''
