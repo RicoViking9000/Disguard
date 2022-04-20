@@ -1470,7 +1470,6 @@ class Cyberlog(commands.Cog):
                         {"🕰" if settings['context'][1] > 0 else ''}{"Timestamp" if settings['context'][1] < 2 else ''}: {adjusted:%b %d, %Y • %I:%M:%s %p} {self.nameZone(member.guild)}
                         {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {(member.created_at + datetime.timedelta(hours=self.timeZone(member.guild))):%b %d, %Y • %I:%M %p} {self.nameZone(member.guild)}
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old
-                        {"🌐" if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in bot.guilds if member in g.members])}\n
                         {"🌐" if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in self.bot.guilds if member in g.members])}\n
                         QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')''')
                 ]
@@ -1519,7 +1518,6 @@ class Cyberlog(commands.Cog):
         if msg:
             if member.id in [m.id for m in member.guild.members]: #TODO: change to dict for performance if possible?
                 embed.title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'} (React ℹ for member info viewer)" if settings['context'][0] < 2 else ''}'''
-                if hadToRemute: embed.description += f"\n{self.emojis['greenCheck']}Succesfully remuted member; their mute time isn't over yet"
                 if hadToRemute: embed.description += f"\n{self.emojis['greenCheck']}Succesfully remuted {member.name}"
                 await msg.edit(content=msg.content, embed=embed if not settings['plainText'] else None)
                 final = copy.deepcopy(embed)
@@ -2139,13 +2137,13 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot joins a server'''
-        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
-        embed = discord.Embed(title=f'{self.emojis["darkGreenPlus"]}Joined server', description=f'{guild.name}\n{guild.member_count} Members\nCreated {DisguardRelativeTimestamp(guild.created_at - datetime.timedelta(hours=DST))}', color=green[1])
+        await self.bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
+        embed = discord.Embed(title=f'{self.emojis["darkGreenPlus"]}Joined server', description=f'{guild.name}\n{guild.member_count} Members\nCreated {utility.DisguardRelativeTimestamp(guild.created_at - datetime.timedelta(hours=DST))}', color=green[1])
         embed.set_footer(text=guild.id)
         await self.globalLogChannel.send(embed=embed)
-        asyncio.create_task(database.VerifyServer(guild, bot))
-        for member in guild.members:
-            await database.VerifyUser(member, bot)
+        asyncio.create_task(database.VerifyServer(guild, self.bot, new=True, includeMembers=guild.members))
+        asyncio.create_task(database.VerifyUsers(self.bot, guild.members))
+        #TODO: Improve teh server join experience
         content=f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.com>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
         content+=f'\nℹMy default prefix is `.` and can be changed on the online dashboard under "General Server Settings."\n\n❔Need help with anything, or just have a question? My developer would be more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `.ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
         try: target = await database.CalculateModeratorChannel(guild, self.bot, False)
@@ -2158,10 +2156,10 @@ class Cyberlog(commands.Cog):
                         break
         try: await target.send(content)
         except: pass
-        await self.CheckDisguardServerRoles(guild.members, mode=1, reason='Bot joined a server')
+        #await self.CheckDisguardServerRoles(guild.members, mode=1, reason='Bot joined a server')
         await asyncio.gather(*[self.indexServer(c) for c in guild.text_channels])
 
-    async def indexServer(self, channel):
+    async def indexServer(self, channel: discord.TextChannel):
         '''This will fully index messages.'''
         path = f'{indexes}/{channel.guild.id}/{channel.id}'
         try: os.makedirs(f'{indexes}/{channel.guild.id}')
@@ -2169,46 +2167,39 @@ class Cyberlog(commands.Cog):
         indexData = {}
         try:
             async for message in channel.history(limit=None, oldest_first=True):
-                if str(message.id) in indexData.keys(): 
-                    break 
-                indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
+                if str(message.id) in indexData.keys(): continue
+                indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': utility.contentParser(message)}
                 await asyncio.sleep(0.0025)
             indexData = json.dumps(indexData, indent=4)
-            with open(f'{path}.json', "w+") as f:
+            with open(f'{path}.json', 'w+') as f:
                 f.write(indexData)
         except Exception as e: print(f'Index error for {channel.guild.name} - {channel.name}: {e}')
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
+        '''[DISCORD API METHOD] Called when a server's attributes are updated'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(after))
-        message = None
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(after))
         if logEnabled(before, 'server'):
             content = 'Server settings were updated'
             settings = getCyberAttributes(after, 'server')
-            color = blue[colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+            color = blue[self.colorTheme(after)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed=discord.Embed(title=f'{(self.emojis["serverUpdate"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{"Server updated (React ℹ to view server details)" if settings["context"][0] < 2 else ""}', color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not after.is_icon_animated() else 'gif'))
-                try: await after.icon_url_as(size=1024).save(savePath)
-                except discord.HTTPException: pass
-                url = await self.uploadFiles(savePath)
+                url = await self.imageToURL(after.icon)
                 if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4): embed.set_author(name=after.name, icon_url=url)
             if readPerms(before, 'server'):
                 try:
-                    log = (await after.audit_logs(limit=1, action=discord.AuditLogAction.guild_update).flatten())[0]
+                    log = await after.audit_logs().get(action=discord.AuditLogAction.guild_update)
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
                     embed.description = f'''{'👮‍♂️' if settings['context'][1] > 0 else ''}{'Updated by' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                        try: await log.user.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                        if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                     content = f'{log.user} updated server settings'
                     await updateLastActive(log.user, datetime.datetime.now(), 'updated a server')
                 except Exception as e: content+=f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
@@ -2234,7 +2225,7 @@ class Cyberlog(commands.Cog):
                 o = f'{after.owner.mention} ({after.owner.name}), ownership of {after.name} has been transferred to you from {before.owner.mention} ({before.owner.name})'
                 if not content: content = o
                 else: content += f'\n{o}'
-                await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server owner changed')
+                #await self.CheckDisguardServerRoles(after.members, mode=0, reason='Server owner changed')
             if before.default_notifications != after.default_notifications:
                 values = {'all_messages': 'All messages', 'only_mentions': 'Only mentions'}
                 embed.add_field(name='Default Notifications', value=f'{values[before.default_notifications.name]} → **{values[after.default_notifications.name]}**')
@@ -2243,20 +2234,18 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name='Explicit Content Filter', value=f'{values[before.explicit_content_filter.name]} → **{values[after.explicit_content_filter.name]}**')
             if before.system_channel != after.system_channel:
                 embed.add_field(name='System channel', value=f"{f'{before.system_channel.mention} ({before.system_channel.name})' if before.system_channel else '<None>'} → {f'{after.system_channel.mention} ({after.system_channel.name})' if after.system_channel else '<None>'}")
-            if before.icon_url != after.icon_url:
-                message = await self.imageLogChannel.send(before.icon_url_as(static_format='png'))
-                thumbURL = message.attachments[0].url
-                message = await self.imageLogChannel.send(after.icon_url_as(static_format='png'))
-                imageURL = message.attachments[0].url
+            if before.icon != after.icon:
+                thumbURL = await self.imageToURL(before.icon.with_static_format('png'))
+                imageURL = await self.imageToURL(after.icon.with_static_format('png'))
                 embed.set_thumbnail(url=thumbURL)
                 embed.set_image(url=imageURL)
                 embed.add_field(name='Server icon updated',value=f'Old: [Thumbnail to the right]({thumbURL})\nNew: [Image below]({imageURL})')
-            asyncio.create_task(database.VerifyServer(after, bot, includeMembers=False))
-            if message and len(embed.fields) > 0:
+            asyncio.create_task(database.VerifyServer(after, self.bot))
+            if len(embed.fields) > 0:
                 reactions = ['ℹ']
-                if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
-                content += embedToPlaintext(embed)
-                message = await logChannel(before, 'server').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'], allowed_mentions=discord.AllowedMentions(users=[after.owner]))
+                if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
+                content += utility.embedToPlaintext(embed)
+                message: discord.Message = await logChannel(before, 'server').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'], allowed_mentions=discord.AllowedMentions(users=[after.owner]))
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await message.edit(content=None)
                 self.archiveLogEmbed(after, message.id, embed, 'Server Update')
                 if not settings['plainText']:
@@ -2275,7 +2264,8 @@ class Cyberlog(commands.Cog):
                             hooks = await after.webhooks()
                             invites = await after.invites()
                         except: pass
-                        new = await self.ServerInfo(after, logs, bans, hooks, invites)
+                        info: Info.Info = self.bot.get_cog('Info')
+                        new = await info.ServerInfo(after, logs, bans, hooks, invites)
                         if embed.author.name: new.set_author(icon_url=url, name=log.user.name)
                         await message.edit(embed=new)
                         await message.clear_reactions()
@@ -2297,16 +2287,15 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot leaves a server'''
-        embed = discord.Embed(title="❌Left server", description=f'{guild.name}', color=red[1])
+        embed = discord.Embed(title="❌Left server", description=guild.name, color=red[1])
         embed.set_footer(text=guild.id)
         await self.globalLogChannel.send(embed=embed)
-        await bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
-        asyncio.create_task(database.VerifyServer(guild, bot))
-        await self.CheckDisguardServerRoles(guild.members, mode=2, reason='Bot left a server')
+        await self.bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
+        asyncio.create_task(database.VerifyServer(guild, self.bot))
+        #await self.CheckDisguardServerRoles(guild.members, mode=2, reason='Bot left a server')
         path = f'Attachments/{guild.id}'
         shutil.rmtree(path)
-        for member in guild.members:
-            await database.VerifyUser(member, bot)
+        await database.VerifyUsers(self.bot, guild.members)
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: discord.Role):
