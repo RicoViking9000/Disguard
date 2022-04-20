@@ -153,7 +153,7 @@ class Cyberlog(commands.Cog):
                 serverStarted = datetime.datetime.now()
                 try: asyncio.gather(database.CalculateGeneralChannel(g, self.bot, True), database.CalculateAnnouncementsChannel(g, self.bot, True), database.CalculateModeratorChannel(g, self.bot, True))
                 except: pass
-                #await self.CheckDisguardServerRoles(g.members, mode=0, reason='Full verification check') #Remove this for v1.0
+                await self.CheckDisguardServerRoles(g.members, mode=0, reason='Full verification check') #Remove this for v1.0
                 timeString += f'\n •Default channel calculations: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 for r in g.roles: self.roles[r.id] = r.members #This allows the bot to properly display how many members had a role before it was deleted
@@ -2002,7 +2002,7 @@ class Cyberlog(commands.Cog):
                     msg = await logChannel(after.guild, 'member').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                     if not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None)
                 self.archiveLogEmbed(after.guild, msg.id, embed, 'Member Update')
-        #if before.guild_permissions != after.guild_permissions: await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
+        if before.guild_permissions != after.guild_permissions: await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
         if before.guild_permissions != after.guild_permissions: asyncio.create_task(database.VerifyUser(before, self.bot))
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
@@ -2156,7 +2156,7 @@ class Cyberlog(commands.Cog):
                         break
         try: await target.send(content)
         except: pass
-        #await self.CheckDisguardServerRoles(guild.members, mode=1, reason='Bot joined a server')
+        await self.CheckDisguardServerRoles(guild.members, mode=1, reason='Bot joined a server')
         await asyncio.gather(*[self.indexServer(c) for c in guild.text_channels])
 
     async def indexServer(self, channel: discord.TextChannel):
@@ -2225,7 +2225,7 @@ class Cyberlog(commands.Cog):
                 o = f'{after.owner.mention} ({after.owner.name}), ownership of {after.name} has been transferred to you from {before.owner.mention} ({before.owner.name})'
                 if not content: content = o
                 else: content += f'\n{o}'
-                #await self.CheckDisguardServerRoles(after.members, mode=0, reason='Server owner changed')
+                await self.CheckDisguardServerRoles(after.members, mode=0, reason='Server owner changed')
             if before.default_notifications != after.default_notifications:
                 values = {'all_messages': 'All messages', 'only_mentions': 'Only mentions'}
                 embed.add_field(name='Default Notifications', value=f'{values[before.default_notifications.name]} → **{values[after.default_notifications.name]}**')
@@ -2292,7 +2292,7 @@ class Cyberlog(commands.Cog):
         await self.globalLogChannel.send(embed=embed)
         await self.bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
         asyncio.create_task(database.VerifyServer(guild, self.bot))
-        #await self.CheckDisguardServerRoles(guild.members, mode=2, reason='Bot left a server')
+        await self.CheckDisguardServerRoles(guild.members, mode=2, reason='Bot left a server')
         path = f'Attachments/{guild.id}'
         shutil.rmtree(path)
         await database.VerifyUsers(self.bot, guild.members)
@@ -2393,7 +2393,7 @@ class Cyberlog(commands.Cog):
             if not settings['plainText']:
                 for r in reactions: await message.add_reaction(r)
             final, roleInfo = copy.deepcopy(embed), None
-        #await self.CheckDisguardServerRoles(roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions')
+        await self.CheckDisguardServerRoles(roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions')
         asyncio.create_task(database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)))
         asyncio.create_task(database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)))
         self.roles.pop(role.id, None)
@@ -2483,7 +2483,7 @@ class Cyberlog(commands.Cog):
                 self.archiveLogEmbed(after.guild, message.id, embed, 'Role Update')
                 if before.permissions != after.permissions:
                     for m in after.members: self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
-        #await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
+        await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
         if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, self.bot, includeMembers=before.permissions != after.permissions))
         for member in after.members:
             await database.VerifyUser(member, self.bot)
@@ -3302,6 +3302,33 @@ class Cyberlog(commands.Cog):
                     if overshoot < -40 and settings['library'] > 0: individualTup[0] = individualTup[0].replace('📥', str(self.emojis['memberJoin'])).replace('📤', str(self.emojis['memberLeave']))
                     embed.add_field(name=individualTup[0] + ', '.join([utility.getPermission(i) for i in tup[0][2:].split(' ')]), value=tup[1], inline=False)
         return embed
+
+    async def CheckDisguardServerRoles(self, memb: typing.List[discord.Member], *, mode=0, reason=None):
+        '''Automatic scan for Alpha Tester/VIP Alpha Tester for Disguard's official server. Mode - 0=Add&Remove, 1=Add, 2=Remove'''
+        #If we pass a solitary member, convert it to a list with a single entry, otherwise, leave it alone
+        if self.bot.user.id != 558025201753784323: return
+        if type(memb) in (discord.User, discord.Member): members = [memb]
+        else: members = memb
+        disguardServer = bot.get_guild(560457796206985216) #Disguard official server
+        disguardServerMemberList = [m.id for m in disguardServer.members] #List of member IDs in Disguard Official server
+        disguardAlphaTester = disguardServer.get_role(571367278860304395) #Alpha Testers role in Disguard Official server
+        disguardVIPTester = disguardServer.get_role(571367775163908096) #VIP Alpha Testers role in Disguard Official server
+        alphaMembers = [member.id for member in disguardAlphaTester.members] #ID list of members who have the Alpha Testers role
+        vipMembers = [member.id for member in disguardVIPTester.members] #ID list of members who have the VIP Alpha Testers role
+        #Loop through all members passed in the argument
+        for m in members:
+            #If this member is in Disguard Official server
+            if m.id in disguardServerMemberList:
+                #Loop iteration member equivalent in Disguard server
+                disguardMember = disguardServer.get_member(m.id)
+                if mode != 2: #Handles adding of roles
+                    if m.id == m.guild.owner.id: await disguardMember.add_roles(disguardVIPTester, reason=f'Automatic Scan: {reason}')
+                    elif m.guild_permissions.manage_guild: await disguardMember.add_roles(disguardAlphaTester, reason=f'Automatic Scan: {reason}')
+                if mode != 1: #Handles removing of roles
+                    if m.id in alphaMembers or m.id in vipMembers:
+                        memberServers = [server for server in bot.guilds if m.id in [member.id for member in server.members]]
+                        if not any([m.id == s.owner.id for s in memberServers]) and m.id in vipMembers: await disguardMember.remove_roles(disguardVIPTester, reason=f'Automatic Scan: {reason}')
+                        if not any([s.get_member(m.id).guild_permissions.manage_guild for s in memberServers]) and m.id in alphaMembers: await disguardMember.remove_roles(disguardAlphaTester, reason=f'Automatic Scan: {reason}')
 
 async def updateServer(s: discord.Guild):
     lightningLogging[s.id] = await database.GetServer(s)
