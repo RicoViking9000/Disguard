@@ -200,7 +200,7 @@ async def dashboard(ctx):
     await ctx.send(f"https://disguard.herokuapp.com/manage/{ctx.guild.id if ctx.guild else ''}\n\nUpon clicking the link, please allow a few seconds for the server to wake up")
 
 @bot.command(aliases=['config', 'configuration', 'setup'])
-async def server(ctx):
+async def server(ctx: commands.Context):
     '''Pulls up information about the current server, configuration-wise'''
     g = ctx.guild
     config = getData(bot).get(g.id)
@@ -211,18 +211,8 @@ async def server(ctx):
     red = emojis['dnd']
     embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[bot.get_cog('Cyberlog').colorTheme(ctx.guild)])
     embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
-    embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else "{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
-    # embed.description+=f'''Flag members for: {f"{antispam.get('congruent')[0]} duplicate messages/{} min "}'''
-    embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else "{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n'''
-    # embed.description+=f'''\nMessage Edit & Delete\n{f" {green}Enabled" if cyberlog.get("message").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('message').get('channel')).mention}" if cyberlog.get('message').get('channel') and cyberlog.get('message').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('message').get('read') else f"{red}Read audit log: Disabled"}\n{f"{green}Log deleted images and attachments: Enabled" if cyberlog.get('image') else f"{red}Log deleted images and attachments: Disabled"}'''
-    # embed.description+=f'''\nMember Join & Leave\n{f" {green}Enabled" if cyberlog.get("doorguard").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('doorguard').get('channel')).mention}" if cyberlog.get('doorguard').get('channel') and cyberlog.get('doorguard').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('doorguard').get('read') else f"{red}Read audit log: Disabled"}'''
-    # embed.description+=f'''\nChannel Create, Edit & Delete\n{f" {green}Enabled" if cyberlog.get("channel").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('channel').get('channel')).mention}" if cyberlog.get('channel').get('channel') and cyberlog.get('channel').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('channel').get('read') else f"{red}Read audit log: Disabled"}'''
-    # embed.description+=f'''\nMember Attribute Update\n{f" {green}Enabled" if cyberlog.get("member").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('member').get('channel')).mention}" if cyberlog.get('member').get('channel') and cyberlog.get('member').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('member').get('read') else f"{red}Read audit log: Disabled"}\nℹLogging selection: {'Only local (role give/role remove & nickname) logs' if cyberlog.get('memberGlobal') == 0 else 'Only global (avatar & username) logs' if cyberlog.get('memberGlobal') == 1 else 'Both local (role give/remove & nickname) and global (avatar & username) logs'}'''
-    # embed.description+=f'''\nRole Create, Edit & Delete\n{f" {green}Enabled" if cyberlog.get("role").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('role').get('channel')).mention}" if cyberlog.get('role').get('channel') and cyberlog.get('role').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('role').get('read') else f"{red}Read audit log: Disabled"}'''
-    # embed.description+=f'''\nEmoji Create, Edit & Delete\n{f" {green}Enabled" if cyberlog.get("emoji").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('emoji').get('channel')).mention}" if cyberlog.get('emoji').get('channel') and cyberlog.get('emoji').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('emoji').get('read') else f"{red}Read audit log: Disabled"}'''
-    # embed.description+=f'''\nServer Update\n{f" {green}Enabled" if cyberlog.get("server").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('server').get('channel')).mention}" if cyberlog.get('server').get('channel') and cyberlog.get('server').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{green}Read audit log: Enabled" if cyberlog.get('server').get('read') else f"{red}Read audit log: Disabled"}'''
-    # embed.description+=f'''\nVoice Chat\n{f" {green}Enabled" if cyberlog.get("voice").get("enabled") else f" {red}Disabled"}\n{f" ℹOverrides default log channel to {bot.get_channel(cyberlog.get('voice').get('channel')).mention}" if cyberlog.get('voice').get('channel') and cyberlog.get('voice').get('channel') != cyberlog.get('defaultChannel') else ''}\n{f"{red}Log joins, leaves, mutes, and deafens: Disabled; only mod-enforced mutes & deafens" if cyberlog.get('voice').get('read') else f"{green}Log joins, leaves, mutes, and deafens: Enabled"}'''
-    embed.set_footer(text='More detailed config view and editing from here will be available in the future')
+    embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else f"{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
+    embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else f"{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n'''
     await ctx.send(embed=embed)
 
 @bot.command()
@@ -231,13 +221,13 @@ async def ping(ctx):
 
 @commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
 @bot.command()
-async def say(ctx, m: typing.Optional[discord.Member] = None, c: typing.Optional[discord.TextChannel] = None, *, t='Hello World'):
+async def say(ctx: commands.Context, m: typing.Optional[discord.Member] = None, c: typing.Optional[discord.TextChannel] = None, *, t='Hello World'):
     '''Uses webhook to say something. T is text to say, m is member. Author if none provided. C is channel, ctx.channel if none provided'''
     bot.get_cog('Cyberlog').AvoidDeletionLogging(ctx.message)
     await ctx.message.delete()
     if c is None: c = ctx.channel
     if m is None: m = ctx.author
-    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar_url_as().read(), reason=f'Initiated by {ctx.author.name} to imitate {m.name} by saying "{t}"')
+    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.name} to imitate {m.name} by saying "{t}"')
     await w.send(t, username=m.name)
     await w.delete()
 
@@ -416,21 +406,25 @@ async def retrieveAttachments(ctx, user: discord.User):
 @commands.is_owner()
 @bot.command()
 async def unduplicate(ctx):
-    '''Removes duplicate entries from a user's status/username/avatar history. The problem came from users with multiple servers with Disguard, and has been patched. This will repair the existing duplicates in the database.'''
-    '''For the first stage, to avoid loss of data, I'm only going to test this on myself'''
-    status = await ctx.send('Working on it')
-    interval = datetime.datetime.now()
-    completed = 0
-    errors = 0
-    for u in bot.users: 
-        if (datetime.datetime.now() - interval).seconds > 1: 
-            await status.edit(content=f'Working on it\n{completed} / {len(bot.users)} users completed ({errors} errors)')
-            interval = datetime.datetime.now()
-        try: 
-            await database.UnduplicateHistory(u)
-            completed += 1
-        except: errors += 1
-    await status.edit(content=f'Done - {completed} successful, {errors} errors')
+    '''Removes duplicate entries from a user's status/username/avatar history'''
+    #status = await ctx.send('Working on it')
+    bot.useAttributeQueue = True
+    await database.UnduplicateUsers(bot.users, ctx)
+    bot.useAttributeQueue = False
+    await database.BulkUpdateHistory(bot.attributeHistoryQueue)
+    #await database.BulkUpdateHistory()
+    # interval = datetime.datetime.now()
+    # completed = 0
+    # errors = 0
+    # for u in bot.users: 
+    #     if (datetime.datetime.now() - interval).seconds > 1: 
+    #         await status.edit(content=f'Working on it\n{completed} / {len(bot.users)} users completed ({errors} errors)')
+    #         interval = datetime.datetime.now()
+    #     try: 
+    #         await database.UnduplicateHistory(u)
+    #         completed += 1
+    #     except: errors += 1
+    # await status.edit(content=f'Done - {completed} successful, {errors} errors')
 
 @commands.is_owner()
 @bot.command()
@@ -482,16 +476,20 @@ async def _status(ctx):
 @commands.is_owner()
 @bot.command()
 async def test(ctx):
-    await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-    #status = await ctx.send('Working')
-    # v = discord.ui.View(timeout=None)
-    # options = [discord.SelectOption(label=g.name[:25], value=g.id, description = g.name if len(g.name) > 25 else None) for g in bot.guilds]
-    # v.add_item(discord.ui.Select(placeholder='Select a server', options=options))
-    # await ctx.send(content='Testing', view=v)
-    # BPM = 1048576
-    # await ctx.send(f'{round(sys.getsizeof(bot.lightningLogging) / BPM, 4)}MB (servers)\n{round(sys.getsizeof(bot.lightningUsers) / BPM, 4)}MB (users)')
-    # await ctx.send(f'{formatProperly(get_size(bot.lightningLogging))} (servers) \n {formatProperly(get_size(bot.lightningUsers))} (users)\n')
-    #await status.edit(content='Done')
+    #await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    '''Generating random birthdays for each member on the test bot'''
+    for user in bot.users:
+        try:
+            if not bot.lightningUsers[user.id].get('birthday'):
+                birthday = datetime.datetime(datetime.date.today().year, 1, 1)
+                month = random.randint(1, 12)
+                daysPerMonth = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
+                day = random.randint(1, daysPerMonth[month])
+                birthday = birthday.replace(month=month, day=day)
+                await database.SetBirthday(user, birthday)
+                print(f'Set {birthday:%B %d} for {user.name}')
+        except KeyError: pass
+
 
 @commands.is_owner()
 @bot.command()
