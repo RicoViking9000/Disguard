@@ -79,7 +79,7 @@ class Birthdays(commands.Cog):
     async def serverBirthdayAnnouncements(self):
         birthdayDict: typing.Dict[str, typing.List[int]] = await database.GetBirthdayList()
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        for userID in birthdayDict[datetime.date.today().strftime('%m%d')]:
+        for userID in birthdayDict.get(datetime.date.today().strftime('%m%d'), []):
             user = self.bot.get_user(userID)
             if not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
             try: bday: datetime.datetime = self.bot.lightningUsers[userID].get('birthday')
