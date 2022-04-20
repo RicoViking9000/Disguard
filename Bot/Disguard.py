@@ -7,6 +7,7 @@ import database
 import Antispam
 import Cyberlog
 import Birthdays
+import utility
 import os
 import datetime
 import collections
@@ -28,7 +29,7 @@ import py7zr
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit']
 
 print("Connecting...")
 
@@ -59,31 +60,12 @@ def getData(bot):
 def getUserData(bot):
     return bot.lightningUsers
 
-#intents = discord.Intents.all()
+intents = discord.Intents.all()
 
-#bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False)) #Make sure bot doesn't tag everyone/mass roles people unless I specify
-bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, allowed_mentions = discord.AllowedMentions(everyone=False, roles=False))
+bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions.none())
 bot.remove_command('help')
 
-bot.reddit = asyncpraw.Reddit(user_agent = 'Portal for Disguard - Auto link functionality. --RV9k--')
-
 indexes = 'Indexes'
-
-
-# @tasks.loop(minutes=1)
-# async def anniversaryDayKickoff():
-#     if datetime.datetime.now().strftime('%m %d %y %H:%M') == '03 18 20 10:55':
-#         embed=discord.Embed(title=datetime.datetime.now().strftime('%B %d, %Y %H:%M %p'),description=secure.anniversary(),color=0xffff00, timestamp=datetime.datetime.utcnow())
-#         embed.set_image(url=secure.embedImage())
-#         await bot.get_user(596381991151337482).send(content=secure.anniversaryMessage(), embed=embed)
-#         anniversaryDayKickoff.cancel()
-
-# @tasks.loop(minutes=1)
-# async def easterAnnouncement():
-#     if datetime.datetime.now().strftime('%m %d %y %H:%M') == '04 12 20 06:00':
-#         for server in bot.guilds:
-#             try: await (await database.CalculateAnnouncementsChannel(server, True)).send('🐰🥚✝ Happy Easter! ✝🥚🐰\n\nWishing every one of you a happy and blessed day filled with new life no matter what the state of the world may be right now,\nRicoViking9000, the developer of Disguard')
-#             except: pass
 
 async def UpdatePresence():
     await bot.change_presence(status=presence['status'], activity=presence['activity'])
@@ -108,14 +90,11 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         for cog in cogs:
             try:
                 bot.load_extension(cog)
-            except Exception as e: print(f'Cog load error: {e}')
-        #await database.Verification(bot)
-        #await Antispam.PrepareMembers(bot)
-        #await bot.get_cog('Birthdays').updateBirthdays()
-        # easterAnnouncement.start()
-        #Cyberlog.ConfigureSummaries(bot)
+            except Exception as e: 
+                print(f'Cog load error: {e}')
+                traceback.print_exc()
         emojis = bot.get_cog('Cyberlog').emojis
-        def initializeCheck(m): return m.author.id == bot.user.id and m.channel.id == bot.get_cog('Cyberlog').imageLogChannel.id and m.content == 'Completed'
+        def initializeCheck(m: discord.Message): return m.author.id == bot.user.id and m.channel.id == bot.get_cog('Cyberlog').imageLogChannel.id and m.content == 'Completed'
         print('Waiting for database callback...')
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
@@ -129,13 +108,13 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     print("Booted")
     await UpdatePresence()
 
-async def indexMessages(server, channel, full=False):
+async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
     path = f'{indexes}/{server.id}'
     start = datetime.datetime.now()
     try: os.makedirs(path)
     except FileExistsError: pass
     path += f'/{channel.id}.json'
-    try: saveImages = await database.GetImageLogPerms(server) and not channel.is_nsfw()
+    try: saveImages = bot.lightningLogging[server.id]['cyberlog'].get('image') and not channel.is_nsfw()
     except AttributeError: return
     if not os.path.exists(path): 
         with open(path, 'w+') as f: f.write('{}')
@@ -148,7 +127,7 @@ async def indexMessages(server, channel, full=False):
             if str(message.id) in indexData.keys() and not full:
                 break
             indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
-            if not message.author.bot and (datetime.datetime.utcnow() - message.created_at).days < 7 and saveImages:
+            if not message.author.bot and (discord.utils.utcnow() - message.created_at).days < 7 and saveImages:
                 attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
                 try: os.makedirs(attach)
                 except FileExistsError: pass
