@@ -284,7 +284,7 @@ class Cyberlog(commands.Cog):
                 for channel in server.text_channels:
                     try:
                         async with aiofiles.open(f'{indexes}/{server.id}/{channel.id}.json', 'r+') as f:
-                            indexData = json.load(f)
+                            indexData = json.loads(await f.read())
                         path = f'Attachments/{server.id}/{channel.id}'
                         for folder in os.listdir(path):
                             timestamp = datetime.datetime.fromisoformat(indexData[folder]['timestamp0'])
@@ -663,7 +663,7 @@ class Cyberlog(commands.Cog):
             if settings['author'] in (1, 2, 4): embed.set_author(name=after.author.name, icon_url=url)
         path = f'{indexes}/{after.guild.id}/{after.channel.id}.json'
         async with aiofiles.open(path) as fl: #Open up index data to append the message edit history entry
-            indexData = json.load(fl) #importing the index data from the filesystem
+            indexData = json.loads(await fl.read()) #importing the index data from the filesystem
             number = len(indexData[str(after.id)].keys()) // 3 #This represents the suffix to the key names, because dicts need to have unique key names, and message edit history requires multiple entries
             indexData[str(after.id)].update({f'author{number}': after.author.id, f'timestamp{number}': discord.utils.utcnow().isoformat(), f'content{number}': utility.contentParser(after)})
             indexData = json.dumps(indexData, indent=4)
@@ -1388,33 +1388,32 @@ class Cyberlog(commands.Cog):
     async def on_member_join(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member joins a server'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(member.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(member.guild))
         self.members[member.guild.id].append(member)
         asyncio.create_task(self.doorguardHandler(member))
         msg = None
-        if logEnabled(member.guild, "doorguard"):
+        if logEnabled(member.guild, 'doorguard'):
             newInv = []
             content=f'{member} joined the server'
-            savePath = None
             targetInvite = None
             settings = getCyberAttributes(member.guild, 'doorguard')
-            color = green[colorTheme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
-            count = member.guild.member_count
-            ageDisplay = elapsedDuration(datetime.datetime.utcnow() - member.created_at, False)
+            color = green[self.colorTheme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
+            count = len(member.guild.members)
+            ageDisplay = utility.elapsedDuration(discord.utils.utcnow() - member.created_at, False)
             embed=discord.Embed(
                 title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'}"} {self.loading}''',
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
-                try: await member.avatar_url_as(size=1024).save(savePath)
-                except discord.HTTPException: pass
-                url = await self.uploadFiles(savePath)
+                url = await self.imageToURL(member.display_avatar)
                 if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4): embed.set_author(name=member.name, icon_url=url)
             try:
                 newInv = await member.guild.invites()
                 oldInv = self.invites.get(str(member.guild.id))
+            except discord.Forbidden: pass
+                #content+="Tip: I can determine who invited new members if I have the `Manage Server` permissions"
+            try:
                 for invite in oldInv:
                     try:
                         if newInv[newInv.index(invite)].uses > invite.uses:
@@ -1444,15 +1443,12 @@ class Cyberlog(commands.Cog):
                     if log.action == discord.AuditLogAction.bot_add:
                         embed.description = f'''
                             {"🤖" if settings['context'][1] > 0 else ''}{"Bot" if settings['context'][1] < 2 else ''}: {member.mention} ({member.name})
-                            {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{suffix(count)} member
+                            {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{utility.suffix(count)} member
                             Top.gg stats (when applicable) will be available in the future'''
-                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                            try: await log.user.avatar_url_as(size=1024).save(savePath)
-                            except discord.HTTPException: pass
-                            url = await self.uploadFiles(savePath)
-                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                            if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
+                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                            url = await self.imageToURL(log.user.display_avatar)
+                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                            if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                         content = f'{log.user} added the {member.name} bot to the server'
                         await updateLastActive(log.user, datetime.datetime.now(), 'added a bot to a server')
                 except: pass
@@ -1460,57 +1456,52 @@ class Cyberlog(commands.Cog):
                 descriptionString = [ #First: plaintext version, second: hover-links hybrid version
                     textwrap.dedent(f'''
                         {self.emojis['member'] if settings['context'][1] > 0 else ''}{"Member" if settings['context'][1] < 2 else ''}: {f"{member.mention} ({member.name})"}
-                        {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{suffix(count)} member
-                        {f"{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}
-                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {DisguardIntermediateTimestamp(member.created_at - datetime.timedelta(hours=DST))}
+                        {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{utility.suffix(count)} member
+                        {f"{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}
+                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {utility.DisguardIntermediateTimestamp(member.created_at - datetime.timedelta(hours=DST))}
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old
-                        {self.emojis["share"] if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in bot.guilds if member in g.members])}\n
+                        {self.emojis["share"] if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in self.bot.guilds if member in g.members])}\n
                         QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}'''), 
                     textwrap.dedent(f'''
                         {self.emojis['member'] if settings['context'][1] > 0 else ''}{"Member" if settings['context'][1] < 2 else ''}: {f"{member.mention} ({member.name})"}
-                        {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{suffix(count)} member
+                        {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{utility.suffix(count)} member
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {ageDisplay[0]} old
                         [Hover or react {self.emojis["expand"]} for more details]({msg.jump_url} '
-                        {"🕰" if settings['context'][1] > 0 else ''}{"Timestamp" if settings['context'][1] < 2 else ''}: {adjusted:%b %d, %Y • %I:%M:%s %p} {nameZone(member.guild)}
-                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {(member.created_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}
+                        {"🕰" if settings['context'][1] > 0 else ''}{"Timestamp" if settings['context'][1] < 2 else ''}: {adjusted:%b %d, %Y • %I:%M:%s %p} {self.nameZone(member.guild)}
+                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {(member.created_at + datetime.timedelta(hours=self.timeZone(member.guild))):%b %d, %Y • %I:%M %p} {self.nameZone(member.guild)}
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old
                         {"🌐" if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in bot.guilds if member in g.members])}\n
+                        {"🌐" if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in self.bot.guilds if member in g.members])}\n
                         QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')''')
                 ]
                 embed.description = descriptionString[1]
                 if targetInvite: 
                     content=f'{targetInvite.inviter} invited {member} to the server' if targetInvite.inviter else content
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)) and targetInvite.inviter:
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not targetInvite.inviter.is_avatar_animated() else 'gif'))
-                        try: await targetInvite.inviter.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                        if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=targetInvite.inviter.name, icon_url=url)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))) and targetInvite.inviter:
+                        url = await self.imageToURL(targetInvite.inviter.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=targetInvite.inviter.name, icon_url=url)
                     inviteString = [ #First: plaintext version, second: hover-links hybrid version
                         textwrap.dedent(f'''
                             {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
                             {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
                             {self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
-                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {DisguardIntermediateTimestamp(targetInvite.created_at - datetime.timedelta(hours=DST))}
-                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {DisguardRelativeTimestamp(datetime.datetime.now() + datetime.timedelta(seconds=targetInvite.max_age))}"}
+                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {utility.DisguardIntermediateTimestamp(targetInvite.created_at - datetime.timedelta(hours=DST))}
+                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {utility.DisguardRelativeTimestamp(datetime.datetime.now() + datetime.timedelta(seconds=targetInvite.max_age))}"}
                             {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times'''),
                         textwrap.dedent(f'''
                             {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
                             [Hover or react {self.emojis["expand"]} for more details]({msg.jump_url} '
                             {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
                             {"🚪" if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
-                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}
-                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {nameZone(member.guild)}"}
+                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {self.nameZone(member.guild)}
+                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {(datetime.datetime.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {self.nameZone(member.guild)}"}
                             {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')''')
                         ] #Note to self: in v2.0, invites have an "expired_at" attribute, thus making "max age" calculations redundant
                     embed.add_field(name='Invite Details',value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             await msg.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
             self.archiveLogEmbed(member.guild, msg.id, embed, 'Member Join')
-        await asyncio.gather(*[database.VerifyServer(member.guild, bot, includeServer=False), database.VerifyUser(member, bot), updateLastActive(member, datetime.datetime.now(), 'joined a server')])
-        try:
-            if os.path.exists(savePath): os.remove(savePath)
-        except: pass
+        await asyncio.gather(*[database.VerifyMember(member, new=True, warnings=self.bot.lightningLogging.get(member.guild.id, {}).get('antispam', {}).get('warn', 3)), database.VerifyUser(member, self.bot, new=True), updateLastActive(member, datetime.datetime.now(), 'joined a server')])
         #Check if member is trying to circumvent a mute
         async def muteDelay(event):
             #Sleeps for 20 seconds to ensure no other bots want to add roles upon join
@@ -1529,6 +1520,7 @@ class Cyberlog(commands.Cog):
             if member.id in [m.id for m in member.guild.members]: #TODO: change to dict for performance if possible?
                 embed.title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'} (React ℹ for member info viewer)" if settings['context'][0] < 2 else ''}'''
                 if hadToRemute: embed.description += f"\n{self.emojis['greenCheck']}Succesfully remuted member; their mute time isn't over yet"
+                if hadToRemute: embed.description += f"\n{self.emojis['greenCheck']}Succesfully remuted {member.name}"
                 await msg.edit(content=msg.content, embed=embed if not settings['plainText'] else None)
                 final = copy.deepcopy(embed)
                 memberInfoEmbed = None
@@ -1538,8 +1530,10 @@ class Cyberlog(commands.Cog):
                         for r in reactions: await msg.add_reaction(r)
                     embed = copy.deepcopy(final)
                     def navigationCheck(r, u): return not u.bot and r.message.id == msg.id
-                    r = await self.bot.wait_for('reaction_add', check=navigationCheck)
+                    r: typing.Tuple[discord.Reaction, discord.User] = await self.bot.wait_for('reaction_add', check=navigationCheck)
                     if r[0].emoji in reactions or settings['plainText']:
+                        #TODO for V1.0: Redo all this stuff
+                        # EVERYTHING BELOW THIS WILL BE REDONE, thus it's obsolete and not necessarily syntactically correct anymore
                         embed.clear_fields()
                         await msg.clear_reactions()
                         editEmbed = True
@@ -1587,7 +1581,7 @@ class Cyberlog(commands.Cog):
                                     for c in member.guild.text_channels: 
                                         try: await c.set_permissions(member, read_messages=False)
                                         except discord.Forbidden as error: embed.description+=f'\nUnable to create permission overwrites for the channel {c.name} because `{error.text}`. Please set the permissions for this channel to [{member.name}: Read Messages = ❌] for the quarantine to work there.'
-                                    embed.description=final.description+f'\n\n**Successfully quarantined {member.name}.**\nUse `{prefix(member.guild)}unlock {member.id}` to unlock this user when desired.'
+                                    embed.description=final.description+f'\n\n**Successfully quarantined {member.name}.**\nUse `{self.prefix(member.guild)}unlock {member.id}` to unlock this user when desired.'
                                     await msg.edit(embed=embed)
                                     final.description = embed.description
                             else:
@@ -1695,7 +1689,7 @@ class Cyberlog(commands.Cog):
             try: self.repeatedJoins[f'{member.guild.id}_{member.id}'].append(member.joined_at)
             except (AttributeError, KeyError): self.repeatedJoins[f'{member.guild.id}_{member.id}'] = [member.joined_at]
             joinLogs = self.repeatedJoins.get(f'{member.guild.id}_{member.id}')
-            remainingDelta = ((joinLogs[0] + datetime.timedelta(seconds=rj[1])) - datetime.datetime.utcnow()) #Time remaining before oldest join log expires. If a member joins the server [threshold] times in this timespan, they're punished
+            remainingDelta: datetime.timedelta = ((joinLogs[0] + datetime.timedelta(seconds=rj[1])) - discord.utils.utcnow()) #Time remaining before oldest join log expires. If a member joins the server [threshold] times in this timespan, they're punished
             durationDelta = datetime.timedelta(seconds=rj[2])
             rH, rM, rS = remainingDelta.seconds // 3600, (remainingDelta.seconds // 60) % 60, remainingDelta.seconds - (remainingDelta.seconds // 3600) * 3600 - ((remainingDelta.seconds // 60) % 60) * 60 #remainingHours, remainingMinutes, remainingSeconds
             dH, dM, dS = durationDelta.seconds // 3600, (durationDelta.seconds // 60) % 60, durationDelta.seconds - (durationDelta.seconds // 3600) * 3600 - ((durationDelta.seconds // 60) % 60) * 60 #ban duration Hours, Minutes, Seconds            
@@ -1714,18 +1708,18 @@ class Cyberlog(commands.Cog):
                 try: await member.send(sendString)
                 except discord.Forbidden: #Can't DM member, try to let them know in the server (if ageKick is disabled)
                     if await database.GetAgeKick(member.guild) is None:
-                        sendTo = await database.CalculateGeneralChannel(member.guild, self.bot, True)
+                        sendTo: discord.TextChannel = await database.CalculateGeneralChannel(member.guild, self.bot, True)
                         if sendTo.permissions_for(member).read_messages: await sendTo.send(sendString) #If the member can read messages in the server's general channel, then we'll send it there
             if len(joinLogs) >= rj[0]:
-                joinSpanDisplay = elapsedDuration(joinLogs[-1] - joinLogs[0])
+                joinSpanDisplay = utility.elapsedDuration(joinLogs[-1] - joinLogs[0])
                 joinSpan = (joinLogs[-1] - joinLogs[0])
                 if len(joinSpanDisplay) == 0: joinSpanDisplay = ['0 seconds']
                 if joinSpan.seconds < rj[1]:
                     unbanAt = datetime.datetime.utcnow() + datetime.timedelta(seconds=rj[2])
-                    timezoneUnbanAt = unbanAt + datetime.timedelta(hours=timeZone(member.guild))
-                    try: await member.send(f'You have been banned from `{member.guild.name}` for {DisguardRelativeTimestamp(timezoneUnbanAt)} for repeatedly joining and leaving the server.')
+                    timezoneUnbanAt = unbanAt + datetime.timedelta(hours=self.timeZone(member.guild))
+                    try: await member.send(f'You have been banned from `{member.guild.name}` for {utility.DisguardRelativeTimestamp(timezoneUnbanAt)} for repeatedly joining and leaving the server.')
                     except: pass
-                    try: await member.ban(reason=f'''[Antispam: repeatedJoins] {member.name} joined the server {len(joinLogs)} times in {joinSpanDisplay}, and will remain banned until {f"{timezoneUnbanAt:%b %d, %Y • %I:%M %p} {nameZone(member.guild)}" if rj[2] > 0 else "the ban is manually revoked"}.''') #If I find out that the unix timestamps work in audit logs, I will update this line too
+                    try: await member.ban(reason=f'''[Antispam: repeatedJoins] {member.name} joined the server {len(joinLogs)} times in {joinSpanDisplay}, and will remain banned until {f"{timezoneUnbanAt:%b %d, %Y • %I:%M %p} {self.nameZone(member.guild)}" if rj[2] > 0 else "the ban is manually revoked"}.''') #If I find out that the unix timestamps work in audit logs, I will update this line too
                     except discord.Forbidden: 
                         try: await logChannel(member.guild, "doorguard").send(f'Unable to ban {member.name} for [ageKick: repeatedJoins] module')
                         except: pass
@@ -1738,10 +1732,10 @@ class Cyberlog(commands.Cog):
         ageKick = antispam.get('ageKick')
         if ageKick is not None: #Check account age; requested feature
             if acctAge < ageKick and member.id not in antispam.get('ageKickWhitelist'): #If the account age is under the threshold and they're not whitelisted:
-                memberCreated = member.created_at + datetime.timedelta(hours=timeZone(member.guild))
+                memberCreated = member.created_at + datetime.timedelta(hours=self.timeZone(member.guild))
                 canRejoin = memberCreated + datetime.timedelta(days=ageKick)
                 formatter = '%b %d, %Y • %I:%M %p'
-                timezone = nameZone(member.guild)
+                timezone = self.nameZone(member.guild)
                 dm = antispam.get('ageKickDM')
                 try: await member.send(eval(dm))
                 except discord.Forbidden as e: 
@@ -1774,62 +1768,55 @@ class Cyberlog(commands.Cog):
     async def on_member_remove(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member leaves a server'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(member.guild))
-        asyncio.create_task(updateLastActive(member, datetime.datetime.now(), 'left a server'))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(member.guild))
+        if member.guild.id not in gimpedServers: asyncio.create_task(updateLastActive(member, datetime.datetime.now(), 'left a server'))
         message = None
-        if logEnabled(member.guild, "doorguard"):
+        if logEnabled(member.guild, 'doorguard'):
             content=f'{member} left the server'
-            f = []
             settings = getCyberAttributes(member.guild, 'doorguard')
-            color = red[colorTheme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
+            color = red[self.colorTheme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed=discord.Embed(
                 title=f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}❌" if settings['library'] < 2 else self.emojis['memberLeave']) if settings['context'][0] > 0 else ''}{"Member left" if not member.bot else "Bot removed"} ({self.loading} Finalizing log)''',
                 description=f"{(self.emojis['member'] if not member.bot else '🤖') if settings['context'][1] > 0 else ''}{'Member' if settings['context'][1] < 2 and not member.bot else 'Bot' if settings['context'][1] < 2 and member.bot else ''}: {member.mention} ({member.name})",
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
-            hereForDisplay = elapsedDuration(datetime.datetime.utcnow() - member.joined_at)
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
+            hereForDisplay = utility.elapsedDuration(discord.utils.utcnow() - member.joined_at)
             embed.add_field(name='Post count',value=self.loading)
             if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
-                try: await member.avatar_url_as(size=1024).save(savePath)
-                except discord.HTTPException: pass
-                url = await self.uploadFiles(savePath)
+                url = await self.imageToURL(member.display_avatar)
                 if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4): embed.set_author(name=member.name, icon_url=url)
             if readPerms(member.guild, 'doorguard'):
                 try:
-                    log = (await member.guild.audit_logs(limit=1).flatten())[0]
-                    if absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=3)) and log.target.id == member.id:
-                        if log.action in (discord.AuditLogAction.kick, discord.AuditLogAction.ban):
-                            if log.action == discord.AuditLogAction.kick:
-                                embed.title = f'{(self.emojis["memberLeave"] if settings["library"] > 1 else self.emojis["member"]) if settings["context"][1] > 0 else ""}{"👢" if settings["context"][1] > 0 else ""}{member.name} was kicked'
-                                embed.description+=f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Kicked by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
-                                content=f'{log.user} kicked {member} from the server'
-                            else:
-                                embed.title = f'{(self.emojis["memberLeave"] if settings["library"] > 1 else self.emojis["member"]) if settings["context"][1] > 0 else ""}{self.emojis["ban"] if settings["context"][1] > 0 else ""}{member.name} was banned'
-                                embed.description+=f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Banned by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
-                                content=f'{log.user} banned {member} from the server'
-                            embed.insert_field_at(0, name='Reason', value=log.reason if log.reason is not None else "None provided",inline=True if log.reason is not None and len(log.reason) < 25 else False)
-                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                            try: await log.user.avatar_url_as(size=1024).save(savePath)
-                            except discord.HTTPException: pass
-                            url = await self.uploadFiles(savePath)
-                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                            if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+                    log = await member.guild.audit_logs().find(lambda x: utility.absTime(discord.utils.utcnow(), x.created_at, datetime.timedelta(seconds=3) and x.target.id == member.id))
+                    #if utility.absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=3)) and log.target.id == member.id:
+                    if log.action in (discord.AuditLogAction.kick, discord.AuditLogAction.ban):
+                        if log.action == discord.AuditLogAction.kick:
+                            embed.title = f'{(self.emojis["memberLeave"] if settings["library"] > 1 else self.emojis["member"]) if settings["context"][1] > 0 else ""}{"👢" if settings["context"][1] > 0 else ""}{member.name} was kicked'
+                            embed.description+=f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Kicked by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
+                            content=f'{log.user} kicked {member} from the server'
+                        else:
+                            embed.title = f'{(self.emojis["memberLeave"] if settings["library"] > 1 else self.emojis["member"]) if settings["context"][1] > 0 else ""}{self.emojis["ban"] if settings["context"][1] > 0 else ""}{member.name} was banned'
+                            embed.description+=f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Banned by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
+                            content=f'{log.user} banned {member} from the server'
+                        embed.insert_field_at(0, name='Reason', value=log.reason or 'None provided', inline=True if log.reason and len(log.reason) < 25 else False)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                except: pass
             message = await logChannel(member.guild, 'doorguard').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             try:
                 sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or datetime.datetime.utcnow())
                 memberJoinPlacement = sortedMembers.index(member) + 1
                 hoverPlainText = textwrap.dedent(f'''
-                    Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}
-                    Left at: {received}
+                    Here since: {(member.joined_at + datetime.timedelta(hours=self.timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {self.nameZone(member.guild)}
+                    Left at: {adjusted:%b %d, %Y • %I:%M:%S %p}
                     Here for: {hereForDisplay}
-                    Was the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {member.guild.member_count}
+                    Was the {memberJoinPlacement}{utility.suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}
                     ''')
                 embed.description += f"\n[Hover for more details]({message.jump_url} '{hoverPlainText}')"
-                #embed.description+=f"\n[Hover for more details]({message.jump_url} 'Here since: {(member.joined_at + datetime.timedelta(hours=timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {nameZone(member.guild)}"
+                #embed.description+=f"\n[Hover for more details]({message.jump_url} 'Here since: {(member.joined_at + datetime.timedelta(hours=self.timeZone(member.guild))):%b %d, %Y • %I:%M:%S %p} {self.nameZone(member.guild)}"
                 #embed.description+=f'''\nLeft at: {received}\nHere for: {hereForDisplay}'''
                 #embed.description+=f'\nWas the {memberJoinPlacement}{suffix(memberJoinPlacement)} member, now we have {len(sortedMembers) - 1}'
             except Exception as e: print(f'Member leave placement fail: {e}')
@@ -1839,11 +1826,8 @@ class Cyberlog(commands.Cog):
             await message.edit(embed=embed if not settings['plainText'] else None)
             self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             #if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
-        try: 
-            if os.path.exists(savePath): os.remove(savePath)
-        except: pass
         self.members[member.guild.id].remove(member)
-        await asyncio.gather(*[database.VerifyServer(member.guild, bot, includeServer=False), database.VerifyUser(member, bot)])
+        await asyncio.gather(*[database.VerifyMembers(member.guild, [member]), database.DeleteUser(member, self.bot)])
         if message:
             def reactionCheck(r, u): return r.message.id == message.id and not u.bot
             while not self.bot.is_closed():
@@ -1863,48 +1847,39 @@ class Cyberlog(commands.Cog):
         msg = None
         if logEnabled(guild, 'doorguard'):
             settings = getCyberAttributes(guild, 'doorguard')
-            color = green[colorTheme(guild)] if settings['color'][0] == 'auto' else settings['color'][0]
+            color = green[self.colorTheme(guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed=discord.Embed(
                 title=f'''{f"{self.emojis['member']}{self.emojis['unban']}" if settings["context"][0] > 0 else ""}{"User was unbanned" if settings['context'][0] < 2 else ""}''',
                 description=f"{self.emojis['member'] if settings['context'][1] > 0 else ''}{'User' if settings['context'][1] < 2 else ''}: {user.name}",
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             content=f'{user} was unbanned'
             if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not user.is_avatar_animated() else 'gif'))
-                try: await user.avatar_url_as(size=1024).save(savePath)
-                except discord.HTTPException: pass
-                url = await self.uploadFiles(savePath)
+                url = await self.imageToURL(user.display_avatar)
                 if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4): embed.set_author(name=user.name, icon_url=url)
             if readPerms(guild, 'doorguard'):
                 try:
-                    log = (await guild.audit_logs(limit=1, action=discord.AuditLogAction.unban).flatten())[0]
+                    log = await guild.audit_logs().get(action=discord.AuditLogAction.unban)
                     embed.description += f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Unbanned by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                            try: await log.user.avatar_url_as(size=1024).save(savePath)
-                            except discord.HTTPException: pass
-                            url = await self.uploadFiles(savePath)
-                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                            if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                    await updateLastActive(log.user, datetime.datetime.now(), 'unbanned a user')
-                    async for log in guild.audit_logs(limit=None): #Attempt to find the ban audit log to pull ban details
-                        if log.action == discord.AuditLogAction.ban:
-                            if log.target.id == user.id:
-                                content=f'{log.user} unbanned {user}'
-                                bannedForDisplay = elapsedDuration(datetime.datetime.utcnow() - log.created_at)
-                                embed.add_field(name="Retrieved ban details",value=f'React {self.emojis["expand"]} to expand', inline=False)
-                                longString = textwrap.dedent(f'''
-                                    {'👮‍♂️' if settings['context'][1] > 0 else ''}{'Banned by' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.name})
-                                    {'📜' if settings['context'][1] > 0 else ''}{'Banned because' if settings['context'][1] < 2 else ''}: {log.reason if log.reason is not None else '<No reason specified>'}
-                                    {f"{self.emojis['ban']}🕰" if settings['context'][1] > 0 else ''}{'Banned at' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(log.created_at - datetime.timedelta(hours=DST))}
-                                    {f"{self.emojis['unban']}🕰" if settings['context'][1] > 0 else ''}{'Unbanned at' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}
-                                    {f"{self.emojis['ban']}⏳" if settings['context'][1] > 0 else ''}{'Banned for' if settings['context'][1] < 2 else ''}: {bannedForDisplay}''')
-                                break
-                except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                    if guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'unbanned a user')
+                    log = await guild.audit_logs(limit=None).get(action=discord.AuditLogAction.ban, target__id=user.id)
+                    content=f'{log.user} unbanned {user}'
+                    bannedForDisplay = utility.elapsedDuration(discord.utils.utcnow() - log.created_at)
+                    embed.add_field(name="Retrieved ban details",value=f'React {self.emojis["expand"]} to expand', inline=False)
+                    longString = textwrap.dedent(f'''
+                        {'👮‍♂️' if settings['context'][1] > 0 else ''}{'Banned by' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.name})
+                        {'📜' if settings['context'][1] > 0 else ''}{'Banned because' if settings['context'][1] < 2 else ''}: {log.reason if log.reason is not None else '<No reason specified>'}
+                        {f"{self.emojis['ban']}🕰" if settings['context'][1] > 0 else ''}{'Banned at' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(log.created_at - datetime.timedelta(hours=DST))}
+                        {f"{self.emojis['unban']}🕰" if settings['context'][1] > 0 else ''}{'Unbanned at' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}
+                        {f"{self.emojis['ban']}⏳" if settings['context'][1] > 0 else ''}{'Banned for' if settings['context'][1] < 2 else ''}: {bannedForDisplay}''')
+                except: pass
             embed.set_footer(text=f'User ID: {user.id}')
-            msg = await logChannel(guild, 'doorguard').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            msg: discord.Message = await logChannel(guild, 'doorguard').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             if not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None)
             self.archiveLogEmbed(guild, msg.id, embed, 'Member Unban')
             if msg and len(embed.fields) > 0:
@@ -1922,7 +1897,7 @@ class Cyberlog(commands.Cog):
                             await msg.edit(content=None, embed=embed)
                             for reaction in [self.emojis['expand'], self.emojis['collapse']]: await msg.add_reaction(reaction)
                     elif r[0].emoji == self.emojis['collapse']:
-                        await msg.clear_reactions() #This line appears everywhere rather than in one place because RicoBot, way back then, had a notrious bug where my code logic caused it to remove any reactions added to log messages
+                        await msg.clear_reactions()
                         if len(msg.embeds) > 0 and 'Banned because' in embed.fields[-1].value or '📜' in embed.fields[-1].value:
                             embed.set_field_at(-1, name='Retrieved ban details', value=f'React {self.emojis["expand"]} to expand')
                             await msg.edit(embed=embed)
@@ -1937,27 +1912,22 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
-        '''[DISCORD API METHOD] Called when member changes status/game, roles, or nickname; only the two latter events used with logging'''
-        try: 
-            received = datetime.datetime.now()
-            adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(after.guild))
-        except (KeyError, AttributeError): return
+        '''[DISCORD API METHOD] Called when member changes roles or nickname'''
+        received = datetime.datetime.now()
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(after.guild))
         msg = None
         if logEnabled(after.guild, 'member') and any([before.nick != after.nick, before.roles != after.roles]):
             content=''
             auditLogFail = False
             settings = getCyberAttributes(after.guild, 'member')
-            color = blue[colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+            color = blue[self.colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not after.is_avatar_animated() else 'gif'))
-                try: await after.avatar_url_as(size=1024).save(savePath)
-                except discord.HTTPException: pass
-                url = await self.uploadFiles(savePath)
+                url = await self.imageToURL(after.display_avatar)
                 if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
                 if settings['author'] in (1, 2, 4): embed.set_author(name=after.name, icon_url=url)
-            if (before.nick != after.nick or before.roles != after.roles) and logEnabled(before.guild, "member") and memberGlobal(before.guild) != 1:
+            if memberGlobal(before.guild) != 1:
                 content=f"{before}'s server attributes were updated"
                 embed.description=f'{self.emojis["member"] if settings["context"][1] > 0 else ""}{"Recipient" if settings["context"][1] < 2 else ""}: {before.mention} ({before.name})'
                 if before.roles != after.roles:
@@ -1965,33 +1935,29 @@ class Cyberlog(commands.Cog):
                     ar = len(after.roles)
                     embed.title = f'''{f"{self.emojis['member']}🚩{self.emojis['darkGreenPlus']}" if settings['context'][0] > 0 else ''}{f'Member gained {"roles" if ar - br > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar > br else f'''{f"{self.emojis['member']}🚩❌" if settings['context'][0] > 0 else ''}{f'Member lost {"roles" if br - ar > 1 else "a role"}' if settings['context'][0] < 2 else ''}''' if ar < br else f'''{f"{self.emojis['member']}🚩✏" if settings['context'][0] > 0 else ''}{'Member roles moodified' if settings['context'][0] < 2 else ''}'''
                     try:
-                        log = (await before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update).flatten())[0]
-                        if log.target.id == before.id: 
-                            if settings['botLogging'] == 0 and log.user.bot: return
-                            elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                            embed.description += f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Moderator" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
-                            if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                                try: await log.user.avatar_url_as(size=1024).save(savePath)
-                                except discord.HTTPException: pass
-                                url = await self.uploadFiles(savePath)
-                                content = f"{log.user} updated {before}'s server attributes"
-                                if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                                if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                            await updateLastActive(log.user, datetime.datetime.now(), 'updated someone\'s roles')
-                    except Exception as e: auditLogFail = e
+                        log = await after.guild.audit_logs().get(action=discord.AuditLogAction.member_role_update, target__id=after.id)
+                        if settings['botLogging'] == 0 and log.user.bot: return
+                        elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
+                        embed.description += f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Moderator" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
+                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name))):
+                            url = await self.imageToURL(log.user)
+                            content = f"{log.user} updated {before}'s server attributes"
+                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                            if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                        if after.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated someone\'s roles')
+                    except: pass
                     added = sorted([r for r in after.roles if r not in before.roles], key = lambda r: r.position)
                     removed = sorted([r for r in before.roles if r not in after.roles and r.id in [role.id for role in after.guild.roles]], key = lambda r: r.position)
                     for r in added:
-                        if r.id in [role.id for role in after.guild.roles]: self.roles[r.id] = r.members
+                        if after.guild.get_role(r): self.roles[r.id] = r.members
                     for r in removed:
-                        if r.id in [role.id for role in after.guild.roles]: self.roles[r.id] = r.members
+                        if after.guild.get_role(r): self.roles[r.id] = r.members
                     if len(added) > 0: 
                         embed.add_field(name=f'Role{"s" if len(added) > 1 else ""} added', value='\n'.join([r.name for r in added]))
                     if len(removed) > 0: 
                         embed.add_field(name=f'Role{"s" if len(removed) > 1 else ""} removed', value='\n'.join([r.name for r in removed]))
-                    beforePerms = [permissionKeys[p[0]] for p in iter(before.guild_permissions) if p[1]]
-                    afterPerms = [permissionKeys[p[0]] for p in iter(after.guild_permissions) if p[1]]
+                    beforePerms = utility.stringifyPermissions(before.guild_permissions)
+                    afterPerms = utility.stringifyPermissions(after.guild_permissions)
                     if beforePerms != afterPerms:
                         lost = [p for p in beforePerms if p not in afterPerms]
                         gained = [p for p in afterPerms if p not in beforePerms]
@@ -2000,12 +1966,12 @@ class Cyberlog(commands.Cog):
                         lostList = []
                         gainedList = [] 
                         for r in removed:
-                            rolePermissions = [permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in beforePerms and permissionKeys[p[0]] not in afterPerms and p in iter(r.permissions) and permissionKeys[p[0]] not in lPK]
+                            rolePermissions = [utility.getPermission(p[0]) for p in r.permissions if utility.getPermission(p[0]) in beforePerms and utility.getPermission(p[0]) not in afterPerms and p in iter(r.permissions) and utility.getPermission(p[0]) not in lPK]
                             if rolePermissions:
                                 lPK += rolePermissions
                                 lostList.append(f'{r.name}\n> {", ".join(rolePermissions)}')
                         for r in added:
-                            rolePermissions = [permissionKeys[p[0]] for p in r.permissions if permissionKeys[p[0]] in afterPerms and permissionKeys[p[0]] not in beforePerms and p in iter(r.permissions) and permissionKeys[p[0]] not in gPK]
+                            rolePermissions = [utility.getPermission(p[0]) for p in r.permissions if utility.getPermission(p[0]) in afterPerms and utility.getPermission(p[0]) not in beforePerms and p in iter(r.permissions) and utility.getPermission(p[0]) not in gPK]
                             if rolePermissions:
                                 gPK += rolePermissions
                                 gainedList.append(f'{r.name}\n> {", ".join(rolePermissions)}')
@@ -2015,71 +1981,31 @@ class Cyberlog(commands.Cog):
                 if before.nick != after.nick:
                     embed.title = f'''{f"{self.emojis['member'] if settings['library'] > 0 else '👤'}📄{self.emojis['edit'] if settings['library'] > 0 else '✏'}" if settings['context'][0] > 0 else ''}{"Member nickname updated" if settings['context'][0] < 2 else ''}'''
                     try:
-                        log = (await before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update).flatten())[0]
-                        if log.target.id == before.id: 
-                            embed.description += f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Moderator" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
-                            if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                                try: await log.user.avatar_url_as(size=1024).save(savePath)
-                                except discord.HTTPException: pass
-                                url = await self.uploadFiles(savePath)
-                                content = f"{log.user} updated {before}'s server attributes"
-                                if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                                if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                    except Exception as e: auditLogFail = e
-                    if not serverIsGimped(after.guild): await updateLastActive(log.user, datetime.datetime.now(), 'updated a nickname')
+                        log = await after.guild.audit_logs().get(action=discord.AuditLogAction.member_update, target__id=after.id)
+                        embed.description += f'\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Moderator" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name})'
+                        if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                            url = await self.imageToURL(log.user.display_avatar)
+                            content = f"{log.user} updated {before}'s server attributes"
+                            if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                            if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                        if after.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated a nickname')
+                    except: pass
                     oldNick = before.nick if before.nick is not None else "<No nickname>"
                     newNick = after.nick if after.nick is not None else "<No nickname>"
                     embed.add_field(name="Old nickname",value=oldNick)
                     embed.add_field(name="New nickname",value=newNick)
-                    #data['oldNick'] = oldNick
-                    #data['newNick'] = newNick
-                if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
+                if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
                 embed.set_footer(text=f'Member ID: {after.id}')
                 try: content = f"{log.user} updated {before}'s server attributes"
                 except: content = f"{before}'s server attributes were updated"
-                content += embedToPlaintext(embed)
+                content += utility.embedToPlaintext(embed)
                 if auditLogFail: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{auditLogFail}`'
                 if len(embed.fields) > 0:
                     msg = await logChannel(after.guild, 'member').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                     if not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None)
                 self.archiveLogEmbed(after.guild, msg.id, embed, 'Member Update')
-                try:
-                    if os.path.exists(savePath): os.remove(savePath)
-                except: pass
-        if before.guild_permissions != after.guild_permissions: 
-            await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
-            asyncio.create_task(database.VerifyUser(before, self.bot))
-        #halfwayStart = datetime.datetime.now()
-        if after.guild.id == 403698615446536203: return
-        if serverIsGimped(after.guild) and not msg: return
-        for g in self.bot.guilds:
-            if g.get_member(after.id):
-                targetServer = g
-                break
-        #One server, selected to avoid duplication and unnecessary calls since this method is called simultaneously for every server a member is in
-        if before.status != after.status:
-            if after.guild.id == targetServer.id:
-                if after.status == discord.Status.offline: await updateLastOnline(after, datetime.datetime.now())
-                if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
-        if before.activities != after.activities:
-            '''This is for LastActive information and custom status history'''
-            if after.guild.id == targetServer.id:
-                for a in after.activities:
-                    if a.type == discord.ActivityType.custom:
-                        if self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory'):
-                            try:
-                                try: user = self.bot.lightningUsers[after.id]
-                                except KeyError: return
-                                if {'e': None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name} != {'e': user.get('customStatusHistory')[-1].get('emoji'), 'n': user.get('customStatusHistory')[-1].get('name')}: 
-                                    if not (await database.GetUser(after)).get('customStatusHistory'):
-                                        asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name))
-                            except AttributeError as e: 
-                                print(f'Attribute error during status: {e}')
-                                traceback.print_exc()
-                            except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
-                        newMemb = before.guild.get_member(before.id)
-                        if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
+        #if before.guild_permissions != after.guild_permissions: await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
+        if before.guild_permissions != after.guild_permissions: asyncio.create_task(database.VerifyUser(before, self.bot))
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
@@ -2094,88 +2020,121 @@ class Cyberlog(commands.Cog):
                     if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
 
     @commands.Cog.listener()
+    async def on_presence_update(self, before: discord.Member, after: discord.Member):
+        '''[DISCORD API METHOD] Called when a member's status/activity changes'''
+        # try: 
+        #     received = datetime.datetime.now()
+        #     adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(after.guild))
+        # except (KeyError, AttributeError): return
+        # for g in self.bot.guilds:
+        #     if after.id in [m.id for m in g.members]:
+        #         targetServer = g
+        #         break
+        #Because this method is called for every server a member is in, we select an arbitrary server to avoid running this code multiple times for members in multiple servers with Disguard in it
+        targetServer = after.mutual_guilds[0]
+        if after.guild.id == targetServer.id and before.status != after.status:
+            # if after.guild.id == targetServer.id:
+            if after.status == discord.Status.offline and after.guild.id not in gimpedServers: await updateLastOnline(after, datetime.datetime.now()) #If we "catch" a member going offline, mark them as last being online right now
+            #if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+            if any(a == discord.Status.dnd for a in (before.status, after.status)) and not any(a == discord.Status.offline for a in (before.status, after.status)) and after.guild.id not in gimpedServers: await updateLastActive(after, datetime.datetime.now(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+        if after.guild.id == targetServer.id and before.activity != after.activity and any(a.type == discord.ActivityType.custom for a in (before.activity, after.activity) if a) and not any([before.status == discord.Status.offline, after.status == discord.Status.offline]):
+            #This is for LastActive information and custom status history
+            # if after.guild.id == targetServer.id:
+            #     for a in after.activities:
+            #         if a.type == discord.ActivityType.custom:
+            if self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory'):
+                try:
+                    try: user = self.bot.lightningUsers[after.id]
+                    except KeyError: return
+                    a = after.activity
+                    prev = user.get('customStatusHistory', [{}])[-1]
+                    proposed = {'e': None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name if a else None}
+                    if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}: 
+                        #if not (await database.GetUser(after)).get('customStatusHistory'):
+                        asyncio.create_task(database.AppendCustomStatusHistory(after, None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), a.name if a.name else None))
+                except Exception as e: 
+                    print(f'CSH error: {e}')
+                    traceback.print_exc()
+                #except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
+            #newMemb = before.guild.get_member(before.id)
+            #if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
+            if after.guild.id not in gimpedServers: await updateLastActive(after, datetime.datetime.now(), 'changed custom status')
+
+    @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
         '''[DISCORD API METHOD] Called when a user changes their global username, avatar, or discriminator'''
-        rawReceived = datetime.datetime.utcnow()
+        rawReceived = discord.utils.utcnow()
         received = datetime.datetime.now()
-        servers = [s for s in bot.guilds if after.id in [m.id for m in s.members]] #Building a list of servers the updated member is in - then we'll calculate logging module permissions for each server
-        membObj = [m for m in servers[0].members if m.id == after.id][0] #Fetching the discord.Member object for later use
+        servers: typing.List[discord.Guild] = after.mutual_guilds
+        membObj = servers[0].get_member(after.id) #Getting the discord.Member object for later use
         embed = discord.Embed(description='')
         content = f'{after.name} updated their global attrubutes'
         legacyTitleEmoji = []
-        newTitleEmoji = []
+        newTitleEmoji = [] #We need two separate lists because each server might have different emoji display settings
         titles = []
         f = []
-        try: thumbnailURL = self.bot.lightningUsers.get(after.id).get('avatarHistory')[-1].get('imageURL')
+        try: thumbnailURL = self.bot.lightningUsers[after.id]['avatarHistory'][-1]['imageURL']
         except (TypeError, AttributeError, KeyError): 
-            thumbnailURL = before.avatar_url_as(static_format='png', size=1024)
+            #thumbnailURL = before.display_avatar_url_as(static_format='png', size=1024)
+            thumbnailURL = await self.imageToURL(before.display_avatar)
         embed.set_thumbnail(url=thumbnailURL)
-        if before.avatar_url != after.avatar_url:
+        if before.display_avatar != after.display_avatar:
             titles.append('Profile Picture')
             legacyTitleEmoji.append('🖼')
             newTitleEmoji.append(self.emojis['imageAdd'])
-            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not after.is_avatar_animated() else 'gif'))
-            await after.avatar_url_as(size=1024).save(savePath)
-            tempFile = discord.File(savePath)
-            #Have to make use of the image log channel for the pupose of hover links. Optionally, edit the message once we have the image URL in the embed, but this will be expensive, especially when this may go to multiple servers
-            message = await self.imageLogChannel.send(file=tempFile)
-            embed.set_image(url=message.attachments[0].url) #New avatar
-            embed.add_field(name="Profile picture updated", value=f"Old: [Thumbnail to the right]({thumbnailURL})\nNew: [Image below]({message.attachments[0].url})", inline=False)
+            url = await self.imageToURL(after.display_avatar)
+            embed.set_image(url=url) #New avatar
+            embed.add_field(name='Profile picture updated', value=f'Old: [Thumbnail to the right]({thumbnailURL})\nNew: [Image below]({url})', inline=False)
             content += f'\n•Profile picture'
             await updateLastActive(after, datetime.datetime.now(), 'updated their profile picture')
-            if self.privacyEnabledChecker(after, 'attributeHistory', 'avatarHistory'): asyncio.create_task(database.AppendAvatarHistory(after, message.attachments[0].url))
-            if os.path.exists(savePath): os.remove(savePath)
+            if self.privacyEnabledChecker(after, 'attributeHistory', 'avatarHistory'): asyncio.create_task(database.AppendAvatarHistory(after, url))
         if before.discriminator != after.discriminator:
-            #data['discrim'] = True
             titles.append('Discriminator')
             legacyTitleEmoji.append('🔢')
             newTitleEmoji.append(self.emojis['discriminator'])
-            embed.add_field(name="Old discriminator",value=before.discriminator)
-            embed.add_field(name="New discriminator",value=after.discriminator)
+            embed.add_field(name='Old discriminator', value=before.discriminator)
+            embed.add_field(name='New discriminator', value=after.discriminator)
             content += f'\n•Discriminator'
             await updateLastActive(after, datetime.datetime.now(), 'updated their discriminator')
         if before.name != after.name:
             titles.append('Username')
             legacyTitleEmoji.append('📄')
             newTitleEmoji.append(self.emojis['richPresence'])
-            embed.add_field(name="Old username",value=before.name)
-            embed.add_field(name="New username",value=after.name)
+            embed.add_field(name='Old username', value=before.name)
+            embed.add_field(name='New username', value=after.name)
             content += f'\n•Discriminator'
             await updateLastActive(after, datetime.datetime.now(), 'updated their username')
             if self.privacyEnabledChecker(after, 'attributeHistory', 'usernameHistory'): asyncio.create_task(database.AppendUsernameHistory(after))
-            asyncio.create_task(database.VerifyUser(membObj, bot))
+            asyncio.create_task(database.VerifyUser(membObj, self.bot))
         embed.set_footer(text=f'User ID: {after.id}')
         for server in servers:
             try:
                 if logEnabled(server, 'member') and memberGlobal(server) != 0:
-                    adjusted = rawReceived + datetime.timedelta(timeZone(server))
+                    adjusted = rawReceived + datetime.timedelta(self.timeZone(server))
                     settings = getCyberAttributes(server, 'member')
-                    color = blue[colorTheme(server)] if settings['color'][1] == 'auto' else settings['color'][1]
+                    color = blue[self.colorTheme(server)] if settings['color'][1] == 'auto' else settings['color'][1]
                     newEmbed = copy.deepcopy(embed)
-                    newContent = content + embedToPlaintext(embed)
+                    newContent = content + utility.embedToPlaintext(embed)
                     #We have to customize embeds for each specific server. First, embed title and description
                     titleEmoji = legacyTitleEmoji if settings['library'] == 0 else [str(emoji) for emoji in newTitleEmoji]
                     titleBase = f'''{f"{self.emojis['member'] if settings['library'] > 0 else '👤'}{''.join(titleEmoji)}{self.emojis['edit'] if settings['library'] > 0 else '✏'}" if settings['context'][0] > 0 else ''}'''
                     if len(titles) == 3 and settings['context'][0] < 2: newEmbed.title = f"{titleBase}User's {', '.join(titles)} updated"
                     elif len(titles) != 3: newEmbed.title = f"{titleBase}User's {' & '.join(titles)} updated"
                     if before.name == after.name: newEmbed.description = f'''{f"{self.emojis['member'] if settings['library'] > 0 else '👤'}" if settings['context'][1] > 0 else ''}{'Member' if settings['context'][1] < 2 else ''}: {after.mention} ({after.name})'''
-                    if settings['embedTimestamp'] > 1: newEmbed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
+                    if settings['embedTimestamp'] > 1: newEmbed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
                     #Next, color and timestamp
                     newEmbed.color = color
                     if settings['embedTimestamp']: newEmbed.timestamp = rawReceived
                     #Then, thumbnail/author
-                    if any(a > 0 for a in (settings['thumbnail'], settings['author'])) and before.avatar_url == after.avatar_url:
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not message.author.is_avatar_animated() else 'gif'))
-                        try: await after.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 0 and embed.thumbnail.url == discord.Embed.Empty: newEmbed.set_thumbnail(url=url)
-                        if settings['author'] > 0 and embed.author.name == discord.Embed.Empty: newEmbed.set_author(name=after.name, icon_url=url)
+                    if any(a > 0 for a in (settings['thumbnail'], settings['author'])) and before.display_avatar == after.display_avatar:
+                        url = await self.imageToURL(after.display_avatar)
+                        if settings['thumbnail'] > 0 and utility.empty(embed.thumbnail.url): newEmbed.set_thumbnail(url=url)
+                        if settings['author'] > 0 and utility.empty(embed.author.name): newEmbed.set_author(name=after.name, icon_url=url)
                     msg = await logChannel(server, 'member').send(content = newContent if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=newEmbed if not settings['plainText'] else None, files=f if not settings['plainText'] else [], tts=settings['tts'])
-                    if not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None)
+                    if msg.content and not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None) #TODO: reduce unnecessary edits
                     self.archiveLogEmbed(server, msg.id, embed, 'User Update')
             except: pass
-        for s in servers: asyncio.create_task(database.VerifyServer(s, bot, includeServer=False))
+        for s in servers: asyncio.create_task(database.VerifyMember(after, warnings=self.bot.lightningLogging[s.id]['antispam'].get('warn', 3)))
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):

@@ -638,7 +638,7 @@ async def SetBirthdayMessage(m: discord.Member, msg, auth, servers):
 
 async def ResetBirthdayMessages(u: discord.User):
     '''Resets a member's birthday messages (once their birthday has happened)'''
-    await users.update_one({'user_id': m.id}, {'$set': {'birthdayMessages': []}})
+    await users.update_one({'user_id': u.id}, {'$set': {'birthdayMessages': []}})
 
 async def GetAge(m: discord.Member):
     '''Return the age of a member'''
@@ -1012,3 +1012,7 @@ async def UpdateBirthdayList(u: discord.User, d: datetime.datetime):
 async def SetBirthdayList(input: dict):
     '''Sets the global birthday directory to the passed dictionary'''
     await disguard.update_one({}, {'$set': {'birthdays': await GetBirthdayList()}}, True)
+
+async def SetWarmup(s: discord.Guild, warmup: int):
+    '''Sets a server's warmup value'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'antispam.warmup': warmup}})
