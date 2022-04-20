@@ -2201,7 +2201,7 @@ class Cyberlog(commands.Cog):
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                     content = f'{log.user} updated server settings'
-                    await updateLastActive(log.user, datetime.datetime.now(), 'updated a server')
+                    if after.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated a server')
                 except Exception as e: content+=f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             if before.afk_channel != after.afk_channel:
                 embed.add_field(name='AFK Channel', value=f"{before.afk_channel.name if before.afk_channel else '<None>'} → **{after.afk_channel.name if after.afk_channel else '<None>'}**")
@@ -2301,41 +2301,38 @@ class Cyberlog(commands.Cog):
     async def on_guild_role_create(self, role: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is created'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(role.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(role.guild))
         msg = None
         if logEnabled(role.guild, "role"):
             content = f'The role "{role.name}" was created'
             settings = getCyberAttributes(role.guild, 'role')
-            color = green[colorTheme(role.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
+            color = green[self.colorTheme(role.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed=discord.Embed(
                 title=f'''{(self.emojis['roleCreate'] if settings['library'] > 1 else f"🚩{self.emojis['darkGreenPlus']}") if settings['context'][0] > 0 else ''}{'Role created' if settings['context'][0] < 2 else ''}''',
                 description=f'''{(self.emojis["richPresence"] if settings['library'] > 0 else '📄') if settings['context'][1] > 0 else ''}{'Name' if settings['context'][1] < 2 else ''}: {role.name}''' if role.name != 'new role' else '',
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             embed.set_footer(text=f'Role ID: {role.id}')
             if readPerms(role.guild, "role"):
                 try:
-                    log = (await role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_create).flatten())[0]
+                    log = await role.guild.audit_logs().get(action=discord.AuditLogAction.role_create)
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
                     embed.description += f'''\n👮‍♂️Created by: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                        try: await log.user.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                        if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                     content = f'{log.user} created the role "{role.name}"'
-                    await updateLastActive(log.user, datetime.datetime.now(), 'created a role')
+                    if role.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'created a role')
                 except Exception as e: content+=f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
-            if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
-            content += embedToPlaintext(embed)
-            msg = await logChannel(role.guild, 'role').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
+            content += utility.embedToPlaintext(embed)
+            msg: discord.Message = await logChannel(role.guild, 'role').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
             self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
         self.roles[role.id] = role.members
-        asyncio.create_task(database.VerifyServer(role.guild, bot, includeMembers=False))
+        asyncio.create_task(database.VerifyServer(role.guild, self.bot))
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
@@ -2353,14 +2350,13 @@ class Cyberlog(commands.Cog):
     async def on_guild_role_delete(self, role: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is deleted'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(role.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(role.guild))
         message = None
         roleMembers = []
         if logEnabled(role.guild, "role"):
             content=f'The role "{role.name}" was deleted'
-            f = None
             settings = getCyberAttributes(role.guild, 'role')
-            color = red[colorTheme(role.guild)] if settings['color'][2] == 'auto' else settings['color'][2]
+            color = red[self.colorTheme(role.guild)] if settings['color'][2] == 'auto' else settings['color'][2]
             embed=discord.Embed(
                 title=f'''{(self.emojis['roleDelete'] if settings['library'] > 1 else '🚩❌') if settings['context'][0] > 0 else ''}Role deleted {self.loading}''',
                 description=f'{"🚩" if settings["context"][1] > 0 else ""}{"Role" if settings["context"][1] < 2 else ""}: {role.name}',
@@ -2369,29 +2365,26 @@ class Cyberlog(commands.Cog):
             embed.set_footer(text='Role ID: {}'.format(role.id))
             if readPerms(role.guild, "role"):
                 try:
-                    log = (await role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_delete).flatten())[0]
+                    log = await role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_delete).next()
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
                     embed.description += f'''\n👮‍♂️Deleted by: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                        try: await log.user.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                        if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                     content = f'{log.user} deleted the role "{role.name}"'
-                    await updateLastActive(log.user, datetime.datetime.now(), 'deleted a role')
-                except Exception as e: content+=f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
-            content += embedToPlaintext(embed)
-            message = await logChannel(role.guild, 'role').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+                    if role.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'deleted a role')
+                except: pass# Exception as e: content+=f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+            content += utility.embedToPlaintext(embed)
+            message: discord.Message = await logChannel(role.guild, 'role').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             #Cache role members, and expel them upon role deletion. work for 2021.
             roleMembers = self.roles.get(role.id)
             if roleMembers:
                 membersWhoLost = '\n'.join([f'👤{m.name}' for m in roleMembers]) if len(roleMembers) < 20 else '👤'.join([m.name for m in roleMembers]) if len(roleMembers) < 100 else '' #Last branch prevents unnecessary computations
                 embed.description += f'\n{self.emojis["details"] if settings["context"][1] > 0 else ""}' + ('Nobody lost this role upon its deletion' if len(roleMembers) < 1 else f"[{len(roleMembers)} members lost this role upon its deletion]({message.jump_url} '{membersWhoLost}')" if len(roleMembers) < 100 else f'{len(roleMembers)} members lost this role upon its deletion')
                 embed = self.PermissionChanges(roleMembers, message, embed)
-            if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
+            if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
             embed.title = f'''{(self.emojis['roleDelete'] if settings['library'] > 1 else f'🚩{self.emojis["delete"]}') if settings['context'][0] > 0 else ''}{'Role deleted (React ℹ for role information)' if settings['context'][0] < 2 else ''}'''
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await message.edit(content=None)
             self.archiveLogEmbed(role.guild, message.id, embed, 'Role Update')
@@ -2400,12 +2393,12 @@ class Cyberlog(commands.Cog):
             if not settings['plainText']:
                 for r in reactions: await message.add_reaction(r)
             final, roleInfo = copy.deepcopy(embed), None
+        #await self.CheckDisguardServerRoles(roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions')
+        asyncio.create_task(database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)))
+        asyncio.create_task(database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)))
         self.roles.pop(role.id, None)
-        await self.CheckDisguardServerRoles(roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions')
-        asyncio.create_task(database.VerifyServer(role.guild, bot))
-        for member in role.members:
-            await database.VerifyUser(member, bot)
         if message:
+            #again, everything below this is not necessarily syntactically correct with the new changes
             while not self.bot.is_closed():
                 def reactionCheck(r, u): return r.message.id == message.id and not u.bot
                 result = await self.bot.wait_for('reaction_add', check=reactionCheck)
@@ -2438,35 +2431,31 @@ class Cyberlog(commands.Cog):
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is updated'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(after.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(after.guild))
         message = None
         if logEnabled(before.guild, 'role'):
             content = f'The role "{before.name}" was updated'
-            f = None
             settings = getCyberAttributes(after.guild, 'role')
-            color = blue[colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+            color = blue[self.colorTheme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed=discord.Embed(
                 title=f'''{(self.emojis['roleEdit'] if settings['library'] > 1 else '🚩✏')}{'Role was updated (React ℹ to view role details)' if settings['context'][0] < 2 else ''}''',
                 description=f'''{'🚩' if settings['context'][1] > 0 else ''}{'Role' if settings['context'][1] < 2 else ''}: {after.mention}{f" ({after.name})" if after.name == before.name else ""}''',
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             if after.name != before.name: embed.description += f'''\n{self.emojis['richPresence'] if settings['context'][1] > 0 else ''}Name: {before.name} → **{after.name}**'''
             if readPerms(before.guild, "role"):
                 try:
-                    log = (await after.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_update).flatten())[0]
+                    log = await after.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_update).next()
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
                     embed.description += f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                        try: await log.user.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                        if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                     content = f'{log.user} updated the role {before.name}'
-                    await updateLastActive(log.user, datetime.datetime.now(), 'updated a role')
-                except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+                    if after.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated a role')
+                except: pass
             embed.set_footer(text=f'Role ID: {before.id}')
             reactions = ['ℹ']
             if before.color != after.color:
@@ -2476,32 +2465,30 @@ class Cyberlog(commands.Cog):
                 reactions.append(self.emojis['shuffle'])
             if before.hoist != after.hoist: embed.add_field(name='Displayed separately', value=f'{before.hoist} → **{after.hoist}**')
             if before.mentionable != after.mentionable: embed.add_field(name='Mentionable', value=f'{before.mentionable} → **{after.mentionable}**')
-            #Here marks the grave of the huge emoji dict. Deleted because it would be visually unappealing. Recover from Github commit history if desired.
             if before.permissions != after.permissions:
                 afterPermissions = list(iter(after.permissions))
-                changedPermissions = [] #I have no clue what this is for... flag for deletion
                 for i, p in enumerate(iter(before.permissions)):
                     k, v = p[0], p[1]
                     if v != afterPermissions[i][1]:
-                        changedPermissions.append((k, v))
-                        embed.add_field(name=permissionKeys[k], value=f'{v} → **{afterPermissions[i][1]}**')
+                        embed.add_field(name=utility.getPermission(k), value=f'{v} → **{afterPermissions[i][1]}**')
             if len(embed.fields) > 0 or before.name != after.name:
-                content += embedToPlaintext(embed)
-                message = await logChannel(after.guild, 'role').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+                content += utility.embedToPlaintext(embed)
+                message: discord.Message = await logChannel(after.guild, 'role').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if not settings['plainText']:
                     for reac in reactions: await message.add_reaction(reac)
-                embed = self.PermissionChanges(after.members, message, embed)
-                if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
+                embed = self.PermissionChanges(after.members, message, embed, permissionsChanged = before.permissions != after.permissions)
+                if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']: await message.edit(content=None)
                 if not settings['plainText']: await message.edit(embed=embed)
                 self.archiveLogEmbed(after.guild, message.id, embed, 'Role Update')
                 if before.permissions != after.permissions:
                     for m in after.members: self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
-        await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
-        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, bot, includeMembers=before.permissions != after.permissions))
+        #await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
+        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, self.bot, includeMembers=before.permissions != after.permissions))
         for member in after.members:
-            await database.VerifyUser(member, bot)
+            await database.VerifyUser(member, self.bot)
         if message and len(embed.fields) > 0 or before.name != after.name:
+            #cutoff
             final = copy.deepcopy(embed)
             while not self.bot.is_closed():
                 def reactionCheck(r, u): return r.message.id == message.id and not u.bot
