@@ -2534,29 +2534,28 @@ class Cyberlog(commands.Cog):
                     reactions.append(self.emojis['collapse'])
     
     @commands.Cog.listener()
-    async def on_guild_emojis_update(self, guild: discord.Guild, before, after):
+    async def on_guild_emojis_update(self, guild: discord.Guild, before: typing.List[discord.Emoji], after: typing.List[discord.Emoji]):
         '''[DISCORD API METHOD] Called when emoji list is updated (creation, update, deletion)'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(guild))
         msg = None
         if logEnabled(guild, 'emoji'):
             content = 'Server emoji list updated'
-            f = None
             settings = getCyberAttributes(guild, 'emoji')
-            color = green[colorTheme(guild)] if settings['color'][0] == 'auto' else settings['color'][0]
+            color = green[self.colorTheme(guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             embed = discord.Embed(
                 title=f'''{(f'{self.emojis["emojiCreate"]}' if settings['library'] == 2 else f"{self.emojis['emoji']}{self.emojis['darkGreenPlus']}" if settings['library'] == 1 else f"{self.emojis['minion']}{self.emojis['darkGreenPlus']}") if settings['context'][0] > 0 else ""}{'Emoji created' if settings['context'][0] < 2 else ''}''',
                 description = '',
                 color=color)
-            if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
             logType = discord.AuditLogAction.emoji_create
             if len(before) > len(after): #Emoji was deleted
                 embed.title = f'''{(f'{self.emojis["emojiDelete"]}' if settings['library'] == 2 else f"{self.emojis['emoji']}{self.emojis['delete']}" if settings['library'] == 1 else f"{self.emojis['minion']}{self.emojis['delete']}") if settings['context'][0] > 0 else ""}{'Emoji deleted' if settings['context'][0] < 2 else ''}'''
-                embed.color = red[colorTheme(guild)] if settings['color'][2] == 'auto' else settings['color'][2]
+                embed.color = red[self.colorTheme(guild)] if settings['color'][2] == 'auto' else settings['color'][2]
                 logType = discord.AuditLogAction.emoji_delete
             elif len(after) == len(before):
                 embed.title = f'''{(f'{self.emojis["emojiUpdate"]}' if settings['library'] == 2 else f"{self.emojis['emoji']}✏" if settings['library'] == 1 else f"{self.emojis['minion']}✏") if settings['context'][0] > 0 else ""}{'Emoji list updated' if settings['context'][0] < 2 else ''}'''
-                embed.color = blue[colorTheme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+                embed.color = blue[self.colorTheme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
                 logType = discord.AuditLogAction.emoji_update
             #utilize dictionaries for speed purposes, to prevent necessity of nested loops
             beforeDict = {}
@@ -2578,29 +2577,27 @@ class Cyberlog(commands.Cog):
                     embed.add_field(name=f'{beforeDict[eID]["name"]} → **{emoji["name"]}**', value=emoji['raw'])
                     if embed.image.url is embed.Empty and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
                     footerIDList.append(eID)
-            content += embedToPlaintext(embed)
+            content += utility.embedToPlaintext(embed)
             if readPerms(guild, "emoji"):
                 try:
-                    log = (await guild.audit_logs(limit=1, action=logType).flatten())[0]
+                    log = await guild.audit_logs(limit=1, action=logType).next()
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
                     embed.description += f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
-                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                        try: await log.user.avatar_url_as(size=1024).save(savePath)
-                        except discord.HTTPException: pass
-                        url = await self.uploadFiles(savePath)
-                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                        if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
                     content = f'{log.user} updated the server emoji list'
-                    await updateLastActive(log.user, datetime.datetime.now(), 'updated emojis somewhere')
+                    if guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'updated server emojis somewhere')
                 except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
-            embed.set_footer(text=f'Relevant emoji IDs: {" • ".join(str(f) for f in footerIDList)}' if len(footerIDList) > 1 else f'Emoji ID: {footerIDList[0]}')
-            if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
-            self.archiveLogEmbed(guild, msg.id, embed, 'Emoji Update')
-            if msg and len(embed.fields) > 0:
-                msg = await logChannel(guild, 'emoji').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            if footerIDList: embed.set_footer(text=f'Relevant emoji IDs: {" • ".join(str(f) for f in footerIDList)}' if len(footerIDList) > 1 else f'Emoji ID: {footerIDList[0]}')
+            if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
+            if len(embed.fields) > 0:
+                msg: discord.Message = await logChannel(guild, 'emoji').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if any((settings['plainText'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
+                self.archiveLogEmbed(guild, msg.id, embed, 'Emoji Update')
+                #cutoff
                 def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
                 while not self.bot.is_closed():
                     result = await self.bot.wait_for('reaction_add', check=reactionCheck)
@@ -2617,23 +2614,21 @@ class Cyberlog(commands.Cog):
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         '''[DISCORD API METHOD] Called whenever a voice channel event is triggered - join/leave, mute/deafen, etc'''
         received = datetime.datetime.now()
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(timeZone(member.guild))
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(self.timeZone(member.guild))
         msg = None
-        #if datetime.datetime.now().strftime('%m/%d') == '04/01': asyncio.create_task(self.aprilFools(member, before, after))
         logRecapsEnabled = self.bot.lightningLogging[member.guild.id]['cyberlog']['voiceChatLogRecaps']
         if not logEnabled(member.guild, 'voice') and not logRecapsEnabled:
             return
         settings = getCyberAttributes(member.guild, 'voice')
-        theme = colorTheme(member.guild)
+        theme = self.colorTheme(member.guild)
         color = blue[theme] if settings['color'][1] == 'auto' else settings['color'][1]
         embed=discord.Embed(
             title = f"{(self.emojis['voiceChannel'] if settings['library'] > 0 else '🎙') if settings['context'][0] > 0 else ''}{'Voice Channel Update' if settings['context'][0] < 2 else ''}",
             description=f"{(self.emojis['member'] if settings['library'] > 0 else '👤') if settings['context'][1] > 0 else ''}{'Member' if settings['context'][1] < 2 else ''}: {member.mention} ({member.name})",
             color=color)
-        if settings['embedTimestamp'] in (1, 3): embed.timestamp = datetime.datetime.utcnow()
+        if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
         content = None
         error = False
-        f = []
         log = None
         if before.channel: beforePrivate = before.channel.overwrites_for(member.guild.default_role).read_messages == False
         if after.channel: afterPrivate = after.channel.overwrites_for(member.guild.default_role).read_messages == False
@@ -2643,24 +2638,17 @@ class Cyberlog(commands.Cog):
         except KeyError:
             eventHistory = []
             self.memberVoiceLogs[member.id] = eventHistory
-            eventHistory = self.memberVoiceLogs[member.id]
+            eventHistory: typing.List[typing.Tuple] = self.memberVoiceLogs[member.id]
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-            savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not member.is_avatar_animated() else 'gif'))
-            try: await member.avatar_url_as(size=1024).save(savePath)
-            except discord.HTTPException: pass
-            url = await self.uploadFiles(savePath)
+            url = await self.imageToURL(member.display_avatar)
             if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4): embed.set_author(name=member.name, icon_url=url)
         #Use an if/else structure for AFK/Not AFK because AFK involves switching channels - this prevents duplicates of AFK & Channel Switch logs
         if before.afk != after.afk:
             #Note these *extremly* long value lines due to the multitude of customization options between emoji choice, emoji/plaintext descriptions, and color schemes
-            # lines = (
-            #     f"{((self.emojis['neonGreenConnect'] if theme == 1 else self.emojis['darkGreenConnect']) if settings['library'] > 0 else '📤') if settings['context'] > 0 else ''}{'Left' if settings['context'] < 2 else ''}: {(self.channelEmoji(before.channel) if settings['library'] > 0 else '🎙') if settings['context'] > 0 else ''}{before.channel}",
-            #     f"{((self.emojis['neonRedDisconnect'] if theme == 1 else self.emojis['darkRedDisconnect']) if settings['library'] > 0 else '📥') if settings['context'] > 0 else ''}{'Joined' if settings['context'] < 2 else ''}: {(self.channelEmoji(after.channel) if settings['library'] > 0 else '🎙') if settings['context'] > 0 else ''}{after.channel}"
-            # )
             lines = (
-                f"{(self.emojis['darkGreenConnect'] if settings['library'] > 0 else '📤') if settings['context'][1] > 0 else ''}{'Left' if settings['context'][1] < 2 else ''}: {(self.channelEmoji(before.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{before.channel}",
-                f"{(self.emojis['darkRedDisconnect'] if settings['library'] > 0 else '📥') if settings['context'][1] > 0 else ''}{'Joined' if settings['context'][1] < 2 else ''}: {(self.channelEmoji(after.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{after.channel}"
+                f"{(self.emojis['darkRedDisconnect'] if settings['library'] > 0 else '📤') if settings['context'][1] > 0 else ''}{'Left' if settings['context'][1] < 2 else ''}: {(utility.channelEmoji(self, before.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{before.channel}",
+                f"{(self.emojis['darkGreenConnect'] if settings['library'] > 0 else '📥') if settings['context'][1] > 0 else ''}{'Joined' if settings['context'][1] < 2 else ''}: {(utility.channelEmoji(self, after.channel) if settings['library'] > 0 else '🎙') if settings['context'][1] > 0 else ''}{after.channel}"
             )
             if after.afk: 
                 content = f'{member} went AFK from {before.channel}'
@@ -2686,7 +2674,7 @@ class Cyberlog(commands.Cog):
                     else: i -= 1
                 #If we hit the end without finding a match, then the member probably unmuted before joining the voice channel, which the API doesn't do anything with until they join
                 if i > 0:
-                    return elapsedDuration(adjusted - e[0])
+                    return utility.elapsedDuration(adjusted - e[0])
                 else: return f'Special case: Member is on browser & had to accept microphone permissions or member toggled {mode} while outside of voice channel'
             #Member switched force-deafen or force-mute status - master if branch is for space-saving purposes when handing audit log retrieval
             if (before.deaf != after.deaf) or (before.mute != after.mute):
@@ -2694,7 +2682,7 @@ class Cyberlog(commands.Cog):
                 if readPerms(member.guild, 'voice'):
                     try:
                         #Fetch the most recent audit log
-                        log = (await member.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update).flatten())[0]
+                        log = await member.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_update).next()
                         #Return or adjust settings if the server has special settings for actions performed by bots
                         if settings['botLogging'] == 0 and log.user.bot: return
                         elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
@@ -2703,15 +2691,12 @@ class Cyberlog(commands.Cog):
                         #Check to make sure that if the audit log represents a mute, our event is a mute, and same for deafen
                         if ('mute' in i and before.mute != after.mute) or ('deafen' in i and before.deaf != after.deaf):
                             #See message edit for documentation on this segment
-                            if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty)) or (settings['author'] > 2 and (settings['author'] == 2 and embed.author.name == discord.Embed.Empty)):
-                                savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not log.user.is_avatar_animated() else 'gif'))
-                                try: await log.user.avatar_url_as(size=1024).save(savePath)
-                                except discord.HTTPException: pass
-                                url = await self.uploadFiles(savePath)
-                                if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and embed.thumbnail.url == discord.Embed.Empty): embed.set_thumbnail(url=url)
-                                if settings['author'] > 2 or (settings['author'] == 2 and embed.author.name == discord.Embed.Empty): embed.set_author(name=log.user.name, icon_url=url)
-                            await updateLastActive(log.user, datetime.datetime.now(), 'moderated a user in voice chat')
-                    except Exception as e: error = f'You have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+                            if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                                url = await self.imageToURL(log.user.display_avatar)
+                                if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                                if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.name, icon_url=url)
+                            if member.guild.id not in gimpedServers: await updateLastActive(log.user, datetime.datetime.now(), 'moderated a user in voice chat')
+                    except: pass
             #The 'onlyJoinLeave' and 'onlyModActions' moved inwards to allow the event history log to always be added to - this will be the new server default setting.
             if before.mute != after.mute:
                 #Member is no longer force muted
@@ -2745,7 +2730,7 @@ class Cyberlog(commands.Cog):
                             embed.add_field(
                                 name=f'''{(self.emojis['modDeafened'] if settings['library'] > 0 else '🔨🔇') if settings['context'][1] > 0 else ''}Deafened by moderator''',
                                 value=f'''{'👮‍♂️' if settings['context'][1] > 0 else ''}{'Moderator' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.name})''')
-            if not serverIsGimped(member.guild): await updateLastActive(member, datetime.datetime.now(), 'voice channel activity')
+            if member.guild.id not in gimpedServers: await updateLastActive(member, datetime.datetime.now(), 'voice channel activity') #Not 100% accurate, especially for moderator actions
             #Member changed self-deafen status
             if before.self_deaf != after.self_deaf:
                 if before.self_deaf:
@@ -2772,21 +2757,16 @@ class Cyberlog(commands.Cog):
             if before.channel != after.channel:
                 if not before.channel:
                     content = f'{member} connected to voice chat in {after.channel.name}'
-                    #self.memberVoiceLogs.update({member.id: []}) #When the member joins a channel, we clear their history log from before, if it exists, to start a new one
                     eventHistory = []
                     self.memberVoiceLogs[member.id] = eventHistory
                     eventHistory = self.memberVoiceLogs[member.id]
-                    #eventHistory.append((rawReceived, f"{((self.emojis['neonGreenConnect'] if theme == 1 else self.emojis['darkGreenConnect']) if settings['library'] > 0 else '📥') if settings['context'] > 0 else ''}Connected to {(self.emojis['privateVoiceChannel'] if afterPrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{after.channel}"))
                     eventHistory.append((adjusted, f"{(self.emojis['darkGreenConnect'] if settings['library'] > 0 else '📥') if settings['context'][1] > 0 else ''}Connected to {(self.emojis['privateVoiceChannel'] if afterPrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{after.channel}"))
                     if not onlyModActions:
-                        #embed.add_field(name=f"{((self.emojis['neonGreenConnect'] if theme == 1 else self.emojis['darkGreenConnect']) if settings['library'] > 0 else '📥') if settings['context'] > 0 else ''}Connected", value=f"To {(self.emojis['privateVoiceChannel'] if afterPrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{after.channel}")
                         embed.add_field(name=f"{((self.emojis['neonGreenConnect'] if theme == 1 else self.emojis['darkGreenConnect']) if settings['library'] > 0 else '📥') if settings['context'][1] > 0 else ''}Connected", value=f"To {(self.emojis['privateVoiceChannel'] if afterPrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{after.channel}")
                 elif not after.channel:
                     content = f'{member} disconnected from {before.channel.name}'
-                    #eventHistory.append((rawReceived, f"{((self.emojis['neonRedDisconnect'] if theme == 1 else self.emojis['darkRedDisconnect']) if settings['library'] > 0 else '📤') if settings['context'] > 0 else ''}Disconnected from {(self.emojis['privateVoiceChannel'] if beforePrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{before.channel}"))
                     eventHistory.append((adjusted, f"{(self.emojis['darkRedDisconnect'] if settings['library'] > 0 else '📤') if settings['context'][1] > 0 else ''}Disconnected from {(self.emojis['privateVoiceChannel'] if beforePrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{before.channel}"))
                     if not onlyModActions:
-                        #embed.add_field(name=f"{((self.emojis['neonRedDisconnect'] if theme == 1 else self.emojis['darkRedDisconnect']) if settings['library'] > 0 else '📤') if settings['context'] > 0 else ''}Disconnected", value=f"From {(self.emojis['privateVoiceChannel'] if beforePrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{before.channel}")
                         embed.add_field(name=f"{(self.emojis['darkRedDisconnect'] if settings['library'] > 0 else '📤') if settings['context'][1] > 0 else ''}Disconnected", value=f"From {(self.emojis['privateVoiceChannel'] if beforePrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{before.channel}")
                 else:
                     content = f'{member} switched from {before.channel.name} to {after.channel.name}'
@@ -2795,34 +2775,34 @@ class Cyberlog(commands.Cog):
                         embed.add_field(name=f"{(self.emojis['shuffle'] if settings['library'] > 0 else '🔀') if settings['context'][1] > 0 else ''}Switched voice channels", value=f"{(self.emojis['privateVoiceChannel'] if beforePrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}{before.channel} → {(self.emojis['privateVoiceChannel'] if beforePrivate else self.emojis['voiceChannel']) if settings['library'] > 0 else '🎙'}**{after.channel}**")
         if len(embed.fields) < 1: return
         #Method to build voice channel history embed
-        def buildHistoryLog(eventHistory):
+        async def buildHistoryLog(eventHistory):
             logEmbed = discord.Embed(title='Member Voice Log Recap • ', description='', color=color)
             maxNumberOfEntries = 30 #Max number of log entries to display in the embed
             start, end = eventHistory[0 if len(eventHistory) < 30 else eventHistory[-1 * maxNumberOfEntries]], eventHistory[-1]
             #Set embed title based on the distance span between the start and end of voice log history
-            if start[0].day == end[0].day: logEmbed.title += f'{DisguardShortTimestamp(start[0])} - {DisguardShortTimestamp(end[0])}' #Member began & ended voice session on the same day, so least amount of contextual date information
-            elif (end[0] - start[0]).days < 1: logEmbed.title += f'{DisguardShortTimestamp(start[0])} yesterday - {DisguardShortTimestamp(end[0])} today' #Member began & ended voice session one day apart - so use yesterday & today
-            else: logEmbed.title += f'{DisguardShortTimestamp(start[0])}{start[0]:%b %d}  - {DisguardShortTimestamp(end[0])} today' #More than one day apart... somehow
+            if start[0].day == end[0].day: logEmbed.title += f'{utility.DisguardShortTimestamp(start[0])} - {utility.DisguardShortTimestamp(end[0])}' #Member began & ended voice session on the same day, so least amount of contextual date information
+            elif (end[0] - start[0]).days < 1: logEmbed.title += f'{utility.DisguardShortTimestamp(start[0])} yesterday - {utility.DisguardShortTimestamp(end[0])} today' #Member began & ended voice session one day apart - so use yesterday & today
+            else: logEmbed.title += f'{utility.DisguardShortTimestamp(start[0])}{start[0]:%b %d}  - {utility.DisguardShortTimestamp(end[0])} today' #More than one day apart... somehow
             if len(eventHistory) > 30: logEmbed.title += f'(Last {maxNumberOfEntries} entries)'
             #Join the formatted log, last [maxNumberOfEntries] entries
             for e in eventHistory[-1 * maxNumberOfEntries:]:
-                logEmbed.description += f'[{DisguardShortmonthTimestamp(e[0])}] {e[1]}\n'
-            logEmbed.add_field(name='Voice Session Duration', value=elapsedDuration(eventHistory[-1][0] - eventHistory[0][0]))
-            logFile = discord.File(savePath)
-            logEmbed.set_author(name=member, icon_url=f'attachment://{logFile.filename}')
+                logEmbed.description += f'[{utility.DisguardShortmonthTimestamp(e[0])}] {e[1]}\n'
+            logEmbed.add_field(name='Voice Session Duration', value=utility.elapsedDuration(eventHistory[-1][0] - eventHistory[0][0]))
+            logEmbed.set_author(name=member, icon_url=await self.imageToURL(member.display_avatar))
             eventHistory = []
-            return logEmbed, logFile
+            return logEmbed
         lc = logChannel(member.guild, 'voice')
         if logEnabled(member.guild, 'voice'):
-            if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
+            if settings['embedTimestamp'] > 1: embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
             if error: content += f'\n\n{error}'
-            msg = await lc.send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) or error else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            msg: discord.Message = await lc.send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) or error else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             if any((settings['plainText'], settings['flashText'])) and not settings['plainText'] and not error: await msg.edit(content=None)
             self.archiveLogEmbed(member.guild, msg.id, embed, 'Voice Session Update')
         else: msg = None
         if not after.channel and logRecapsEnabled:
-            resultEmbed, fle = buildHistoryLog(eventHistory)
-            await lc.send(embed=resultEmbed, file=fle)
+            resultEmbed = await buildHistoryLog(eventHistory)
+            await lc.send(embed=resultEmbed)
+        #cutoff
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
@@ -2835,23 +2815,6 @@ class Cyberlog(commands.Cog):
                     await msg.edit(content=None, embed=embed)
                     await msg.clear_reactions()
                     if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
-
-    async def aprilFools(self, member, before, after):
-        if before.channel == None and after.channel and not member.bot:
-            await asyncio.sleep(10)
-            def disconnect(error):
-                asyncio.create_task(member.guild.voice_client.disconnect())
-            if member.voice:
-                c = member.voice.channel
-                if member.guild.voice_client and member.guild.voice_client.is_playing() and member.guild.voice_client.channel != member.voice.channel:
-                    member.guild.voice_client.stop
-                if member.guild.voice_client and member.guild.voice_client.channel: await member.guild.voice_client.disconnect()
-                await member.voice.channel.connect()
-                audio = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio('rickroll.mp3', executable='G:/My Drive/Other/ffmpeg-2021-03-31-git-61ea0e3191-full_build/bin/ffmpeg.exe'))
-                member.guild.voice_client.play(audio, after=disconnect)
-                await asyncio.sleep(180)
-                try: await member.guild.voice_client.disconnect()
-                except: pass
 
     '''The following listener methods are used for lastActive tracking; not logging right now'''
     # As of update 0.2.25, on_raw_reaction_add and on_raw_reaction_remove are in use, at the top, for ghost reaction logging, the latter of which used to be here.
