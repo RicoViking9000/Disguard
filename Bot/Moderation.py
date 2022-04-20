@@ -940,7 +940,7 @@ class WarmupActionView(discord.ui.View):
         super().__init__()
         self.bot = bot
     
-    @discord.ui.button
+    @discord.ui.button()
     async def apply(self, button: discord.ui.Button, interaction: discord.Interaction):
         button.disabled = True
         await interaction.response.edit_message(view=self)
