@@ -2055,6 +2055,14 @@ class Cyberlog(commands.Cog):
                     except: pass
                 await member.kick(reason=f'[Antispam: ageKick] Account must be {ageKick} days old; is only {acctAge} days old')
             elif member.id in antispam.get('ageKickWhitelist'): await database.RemoveWhitelistEntry(member.guild, member.id)
+        '''WARMUP''' #mute members on join until configured time passes
+        if antispam.get('warmup'):
+            warmup, loops = antispam['warmup'], 0
+            units = {0: 'second', 1: 'minute', 2: 'hour', 3: 'day', 4: 'week'}
+            while warmup >= 60 and loops < 4:
+                warmup /= 60
+                loops += 1
+            await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=antispam['warmup'], reason=f'[Antispam: Warmup] This new member will be able to begin chatting in {warmup}{units[loops]}{"s" if warmup != 1 else ""}.')
         '''Repeated Joins: Sleeping'''
         if 0 not in rj[:2]:
             try:

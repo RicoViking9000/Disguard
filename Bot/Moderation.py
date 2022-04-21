@@ -54,6 +54,28 @@ class Moderation(commands.Cog):
         self.roleCache = {}
         self.permissionsCache = {}
 
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_roles=True)
+    @commands.command()
+    async def warmup(self, ctx: commands.Context, arg: str):
+        '''A command to set the duration a member must remain in the server before chatting'''
+        duration, unit = arg[:-1], arg[:-1]
+        # define multipliers to convert higher units into seconds
+        minutes = 60
+        hours = 60 * minutes
+        days = 24 * hours
+        weeks = 7 * days
+        # define relational dictionary
+        conversion = {'s': 1, 'm': minutes, 'h': hours, 'd': days, 'w': weeks},
+        units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week'}
+        # now, set the final amount in seconds
+        warmup = duration * conversion[unit]
+        await database.SetWarmup(ctx.guild, warmup)
+        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{duration} {units[unit]}{"s" if duration != 1 else ""}** before chatting')
+        #view = WarmupActionView(self.bot)
+        #await ctx.send(embed=embed, view=view)
+        await ctx.send(embed=embed)
+
     @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
     async def lock(self, ctx, member: discord.Member, *, reason=''):
