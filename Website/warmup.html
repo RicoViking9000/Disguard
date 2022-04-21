@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Warmup - Disguard Commands</title>
+        <link rel="stylesheet" type="text/css" href="Styles.css">
+        <link rel='icon' type='image/png' href='icoDisguard.png'>
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul id="navig">
+                    <li> <a href="index.html">Home</a></li>
+                    <li> <a href="features.html">Features</a></li>
+                    <li> <a href="commands.html">Commands</a></li>
+                    <li> <a href="https://disguard.herokuapp.com/">Manage Servers</a></li>
+                    <li> <a href="https://discord.gg/xSGujjz">Join Support Server</a></li>
+                    <li> <a href="https://discordapp.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot">Invite Disguard</a></li>
+                    <li> <a href='https://github.com/RicoViking9000/Disguard'>Github</a></li>
+                    <li> <a href="privacyBasic.html">Privacy Policy</a></li>
+                </ul>
+            </nav>
+        </header>
+        <div class=pad>
+            <h1>Warmup command</h1>
+            <p>Configure the duration members must be in the server before being allowed to chat</p>
+            <p>This command mutes members when they join the server, then unmutes them once the designated amount of time has passed.</p>
+            <p>Requires Manage Roles and Manage Channels permissions because the bot uses these permissions to mute members</p>
+            <h3>.warmup {duration}</h3>
+            <h4>{duration}</h4>
+            <div>
+                <p>The new value to set. Format it with a number followed by a letter representing the units. For example, 5d would mean 5 days.
+                    Here are the acceptable values for letters representing units:
+                </p>
+                <ul>
+                    <li>s: seconds</li>
+                    <li>m: minutes</li>
+                    <li>h: hours</li>
+                    <li>d: days</li>
+                    <li>w: weeks</li>
+                </ul>
+                <p>Make sure the argument is one word so that the bot can properly do conversion.</p>
+            </div>
+            <p>Examples</p>
+            <div>
+                <h4>.warmup 12h</h4>
+                <p>Set the configuration so that members must be in the server for 12 hours before chatting</p>
+            </div>
+            <hr>
+            <div>
+                <h4>.warmup 0s</h4>
+                <p>Disable the feature</p>
+            </div>
+        </div>
+    </body>
+</html>

@@ -2056,7 +2056,7 @@ class Cyberlog(commands.Cog):
                 await member.kick(reason=f'[Antispam: ageKick] Account must be {ageKick} days old; is only {acctAge} days old')
             elif member.id in antispam.get('ageKickWhitelist'): await database.RemoveWhitelistEntry(member.guild, member.id)
         '''WARMUP''' #mute members on join until configured time passes
-        if antispam.get('warmup'):
+        if antispam.get('warmup', 0) > 0:
             warmup, loops = antispam['warmup'], 0
             units = {0: 'second', 1: 'minute', 2: 'hour', 3: 'day', 4: 'week'}
             while warmup >= 60 and loops < 4:
