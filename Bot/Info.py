@@ -1,6 +1,5 @@
 '''Holds all code relating to Disguard's info command, now new and improved from V1.0'''
 import utility
-import views
 import discord
 from discord.ext import commands
 import asyncio
