@@ -68,13 +68,13 @@ class Moderation(commands.Cog):
             days = 24 * hours
             weeks = 7 * days
             # define relational dictionary
-            conversion = {'s': 1, 'm': minutes, 'h': hours, 'd': days, 'w': weeks},
+            conversion = {'s': 1, 'm': minutes, 'h': hours, 'd': days, 'w': weeks}
             units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week'}
             # now, set the final amount in seconds
             warmup = int(duration) * conversion[unit]
         else: warmup = 0
         await database.SetWarmup(ctx.guild, warmup)
-        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{duration} {units[unit]}{"s" if duration != 1 else ""}** before chatting')
+        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{duration} {units[unit]}{"s" if duration != 1 else ""}** before chatting', color=orange[self.colorTheme(ctx.guild)])
         view = WarmupActionView(self.bot)
         await ctx.send(embed=embed, view=view)
 
@@ -765,13 +765,13 @@ class Moderation(commands.Cog):
                     results[m]['Add Mute Role'].append(f'{self.emojis["greenCheck"]}')
                 except Exception as e: results[m]['Add Mute Role'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')
                 if duration:
-                    muteTimedEvents[m.id] = {'type': 'mute', 'target': m.id, 'flavor': reason, 'role': muteRole.id, 'roleList': [r.id for r in memberRolesTaken[m.id]], 'permissionsTaken': permissionsTaken[str(m.id)], 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                    muteTimedEvents[m.id] = {'type': 'mute', 'target': m.id, 'flavor': reason, 'role': muteRole.id, 'roleList': [r.id for r in memberRolesTaken[m.id]], 'permissionsTaken': permissionsTaken[str(m.id)], 'timestamp': datetime.datetime.utcnow(), 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
                     asyncio.create_task(database.AppendTimedEvent(g, muteTimedEvents[m.id]))
                 results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
             except Exception as e: results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')
         asyncio.create_task(database.SetMuteCache(m.guild, members, memberRolesTaken))
         asyncio.create_task(database.SetPermissionsCache(m.guild, members, permissionsTaken))
-        if duration and waitToUnmute: asyncio.create_task(self.waitToUnmute(members, author, muteTimedEvents, datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)))
+        if duration and waitToUnmute: asyncio.create_task(self.waitToUnmute(members, author, muteTimedEvents, discord.utils.utcnow() + datetime.timedelta(seconds=duration)))
         return results
 
     async def waitToUnmute(self, members, author, events, expires, reason=None):
@@ -942,7 +942,7 @@ class WarmupActionView(discord.ui.View):
         super().__init__()
         self.bot = bot
     
-    @discord.ui.button()
+    @discord.ui.button(label='Apply to existing members')
     async def apply(self, button: discord.ui.Button, interaction: discord.Interaction):
         button.disabled = True
         await interaction.response.edit_message(view=self)

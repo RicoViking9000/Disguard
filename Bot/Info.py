@@ -3,8 +3,12 @@ import utility
 import discord
 from discord.ext import commands
 import asyncio
+import aiofiles
 import datetime
 import emoji
+import json
+
+indexes = 'Indexes'
 
 class InfoResult(object):
     def __init__(self, obj, mainKey, relevance):
@@ -703,8 +707,8 @@ class Info(commands.Cog):
     async def MemberPosts(self, m: discord.Member):
         messageCount=0
         for channel in m.guild.text_channels: 
-            with open(f'{indexes}/{m.guild.id}/{channel.id}.json') as f:
-                loaded = json.load(f)
+            async with aiofiles.open(f'{indexes}/{m.guild.id}/{channel.id}.json') as f:
+                loaded = json.loads(await f.read())
                 messageCount += len([k for k, v in loaded.items() if m.id == v['author0']])
         return messageCount
 

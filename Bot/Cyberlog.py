@@ -44,7 +44,6 @@ except FileExistsError: pass
 summaries = {}
 grabbedSummaries = {}
 indexed = {}
-info = {}
 lightningLogging = {}
 lightningUsers = {}
 
@@ -1467,8 +1466,8 @@ class Cyberlog(commands.Cog):
                         {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{utility.suffix(count)} member
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {ageDisplay[0]} old
                         [Hover or react {self.emojis["expand"]} for more details]({msg.jump_url} '
-                        {"🕰" if settings['context'][1] > 0 else ''}{"Timestamp" if settings['context'][1] < 2 else ''}: {adjusted:%b %d, %Y • %I:%M:%s %p} {self.nameZone(member.guild)}
-                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {(member.created_at + datetime.timedelta(hours=self.timeZone(member.guild))):%b %d, %Y • %I:%M %p} {self.nameZone(member.guild)}
+                        {"🕰" if settings['context'][1] > 0 else ''}{"Timestamp" if settings['context'][1] < 2 else ''}: {utility.DisguardStandardTimestamp(adjusted)} {self.nameZone(member.guild)}
+                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {(utility.DisguardStandardTimestamp(member.created_at + datetime.timedelta(hours=self.timeZone(member.guild))))} {self.nameZone(member.guild)}
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old
                         {"🌐" if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in self.bot.guilds if member in g.members])}\n
                         QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.name}\n🔒: Quarantine {member.name}\n👢: Kick {member.name}\n🔨: Ban {member.name}')''')
@@ -1511,7 +1510,7 @@ class Cyberlog(commands.Cog):
         events = self.bot.lightningLogging.get(member.guild.id).get('antispam').get('timedEvents')
         for event in events:
             try:
-                if event['type'] == 'mute' and event['target'] == member.id:
+                if event['type'] == 'mute' and event['target'] == member.id and (datetime.datetime.utcnow() - event['timestamp']).total_seconds > 60:
                     hadToRemute = True
                     asyncio.create_task(muteDelay)
             except: pass
@@ -1681,7 +1680,7 @@ class Cyberlog(commands.Cog):
                 await msg.edit(embed=embed)
 
     async def doorguardHandler(self, member: discord.Member):
-        '''REPEATED JOINS'''
+        '''REPEATED JOINS''' #Consider splitting this up into three methods or adding exception catchers
         rj = antispamObject(member.guild).get('repeatedJoins')
         if 0 not in rj[:2]: #Make sure this module is enabled (remember, modules are set to 0 to mark them as disabled)
             try: self.repeatedJoins[f'{member.guild.id}_{member.id}'].append(member.joined_at)
@@ -1695,6 +1694,7 @@ class Cyberlog(commands.Cog):
             durationTimes = [dH, dM, dS, durationDelta.days]
             remainingDisplay = []
             durationDisplay = []
+            units = ['second', 'minute', 'hour', 'day']
             for i in range(len(remainingTimes) - 1, -1, -1):
                 if remainingTimes[i] != 0: remainingDisplay.append(f'{remainingTimes[i]} {units[i]}{"s" if remainingTimes[i] != 1 else ""}')
                 if durationTimes[i] != 0: durationDisplay.append(f'{durationTimes[i]} {units[i]}{"s" if durationTimes[i] != 1 else ""}')
@@ -1725,7 +1725,7 @@ class Cyberlog(commands.Cog):
                     banTimedEvent = {'type': 'ban', 'flavor': '[Antispam: repeatedJoins]', 'target': member.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=rj[2])}
                     await database.AppendTimedEvent(member.guild, banTimedEvent)
         '''AGEKICK ⬇'''
-        acctAge = (datetime.datetime.utcnow() - member.created_at).days
+        acctAge = (discord.utils.utcnow() - member.created_at).days
         antispam = antispamObject(member.guild)
         ageKick = antispam.get('ageKick')
         if ageKick is not None: #Check account age; requested feature
@@ -1745,10 +1745,11 @@ class Cyberlog(commands.Cog):
         if antispam.get('warmup', 0) > 0:
             warmup, loops = antispam['warmup'], 0
             units = {0: 'second', 1: 'minute', 2: 'hour', 3: 'day', 4: 'week'}
-            while warmup >= 60 and loops < 4:
-                warmup /= 60
+            values = {0: 60, 1: 60, 2: 60, 3: 24, 4: 7}
+            while warmup >= values[loops] and loops < 4:
+                warmup /= values[loops]
                 loops += 1
-            await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=antispam['warmup'], reason=f'[Antispam: Warmup] This new member will be able to begin chatting in {warmup}{units[loops]}{"s" if warmup != 1 else ""} (at {utility.DisguardStandardTimestamp(discord.utils.utcnow() + warmup)}).')
+            await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=antispam['warmup'], reason=f'[Antispam: Warmup] This new member will be able to begin chatting in {round(warmup)} {units[loops]}{"s" if warmup != 1 else ""} (at {utility.DisguardStandardTimestamp(discord.utils.utcnow() + datetime.timedelta(seconds=antispam.get("warmup", 0)) + datetime.timedelta(hours=self.timeZone(member.guild)))}).', waitToUnmute=True)
         '''Repeated Joins: Sleeping'''
         if 0 not in rj[:2]:
             try:
@@ -1820,7 +1821,8 @@ class Cyberlog(commands.Cog):
             except Exception as e: print(f'Member leave placement fail: {e}')
             if 'Finalizing' in embed.title: embed.title = f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}❌" if settings['library'] < 2 else self.emojis['memberLeave']) if settings['context'][0] > 0 else ''}{f'{"Member left" if not member.bot else "Bot removed"}' if settings['context'][0] < 2 else ''}'''
             await message.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
-            embed.set_field_at(-1, name='**Post count**', value=await asyncio.create_task(self.MemberPosts(member)))
+            info: Info.Info = self.bot.get_cog('Info')
+            embed.set_field_at(-1, name='**Post count**', value=await asyncio.create_task(info.MemberPosts(member)))
             await message.edit(embed=embed if not settings['plainText'] else None)
             self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             #if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
