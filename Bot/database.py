@@ -224,6 +224,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=Fa
             'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
             'ageKickOwner': False if serv is None or spam.get('ageKickOwner') is None else spam.get('ageKickOwner'),
             'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist'),
+            'warmup': spam.get('warmup', 0) #If > 0, mute members for this amount of time when they join the server
             'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents'), #Bans, mutes, etc
             'automuteRole': 0 if not spam else spam.get('automuteRole', 0)},
         "cyberlog": {

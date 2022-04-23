@@ -4,7 +4,7 @@ This will initially only contain the Easter/April Fools Day events code, but ove
 
 import discord
 import secure
-from discord.ext import commands
+from discord.ext import commands, tasks
 import database
 import lyricsgenius
 import re

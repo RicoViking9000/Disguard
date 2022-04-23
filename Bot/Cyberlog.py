@@ -1827,7 +1827,7 @@ class Cyberlog(commands.Cog):
         events = self.bot.lightningLogging.get(member.guild.id).get('antispam').get('timedEvents')
         for event in events:
             try:
-                if event['type'] == 'mute' and event['target'] == member.id:
+                if event['type'] == 'mute' and event['target'] == member.id and (datetime.datetime.utcnow() - event['timestamp']).total_seconds > 60:
                     hadToRemute = True
                     asyncio.create_task(muteDelay)
             except: pass
@@ -2055,6 +2055,15 @@ class Cyberlog(commands.Cog):
                     except: pass
                 await member.kick(reason=f'[Antispam: ageKick] Account must be {ageKick} days old; is only {acctAge} days old')
             elif member.id in antispam.get('ageKickWhitelist'): await database.RemoveWhitelistEntry(member.guild, member.id)
+        '''WARMUP''' #mute members on join until configured time passes
+        if antispam.get('warmup', 0) > 0:
+            warmup, loops = antispam['warmup'], 0
+            units = {0: 'second', 1: 'minute', 2: 'hour', 3: 'day', 4: 'week'}
+            values = {0: 60, 1: 60, 2: 60, 3: 24, 4: 7}
+            while warmup >= values[loops] and loops < 4:
+                warmup /= values[loops]
+                loops += 1
+            await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=antispam['warmup'], reason=f'[Antispam: Warmup] This new member will be able to begin chatting in {round(warmup)}{units[loops]}{"s" if warmup != 1 else ""}.', waitToUnmute=True)
         '''Repeated Joins: Sleeping'''
         if 0 not in rj[:2]:
             try:
@@ -2961,7 +2970,7 @@ class Cyberlog(commands.Cog):
             embed.set_footer(text=f'Relevant emoji IDs: {" • ".join(str(f) for f in footerIDList)}' if len(footerIDList) > 1 else f'Emoji ID: {footerIDList[0]}')
             if settings['embedTimestamp'] > 1: embed.description += f"\n{(clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {DisguardLongTimestamp(received)}"
             self.archiveLogEmbed(guild, msg.id, embed, 'Emoji Update')
-            if msg and len(embed.fields) > 0:
+            if len(embed.fields) > 0:
                 msg = await logChannel(guild, 'emoji').send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
                 if any((settings['plainText'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
                 def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
