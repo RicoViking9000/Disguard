@@ -1047,4 +1047,7 @@ async def UpdateBirthdayList(u: discord.User, d: datetime.datetime):
     try: birthdayList[d.strftime('%m/%d/%Y')].append({u.id: d})
     except KeyError: birthdayList[d.strftime('%m/%d/%Y')] = [{u.id: d}]
     await disguard.update_one({}, {'$set': {'birthdays': birthdayList}}, True)
-
+   
+async def SetWarmup(s: discord.Guild, warmup: int):
+    '''Sets a server's warmup value'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'antispam.warmup': warmup}})
