@@ -1827,7 +1827,7 @@ class Cyberlog(commands.Cog):
         events = self.bot.lightningLogging.get(member.guild.id).get('antispam').get('timedEvents')
         for event in events:
             try:
-                if event['type'] == 'mute' and event['target'] == member.id:
+                if event['type'] == 'mute' and event['target'] == member.id and (datetime.datetime.utcnow() - event['timestamp']).total_seconds > 60:
                     hadToRemute = True
                     asyncio.create_task(muteDelay)
             except: pass
@@ -2059,10 +2059,11 @@ class Cyberlog(commands.Cog):
         if antispam.get('warmup', 0) > 0:
             warmup, loops = antispam['warmup'], 0
             units = {0: 'second', 1: 'minute', 2: 'hour', 3: 'day', 4: 'week'}
-            while warmup >= 60 and loops < 4:
-                warmup /= 60
+            values = {0: 60, 1: 60, 2: 60, 3: 24, 4: 7}
+            while warmup >= values[loops] and loops < 4:
+                warmup /= values[loops]
                 loops += 1
-            await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=antispam['warmup'], reason=f'[Antispam: Warmup] This new member will be able to begin chatting in {warmup}{units[loops]}{"s" if warmup != 1 else ""}.')
+            await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=antispam['warmup'], reason=f'[Antispam: Warmup] This new member will be able to begin chatting in {round(warmup)}{units[loops]}{"s" if warmup != 1 else ""}.', waitToUnmute=True)
         '''Repeated Joins: Sleeping'''
         if 0 not in rj[:2]:
             try:
