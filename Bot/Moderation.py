@@ -60,6 +60,7 @@ class Moderation(commands.Cog):
     async def warmup(self, ctx: commands.Context, arg: str):
         '''A command to set the duration a member must remain in the server before chatting'''
         duration, unit = arg[:-1], arg[-1]
+        units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week'}
         # define multipliers to convert higher units into seconds
         if duration != '0':
             minutes = 60
@@ -68,7 +69,6 @@ class Moderation(commands.Cog):
             weeks = 7 * days
             # define relational dictionary
             conversion = {'s': 1, 'm': minutes, 'h': hours, 'd': days, 'w': weeks}
-            units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week'}
             # now, set the final amount in seconds
             warmup = int(duration) * conversion[unit]
         else: warmup = 0
