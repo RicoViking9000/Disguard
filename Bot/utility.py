@@ -209,7 +209,7 @@ def DisguardRelativeTimestamp(t):
     return f'<t:{r}:R>'
 
 def DisguardStandardTimestamp(t: datetime.datetime):
-    return f'{t:%B %d, %Y • %I:%M%S %p}'
+    return f'{t:%B %d, %Y • %I:%M:%S %p}'
 
 def paginate(input, perPage):
     '''Splits a list (input) into segments with perPage items in each segment'''
