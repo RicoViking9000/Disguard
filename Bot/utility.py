@@ -126,6 +126,10 @@ def absTime(x, y, distance):
     '''Checks to ensure x and y (date objects (date, datetime, or time)) are within `distance` (timedelta) of each other'''
     return abs(x - y) < distance
 
+def daylightSavings():
+    '''Returns True if the USA is in daylight savings time'''
+    DST = 4 if datetime.datetime.now() < datetime.datetime(2022, 11, 6, 2) else 5
+
 def embedToPlaintext(e: discord.Embed):
     '''Returns a string composed of fields/values in the embed. Cleans up the content too.'''
     result = ''
