@@ -15,12 +15,16 @@ import emoji
 import traceback
 import typing
 import textwrap
+import utility
+import Cyberlog
+import copy
 
 yellow = (0xffff00, 0xffff66)
 placeholderURL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 qlf = '  ' #Two special characters to represent quoteLineFormat
 qlfc = ' '
 newline = '\n'
+units = ['second', 'minute', 'hour', 'day']
 
 class Misc(commands.Cog):
     def __init__(self, bot):
@@ -52,25 +56,25 @@ class Misc(commands.Cog):
                     result = await messageConverter.convert(context, w)
                     if result is None: return
                     if result.channel.is_nsfw() and not message.channel.is_nsfw():
-                        return await message.channel.send(f"{self.emojis['alert']} | This message links to a NSFW channel, so I cannot share its content")
+                        return await message.channel.send(f'{self.emojis["alert"]} | This message links to a NSFW channel, so its content can\'t be shared')
                     if len(result.embeds) == 0:
                         embed=discord.Embed(description=result.content)
-                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y • %I:%M %p} {nameZone(message.guild)}')
-                        embed.set_author(name=result.author.name,icon_url=result.author.avatar_url)
+                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=self.timeZone(message.guild))):%b %d, %Y • %I:%M %p} {self.nameZone(message.guild)}')
+                        embed.set_author(name=result.author.name, icon_url=result.author.avatar.url)
                         if len(result.attachments) > 0 and result.attachments[0].height is not None:
                             try: embed.set_image(url=result.attachments[0].url)
                             except: pass
                         return await message.channel.send(embed=embed)
                     else:
-                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=timeZone(message.guild))):%b %d, %Y - %I:%M %p} {nameZone(message.guild)}')
-                        if result.embeds[0].author.name is discord.Embed.Empty: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar_url)
-                        return await message.channel.send(content=result.content,embed=result.embeds[0])
+                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=self.timeZone(message.guild))):%b %d, %Y - %I:%M %p} {self.nameZone(message.guild)}')
+                        if result.embeds[0].author.name is discord.Embed.Empty: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar.url)
+                        return await message.channel.send(content=result.content, embed=result.embeds[0])
 
     async def sendGuideMessage(self, message: discord.Message):
-        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(bot.latency * 1000)}ms\n\n**Prefix:** `{self.bot.lightningLogging.get(message.guild.id).get("prefix")}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
+        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{self.bot.lightningLogging.get(message.guild.id).get("prefix")}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
     
     @commands.command()
-    async def privacy(self, ctx):
+    async def privacy(self, ctx: commands.Context):
         user = self.bot.lightningUsers[ctx.author.id]
         users = database.GetUserCollection()
         privacy = user['privacy']
@@ -89,7 +93,7 @@ class Misc(commands.Cog):
         m = await ctx.send(embed=embed)
 
     @commands.command(aliases=['feedback', 'ticket'])
-    async def support(self, ctx, *, opener=''):
+    async def support(self, ctx: commands.Context, *, opener=''):
         '''Command to initiate a feedback ticket. Anything typed after the command name will be used to start the support ticket
         Ticket status
         0: unopened by dev
@@ -97,11 +101,12 @@ class Misc(commands.Cog):
         2: in progress (dev has replied)
         3: closed'''
         await ctx.trigger_typing()
-        colorTheme = self.bot.get_cog('Cyberlog').colorTheme(ctx.guild) if ctx.guild else 1
-        details = self.bot.get_cog('Cyberlog').emojis['details']
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        colorTheme = cyber.colorTheme(ctx.guild) if ctx.guild else 1
+        details = cyber.emojis['details']
         def navigationCheck(r, u): return str(r) in reactions and r.message.id == status.id and u.id == ctx.author.id
         #If the user didn't provide a message with the command, prompt them with one here
-        if opener.startsWith('System:'):
+        if opener.startswith('System:'):
             specialCase = opener[opener.find(':') + 1:].strip()
             opener = ''
         else:
@@ -111,15 +116,15 @@ class Misc(commands.Cog):
             status = await ctx.send(embed=embed)
             reactions = ['🎟', details]
             for r in reactions: await status.add_reaction(r)
-            result = await self.bot.wait_for('reaction_add', check=navigationCheck)
+            result: typing.Tuple[discord.Reaction, discord.User] = await self.bot.wait_for('reaction_add', check=navigationCheck)
             if result[0].emoji == details:
                 await status.delete()
                 return await self.ticketsCommand(ctx)
             await ctx.send('Please type the message you would like to use to start the support thread, such as a description of your problem or a question you have')
-            def ticketCreateCheck(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
-            try: result = await self.bot.wait_for('message', check=ticketCreateCheck, timeout=300)
+            def ticketCreateCheck(m: discord.Message): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
+            try: result2: discord.Message = await self.bot.wait_for('message', check=ticketCreateCheck, timeout=300)
             except asyncio.TimeoutError: return await ctx.send('Timed out')
-            opener = result.content
+            opener = result2.content
         #If the command was used in DMs, ask the user if they wish to represent one of their servers
         if not ctx.guild:
             await ctx.trigger_typing()
@@ -130,7 +135,7 @@ class Misc(commands.Cog):
                 awaitingServerSelection = await ctx.send(f'Because we\'re in DMs, please provide the server you\'re representing by reacting with the corresponding letter\n\n{newline.join([f"{alphabet[i]}: {g}" for i, g in enumerate(serverList)])}')
                 possibleLetters = [l for l in alphabet if l in awaitingServerSelection.content]
                 for letter in possibleLetters: await awaitingServerSelection.add_reaction(letter)
-                def selectionCheck(r, u): return str(r) in possibleLetters and r.message.id == awaitingServerSelection.id and u.id == ctx.author.id
+                def selectionCheck(r:discord.Reaction, u:discord.User): return str(r) in possibleLetters and r.message.id == awaitingServerSelection.id and u.id == ctx.author.id
                 try: selection = await self.bot.wait_for('reaction_add', check=selectionCheck, timeout=300)
                 except asyncio.TimeoutError: return await ctx.send('Timed out')
                 server = serverList[alphabet.index(str(selection[0]))]
@@ -468,8 +473,9 @@ class Misc(commands.Cog):
 
     @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
-    async def pause(self, ctx, *args):
+    async def pause(self, ctx: commands.Context, *args):
         '''Pause logging or antispam for a duration'''
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         status = await ctx.send(str(self.loading) + "Please wait...")
         status = await ctx.send(f'{self.emojis["loading"]}Pausing...')
         args = [a.lower() for a in args]
@@ -498,19 +504,16 @@ class Misc(commands.Cog):
             title=f'The {args[0][0].upper()}{args[0][1:]} module was paused',
             description=textwrap.dedent(f'''
                 👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.name})
-                {clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=utility.timeZone(ctx.guild)))}Paused at: {DisguardIntermediateTimestamp(datetime.datetime.now())}
-                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{DisguardIntermediateTimestamp(until)} ({DisguardRelativeTimestamp(until)})"}
+                {utility.clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=self.timeZone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(datetime.datetime.now())}
+                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{utility.DisguardIntermediateTimestamp(until)} ({utility.DisguardRelativeTimestamp(until)})"}
                 '''),
-            color=yellow[colorTheme(ctx.guild)])
+            color=yellow[cyber.colorTheme(ctx.guild)])
         embed.set_footer(text='Resuming at: ')
         embed.timestamp = rawUntil
-        savePath = '{}/{}'.format(tempDir, '{}.{}'.format(datetime.datetime.now().strftime('%m%d%Y%H%M%S%f'), 'png' if not ctx.author.is_avatar_animated() else 'gif'))
-        try: await ctx.author.avatar_url_as(size=1024).save(savePath)
-        except discord.HTTPException: pass
-        f = discord.File(savePath)
-        embed.set_thumbnail(url=f'attachment://{f.filename}')
-        embed.set_author(name=ctx.author.name, icon_url=f'attachment://{f.filename}')
-        await status.edit(content=None, embed=embed, file=f)
+        url = cyber.imageToURL(ctx.author.avatar)
+        embed.set_thumbnail(url=url)
+        embed.set_author(name=ctx.author.name, icon_url=url)
+        await status.edit(content=None, embed=embed)
         await database.PauseMod(ctx.guild, key)
         self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = False
         pauseTimedEvent = {'type': 'pause', 'target': key, 'server': ctx.guild.id}
@@ -524,8 +527,8 @@ class Misc(commands.Cog):
         await status.edit(embed=embed)
         
     @commands.command()
-    async def unpause(self, ctx, *args):
-        if len(args) < 1: return await ctx.send("Please provide module `antispam` or `logging` to unpause")
+    async def unpause(self, ctx: commands.Context, *args):
+        if len(args) < 1: return await ctx.send('Please provide module `antispam` or `logging` to unpause')
         args = [a.lower() for a in args]
         if 'antispam' in args:
             await database.ResumeMod(ctx.guild, 'antispam')
@@ -537,16 +540,17 @@ class Misc(commands.Cog):
             await ctx.send("✅Successfully resumed logging")
 
     @commands.command()
-    async def history(self, ctx, target: typing.Optional[discord.Member] = None, *, mod = ''):
+    async def history(self, ctx: commands.Context, target: typing.Optional[discord.Member] = None, *, mod = ''):
         '''Viewer for custom status, username, and avatar history
         •If no member is provided, it will default to the command author
         •If no module is provided, it will default to the homepage'''
         await ctx.trigger_typing()
         if target is None: target = ctx.author
-        p = prefix(ctx.guild)
-        embed=discord.Embed(color=yellow[colorTheme(ctx.guild)])
-        if not self.privacyEnabledChecker(target, 'default', 'attributeHistory'):
-            if self.privacyVisibilityChecker(target, 'default', 'attributeHistory'):
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        p = cyber.prefix(ctx.guild)
+        embed=discord.Embed(color=yellow[cyber.colorTheme(ctx.guild)])
+        if not cyber.privacyEnabledChecker(target, 'default', 'attributeHistory'):
+            if cyber.privacyVisibilityChecker(target, 'default', 'attributeHistory'):
                 embed.title = 'Attribute History » Feature Disabled' 
                 embed.description = f'{target.name} has disabled their attribute history' if target.id != ctx.author.id else 'You have disabled your attribute history'
             else:
@@ -555,13 +559,13 @@ class Misc(commands.Cog):
                     embed.description = f'{target.name} has privated their attribute history' if target.id != ctx.author.id else 'You have privated your attribute history. Use this command in DMs to access it.'
             return await ctx.send(embed=embed)
         letters = [letter for letter in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-        def navigationCheck(r, u): return str(r) in navigationList and u.id == ctx.author.id and r.message.id == message.id
+        def navigationCheck(r: discord.Reaction, u: discord.User): return str(r) in navigationList and u.id == ctx.author.id and r.message.id == message.id
         async def viewerAbstraction():
             e = copy.deepcopy(embed)
-            if not self.privacyEnabledChecker(target, 'attributeHistory', f'{mod}History'):
+            if not cyber.privacyEnabledChecker(target, 'attributeHistory', f'{mod}History'):
                 e.description = f'{target.name} has disabled their {mod} history feature' if target != ctx.author else f'You have disabled your {mod} history.'
                 return e, []
-            if not self.privacyVisibilityChecker(target, 'attributeHistory', f'{mod}History'):
+            if not cyber.privacyVisibilityChecker(target, 'attributeHistory', f'{mod}History'):
                 e.description = f'{target.name} has privated their {mod} history feature' if target != ctx.author else f'You have privated your {mod} history. Use this command in DMs to access it.'
                 return e, []
             e.description = ''
@@ -581,7 +585,7 @@ class Misc(commands.Cog):
                         if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
                     if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
                 prior = entry
-                timestampString = f'{DisguardIntermediateTimestamp(entry.get("timestamp") - datetime.timedelta(hours=DST))}'
+                timestampString = f'{utility.DisguardIntermediateTimestamp(entry.get("timestamp") - datetime.timedelta(hours=utility.daylightSavings()))}'
                 if mod in ('avatar', 'customStatus'): timestampString += f' {"• " + (backslash + letters[i]) if mod == "avatar" or (mod == "customStatus" and entry.get("emoji") and len(entry.get("emoji")) > 1) else ""}'
                 e.add_field(name=timestampString if i == 0 else f'**{distanceDisplay[0]} later** • {timestampString}', value=f'''> {entry.get("emoji") if entry.get("emoji") and len(entry.get("emoji")) == 1 else f"[Custom Emoji]({entry.get('emoji')})" if entry.get("emoji") else ""} {entry.get(tailMappings.get(mod)) if entry.get(tailMappings.get(mod)) else ""}''', inline=False)
             headerTail = f'{"🏠 Home" if mod == "" else "🖼 Avatar History" if mod == "avatar" else "📝 Username History" if mod == "username" else "💭 Custom Status History"}'
@@ -592,7 +596,7 @@ class Misc(commands.Cog):
             e.title = header
             return e, data[-19:]
         while not self.bot.is_closed():
-            embed=discord.Embed(color=yellow[colorTheme(ctx.guild)])
+            embed=discord.Embed(color=yellow[cyber.colorTheme(ctx.guild)])
             if any(attempt in mod.lower() for attempt in ['avatar', 'picture', 'pfp']): mod = 'avatar'
             elif any(attempt in mod.lower() for attempt in ['name']): mod = 'username'
             elif any(attempt in mod.lower() for attempt in ['status', 'emoji', 'presence', 'quote']): mod = 'customStatus'
@@ -661,6 +665,15 @@ class Misc(commands.Cog):
                     elif b.lower() == "d":              #Parsing days
                         duration+=24*60*60*int(number)
         return duration
+
+    def getServer(self, s: discord.Guild):
+        return self.bot.lightningLogging.get(s.id)
+
+    def nameZone(self, s: discord.Guild):
+        return self.getServer(s).get('tzname', 'EST')
+
+    def timeZone(self, s: discord.Guild):
+        return self.getServer(s).get('offset', -4)
 
 def clean(s):
     return re.sub(r'[^\w\s]', '', s.lower())
