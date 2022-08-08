@@ -171,19 +171,18 @@ class Misc(commands.Cog):
         await self.ticketsCommand(ctx, number=ticket['number'])
 
     @commands.command(name='tickets')
-    async def ticketsCommand(self, ctx, number:int = None):
+    async def ticketsCommand(self, ctx: commands.Context, number:int = -1):
         '''Command to view feedback tickets'''
         g = ctx.guild
         alphabet = [l for l in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
-        colorTheme = self.bot.get_cog('Cyberlog').colorTheme(ctx.guild) if ctx.guild else 1
-        #emojis = bot.get_cog('Cyberlog').emojis
-        global emojis
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        colorTheme = cyber.colorTheme(ctx.guild) if ctx.guild else 1
         trashcan = self.emojis['delete']
         statusDict = {0: 'Unopened', 1: 'Viewed', 2: 'In progress', 3: 'Closed', 4: 'Locked'}
         message = await ctx.send(embed=discord.Embed(description=f'{self.loading}Downloading ticket data'))
         tickets = await database.GetSupportTickets()
         embed=discord.Embed(title=f"🎟 Disguard Ticket System / {self.emojis['details']} Browse Your Tickets", color=yellow[colorTheme])
-        embed.set_author(name=ctx.author, icon_url=ctx.author.avatar_url_as(static_format='png'))
+        embed.set_author(name=ctx.author, icon_url=ctx.author.avatar.with_static_format('png').url)
         if len(tickets) == 0: 
             embed.description = 'There are currently no tickets in the system'
             return await message.edit(embed=embed)
@@ -226,8 +225,8 @@ class Misc(commands.Cog):
         if len(filtered) == 0:
             embed.description = f"There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{self.getData()[ctx.guild.id]['prefix'] if ctx.guild else '.'}ticket`"
             return await message.edit(embed=embed)
-        def optionNavigation(r, u): return r.emoji in reactions and r.message.id == message.id and u.id == ctx.author.id and not u.bot
-        def messageCheck(m): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
+        def optionNavigation(r: discord.Reaction, u: discord.User): return r.emoji in reactions and r.message.id == message.id and u.id == ctx.author.id and not u.bot
+        def messageCheck(m: discord.Message): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
         while not self.bot.is_closed():
             filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
             organize(sortMode)
@@ -236,8 +235,8 @@ class Misc(commands.Cog):
             populateEmbed(pages, currentPage, sortDescription)
             if number and number > len(tickets): 
                 await message.edit(content=f'The ticket number you provided ({number}) is invalid. Switching to browse view.')
-                number = None
-            if not number:
+                number, option = None, [None]
+            if number == -1 or number == None:
                 if ctx.guild: 
                     if clearReactions: await message.clear_reactions()
                     else: clearReactions = True
@@ -245,31 +244,32 @@ class Misc(commands.Cog):
                 else:
                     await message.delete()
                     message = await ctx.send(content=message.content, embed=embed)
-                reactions = [trashcan, self.emojis['details'], self.emojis['arrowBackwards']] + alphabet[:len(pages[currentPage])] + [self.emojis['arrowForwards']]
+                reactions = [trashcan, self.emojis['details'], self.emojis['arrowBackward']] + alphabet[:len(pages[currentPage])] + [self.emojis['arrowForward']]
                 for r in reactions: await message.add_reaction(r)
-                destination = await self.bot.wait_for('reaction_add', check=optionNavigation)
-                try: await message.remove_reaction(*destination)
+                option = await self.bot.wait_for('reaction_add', check=optionNavigation)
+                try: await message.remove_reaction(*option)
                 except: pass
-            else: destination = [alphabet[0]]
+            else: option = [alphabet[0]]
             async def clearMessageContent():
                 await asyncio.sleep(5)
                 if datetime.datetime.now() > clearAt: await message.edit(content=None)
             clearAt = None
-            if destination[0].emoji == trashcan: return await message.delete()
-            elif destination[0].emoji == self.emojis['details']:
-                clearReactions = False
-                sortMode += 1 if sortMode != 3 else -3
-                messageContent = '--SORT MODE--\n' + '\n'.join([f'> **{d}**' if i == sortMode else f'{qlfc}{d}' for i, d in enumerate(sortDescriptions)])
-                await message.edit(content=messageContent)
-                clearAt = datetime.datetime.now() + datetime.timedelta(seconds=4)
-                asyncio.create_task(clearMessageContent())
-            elif destination[0].emoji in (self.emojis['arrowBackward'], self.emojis['arrowForward']):
-                if destination[0].emoji == self.emojis['arrowBackward']: currentPage -= 1
-                else: currentPage += 1
-                if currentPage < 0: currentPage = 0
-                if currentPage == len(pages): currentPage = len(pages) - 1
-            elif str(destination[0]) in alphabet[:len(pages[currentPage])]: 
-                if not number: number = pages[currentPage][alphabet.index(str(destination[0]))]['number']
+            if type(option[0]) is discord.Reaction and str(option[0]) not in alphabet[:len(pages[currentPage])]:
+                if option[0].emoji == trashcan: return await message.delete()
+                elif option[0].emoji == self.emojis['details']:
+                    clearReactions = False
+                    sortMode += 1 if sortMode != 3 else -3
+                    messageContent = '--SORT MODE--\n' + '\n'.join([f'> **{d}**' if i == sortMode else f'{qlfc}{d}' for i, d in enumerate(sortDescriptions)])
+                    await message.edit(content=messageContent)
+                    clearAt = datetime.datetime.now() + datetime.timedelta(seconds=4)
+                    asyncio.create_task(clearMessageContent())
+                elif option[0].emoji in (self.emojis['arrowBackward'], self.emojis['arrowForward']):
+                    if option[0].emoji == self.emojis['arrowBackward']: currentPage -= 1
+                    else: currentPage += 1
+                    if currentPage < 0: currentPage = 0
+                    if currentPage == len(pages): currentPage = len(pages) - 1
+            elif option[0] and str(option[0]) in alphabet[:len(pages[currentPage])]:
+                if not number or number < 0: number = pages[currentPage][alphabet.index(str(option[0]))]['number']
                 ticket = [t for t in tickets if t['number'] == number][0]
                 if ctx.author.id not in [m['id'] for m in ticket['members']]: 
                     await message.edit(content=f'The ticket number you provided ({number}) does not include you, and you do not have a pending invite to it.\n\nIf you were invited to this ticket, then either the ticket author revoked the invite, or you declined the invite.\n\nSwitching to browse view')
@@ -333,8 +333,10 @@ class Misc(commands.Cog):
                         await message.delete()
                         message = await ctx.send(embed=embed)
                     for r in reactions: await message.add_reaction(r)
-                    result = await self.bot.wait_for('reaction_add', check=optionNavigation)
-                    if result[0].emoji == self.emojis['arrowBackward']: break
+                    result: typing.Tuple[discord.Reaction, discord.User] = await self.bot.wait_for('reaction_add', check=optionNavigation)
+                    if result[0].emoji == self.emojis['arrowLeft']:
+                        number = None #deselect the ticket
+                        break
                     elif result[0].emoji == self.emojis['hiddenVoiceChannel']:
                         ticket['status'] = 3
                         ticket['conversation'].append({'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*My developer has closed this support ticket. If you still need assistance on this matter, you may reopen it by responding to it. Otherwise, it will silently lock in 7 days.*'})
@@ -430,7 +432,7 @@ class Misc(commands.Cog):
                                 else: break
                             else:
                                 try: 
-                                    self.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                                    cyber.AvoidDeletionLogging(result)
                                     await result.delete()
                                 except: pass
                                 memberResults = (await self.bot.get_cog('Cyberlog').FindMoreMembers([u for u in self.bot.users if any([u.id in [m.id for m in s.members] for s in self.bot.guilds])], result.content))[:15]
@@ -455,7 +457,7 @@ class Misc(commands.Cog):
                         for f in p: f.cancel()
                         if type(result) is discord.Message:
                             try: 
-                                self.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
+                                cyber.AvoidDeletionLogging(result)
                                 await result.delete()
                             except: pass
                             ticket['conversation'].append({'author': ctx.author.id, 'timestamp': datetime.datetime.utcnow(), 'message': result.content})
@@ -466,9 +468,9 @@ class Misc(commands.Cog):
                     elif result[0].emoji in (self.emojis['bell'], self.emojis['bellMute']): member['notifications'] = not member['notifications']
                     ticket['members'] = [member if i == memberIndex else m for i, m in enumerate(ticket['members'])]
                     asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-            number = None #Triggers browse mode
+            else: number = None #Triggers browse mode
             try:
-                if datetime.datetime.now() > clearAt: await message.edit(content=None)
+                if clearAt and datetime.datetime.now() > clearAt: await message.edit(content=None)
             except UnboundLocalError: await message.edit(content=None)
 
     @commands.has_guild_permissions(manage_guild=True)
