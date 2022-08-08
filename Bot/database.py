@@ -362,7 +362,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
         base = {}
         serverGen = [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon.with_static_format('png').url)} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] #d.py V2.0
         if u.name != current['name']: base.update({'username': u.name})
-        if u.avatar.with_static_format('png').with_size(2048).url != current['avatar']: base.update({'avatar': u.avatar.with_static_format('png').with_size(2048).url})
+        if u.display_avatar.with_static_format('png').with_size(2048).url != current['avatar']: base.update({'avatar': u.display_avatar.with_static_format('png').with_size(2048).url})
         if serverGen != current['servers']: base.update({'servers': serverGen})
         if base: updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': base}))
     if mode == 'update': await users.bulk_write(updateOperations, ordered=not parallel)

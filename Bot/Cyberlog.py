@@ -488,7 +488,7 @@ class Cyberlog(commands.Cog):
             layerObject = self.reactions[m][u.id][p.emoji.name]
             if not layerObject: return
         except KeyError: return
-        seconds = (datetime.datetime.utcnow() - layerObject['timestamp']).seconds
+        seconds = (discord.utils.utcnow() - layerObject['timestamp']).seconds
         if seconds < self.bot.lightningLogging[g.id]['cyberlog']['ghostReactionTime']:
             settings = getCyberAttributes(g, 'misc')
             received = datetime.datetime.now()
@@ -2042,7 +2042,7 @@ class Cyberlog(commands.Cog):
             # if after.guild.id == targetServer.id:
             #     for a in after.activities:
             #         if a.type == discord.ActivityType.custom:
-            if self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory'):
+            if self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity:
                 try:
                     try: user = self.bot.lightningUsers[after.id]
                     except KeyError: return
@@ -2075,7 +2075,6 @@ class Cyberlog(commands.Cog):
         f = []
         try: thumbnailURL = self.bot.lightningUsers[after.id]['avatarHistory'][-1]['imageURL']
         except (TypeError, AttributeError, KeyError): 
-            #thumbnailURL = before.display_avatar_url_as(static_format='png', size=1024)
             thumbnailURL = await self.imageToURL(before.display_avatar)
         embed.set_thumbnail(url=thumbnailURL)
         if before.display_avatar != after.display_avatar:
