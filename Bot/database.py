@@ -31,7 +31,6 @@ yellow = (0xffff00, 0xffff66)
 red = (0xff0000, 0xff6666)
 green = (0x008000, 0x66ff66)
 blue = (0x0000FF, 0x6666ff)
-DST = 4 if datetime.datetime.now() < datetime.datetime(2021, 11, 6, 2) else 5
 bot: commands.Bot = None
 
 defaultAgeKickDM = ''''You have been kicked from **{}** temporarily due to their antispam configuration: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
@@ -167,14 +166,14 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         'name': s.name,
         'prefix': serv.get('prefix', '.'),
         'thumbnail': s.icon.with_static_format('png').with_size(512).url, #Server icon, 512x512, png or gif
-        'offset': serv.get('offset', DST * -1), #Distance from UTC time
+        'offset': serv.get('offset', utility.daylightSavings() * -1), #Distance from UTC time
         'tzname': serv.get('tzname', 'EST'), #Custom timezone name (EST by default)
         'jumpContext': serv.get('jumpContext', False), #Whether to display content for posted message jump URL links
         'undoSuppression': serv.get('undoSuppression', False), #Whether to enable the undo functionality after a message's embed was collapsed
         'redditComplete': serv.get('redditComplete', 0), #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
         'redditEnhance': 0 if serv.get('redditEnhance') == (False, False) else 1 if serv.get('redditEnhance') == (True, False) else 2 if serv.get('redditEnhance') == (False, True) else 3 if serv.get('redditEnhance') == (True, True) else serv.get('redditEnhance', 3), #0: all off, 1: subreddits only, 2: submissions only, 3: all on
         'birthdayChannel': serv.get('birthdayChannel') or serv.get('birthday', 0), #Channel to send birthday announcements to
-        'birthdate': serv.get('birthdate', datetime.datetime(started.year, 1, 1, 12 - DST)), #When to send bday announcements
+        'birthdate': serv.get('birthdate', datetime.datetime(started.year, 1, 1, 12 - utility.daylightSavings())), #When to send bday announcements
         'birthdayMode': serv.get('birthdayMode', 0), #How to respond to automatic messages. 0 = disabled, 1 = react, 2 = message
         'colorTheme': serv.get('colorTheme', 0), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
         'channels': serverChannels,
