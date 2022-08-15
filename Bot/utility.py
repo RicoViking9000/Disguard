@@ -224,14 +224,14 @@ def paginate(input, perPage):
     '''Splits a list (input) into segments with perPage items in each segment'''
     for i in range(0, len(input), perPage): yield input[i:i+perPage]
 
-def FindMember(self, g: discord.Guild, arg):
+def FindMember(g: discord.Guild, arg):
     def check(m): return any([arg.lower() == m.nick,
         arg.lower() in m.name.lower(),
         arg in m.discriminator,
         arg in str(m.id)]) 
     return discord.utils.find(check, g.members)
 
-async def FindMembers(self, g: discord.Guild, arg):
+async def FindMembers(g: discord.Guild, arg):
     '''Used for smart info command. Finds anything matching the filter'''
     arg = arg.lower()
     def check(m):
@@ -242,7 +242,7 @@ async def FindMembers(self, g: discord.Guild, arg):
         return None
     return [(mem, check(mem)) for mem in g.members if check(mem) is not None]
 
-async def FindRoles(self, g: discord.Guild, arg):
+async def FindRoles(g: discord.Guild, arg):
     arg = arg.lower()
     def check(r):
         if arg in r.name.lower(): return compareMatch(arg, r.name)
@@ -250,7 +250,7 @@ async def FindRoles(self, g: discord.Guild, arg):
         return None
     return [(rol, check(rol)) for rol in g.roles if check(rol) is not None]
 
-async def FindChannels(self, g: discord.Guild, arg):
+async def FindChannels(g: discord.Guild, arg):
     arg=arg.lower()
     def check(c): 
         if arg in c.name.lower(): return compareMatch(arg, c.name)
@@ -258,7 +258,7 @@ async def FindChannels(self, g: discord.Guild, arg):
         return None
     return [(cha, check(cha)) for cha in g.channels if check(cha) is not None]
 
-async def FindEmojis(self, g: discord.Guild, arg):
+async def FindEmojis(g: discord.Guild, arg):
     arg=arg.lower()
     def check(e): 
         if arg in e.name.lower(): return compareMatch(arg, e.name)
@@ -301,7 +301,7 @@ async def FindMoreMembers(members, arg):
         return None
     return [{'member': m, 'check': check(m)} for m in members if check(m) is not None] #list of dicts
     
-async def FindMoreRoles(self, g: discord.Guild, arg):
+async def FindMoreRoles(g: discord.Guild, arg):
     arg=arg.lower()
     def check(r):
         if arg in r.name.lower(): return 'Role name is \'{}\''.format(r.name.replace(arg, '**{}**'.format(arg))), compareMatch(arg, r.name)
@@ -314,7 +314,7 @@ async def FindMoreRoles(self, g: discord.Guild, arg):
         return None
     return [{'role': r, 'check': check(r)} for r in g.roles if check(r) is not None] #List of dicts
 
-async def FindMoreChannels(self, g: discord.Guild, arg):
+async def FindMoreChannels(g: discord.Guild, arg):
     arg=arg.lower()
     def check(c):
         if arg in c.name.lower(): return 'Name is \'{}\''.format(c.name.replace(arg, '**{}**'.format(arg))), compareMatch(arg, c.name)
@@ -329,7 +329,7 @@ async def FindMoreChannels(self, g: discord.Guild, arg):
         return None
     return [{'channel': c, 'check': check(c)} for c in g.channels if check(c) is not None]
 
-async def FindMoreInvites(self, g: discord.Guild, arg):
+async def FindMoreInvites(g: discord.Guild, arg):
     arg=arg.lower()
     def check(i):
         if arg in i.code.lower(): return i.code.replace(arg, '**{}**'.format(arg)), compareMatch(arg, i.code)
@@ -343,7 +343,7 @@ async def FindMoreInvites(self, g: discord.Guild, arg):
     try: return [{'invite': i, 'check': check(i)} for i in (await g.invites()) if check(i) is not None]
     except: return []
 
-async def FindMoreEmojis(self, g: discord.Guild, arg):
+async def FindMoreEmojis(g: discord.Guild, arg):
     arg=arg.lower()
     def check(e):
         if arg in e.name.lower(): return 'Emoji name is {}'.format(e.name.replace(arg, '**{}**'.format(arg))), compareMatch(arg, e.name)
