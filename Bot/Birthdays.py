@@ -291,7 +291,7 @@ class Birthdays(commands.Cog):
                         
         
 async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: discord.User):
-    view = GuestBirthdayView(self, ctx.author, target)
+    view = GuestBirthdayView(self, ctx, target)
     embed = await view.createEmbed()
     await ctx.send(embed=embed, view=view)
 
@@ -812,7 +812,7 @@ class GuestBirthdayView(discord.ui.View):
         age = user.get('age')
         wishlist = user.get('wishList', []) #TODO: implement privacy settings
         wishlistHidden = not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'wishlist')
-        description = f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist])}' if wishlist and not wishlistHidden else 'Set to private by user' if wishlistHidden else ''
+        description = f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist]) if wishlist and not wishlistHidden else "Set to private by user" if wishlistHidden else ""}'
         embed = discord.Embed(title = f'🍰 {self.target.name}\'s Birthday Page', description=description, color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
         embed.set_author(name=self.target.name, icon_url=self.target.avatar.url)
         embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
