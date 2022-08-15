@@ -3051,6 +3051,7 @@ async def verifyLogChannel(bot, s: discord.Guild):
             await database.SetLogChannel(s, None)
 
 def logExclusions(channel: discord.TextChannel, member: discord.Member):
+    if type(member) is not discord.Member: member = channel.guild.get_member(member.id)
     return not any([channel.id in lightningLogging.get(channel.guild.id).get('cyberlog').get('channelExclusions'),
     member.id in lightningLogging.get(channel.guild.id).get('cyberlog').get('memberExclusions'),
     any([r.id in lightningLogging.get(channel.guild.id).get('cyberlog').get('roleExclusions') for r in member.roles])])
