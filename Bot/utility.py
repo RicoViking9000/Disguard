@@ -189,27 +189,32 @@ def elapsedDuration(timeSpan: datetime.timedelta, joinString=True, fullUnits=Tru
 
 def DisguardShortTimestamp(t):
     '''Given a datetime module object, returns a Discord-UI based timestamp with <HH:MM> format'''
-    r = round(t.timestamp())
+    try: r = round(t.timestamp())
+    except: r = 0
     return f'<t:{r}:t>'
 
 def DisguardShortmonthTimestamp(t):
     '''Given a datetime module object, returns a Discord-UI based timestamp with <MM/DD/YYYY> <HH:MM:SS AM/PM> format'''
-    r = round(t.timestamp())
+    try: r = round(t.timestamp())
+    except: r = 0
     return f'<t:{r}:d> <t:{r}:T>'
 
 def DisguardIntermediateTimestamp(t):
     '''Given a datetime module object, returns a Discord-UI based timestamp with <MMMM DD, YYYY HH:MM AM/PM> format'''
-    r = round(t.timestamp())
+    try: r = round(t.timestamp())
+    except: r = 0
     return f'<t:{r}:f>'
 
 def DisguardLongTimestamp(t):
     '''Given a datetime module object, returns a Discord-UI based timestamp with <MMMM DD, YYYY> <HH:MM:SS AM/PM> format'''
-    r = round(t.timestamp())
+    try: r = round(t.timestamp())
+    except: r = 0
     return f'<t:{r}:D> <t:{r}:T>'
 
 def DisguardRelativeTimestamp(t):
     '''Given a datetime module object, returns a Discord-UI based timestamp with relative <In x days> format'''
-    r = round(t.timestamp())
+    try: r = round(t.timestamp())
+    except: r = 0
     return f'<t:{r}:R>'
 
 def DisguardStandardTimestamp(t: datetime.datetime):
