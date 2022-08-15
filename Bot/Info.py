@@ -1,4 +1,8 @@
-'''Holds all code relating to Disguard's info command, now new and improved from V1.0'''
+'''Holds all code relating to Disguard's info command'''
+import collections
+import typing
+import psutil
+import cpuinfo
 import utility
 import discord
 from discord.ext import commands
@@ -7,8 +11,19 @@ import aiofiles
 import datetime
 import emoji
 import json
+import Cyberlog
+import Birthdays
 
 indexes = 'Indexes'
+qlf = '  ' #Two special characters to represent quoteLineFormat
+newline='\n'
+newlineQuote = '\n> '
+
+green = (0x008000, 0x66ff66)
+blue = (0x0000FF, 0x6666ff)
+red = (0xff0000, 0xff6666)
+orange = (0xD2691E, 0xffc966)
+yellow = (0xffff00, 0xffff66)
 
 class InfoResult(object):
     def __init__(self, obj, mainKey, relevance):
@@ -17,20 +32,23 @@ class InfoResult(object):
         self.relevance = relevance
 
 class Info(commands.Cog):
-    def __init__(self, bot) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
+        self.emojis: typing.Dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
+        self.loading = self.emojis['loading']
         self.bot = bot
 
     @commands.guild_only()
     @commands.command()
-    async def info(self, ctx, *args): #queue system: message, embed, every 3 secs, check if embed is different, edit message to new embed
+    async def info(self, ctx: commands.Context, *args): #queue system: message, embed, every 3 secs, check if embed is different, edit message to new embed
         arg = ' '.join([a.lower() for a in args])
         message = await ctx.send('{}Searching'.format(self.loading))
         mainKeys=[]
-        main=discord.Embed(title='Info results viewer', color=yellow[colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+        main=discord.Embed(title='Info results viewer', color=yellow[cyber.colorTheme(ctx.guild)])
         embeds=[]
         PartialEmojiConverter = commands.PartialEmojiConverter()
         if len(arg) > 0:
-            members, roles, channels, emojis = tuple(await asyncio.gather(*[self.FindMembers(ctx.guild, arg), self.FindRoles(ctx.guild, arg), self.FindChannels(ctx.guild, arg), self.FindEmojis(ctx.guild, arg)]))
+            members, roles, channels, emojis = tuple(await asyncio.gather(*[utility.FindMembers(ctx.guild, arg), utility.FindRoles(ctx.guild, arg), utility.FindChannels(ctx.guild, arg), utility.FindEmojis(ctx.guild, arg)]))
             logs, invites, bans, webhooks = None, None, None, None
         else:
             await message.edit(content=f'{self.loading}Loading content')
@@ -122,17 +140,17 @@ class Info(commands.Cog):
             await self.bot.wait_for('reaction_add',check=birthdayCheck)
             try: await message.delete()
             except: pass
-            return await self.bot.get_cog('Birthdays').birthday(ctx, str(ctx.author.id))
+            return await Birthdays.guestBirthdayHandler(self.bot.get_cog('Birthdays'), ctx, ctx.author)
         if len(embeds) > 1 or indiv is not None: 
-            await message.edit(content='{}Still working'.format(self.loading),embed=indiv)
-        members, roles, channels, inv, emojis = tuple(await asyncio.gather(*[self.FindMoreMembers(ctx.guild.members, arg), self.FindMoreRoles(ctx.guild, arg), self.FindMoreChannels(ctx.guild, arg), self.FindMoreInvites(ctx.guild, arg), self.FindMoreEmojis(ctx.guild, arg)]))
+            await message.edit(content='{}Still working'.format(self.loading), embed=indiv)
+        members, roles, channels, inv, emojis = tuple(await asyncio.gather(*[utility.FindMoreMembers(ctx.guild.members, arg), utility.FindMoreRoles(ctx.guild, arg), utility.FindMoreChannels(ctx.guild, arg), utility.FindMoreInvites(ctx.guild, arg), utility.FindMoreEmojis(ctx.guild, arg)]))
         counter = 0
         while counter < 2:
             #print(counter, logs)
             if 'server' == arg or 'guild' == arg:
                 mainKeys.append('ℹServer information')
-                #indiv = await self.ServerInfo(ctx.guild, logs, bans, webhooks, invites)
-                indiv = await self.ServerViewer(ctx.guild)
+                indiv = await self.ServerInfo(ctx.guild, logs, bans, webhooks, invites)
+                # indiv = await self.ServerViewer(ctx.guild)
             if 'roles' == arg:
                 mainKeys.append('ℹRole list information')
                 indiv = await self.RoleListInfo(ctx.guild.roles, logs)
@@ -176,14 +194,14 @@ class Info(commands.Cog):
                     partial = await PartialEmojiConverter.convert(ctx, arg)
                     every.append(InfoResult(partial, f'{partial}{partial.name}', 100))
                 except: pass
-            if 'server' in arg or 'guild' in arg or arg in ctx.guild.name.lower() or ctx.guild.name.lower() in arg: every.append(InfoResult((await self.ServerInfo(ctx.guild, logs, bans, webhooks, invites)), 'ℹServer information', compareMatch('server', arg)))
-            if 'roles' in arg: every.append(InfoResult((await self.RoleListInfo(ctx.guild.roles, logs)), 'ℹRole list information', compareMatch('roles', arg)))
-            if any(s in arg for s in ['members', 'people', 'users', 'bots', 'humans']): every.append(InfoResult((await self.MemberListInfo(ctx.guild.members)), 'ℹMember list information', compareMatch('members', arg)))
-            if 'channels' in arg: every.append(InfoResult((await self.ChannelListInfo(ctx.guild.channels, logs)), 'ℹChannel list information', compareMatch('channels', arg)))
-            if 'emoji' in arg or 'emotes' in arg: every.append(InfoResult((await self.EmojiListInfo(ctx.guild.emojis, logs)), 'ℹEmoji information', compareMatch('emoji', arg)))
-            if 'invites' in arg: every.append(InfoResult((await self.InvitesListInfo(invites, logs, ctx.guild)), 'ℹInvites information', compareMatch('invites', arg)))
-            if 'bans' in arg: every.append(InfoResult((await self.BansListInfo(bans, logs, ctx.guild)), 'ℹBans information', compareMatch('bans', arg)))
-            if any(s in arg for s in ['dev', 'owner', 'master', 'creator', 'author', 'disguard', 'bot', 'you']): every.append(InfoResult((await self.BotInfo(await bot.application_info(), ctx.guild)), '{}Information about me'.format(bot.get_emoji(569191704523964437)), compareMatch('disguard', arg)))
+            if 'server' in arg or 'guild' in arg or arg in ctx.guild.name.lower() or ctx.guild.name.lower() in arg: every.append(InfoResult((await self.ServerInfo(ctx.guild, logs, bans, webhooks, invites)), 'ℹServer information', utility.compareMatch('server', arg)))
+            if 'roles' in arg: every.append(InfoResult((await self.RoleListInfo(ctx.guild.roles, logs)), 'ℹRole list information', utility.compareMatch('roles', arg)))
+            if any(s in arg for s in ['members', 'people', 'users', 'bots', 'humans']): every.append(InfoResult((await self.MemberListInfo(ctx.guild.members)), 'ℹMember list information', utility.compareMatch('members', arg)))
+            if 'channels' in arg: every.append(InfoResult((await self.ChannelListInfo(ctx.guild.channels, logs)), 'ℹChannel list information', utility.compareMatch('channels', arg)))
+            if 'emoji' in arg or 'emotes' in arg: every.append(InfoResult((await self.EmojiListInfo(ctx.guild.emojis, logs)), 'ℹEmoji information', utility.compareMatch('emoji', arg)))
+            if 'invites' in arg: every.append(InfoResult((await self.InvitesListInfo(invites, logs, ctx.guild)), 'ℹInvites information', utility.compareMatch('invites', arg)))
+            if 'bans' in arg: every.append(InfoResult((await self.BansListInfo(bans, logs, ctx.guild)), 'ℹBans information', utility.compareMatch('bans', arg)))
+            if any(s in arg for s in ['dev', 'owner', 'master', 'creator', 'author', 'disguard', 'bot', 'you']): every.append(InfoResult((await self.BotInfo(await self.bot.application_info(), ctx.guild)), '{}Information about me'.format(self.bot.get_emoji(569191704523964437)), utility.compareMatch('disguard', arg)))
             every.sort(key=lambda x: x.relevance, reverse=True)
             md = 'Viewing {} - {} of {} results for *{}*{}\n**Type the number of the option to view**\n'
             md2=[]
@@ -205,6 +223,7 @@ class Info(commands.Cog):
                 #await asyncio.sleep(5)
                 await message.edit(embed=indiv)
             if type(priority) is discord.Member:
+                message = await message.channel.fetch_message(message.id)
                 for i, f in enumerate(message.embeds[0].fields):
                     if '📜Messages' == f.name: 
                         message.embeds[0].set_field_at(i, name=f.name, value=await self.MemberPosts(every[0].obj))
@@ -220,10 +239,12 @@ class Info(commands.Cog):
                 try: webhooks = await ctx.guild.webhooks()
                 except: webhooks = False
             counter += 1
-        loadContent = discord.Embed(title='{}Loading {}', color=yellow[colorTheme(ctx.guild)])
+        loadContent = discord.Embed(title='{}Loading {}', color=yellow[cyber.colorTheme(ctx.guild)])
+        # message = await message.channel.fetch_message(message.id)
         if message.content is not None: await message.edit(content=None)
         past = False
         while not self.bot.is_closed():
+            message = await message.channel.fetch_message(message.id)
             if past or message.embeds[0].author.name is not discord.Embed.Empty and '⭐' in message.embeds[0].author.name: 
                 if len(every) > 0: 
                     for r in ['⬅']: await message.add_reaction(r)
@@ -251,7 +272,7 @@ class Info(commands.Cog):
             past = False
             def reacCheck(r, u): return str(r) in ['◀', '▶'] and u==ctx.author
             while not past:
-                done, pending = await asyncio.wait([bot.wait_for('message', check=check, timeout=300), bot.wait_for('reaction_add', check=reacCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
+                done, pending = await asyncio.wait([self.bot.wait_for('message', check=check, timeout=300), self.bot.wait_for('reaction_add', check=reacCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
                 try: stuff = done.pop().result()
                 except: return
                 for future in pending: future.cancel()
@@ -271,7 +292,7 @@ class Info(commands.Cog):
                     except: pass
                     loadContent.title = loadContent.title.format(self.loading, str(every[int(stuff.content) - 1].obj))
                     await message.edit(content=None, embed=loadContent)
-                    self.AvoidDeletionLogging(stuff)
+                    cyber.AvoidDeletionLogging(stuff)
                     try: await stuff.delete()
                     except: pass
                     await message.edit(content=None,embed=(await self.evalInfo(every[int(stuff.content)-1].obj, ctx.guild, logs)))
@@ -284,9 +305,15 @@ class Info(commands.Cog):
                     await message.add_reaction('⬅')
                     if 'member details' in message.embeds[0].title.lower(): await message.add_reaction('🍰')
 
+    def colorTheme(self, server: discord.Guild):
+        return self.bot.get_cog('Cyberlog').colorTheme(server)
+
+    def timeZone(self, server: discord.Guild):
+        return self.bot.get_cog('Cyberlog').timeZone(server)
+
     async def ServerInfo(self, s: discord.Guild, logs, bans, hooks, invites):
         '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
-        embed=discord.Embed(title=s.name, description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description), timestamp=datetime.datetime.utcnow(), color=yellow[colorTheme(s)])
+        embed=discord.Embed(title=s.name, description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description), timestamp=datetime.datetime.utcnow(), color=yellow[self.colorTheme(s)])
         mfa = {0: 'No', 1: 'Yes'}
         veri = {'none': 'None', 'low': 'Email', 'medium': 'Email, account age > 5 mins', 'high': 'Email, account 5 mins old, server member for 10 mins', 'extreme': 'Phone number'}
         perks0=['None yet']
@@ -305,7 +332,7 @@ class Info(commands.Cog):
             return messages
         for c in s.text_channels:
             messages += await asyncio.create_task(indexChannel(c))
-        created = s.created_at - datetime.timedelta(hours=DST)
+        created = s.created_at - datetime.timedelta(hours=utility.daylightSavings())
         txt='{}Text Channels: {}'.format(self.emojis["textChannel"], len(s.text_channels))
         vc='{}Voice Channels: {}'.format(self.emojis['voiceChannel'], len(s.voice_channels))
         cat='{}Category Channels: {}'.format(self.emojis['folder'], len(s.categories))
@@ -320,7 +347,7 @@ class Info(commands.Cog):
         embed.description+='\n\n**Features:** {}'.format(', '.join(s.features) if len(s.features) > 0 else 'None')
         embed.description+='\n\n**Nitro boosters:** {}/{}, **perks:** {}'.format(s.premium_subscription_count,perkDict.get(s.premium_tier),', '.join(perks))
         #embed.set_thumbnail(url=s.icon_url)
-        embed.add_field(name='Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})',inline=False)
+        embed.add_field(name='Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})',inline=False)
         embed.add_field(name='Region',value=str(s.region))
         embed.add_field(name='AFK Timeout',value='{}s --> {}'.format(s.afk_timeout, s.afk_channel))
         if s.max_presences is not None: embed.add_field(name='Max Presences',value='{} (BETA)'.format(s.max_presences))
@@ -342,80 +369,15 @@ class Info(commands.Cog):
         embed.set_footer(text='Server ID: {}'.format(s.id))
         return embed
 
-    async def ServerViewer(self, s: discord.Guild, *, data={}):
-        '''Powerful information viewer to be used in Disguard 1.0'''
-        import views
-        messages, errored, index = 0, False, 0 #Index - 0: Server objects, 1: Server metadata, 2: Server statistics
-        async def indexChannel(channel):
-            nonlocal errored
-            messages = 0
-            try:
-                with open(f'{indexes}/{channel.guild.id}/{channel.id}.json') as f: messages += len(json.load(f).keys())
-            except: errored = True
-            return messages
-        users, bots = 0, 0
-        for m in s.members: #Perform all member building actions here
-            if m.bot: bots += 1
-            else: users += 1
-        static, animated = 0, 0
-        for e in s.emojis:
-            if e.animated: animated += 1
-            else: static += 1
-        embed = discord.Embed(color=yellow[self.colorTheme(s)]) #In the future, use dominant color
-        def buildEmbed(index):
-            embed.title = f'{s.name} » {self.emojis["details"]}{"Objects" if index == 0 else "Metadata" if index == 1 else "Statistics"}'
-            if index == 0:
-                embed.description = f'> {s.description}' if s.description else ''
-                embed.description += f'''\n{'**Server Objects**':-^75}\n**Total channels: {len(s.channels)}**\n{self.emojis['folder']} Category channels: {len(s.categories)}\n{self.emojis['textChannel']} Text channels: {len(s.text_channels)}\n{self.emojis['voiceChannel']} Voice channels: {len(s.voice_channels)}\n{self.emojis['rick']} Stage channels: {len(s.stage_channels)}'''
-                embed.description += f'''\n\n**Total members: {s.member_count}**\n{self.emojis['member']} Humans: {users}\n🤖 Bots: {bots}\n\n🚩 **Roles:**{qlf}{len(s.roles) - 1}\n{self.emojis['emoji']} **Emojis:** {qlf}{len(s.emojis)} • {static}/{s.emoji_limit} static, {animated}/{s.emoji_limit} animated\n{self.emojis['sticker']} **Stickers:**{qlf}Coming soon'''
-                embed.description += f'''\n📜 **Messages:**{qlf}{self.loading}\n{self.emojis['link']} **Invites:**{qlf}{self.loading}\n{self.emojis['ban']} **Bans:**{qlf}{self.loading}\n{self.emojis['webhookCreate']} **Webhooks:**{qlf}{self.loading}\n{self.emojis['details']} **Audit log entries:**{qlf}{self.loading}'''
-                embed.description += f'''\n{'**Media**':-^75}\n**Server avatar**: png • jpg{f" • gif" if s.icon.is_animated() else ''}{f"{newline}**Banner**: png • jpg" if s.banner else ''}{f"{newline}**Discovery Splash**: png • jpg" if s.discovery_splash else ''}{f"{newline}**Invite Splash**: png • jpg" if s.splash else ''}'''
-                embed.description += f'''\n{'**Metadata**':-^75}\nProbably gonna put this on a separate page'''
-            elif index == 1:
-                pass
-            else:
-                pass
-        async def updateEmbed():
-            nonlocal messages
-            for c in s.text_channels: messages += await asyncio.create_task(indexChannel(c))
-            try: bans = len(await s.bans())
-            except Exception as e: bans = type(Exception).__name__
-            try: webhooks = len(await s.webhooks())
-            except Exception as e: webhooks = type(Exception).__name__
-            try: logs = len(await s.audit_logs())
-            except Exception as e: logs = type(Exception).__name__
-            try: invites = len(await s.invites())
-            except Exception as e: invites = type(Exception).__name__
-            d = embed.description
-            d = d.replace(f'**Messages:**{qlf}{self.loading}', f'**Messages:**{qlf}{self.emojis["warning"] if errored else ""}{messages}').replace(f'**Bans:**{qlf}{self.loading}', f'**Bans:**{qlf}{bans}')
-            d = d.replace(f'**Webhooks:**{qlf}{self.loading}', f'**Webhooks:**{qlf}{webhooks}').replace(f'**Audit log entries:**{qlf}{self.loading}', f'**Audit log entries:**{qlf}{logs}')
-            d = d.replace(f'**Invites:**{qlf}{self.loading}', f'**Invites:**{qlf}{invites}')
-            embed.description = d
-
-        async def worker():
-            message = data.get('message')
-            options = views.LinkLayerNavigation()
-            if data['history']: options.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, custom_id='back', emoji='⬅', label='Back'))
-            butt = discord.ui.Button(style=discord.ButtonStyle.secondary if index != 0 else discord.ButtonStyle.primary, custom_id='objects', label='Server Objects')
-            options.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary if index != 0 else discord.ButtonStyle.primary, custom_id='objects', label='Server Objects'))
-            options.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary if index != 1 else discord.ButtonStyle.primary, custom_id='metadata', label='Server Metadata'))
-            options.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary if index != 2 else discord.ButtonStyle.primary, custom_id='statistics', label='Server Statistics'))
-            options.add_item(discord.ui.Button(style=discord.ButtonStyle.secondary, custom_id='more', emoji=self.emojis['threeDots'], label='More'))
-            if message: await message.edit(embed=embed, view=options)
-
-        verification = {'none': 'None', 'low': 'Must have verified email', 'medium': 'Must have verified email, account age at least 5 mins', 'high': 'Must have verified email, account age at least 5 mins, server member for at least 10 mins', 'extreme': 'Must have verified phone number'}
-        embed.set_thumbnail(url=stockImage)
-        return embed #Temporary
-
     async def ChannelInfo(self, channel: discord.abc.GuildChannel, invites, pins, logs):
         permString = None
-        details = discord.Embed(title=f'{self.channelEmoji(channel)}{channel.name}', description='',color=yellow[colorTheme(channel.guild)], timestamp=datetime.datetime.utcnow())
+        details = discord.Embed(title=f'{utility.channelEmoji(self, channel)}{channel.name}', description='',color=yellow[self.colorTheme(channel.guild)], timestamp=datetime.datetime.utcnow())
         details.set_footer(text='Channel ID: {}'.format(channel.id))
         if type(channel) is discord.TextChannel: details.description+=channel.mention
         if type(channel) is not discord.CategoryChannel:
             #details.description+='\n\n**Channels {}**\n{}'.format('without a category' if channel.category is None else 'in category {}'.format(channel.category.name), '\n'.join(['{}'.format('{}{}{}{}'.format('**' if chan==channel else '', types.get(type(chan)), chan.name, '**' if chan==channel else '')) for chan in channel.category.channels]))
             details.description+='\n**Category:** {}'.format('None' if channel.category is None else channel.category.name)
-        else: details.description+='\n\n**Channels in this category**\n{}'.format('\n'.join(['{}{}'.format(self.channelEmoji(chan), chan.name) for chan in channel.channels]))
+        else: details.description+='\n\n**Channels in this category**\n{}'.format('\n'.join(['{}{}'.format(utility.channelEmoji(self, chan), chan.name) for chan in channel.channels]))
         perms = {}
         formatted = {} #Key (read_messages, etc): {role or member: deny or allow, role or member: deny or allow...}
         temp=[]
@@ -427,21 +389,21 @@ class Info(commands.Cog):
                     try: formatted.get(kk).update({k: vv})
                     except: formatted.update({kk: {k: vv}})
         for k,v in formatted.items():
-            temp.append('{:<60s}'.format(permissionKeys.get(k, f'Unknown Permission ({k})')))
+            temp.append('{:<60s}'.format(utility.permissionKeys.get(k, f'Unknown Permission ({k})')))
             string='\n'.join(['     {}: {:>{diff}}'.format(kk.name, english.get(vv), diff=25 - len(kk.name)) for kk,vv in iter(v.items())])
             temp.append(string)
             permString = '```Channel permission overwrites\n{}```'.format('\n'.join(temp))
-        created=channel.created_at - datetime.timedelta(hours=DST)
+        created=channel.created_at - datetime.timedelta(hours=utility.daylightSavings())
         updated = None
         if logs:
             for log in logs:
                 if log.action == discord.AuditLogAction.channel_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == channel.id:
-                        updated = log.created_at - datetime.timedelta(hours=DST)
+                        updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
                         break
         if updated is None: updated = created
-        details.add_field(name='Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
-        details.add_field(name='Last updated',value=f'{DisguardIntermediateTimestamp(updated)} ({DisguardRelativeTimestamp(updated)})' if logs != None else self.loading if logs is None else '🔒Unable to obtain audit logs' if not logs else 'N/A')
+        details.add_field(name='Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
+        details.add_field(name='Last updated',value=f'{utility.DisguardIntermediateTimestamp(updated)} ({utility.DisguardRelativeTimestamp(updated)})' if logs != None else self.loading if logs is None else '🔒Unable to obtain audit logs' if not logs else 'N/A')
         inviteCount = []
         if invites:
             for inv in iter(invites): inviteCount.append(inv.inviter)
@@ -465,22 +427,22 @@ class Info(commands.Cog):
         #sortedRoles = sorted(r.guild.roles, key = lambda x: x.position, reverse=True)
         #start = r.position - 3
         #if start < 0: start = 0
-        created = r.created_at - datetime.timedelta(hours=DST)
+        created = r.created_at - datetime.timedelta(hours=utility.daylightSavings())
         updated = None
         if logs:
             for log in logs:
                 if log.action == discord.AuditLogAction.role_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == r.id:
-                        updated = log.created_at - datetime.timedelta(hours=DST)
+                        updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
                         break
         if updated is None: updated = created
-        embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
+        embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([utility.permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
         #embed.description+='\n**Position**:\n{}'.format('\n'.join(['{0}{1}{0}'.format('**' if sortedRoles[role] == r else '', sortedRoles[role].name) for role in range(start, start+6)]))
         embed.add_field(name='Displayed separately',value=r.hoist)
         embed.add_field(name='Externally managed',value=r.managed)
         embed.add_field(name='Mentionable',value=r.mentionable)
-        embed.add_field(name='Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
-        embed.add_field(name='Last updated',value=f'{DisguardIntermediateTimestamp(updated)} ({DisguardRelativeTimestamp(updated)})' if logs != None else self.loading if logs is None else '🔒Unable to obtain audit logs' if not logs else 'N/A')
+        embed.add_field(name='Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
+        embed.add_field(name='Last updated',value=f'{utility.DisguardIntermediateTimestamp(updated)} ({utility.DisguardRelativeTimestamp(updated)})' if logs != None else self.loading if logs is None else '🔒Unable to obtain audit logs' if not logs else 'N/A')
         embed.add_field(name='Belongs to',value='{} members'.format(len(r.members)))
         embed.set_footer(text='Role ID: {}'.format(r.id))
         return embed
@@ -488,12 +450,13 @@ class Info(commands.Cog):
     async def MemberInfo(self, m: discord.Member, *, addThumbnail=True, calculatePosts=True):
         if calculatePosts: postCount = await self.MemberPosts(m)
         else: postCount = self.loading
+        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         #tz = timeZone(m.guild)
         #nz = nameZone(m.guild)
         embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=m.color)
-        mA = lastActive(m) #The dict (timestamp and reason) when a member was last active
+        mA = Cyberlog.lastActive(m) #The dict (timestamp and reason) when a member was last active
         activeTimestamp = mA.get('timestamp')# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
-        onlineTimestamp = lastOnline(m)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
+        onlineTimestamp = Cyberlog.lastOnline(m)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
         onlineDelta = (datetime.datetime.now() - onlineTimestamp) #the timedelta between now and member's last online appearance
         activeDelta = (datetime.datetime.now() - activeTimestamp) #The timedelta between now and when a member was last active
         units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
@@ -509,8 +472,8 @@ class Info(commands.Cog):
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         if len(activeDisplay) == 0: activeDisplay = ['0s']
         activities = {discord.Status.online: self.emojis['online'], discord.Status.idle: self.emojis['idle'], discord.Status.dnd: self.emojis['dnd'], discord.Status.offline: self.emojis['offline']}
-        lastOnlineString = f'''\nLast online {f"{DisguardRelativeTimestamp(onlineTimestamp)}{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > lastOnline(m) and m.status == discord.Status.offline else ''}" if self.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
-        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{DisguardRelativeTimestamp(activeTimestamp)} ({mA['reason']})" if self.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if self.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}{lastOnlineString if m.status == discord.Status.offline else ""}'''
+        lastOnlineString = f'''\nLast online {f"{utility.DisguardRelativeTimestamp(onlineTimestamp)}{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > Cyberlog.lastOnline(m) and m.status == discord.Status.offline else ''}" if cyber.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if cyber.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
+        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{utility.DisguardRelativeTimestamp(activeTimestamp)} ({mA['reason']})" if cyber.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if cyber.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}{lastOnlineString if m.status == discord.Status.offline else ""}'''
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:
@@ -525,51 +488,51 @@ class Info(commands.Cog):
                 except:
                     current.append('Error parsing activity')
             embed.description+='\n\n • {}'.format('\n • '.join(current))
-        embed.description+='\n\n**Roles ({}):** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(len(m.roles) - 1, ' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(m.guild_permissions) if p[1]]))
+        embed.description+='\n\n**Roles ({}):** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(len(m.roles) - 1, ' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([utility.permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(m.guild_permissions) if p[1]]))
         boosting = m.premium_since
-        joined = m.joined_at - datetime.timedelta(hours=DST)
-        created = m.created_at - datetime.timedelta(hours=DST)
+        joined = m.joined_at - datetime.timedelta(hours=utility.daylightSavings())
+        created = m.created_at - datetime.timedelta(hours=utility.daylightSavings())
         if m.voice is None: voice = 'None'
         else:
             voice = '{}{} in {}{}'.format('🔇' if m.voice.mute or m.voice.self_mute else '', '🤐' if m.voice.deaf or m.voice.self_deaf else '','N/A' if m.voice.channel is None else m.voice.channel.name, ', AFK' if m.voice.afk else '')
         if boosting is None: embed.add_field(name='Boosting server',value='Nope')
         else:
-            embed.add_field(name='Boosting server',value=f'Since {DisguardRelativeTimestamp(boosting - datetime.timedelta(hours=DST))}')
-        embed.add_field(name='📆Account created',value=f'{DisguardRelativeTimestamp(created)}') #V1.5
+            embed.add_field(name='Boosting server',value=f'Since {utility.DisguardRelativeTimestamp(boosting - datetime.timedelta(hours=utility.daylightSavings()))}')
+        embed.add_field(name='📆Account created',value=f'{utility.DisguardRelativeTimestamp(created)}') #V1.5
         #embed.add_field(name='📆Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nz, (datetime.datetime.now(datetime.timezone.utc)-created).days)) #v2.0
-        embed.add_field(name='📆Joined server',value=f'{DisguardRelativeTimestamp(joined)}')
+        embed.add_field(name='📆Joined server',value=f'{utility.DisguardRelativeTimestamp(joined)}')
         embed.add_field(name='📜Messages',value=postCount)
         embed.add_field(name='🎙Voice Chat',value=voice)
-        if addThumbnail: embed.set_thumbnail(url=m.avatar_url) #V1.5
-        #if addThumbnail: embed.set_thumbnail(url=m.avatar.url) #V2.0
+        # if addThumbnail: embed.set_thumbnail(url=m.avatar_url) #V1.5
+        if addThumbnail: embed.set_thumbnail(url=m.avatar.url) #V2.0
         embed.set_footer(text='Member ID: {}'.format(m.id))
         return embed
         
     async def EmojiInfo(self, e: discord.Emoji, owner):
-        created = e.created_at - datetime.timedelta(hours=DST)
-        embed = discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(e.guild)])
+        created = e.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        embed = discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(e.guild)])
         embed.set_image(url=e.url)
         embed.set_footer(text='Emoji ID: {}'.format(e.id))
         embed.add_field(name='Twitch emoji',value=e.managed)
         if owner is not None: embed.add_field(name='Uploaded by',value='{} ({})'.format(owner.mention, owner.name))
         embed.add_field(name='Server',value=e.guild.name)
-        embed.add_field(name='📆Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
+        embed.add_field(name='📆Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
         return embed
 
     async def PartialEmojiInfo(self, e: discord.PartialEmoji, s: discord.Guild):
-        embed=discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
+        embed=discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
         embed.set_image(url=e.url)
         embed.set_footer(text='Emoji ID: {}'.format(e.id))
         return embed
 
     async def InviteInfo(self, i: discord.Invite, s): #s: server
-        embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
-        embed.set_thumbnail(url=i.guild.icon_url)
+        embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
+        embed.set_thumbnail(url=i.guild.icon.url)
         #expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
         expires=datetime.datetime.now() + datetime.timedelta(seconds=i.max_age)
-        created = i.created_at - datetime.timedelta(hours=DST)
-        embed.add_field(name='📆Created',value=f'{DisguardIntermediateTimestamp(created)} ({DisguardRelativeTimestamp(created)})')
-        embed.add_field(name='⏰Expires',value=f'{DisguardRelativeTimestamp(expires)}' if i.max_age > 0 else 'Never')
+        created = i.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        embed.add_field(name='📆Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
+        embed.add_field(name='⏰Expires',value=f'{utility.DisguardRelativeTimestamp(expires)}' if i.max_age > 0 else 'Never')
         embed.add_field(name='Server',value=i.guild.name)
         embed.add_field(name='Channel',value=i.channel.mention)
         embed.add_field(name='Author',value='{} ({})'.format(i.inviter.mention, i.inviter.name))
@@ -580,24 +543,24 @@ class Info(commands.Cog):
 
     async def BotInfo(self, app: discord.AppInfo, s: discord.Guild):
         bpg = 1073741824 #Bytes per gig
-        embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
+        embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(self.bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
         embed.description+=f'\n\nDISGUARD HOST SYSTEM INFORMATION\nCPU: {cpuinfo.get_cpu_info().get("brand")}\n•   Usage: {psutil.cpu_percent()}%\n​•   Core count: {psutil.cpu_count(logical=False)} cores, {psutil.cpu_count()} threads\n​​​​​​‍‍‍​​​•   {(psutil.cpu_freq().current / 1000):.2f} GHz current clock speed; {(psutil.cpu_freq().max / 1000):.2f} GHz max clock speed'
         embed.description+=f'\n​RAM: {(psutil.virtual_memory().total / bpg):.1f}GB total ({(psutil.virtual_memory().used / bpg):.1f}GB used, {(psutil.virtual_memory().free / bpg):.1f}GB free)'
         embed.description+=f'\nSTORAGE: {psutil.disk_usage("/").total // bpg}GB total ({psutil.disk_usage("/").used // bpg}GB used, {psutil.disk_usage("/").free // bpg}GB free)'
         embed.set_footer(text='My ID: {}'.format(app.id))
-        embed.set_thumbnail(url=app.icon_url)
+        embed.set_thumbnail(url=app.icon.url)
         embed.add_field(name='Developer',value=app.owner)
         embed.add_field(name='Public Bot',value=app.bot_public)
         embed.add_field(name='In development since',value='March 20, 2019')
         embed.add_field(name='Website with information',value=f'[Disguard Website](https://disguard.netlify.com/ \'https://disguard.netlify.com/\')')
-        embed.add_field(name='Servers',value=len(bot.guilds))
-        embed.add_field(name='Emojis',value=len(bot.emojis))
-        embed.add_field(name='Users',value=len(bot.users))
+        embed.add_field(name='Servers',value=len(self.bot.guilds))
+        embed.add_field(name='Emojis',value=len(self.bot.emojis))
+        embed.add_field(name='Users',value=len(self.bot.users))
         return embed
 
     async def EmojiListInfo(self, emojis, logs):
         '''Prereq: len(emojis) > 0'''
-        embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(emojis[0].guild)])
+        embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(emojis[0].guild)])
         static = [str(e) for e in emojis if not e.animated]
         animated = [str(e) for e in emojis if e.animated]
         if len(static) > 0: embed.add_field(name='Static emojis: {}/{}'.format(len(static), emojis[0].guild.emoji_limit),value=''.join(static)[:1023],inline=False)
@@ -609,12 +572,12 @@ class Info(commands.Cog):
 
     async def ChannelListInfo(self, channels, logs):
         '''Prereq: len(channels) > 0'''
-        embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(channels[0].guild)])
+        embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(channels[0].guild)])
         none=['(No category)'] if len([c for c in channels if type(c) is not discord.CategoryChannel and c.category is None]) else []
-        none += ['|{}{}'.format(self.channelEmoji(c), c.name) for c in channels if type(c) is not discord.CategoryChannel and c.category is None]
+        none += ['|{}{}'.format(utility.channelEmoji(self, c), c.name) for c in channels if type(c) is not discord.CategoryChannel and c.category is None]
         for chan in channels[0].guild.categories:
-            none.append('{}{}'.format(self.channelEmoji(chan), chan.name))
-            none+=['|{}{}'.format(self.channelEmoji(c), c.name) for c in chan.channels]
+            none.append('{}{}'.format(utility.channelEmoji(self, chan), chan.name))
+            none+=['|{}{}'.format(utility.channelEmoji(self, c), c.name) for c in chan.channels]
         embed.description='Total channels: {}\n\n{}'.format(len(channels), '\n'.join(none))
         if logs: embed.add_field(name='Total channels ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.channel_create])))
         elif logs is None: embed.add_field(name='Total channels ever created',value=self.loading)
@@ -623,7 +586,7 @@ class Info(commands.Cog):
 
     async def RoleListInfo(self, roles, logs):
         '''Prereq: len(roles) > 0'''
-        embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(roles[0].guild)])
+        embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(roles[0].guild)])
         embed.description='Total roles: {}\n\n • {}'.format(len(roles), '\n • '.join([r.name for r in roles]))
         embed.add_field(name='Roles displayed separately',value=len([r for r in roles if r.hoist]))
         embed.add_field(name='Mentionable roles',value=len([r for r in roles if r.mentionable]))
@@ -636,12 +599,12 @@ class Info(commands.Cog):
         return embed
 
     async def MemberListInfo(self, members):
-        embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(members[0].guild)])
+        embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(members[0].guild)])
         posts=[]
         for channel in members[0].guild.text_channels:
             with open(f'{indexes}/{members[0].guild.id}/{channel.id}.json') as f: 
                 posts += [message['author0'] for message in json.load(f).values()]
-        most = ['{} with {}'.format(bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
+        most = ['{} with {}'.format(self.bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
         online=self.emojis['online']
         idle=self.emojis['idle']
         dnd=self.emojis['dnd']
@@ -665,7 +628,7 @@ class Info(commands.Cog):
         return embed
 
     async def InvitesListInfo(self, invites, logs, s: discord.Guild):
-        embed=discord.Embed(title=f'{invites[0].guild.name if invites else "This server"}\'s invites', timestamp=datetime.datetime.utcnow(), color=yellow[colorTheme(s)])
+        embed=discord.Embed(title=f'{invites[0].guild.name if invites else "This server"}\'s invites', timestamp=datetime.datetime.utcnow(), color=yellow[self.colorTheme(s)])
         if invites: embed.description='Total invites: {}\n\n • {}'.format(len(invites), '\n • '.join(['discord.gg/**{}**: Goes to {}, created by {}'.format(i.code, i.channel.name, i.inviter.name) for i in invites]))[:2047]
         else: embed.description=f'Total invites: {self.loading if invites is None else "🔒Unable to obtain invites"}'
         if logs: embed.add_field(name='Total invites ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.invite_create])))
@@ -674,7 +637,7 @@ class Info(commands.Cog):
         return embed
 
     async def BansListInfo(self, bans, logs, s): #s=server
-        embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=datetime.datetime.utcnow(),color=yellow[colorTheme(s)])
+        embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
         embed.description=f'Users currently banned: {len(bans) if bans else self.loading if bans is None else "🔒Missing ban retrieval permissions"}'
         if not logs:
             if logs is None: embed.add_field(name='Banned previously', value=self.loading)
@@ -686,13 +649,13 @@ class Info(commands.Cog):
         for b in bans:
             for l in logs:
                 if l.action == discord.AuditLogAction.ban and l.target == b.user:
-                    created = l.created_at + datetime.timedelta(hours=timeZone(s))
+                    created = l.created_at + datetime.timedelta(hours=self.timeZone(s))
                     array.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/%Y@%H:%M'), '(No reason specified)' if b.reason is None else b.reason))
                     current.append(b.user)
         other=[]
         for l in logs:
             if l.action == discord.AuditLogAction.ban and l.target not in current:
-                created = l.created_at + datetime.timedelta(hours=timeZone(s))
+                created = l.created_at + datetime.timedelta(hours=self.timeZone(s))
                 other.append('{}: Banned by {} on {} because {}'.format(l.target.name, l.user.name, created.strftime('%m/%d/%Y@%H:%M'), '(No reason specified)' if l.reason is None else l.reason))
                 current.append(b.user)
         for b in bans:
