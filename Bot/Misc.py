@@ -27,8 +27,8 @@ newline = '\n'
 units = ['second', 'minute', 'hour', 'day']
 
 class Misc(commands.Cog):
-    def __init__(self, bot):
-        self.bot: commands.Bot = bot
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
         self.emojis: typing.Dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
         self.loading = self.emojis['loading']
     
