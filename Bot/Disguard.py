@@ -25,6 +25,7 @@ import shutil
 import asyncpraw
 import sys
 import py7zr
+from pymongo import errors as mongoErrors
 
 
 booted = False
@@ -103,37 +104,27 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
     await UpdatePresence()
 
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
-    path = f'{indexes}/{server.id}'
+    if channel.id in (534439214289256478, 910598159963652126): return
     start = datetime.datetime.now()
-    try: os.makedirs(path)
-    except FileExistsError: pass
-    path += f'/{channel.id}.json'
     try: saveImages = (await utility.get_server(server))['cyberlog'].get('image') and not channel.is_nsfw()
     except AttributeError: return
-    if not os.path.exists(path): 
-        with open(path, 'w+') as f: f.write('{}')
-        full = True
-    with open(path) as f:
-        try: indexData = json.load(f)
-        except: indexData = {}
-    try: 
-        async for message in channel.history(limit=None, oldest_first=full):
-            if str(message.id) in indexData.keys() and not full:
-                break
-            indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': '<Hidden due to channel being NSFW>' if channel.is_nsfw() else message.content if len(message.content) > 0 else f"<{len(message.attachments)} attachment{'s' if len(message.attachments) > 1 else f':{message.attachments[0].filename}'}>" if len(message.attachments) > 0 else f"<{len(message.embeds)} embed>" if len(message.embeds) > 0 else "<No content>"}
-            if not message.author.bot and (discord.utils.utcnow() - message.created_at).days < 7 and saveImages:
-                attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-                try: os.makedirs(attach)
-                except FileExistsError: pass
-                for attachment in message.attachments:
-                    if attachment.size / 1000000 < 8:
-                        try: await attachment.save('{}/{}'.format(attach, attachment.filename))
-                        except discord.HTTPException: pass
-            if full: await asyncio.sleep(0.0025)
-        indexData = json.dumps(indexData, indent=4)
-        with open(path, "w+") as f:
-            f.write(indexData)
-    except Exception as e: print(f'Index error for {server.name} - {channel.name}: {e}')
+    if not lightningdb.database.get_collection(str(channel.id)): full = True
+    existing_message_counter = 0
+    async for message in channel.history(limit=None, oldest_first=full):
+        try: await lightningdb.post_message(message)
+        except mongoErrors.DuplicateKeyError:
+            if not full:
+                existing_message_counter += 1
+                if existing_message_counter >= 15: break
+        if not message.author.bot and (discord.utils.utcnow() - message.created_at).days < 7 and saveImages:
+            attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
+            try: os.makedirs(attach)
+            except FileExistsError: pass
+            for attachment in message.attachments:
+                if attachment.size / 1000000 < 8:
+                    try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                    except discord.HTTPException: pass
+        if full: await asyncio.sleep(0.0010)
     print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
 
 @commands.is_owner()
@@ -483,7 +474,6 @@ async def test(ctx):
                 await database.SetBirthday(user, birthday)
                 print(f'Set {birthday:%B %d} for {user.name}')
         except KeyError: pass
-
 
 @commands.is_owner()
 @bot.command()

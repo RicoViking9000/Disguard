@@ -271,11 +271,10 @@ class Cyberlog(commands.Cog):
             for server in self.bot.guilds:
                 for channel in server.text_channels:
                     try:
-                        async with aiofiles.open(f'{indexes}/{server.id}/{channel.id}.json', 'r+') as f:
-                            indexData = json.loads(await f.read())
+                        messages = await lightningdb.get_channel_messages(channel.id)
                         path = f'Attachments/{server.id}/{channel.id}'
                         for folder in os.listdir(path):
-                            timestamp = datetime.datetime.fromisoformat(indexData[folder]['timestamp0'])
+                            timestamp = datetime.datetime.fromisoformat(messages[folder]['timestamp0'])
                             if (datetime.datetime.utcnow() - timestamp).days > 365:
                                 removal.append(folder) #Mark year-old attachments for deletion
                             elif not os.listdir(folder):
@@ -306,19 +305,7 @@ class Cyberlog(commands.Cog):
         await self.saveMessage(message)
 
     async def saveMessage(self, message: discord.Message):
-        path = f'{indexes}/{message.guild.id}'
-        if not os.path.exists(path): os.makedirs(path)
-        try:
-            async with aiofiles.open(f'{path}/{message.channel.id}.json', 'r+') as f:
-                read = await f.read()
-                try: indexData = json.loads(read)
-                except json.JSONDecodeError: indexData = {}
-                indexData[message.id] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': utility.contentParser(message)}
-        except (FileNotFoundError, PermissionError, OSError): 
-            indexData = {message.id: {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': utility.contentParser(message)}}
-        indexData = json.dumps(indexData, indent=4)
-        async with aiofiles.open(f'{path}/{message.channel.id}.json', 'w+') as f:
-            await f.write(indexData)
+        await lightningdb.post_message(message)
         if message.author.bot: return
         if ((await utility.get_server(message.guild))['cyberlog'].get('image')) and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path2 = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
@@ -650,11 +637,7 @@ class Cyberlog(commands.Cog):
             if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4): embed.set_author(name=after.author.name, icon_url=url)
         path = f'{indexes}/{after.guild.id}/{after.channel.id}.json'
-        async with aiofiles.open(path) as fl: #Open up index data to append the message edit history entry
-            indexData = json.loads(await fl.read()) #importing the index data from the filesystem
-            number = len(indexData[str(after.id)].keys()) // 3 #This represents the suffix to the key names, because dicts need to have unique key names, and message edit history requires multiple entries
-            indexData[str(after.id)].update({f'author{number}': after.author.id, f'timestamp{number}': discord.utils.utcnow().isoformat(), f'content{number}': utility.contentParser(after)})
-            indexData = json.dumps(indexData, indent=4)
+        await lightningdb.patch_message(after)
         plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{beforeParsed if len(beforeParsed) < 1024 else beforeC}`\nAfter:`{afterParsed if len(afterParsed) < 1024 else afterC}\n`{after.jump_url}'
         try: 
             msg: discord.Message = await c.send(content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
@@ -662,8 +645,6 @@ class Cyberlog(commands.Cog):
                 try: await msg.add_reaction(self.emojis['threeDots'])
                 except: pass
         except discord.HTTPException as e: return await c.send(f'Message edit log error: {e}')
-        with open(path, 'w+') as fl:
-            fl.write(indexData) #push the changes to the json file
         embed.description=f'''
             {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Author" if settings["context"][1] < 2 else ""}: {author.mention} ({author.name})
             {utility.channelEmoji(self, channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
@@ -703,13 +684,11 @@ class Cyberlog(commands.Cog):
                             await msg.clear_reactions()
                             embed.clear_fields()
                             embed.description=embed.description[:embed.description.find({utility.DisguardLongTimestamp(received)}) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
-                            with open(f'{indexes}/{guild.id}/{channel.id}.json', 'r+') as f:
-                                indexData = json.load(f)
-                                currentMessage = indexData[str(after.id)]
-                                enum = list(enumerate(currentMessage.values()))
-                                def makeHistory(): #This will create groups of 4 from enum; since 4 lines represent the file data for indexes
-                                    for i in range(0, len(enum), 3): yield enum[i:i+3]
-                                entries = list(makeHistory()) #This will always have a length of 2 or more
+                            currentMessage = await lightningdb.get_message(after.channel.id, after.id)
+                            enum = list(enumerate(currentMessage.values()))
+                            def makeHistory(): #This will create groups of 4 from enum; since 4 lines represent the file data for indexes
+                                for i in range(0, len(enum), 3): yield enum[i:i+3]
+                            entries = list(makeHistory()) #This will always have a length of 2 or more
                             for i, entry in enumerate(entries): 
                                 embed.add_field(name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry[1][1]) + datetime.timedelta(hours=await utility.time_zone(guild)))}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',value=entry[-1][1], inline=False)
                             await msg.edit(embed=embed)
@@ -789,14 +768,11 @@ class Cyberlog(commands.Cog):
             return
         c = await logChannel(g, 'message')
         if c is None: return #Invalid log channel
-        try:
-            path = f'{indexes}/{after.guild.id}/{after.channel.id}.json'
-            with open(path) as f:
-                indexData = json.load(f)
-                currentMessage = indexData[str(after.id)]
-                before = currentMessage[f'content{len(currentMessage.keys()) // 3 - 1}']
-        except (FileNotFoundError, KeyError): before = f'<Data retrieval error>' #If we can't find the file, then we say this
-        except IndexError: before = after.content #Author is bot, and indexes aren't kept for bots; keep this for pins only
+        message_data = await lightningdb.get_message(channel.id, after.id)
+        if message_data:
+            index = int(list(message_data.keys())[1][-1])
+            before = message_data[f'content{index}']
+        else: before = after.content
         try: await self.MessageEditHandler(before, after, received)
         except UnboundLocalError: await self.MessageEditHandler('<Data retrieval error>', after, received) #If before doesn't exist
 
@@ -843,16 +819,10 @@ class Cyberlog(commands.Cog):
             channel, created, content = message.channel, message.created_at, message.content
         else:
             try:
-                filePath = f'{indexes}/{payload.guild_id}/{payload.channel_id}.json'
-                with open(filePath) as fl:
-                    indexData = json.load(fl)
-                    currentMessage = indexData[str(payload.message_id)]
-                    authorID, created, content = tuple(currentMessage.values())[-3:] #Take the 3 most recent entries, in cases where the message has been edited
-                    author, channel, created = await self.bot.fetch_user(authorID), self.bot.get_channel(payload.channel_id), datetime.datetime.fromisoformat(created)
-                    indexData.pop(str(payload.message_id))
-                with open(filePath, 'w+') as fl:
-                    fl.write(json.dumps(indexData, indent=4))
-            except (FileNotFoundError, IndexError, KeyError):
+                message_data = await lightningdb.get_message(payload.channel_id, payload.message_id)
+                author, channel, created = await self.bot.fetch_user(message_data['author0']), self.bot.get_channel(payload.channel_id), datetime.datetime.fromisoformat(created)
+                await lightningdb.delete_message(payload.channel_id, payload.message_id)
+            except (KeyError, IndexError):
                 try: channel = channel.mention
                 except UnboundLocalError: 
                     channel = self.bot.get_channel(payload.channel_id)
@@ -1344,23 +1314,16 @@ class Cyberlog(commands.Cog):
                 embed.add_field(name=f'Category Tree',value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){newline}" if startEnd[0] > 0 else ""}{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{newline}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}''')
                 if channel.category is not None: self.categories[channel.category.id].remove(channel)
                 else: self.categories[channel.guild.id].remove(channel)
-            if channel.type[0] == 'text': 
-                try:
-                    path = f'{indexes}/{channel.guild.id}/{channel.id}.json'
-                    with open(path) as f:
-                        indexData = json.load(f)
-                        embed.add_field(name='Message count', value=len(indexData.keys()))
-                    try:
-                        channelIndexPath = f'{indexes}/{channel.guild.id}/{channel.id}.json'
-                        os.remove(channelIndexPath)
-                        channelAttachmentsPath = f'Attachments/{channel.guild.id}/{channel.id}'
-                        shutil.rmtree(channelAttachmentsPath)
-                    except Exception as e: print(f'Failed to delete index data for channel {channel.name} ({channel.id}) of server {channel.guild.name} ({channel.guild.id}) because {e}')
-                except Exception as e: embed.add_field(name='Message count',value=f'Error: {e}')
+            if channel.type[0] == 'text':
+                messages = await lightningdb.get_channel_messages(channel.id)
+                embed.add_field(name='Message count', value=len(messages) if messages else 0)
+                await lightningdb.delete_channel(channel.id)
+                channelAttachmentsPath = f'Attachments/{channel.guild.id}/{channel.id}'
+                shutil.rmtree(channelAttachmentsPath)
                 self.pins.pop(channel.id, None)
             await msg.edit(content = None if not settings['plainText'] else content, embed=embed)
             self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
-        if type(channel) is discord.TextChannel: asyncio.create_task(database.VerifyServer(channel.guild, self.bot)) #Look into database methods to remove channels without needing to call the VeriftServer method
+        if type(channel) is discord.TextChannel: asyncio.create_task(database.VerifyServer(channel.guild, self.bot)) #Look into database methods to remove channels without needing to call the VerifyServer method
         if msg:
             def reactionCheck(r, u): return r.message.id == msg.id and not u.bot
             while not self.bot.is_closed():
@@ -2153,18 +2116,14 @@ class Cyberlog(commands.Cog):
 
     async def indexServer(self, channel: discord.TextChannel):
         '''This will fully index messages.'''
-        path = f'{indexes}/{channel.guild.id}/{channel.id}'
         try: os.makedirs(f'{indexes}/{channel.guild.id}')
         except FileExistsError: pass
-        indexData = {}
         try:
             async for message in channel.history(limit=None, oldest_first=True):
-                if str(message.id) in indexData.keys(): continue
-                indexData[str(message.id)] = {'author0': message.author.id, 'timestamp0': message.created_at.isoformat(), 'content0': utility.contentParser(message)}
+                try:
+                    await lightningdb.post_message(message)
+                except: continue
                 await asyncio.sleep(0.0025)
-            indexData = json.dumps(indexData, indent=4)
-            with open(f'{path}.json', 'w+') as f:
-                f.write(indexData)
         except Exception as e: print(f'Index error for {channel.guild.name} - {channel.name}: {e}')
 
     @commands.Cog.listener()

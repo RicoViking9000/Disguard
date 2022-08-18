@@ -13,6 +13,7 @@ import emoji
 import json
 import Cyberlog
 import Birthdays
+import lightningdb
 
 indexes = 'Indexes'
 qlf = '  ' #Two special characters to represent quoteLineFormat
@@ -239,7 +240,7 @@ class Info(commands.Cog):
                 try: webhooks = await ctx.guild.webhooks()
                 except: webhooks = False
             counter += 1
-        loadContent = discord.Embed(title='{}Loading {}', color=yellow[await utility.colorTheme(ctx.guild)])
+        loadContent = discord.Embed(title='{}Loading {}', color=yellow[await utility.color_theme(ctx.guild)])
         # message = await message.channel.fetch_message(message.id)
         if message.content is not None: await message.edit(content=None)
         past = False
@@ -307,7 +308,7 @@ class Info(commands.Cog):
 
     async def ServerInfo(self, s: discord.Guild, logs, bans, hooks, invites):
         '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
-        embed=discord.Embed(title=s.name, description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description), timestamp=datetime.datetime.utcnow(), color=yellow[self.colorTheme(s)])
+        embed=discord.Embed(title=s.name, description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description), timestamp=datetime.datetime.utcnow(), color=yellow[await utility.color_theme(s)])
         mfa = {0: 'No', 1: 'Yes'}
         veri = {'none': 'None', 'low': 'Email', 'medium': 'Email, account age > 5 mins', 'high': 'Email, account 5 mins old, server member for 10 mins', 'extreme': 'Phone number'}
         perks0=['None yet']
@@ -320,12 +321,8 @@ class Info(commands.Cog):
         elif s.premium_tier==1: perks = perks1
         else: perks = perks0
         messages = 0
-        async def indexChannel(channel):
-            messages = 0
-            with open(f'{indexes}/{channel.guild.id}/{channel.id}.json') as f: messages += len(json.load(f).keys())
-            return messages
-        for c in s.text_channels:
-            messages += await asyncio.create_task(indexChannel(c))
+        for channel in s.text_channels:
+            messages += len(await lightningdb.get_channel_messages(channel.id))
         created = s.created_at - datetime.timedelta(hours=utility.daylightSavings())
         txt='{}Text Channels: {}'.format(self.emojis["textChannel"], len(s.text_channels))
         vc='{}Voice Channels: {}'.format(self.emojis['voiceChannel'], len(s.voice_channels))
@@ -344,7 +341,7 @@ class Info(commands.Cog):
         embed.add_field(name='Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})',inline=False)
         embed.add_field(name='Region',value=str(s.region))
         embed.add_field(name='AFK Timeout',value='{}s --> {}'.format(s.afk_timeout, s.afk_channel))
-        if s.max_presences is not None: embed.add_field(name='Max Presences',value='{} (BETA)'.format(s.max_presences))
+        if s.max_presences is not None: embed.add_field(name='Max Presences',value='{}'.format(s.max_presences))
         embed.add_field(name='Mods need 2FA',value=mfa.get(s.mfa_level))
         embed.add_field(name='Verification',value=veri.get(str(s.verification_level)))
         embed.add_field(name='Explicit filter',value=s.explicit_content_filter)
@@ -365,7 +362,7 @@ class Info(commands.Cog):
 
     async def ChannelInfo(self, channel: discord.abc.GuildChannel, invites, pins, logs):
         permString = None
-        details = discord.Embed(title=f'{utility.channelEmoji(self, channel)}{channel.name}', description='',color=yellow[self.colorTheme(channel.guild)], timestamp=datetime.datetime.utcnow())
+        details = discord.Embed(title=f'{utility.channelEmoji(self, channel)}{channel.name}', description='',color=yellow[await utility.color_theme(channel.guild)], timestamp=datetime.datetime.utcnow())
         details.set_footer(text='Channel ID: {}'.format(channel.id))
         if type(channel) is discord.TextChannel: details.description+=channel.mention
         if type(channel) is not discord.CategoryChannel:
@@ -405,7 +402,7 @@ class Info(commands.Cog):
         if type(channel) is discord.TextChannel:
             details.add_field(name='Topic',value='{}{}'.format('<No topic>' if channel.topic is None or len(channel.topic) < 1 else channel.topic[:100], '' if channel.topic is None or len(channel.topic)<=100 else '...'),inline=False)
             details.add_field(name='Slowmode',value='{}s'.format(channel.slowmode_delay))
-            with open(f'{indexes}/{channel.guild.id}/{channel.id}.json') as f: details.add_field(name='Message count',value=len(json.load(f).keys()))
+            details.add_field(name='Message count',value=len(await lightningdb.get_channel_messages(channel.id)))
             details.add_field(name='NSFW',value=channel.is_nsfw())
             details.add_field(name='News channel?',value=channel.is_news())
             details.add_field(name='Pins count',value=len(pins) if pins else self.loading if pins is False else '🔒Unable to retrieve pins')
@@ -504,7 +501,7 @@ class Info(commands.Cog):
         
     async def EmojiInfo(self, e: discord.Emoji, owner):
         created = e.created_at - datetime.timedelta(hours=utility.daylightSavings())
-        embed = discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(e.guild)])
+        embed = discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(e.guild)])
         embed.set_image(url=e.url)
         embed.set_footer(text='Emoji ID: {}'.format(e.id))
         embed.add_field(name='Twitch emoji',value=e.managed)
@@ -514,13 +511,13 @@ class Info(commands.Cog):
         return embed
 
     async def PartialEmojiInfo(self, e: discord.PartialEmoji, s: discord.Guild):
-        embed=discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
+        embed=discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.set_image(url=e.url)
         embed.set_footer(text='Emoji ID: {}'.format(e.id))
         return embed
 
     async def InviteInfo(self, i: discord.Invite, s): #s: server
-        embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
+        embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.set_thumbnail(url=i.guild.icon.url)
         #expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
         expires=datetime.datetime.now() + datetime.timedelta(seconds=i.max_age)
@@ -537,7 +534,7 @@ class Info(commands.Cog):
 
     async def BotInfo(self, app: discord.AppInfo, s: discord.Guild):
         bpg = 1073741824 #Bytes per gig
-        embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(self.bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
+        embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(self.bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.description+=f'\n\nDISGUARD HOST SYSTEM INFORMATION\nCPU: {cpuinfo.get_cpu_info().get("brand")}\n•   Usage: {psutil.cpu_percent()}%\n​•   Core count: {psutil.cpu_count(logical=False)} cores, {psutil.cpu_count()} threads\n​​​​​​‍‍‍​​​•   {(psutil.cpu_freq().current / 1000):.2f} GHz current clock speed; {(psutil.cpu_freq().max / 1000):.2f} GHz max clock speed'
         embed.description+=f'\n​RAM: {(psutil.virtual_memory().total / bpg):.1f}GB total ({(psutil.virtual_memory().used / bpg):.1f}GB used, {(psutil.virtual_memory().free / bpg):.1f}GB free)'
         embed.description+=f'\nSTORAGE: {psutil.disk_usage("/").total // bpg}GB total ({psutil.disk_usage("/").used // bpg}GB used, {psutil.disk_usage("/").free // bpg}GB free)'
@@ -554,7 +551,7 @@ class Info(commands.Cog):
 
     async def EmojiListInfo(self, emojis, logs):
         '''Prereq: len(emojis) > 0'''
-        embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(emojis[0].guild)])
+        embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(emojis[0].guild)])
         static = [str(e) for e in emojis if not e.animated]
         animated = [str(e) for e in emojis if e.animated]
         if len(static) > 0: embed.add_field(name='Static emojis: {}/{}'.format(len(static), emojis[0].guild.emoji_limit),value=''.join(static)[:1023],inline=False)
@@ -566,7 +563,7 @@ class Info(commands.Cog):
 
     async def ChannelListInfo(self, channels, logs):
         '''Prereq: len(channels) > 0'''
-        embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(channels[0].guild)])
+        embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(channels[0].guild)])
         none=['(No category)'] if len([c for c in channels if type(c) is not discord.CategoryChannel and c.category is None]) else []
         none += ['|{}{}'.format(utility.channelEmoji(self, c), c.name) for c in channels if type(c) is not discord.CategoryChannel and c.category is None]
         for chan in channels[0].guild.categories:
@@ -580,7 +577,7 @@ class Info(commands.Cog):
 
     async def RoleListInfo(self, roles, logs):
         '''Prereq: len(roles) > 0'''
-        embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(roles[0].guild)])
+        embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(roles[0].guild)])
         embed.description='Total roles: {}\n\n • {}'.format(len(roles), '\n • '.join([r.name for r in roles]))
         embed.add_field(name='Roles displayed separately',value=len([r for r in roles if r.hoist]))
         embed.add_field(name='Mentionable roles',value=len([r for r in roles if r.mentionable]))
@@ -593,11 +590,10 @@ class Info(commands.Cog):
         return embed
 
     async def MemberListInfo(self, members):
-        embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(members[0].guild)])
+        embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(members[0].guild)])
         posts=[]
         for channel in members[0].guild.text_channels:
-            with open(f'{indexes}/{members[0].guild.id}/{channel.id}.json') as f: 
-                posts += [message['author0'] for message in json.load(f).values()]
+            posts += [message['author0'] for message in (await lightningdb.get_channel_messages(channel.id)).values()]
         most = ['{} with {}'.format(self.bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
         online=self.emojis['online']
         idle=self.emojis['idle']
@@ -622,7 +618,7 @@ class Info(commands.Cog):
         return embed
 
     async def InvitesListInfo(self, invites, logs, s: discord.Guild):
-        embed=discord.Embed(title=f'{invites[0].guild.name if invites else "This server"}\'s invites', timestamp=datetime.datetime.utcnow(), color=yellow[self.colorTheme(s)])
+        embed=discord.Embed(title=f'{invites[0].guild.name if invites else "This server"}\'s invites', timestamp=datetime.datetime.utcnow(), color=yellow[await utility.color_theme(s)])
         if invites: embed.description='Total invites: {}\n\n • {}'.format(len(invites), '\n • '.join(['discord.gg/**{}**: Goes to {}, created by {}'.format(i.code, i.channel.name, i.inviter.name) for i in invites]))[:2047]
         else: embed.description=f'Total invites: {self.loading if invites is None else "🔒Unable to obtain invites"}'
         if logs: embed.add_field(name='Total invites ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.invite_create])))
@@ -631,7 +627,7 @@ class Info(commands.Cog):
         return embed
 
     async def BansListInfo(self, bans, logs, s): #s=server
-        embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=datetime.datetime.utcnow(),color=yellow[self.colorTheme(s)])
+        embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.description=f'Users currently banned: {len(bans) if bans else self.loading if bans is None else "🔒Missing ban retrieval permissions"}'
         if not logs:
             if logs is None: embed.add_field(name='Banned previously', value=self.loading)
@@ -662,29 +658,7 @@ class Info(commands.Cog):
         return embed
 
     async def MemberPosts(self, m: discord.Member):
-        messageCount=0
-        for channel in m.guild.text_channels: 
-            async with aiofiles.open(f'{indexes}/{m.guild.id}/{channel.id}.json') as f:
-                loaded = json.loads(await f.read())
-                messageCount += len([k for k, v in loaded.items() if m.id == v['author0']])
-        return messageCount
-
-    # async def calculateMemberPosts(self, m: discord.Member, p):
-    #     try: return len([f for f in os.listdir(p) if str(m.id) in f])
-    #     except FileNotFoundError: return 0
-
-    # async def MostMemberPosts(self, g: discord.Guild):
-    #     posts=[]
-    #     for channel in g.text_channels: posts += await self.bot.loop.create_task(self.calculateMostMemberPosts(f'{indexes}/{g.id}/{channel.id}'))
-    #     return ['{} with {}'.format(bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
-
-    # async def calculateMostMemberPosts(self, p):
-    #     with open(p) as f:
-    #         return [int(v['author0']) for v in json.load(f).values()]
-    #     #return [int(f[f.find('_')+1:f.find('.')]) for f in os.listdir(p)]
-
-    # async def calculateChannelPosts(self, c):
-    #     return len(os.listdir(f'{indexes}/{c.guild.id}/{c.id}'))
+        return len(await lightningdb.get_messages_by_author(m.id, [channel.id for channel in m.guild.text_channels]))
 
     async def evalInfo(self, obj, g: discord.Guild, logs):
         if type(obj) is discord.Embed: return obj
