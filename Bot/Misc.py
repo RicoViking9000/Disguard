@@ -31,12 +31,6 @@ class Misc(commands.Cog):
         self.bot = bot
         self.emojis: typing.Dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
         self.loading = self.emojis['loading']
-    
-    def getData(self):
-        return self.bot.lightningLogging
-
-    def getUserData(self):
-        return self.bot.lightningUsers
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -44,7 +38,7 @@ class Misc(commands.Cog):
         asyncio.create_task(self.jumpLinkQuoteContext(message))
 
     async def jumpLinkQuoteContext(self, message: discord.Message):
-        try: enabled = self.bot.lightningLogging.get(message.guild.id).get('jumpContext')
+        try: enabled = (await utility.get_server(message.guild)).get('jumpContext')
         except AttributeError: return
         if message.author.id == self.bot.user.id: return
         if enabled:
@@ -59,31 +53,31 @@ class Misc(commands.Cog):
                         return await message.channel.send(f'{self.emojis["alert"]} | This message links to a NSFW channel, so its content can\'t be shared')
                     if len(result.embeds) == 0:
                         embed=discord.Embed(description=result.content)
-                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=self.timeZone(message.guild))):%b %d, %Y • %I:%M %p} {self.nameZone(message.guild)}')
+                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y • %I:%M %p} {await utility.name_zone(message.guild)}')
                         embed.set_author(name=result.author.name, icon_url=result.author.avatar.url)
                         if len(result.attachments) > 0 and result.attachments[0].height is not None:
                             try: embed.set_image(url=result.attachments[0].url)
                             except: pass
                         return await message.channel.send(embed=embed)
                     else:
-                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=self.timeZone(message.guild))):%b %d, %Y - %I:%M %p} {self.nameZone(message.guild)}')
+                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y - %I:%M %p} {await utility.name_zone(message.guild)}')
                         if result.embeds[0].author.name is discord.Embed.Empty: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar.url)
                         return await message.channel.send(content=result.content, embed=result.embeds[0])
 
     async def sendGuideMessage(self, message: discord.Message):
-        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{self.bot.lightningLogging.get(message.guild.id).get("prefix")}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
+        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
     
     @commands.command()
     async def privacy(self, ctx: commands.Context):
-        user = self.bot.lightningUsers[ctx.author.id]
+        user = await utility.get_user(ctx.author)
         users = database.GetUserCollection()
         privacy = user['privacy']
-        prefix = self.bot.lightningLogging[ctx.guild.id]['prefix'] if ctx.guild else '.'
+        prefix = await utility.prefix(ctx.guild) if ctx.guild else '.'
         def slideToggle(i): return self.emojis['slideToggleOff'] if i == 0 else self.emojis['slideToggleOn'] if i == 1 else slideToggle(privacy['default'][0]) #Uses recursion to use default value if specific setting says to
         def viewerEmoji(i): return '🔒' if i == 0 else '🔓' if i == 1 else viewerEmoji(privacy['default'][1]) if i == 2 else self.emojis['members']
         def viewerText(i): return 'only you' if i == 0 else 'everyone you share a server with' if i == 1 else viewerText(privacy['default'][1]) if i == 2 else f'{len(i)} users'
         def enabled(i): return False if i == 0 else True if i == 1 else enabled(privacy['default'][0])
-        #embed = discord.Embed(title=f'Privacy Settings » {ctx.author.name} » Overview', color=user['profile'].get('favColor') or yellow[user['profile']['colorTheme']])
+        #embed = discord.Embed(title=f'Privacy Settings » {ctx.author.name} » Overview', color=user['profile'].get('favColor') or yellow[user['profile']['color_theme']])
         embed = discord.Embed(title=f'Privacy Settings » {ctx.author.name} » Overview', color=yellow[1])
         embed.description = f'''To view Disguard's privacy policy, [click here](https://disguard.netlify.app/privacybasic)\nTo view and edit all settings, visit your profile on my [web dashboard](http://disguard.herokuapp.com/manage/profile)'''
         embed.add_field(name='Default Settings', value=f'''{slideToggle(privacy['default'][0])}Allow Disguard to use your customization settings for its features: {"Enabled" if enabled(privacy['default'][0]) else "Disabled"}\n{viewerEmoji(privacy['default'][1])}Default visibility of your customization settings: {viewerText(privacy['default'][1])}''', inline=False)
@@ -102,7 +96,7 @@ class Misc(commands.Cog):
         3: closed'''
         await ctx.trigger_typing()
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        colorTheme = cyber.colorTheme(ctx.guild) if ctx.guild else 1
+        color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         details = cyber.emojis['details']
         def navigationCheck(r, u): return str(r) in reactions and r.message.id == status.id and u.id == ctx.author.id
         #If the user didn't provide a message with the command, prompt them with one here
@@ -112,7 +106,7 @@ class Misc(commands.Cog):
         else:
             specialCase = False
         if not opener:
-            embed=discord.Embed(title='Disguard Support Menu', description=f"Welcome to Disguard support!\n\nIf you would easily like to get support, you may join my official server: https://discord.gg/xSGujjz\n\nIf you would like to get in touch with my developer without joining servers, react 🎟 to open a support ticket\n\nIf you would like to view your active support tickets, type `{self.getData()[ctx.guild.id]['prefix'] if ctx.guild else '.'}tickets` or react {details}", color=yellow[colorTheme])
+            embed=discord.Embed(title='Disguard Support Menu', description=f"Welcome to Disguard support!\n\nIf you would easily like to get support, you may join my official server: https://discord.gg/xSGujjz\n\nIf you would like to get in touch with my developer without joining servers, react 🎟 to open a support ticket\n\nIf you would like to view your active support tickets, type `{await utility.prefix() if ctx.guild else '.'}tickets` or react {details}", color=yellow[color_theme])
             status = await ctx.send(embed=embed)
             reactions = ['🎟', details]
             for r in reactions: await status.add_reaction(r)
@@ -142,7 +136,7 @@ class Misc(commands.Cog):
                 if type(server) is str: server = None
             else: server = serverList[0]
         else: server = ctx.guild
-        embed=discord.Embed(title=f'🎟 Disguard Ticket System / {self.loading} Creating Ticket...', color=yellow[colorTheme])
+        embed=discord.Embed(title=f'🎟 Disguard Ticket System / {self.loading} Creating Ticket...', color=yellow[color_theme])
         status = await ctx.send(embed=embed)
         #Obtain server permissions for the member to calculate their prestige (rank of power in the server)
         if server: p = server.get_member(ctx.author.id).guild_permissions
@@ -161,7 +155,7 @@ class Misc(commands.Cog):
         await database.CreateSupportTicket(ticket)
         whiteCheck = discord.utils.get(self.bot.get_guild(560457796206985216).emojis, name='whiteCheck')
         embed.title = f'🎟 Disguard Ticket System / {whiteCheck} Support Ticket Created!'
-        embed.description = f'''Your support ticket has successfully been created\n\nTicket number: {ticket['number']}\nAuthor: {ctx.author.name}\nMessage: {opener}\n\nTo view this ticket, react 🎟 or type `{self.getData()[ctx.guild.id]['prefix'] if ctx.guild else "."}tickets {ticket['number']}`, which will allow you to add members to the support thread if desired, disable DM notifications, reply, and more.'''
+        embed.description = f'''Your support ticket has successfully been created\n\nTicket number: {ticket['number']}\nAuthor: {ctx.author.name}\nMessage: {opener}\n\nTo view this ticket, react 🎟 or type `{await utility.prefix(ctx.guild) if ctx.guild else "."}tickets {ticket['number']}`, which will allow you to add members to the support thread if desired, disable DM notifications, reply, and more.'''
         await status.edit(embed=embed)
         reactions = ['🎟']
         await status.add_reaction('🎟')
@@ -176,12 +170,12 @@ class Misc(commands.Cog):
         g = ctx.guild
         alphabet = [l for l in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        colorTheme = cyber.colorTheme(ctx.guild) if ctx.guild else 1
+        color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         trashcan = self.emojis['delete']
         statusDict = {0: 'Unopened', 1: 'Viewed', 2: 'In progress', 3: 'Closed', 4: 'Locked'}
         message = await ctx.send(embed=discord.Embed(description=f'{self.loading}Downloading ticket data'))
         tickets = await database.GetSupportTickets()
-        embed=discord.Embed(title=f"🎟 Disguard Ticket System / {self.emojis['details']} Browse Your Tickets", color=yellow[colorTheme])
+        embed=discord.Embed(title=f"🎟 Disguard Ticket System / {self.emojis['details']} Browse Your Tickets", color=yellow[color_theme])
         embed.set_author(name=ctx.author, icon_url=ctx.author.avatar.with_static_format('png').url)
         if len(tickets) == 0: 
             embed.description = 'There are currently no tickets in the system'
@@ -193,7 +187,7 @@ class Misc(commands.Cog):
             elif sortMode == 3: filtered.sort(key = lambda x: x['number']) #Lowest ticket numbers first
         def paginate(iterable, resultsPerPage=10):
             for i in range(0, len(iterable), resultsPerPage): yield iterable[i : i + resultsPerPage]
-        def populateEmbed(pages, index, sortDescription):
+        async def populateEmbed(pages, index, sortDescription):
             embed.clear_fields()
             embed.description = f'''{f'NAVIGATION':-^70}\n{trashcan}: Delete this embed\n{self.emojis['details']}: Adjust sort\n◀: Previous page\n🇦 - {alphabet[len(pages[index]) - 1]}: View ticket\n▶: Next page\n{f'Tickets for {ctx.author.name}':-^70}\nPage {index + 1} of {len(pages)}\nViewing {len(pages[index])} of {len(filtered)} results\nSort: {sortDescription}'''
             for i, ticket in enumerate(pages[index]):
@@ -201,15 +195,15 @@ class Misc(commands.Cog):
                 if not tg and ticket['server']: tg = self.bot.get_guild(ticket['server'])
                 embed.add_field(
                     name=f"{alphabet[i]}Ticket {ticket['number']}",
-                    value=f'''> Members: {", ".join([self.bot.get_user(u['id']).name for i, u in enumerate(ticket['members']) if i not in (1, 2)])}\n> Status: {statusDict[ticket['status']]}\n> Latest reply: {self.bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(self.getData()[tg.id]['offset'] if tg else -5))):%b %d, %Y • %I:%M %p} {self.getData()[tg.id]['tzname'] if tg else 'EST'}\n> {qlf}{ticket['conversation'][-1]['message']}''',
+                    value=f'''> Members: {", ".join([self.bot.get_user(u['id']).name for i, u in enumerate(ticket['members']) if i not in (1, 2)])}\n> Status: {statusDict[ticket['status']]}\n> Latest reply: {self.bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -5))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}\n> {qlf}{ticket['conversation'][-1]['message']}''',
                     inline=False)
         async def notifyMembers(ticket):
-            e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^70}", color=yellow[ticketColorTheme])
+            e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^70}", color=yellow[ticketcolor_theme])
             entry = ticket['conversation'][-1]
             messageAuthor = self.bot.get_user(entry['author'])
-            e.set_author(name=messageAuthor, icon_url=messageAuthor.avatar_url_as(static_format='png'))
+            e.set_author(name=messageAuthor, icon_url=messageAuthor.avatar.with_static_format('png').url)
             e.add_field(
-                name=f"{messageAuthor.name} • {(entry['timestamp'] + datetime.timedelta(hours=(self.getData()[tg.id]['offset'] if tg else -5))):%b %d, %Y • %I:%M %p} {self.getData()[tg.id]['tzname'] if tg else 'EST'}",
+                name=f"{messageAuthor.name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -5))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}",
                 value=f'> {entry["message"]}',
                 inline=False)
             e.set_footer(text=f"You are receiving this DM because you have notifications enabled for ticket {ticket['number']}. View the ticket to disable notifications.")
@@ -223,7 +217,7 @@ class Misc(commands.Cog):
         sortDescriptions = ['Recently Active (Newest first)', 'Recently Active (Oldest first)', 'Ticket Number (Descending)', 'Ticket Number (Ascending)']
         filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
         if len(filtered) == 0:
-            embed.description = f"There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{self.getData()[ctx.guild.id]['prefix'] if ctx.guild else '.'}ticket`"
+            embed.description = f"There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{await utility.prefix(ctx.guild) if ctx.guild else '.'}ticket`"
             return await message.edit(embed=embed)
         def optionNavigation(r: discord.Reaction, u: discord.User): return r.emoji in reactions and r.message.id == message.id and u.id == ctx.author.id and not u.bot
         def messageCheck(m: discord.Message): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
@@ -232,7 +226,7 @@ class Misc(commands.Cog):
             organize(sortMode)
             pages = list(paginate(filtered, 5))
             sortDescription = sortDescriptions[sortMode]
-            populateEmbed(pages, currentPage, sortDescription)
+            await populateEmbed(pages, currentPage, sortDescription)
             if number and number > len(tickets): 
                 await message.edit(content=f'The ticket number you provided ({number}) is invalid. Switching to browse view.')
                 number, option = None, [None]
@@ -313,7 +307,7 @@ class Misc(commands.Cog):
                     memberIndex = ticket['members'].index(member)
                     tg = g
                     if not tg and ticket['server']: tg = self.bot.get_guild(ticket['server'])
-                    ticketColorTheme = self.bot.get_cog('Cyberlog').colorTheme(tg) if tg else 1
+                    ticketcolor_theme = self.bot.get_cog('Cyberlog').color_theme(tg) if tg else 1
                     def returnPresence(status): return self.emojis['hiddenVoiceChannel'] if status == 4 else self.emojis['online'] if status == 3 else self.emojis['idle'] if status in (1, 2) else self.emojis['dnd']
                     reactions = [self.emojis['arrowLeft'], self.emojis['members'], self.emojis['reply']]
                     reactions.insert(2, self.emojis['bell'] if not ctx.guild or not member['notifications'] else self.emojis['bellMute'])
@@ -324,7 +318,7 @@ class Misc(commands.Cog):
                     if ctx.author.id == 247412852925661185: reactions.append(self.emojis['hiddenVoiceChannel'])
                     embed.title = f'🎟 Disguard Ticket System / Ticket {number}'
                     embed.description = f'''{'TICKET DATA':-^70}\n{self.emojis['member']}Author: {self.bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{self.emojis['members']}Other members involved: {', '.join([self.bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, self.bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {self.emojis["members"]} to add'}\n⛓Server: {self.bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{self.emojis['bell'] if member['notifications'] else self.emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {self.emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^70}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{newline}{self.emojis["arrowBackward"]} and {self.emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
-                    for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(self.getData()[tg.id]['offset'] if tg else -4))):%b %d, %Y • %I:%M %p} {self.getData()[tg.id]['tzname'] if tg else 'EST'}", value=f'> {entry["message"]}', inline=False)
+                    for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}", value=f'> {entry["message"]}', inline=False)
                     if ctx.guild: 
                         if clearReactions: await message.clear_reactions()
                         else: clearReactions = True
@@ -382,7 +376,7 @@ class Misc(commands.Cog):
                                 if str(result[0]) in alphabet:
                                     if not embed.description[embed.description.find(str(result[0])) + 2:].startswith('to manage'):
                                         addMember = memberResults[alphabet.index(str(result[0]))]
-                                        invite = discord.Embed(title='🎟 Invited to ticket', description=f"Hey {addMember.name},\n{ctx.author.name} has invited you to **support ticket {ticket['number']}** with [{', '.join([self.bot.get_user(m['id']).name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}].\n\nThe Disguard support ticket system is a tool for server members to easily get in touch with my developer for issues, help, and questions regarding the bot\n\nTo join the support ticket, type `.tickets {ticket['number']}`", color=yellow[ticketColorTheme])
+                                        invite = discord.Embed(title='🎟 Invited to ticket', description=f"Hey {addMember.name},\n{ctx.author.name} has invited you to **support ticket {ticket['number']}** with [{', '.join([self.bot.get_user(m['id']).name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}].\n\nThe Disguard support ticket system is a tool for server members to easily get in touch with my developer for issues, help, and questions regarding the bot\n\nTo join the support ticket, type `.tickets {ticket['number']}`", color=yellow[ticketcolor_theme])
                                         invite.set_footer(text=f'You are receiving this DM because {ctx.author} invited you to a Disguard support ticket')
                                         try: 
                                             await addMember.send(embed=invite)
@@ -481,9 +475,10 @@ class Misc(commands.Cog):
         status = await ctx.send(str(self.loading) + "Please wait...")
         status = await ctx.send(f'{self.emojis["loading"]}Pausing...')
         args = [a.lower() for a in args]
-        defaultChannel = self.bot.get_channel(self.bot.lightningLogging[ctx.guild.id]['cyberlog']['defaultChannel'])
+        server_data = await utility.get_server(ctx.guild)
+        defaultChannel = self.bot.get_channel(server_data['cyberlog']['defaultChannel'])
         if not defaultChannel:
-            defaultChannel = self.bot.get_channel(self.bot.lightningLogging[ctx.guild.id]['antispam']['log'][1])
+            defaultChannel = self.bot.get_channel(server_data['antispam']['log'][1])
             if not defaultChannel:
                 defaultChannel = ctx.channel
         if 'logging' in args:
@@ -498,7 +493,7 @@ class Misc(commands.Cog):
         duration = datetime.timedelta(seconds = seconds)
         if seconds > 0: 
             rawUntil = datetime.datetime.utcnow() + duration
-            until = rawUntil + self.bot.get_cog('Cyberlog').timeZone(ctx.guild)
+            until = rawUntil + await utility.time_zone(ctx.guild)
         else: 
             rawUntil = datetime.datetime.max
             until = datetime.datetime.max
@@ -506,10 +501,10 @@ class Misc(commands.Cog):
             title=f'The {args[0][0].upper()}{args[0][1:]} module was paused',
             description=textwrap.dedent(f'''
                 👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.name})
-                {utility.clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=self.timeZone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(datetime.datetime.now())}
+                {utility.clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=await utility.time_zone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(datetime.datetime.now())}
                 ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{utility.DisguardIntermediateTimestamp(until)} ({utility.DisguardRelativeTimestamp(until)})"}
                 '''),
-            color=yellow[cyber.colorTheme(ctx.guild)])
+            color=yellow[await utility.color_theme(ctx.guild)])
         embed.set_footer(text='Resuming at: ')
         embed.timestamp = rawUntil
         url = cyber.imageToURL(ctx.author.avatar)
@@ -517,13 +512,13 @@ class Misc(commands.Cog):
         embed.set_author(name=ctx.author.name, icon_url=url)
         await status.edit(content=None, embed=embed)
         await database.PauseMod(ctx.guild, key)
-        self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = False
+        # self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = False
         pauseTimedEvent = {'type': 'pause', 'target': key, 'server': ctx.guild.id}
         if len(args) == 1: return #If the duration is infinite, we don't wait
         await database.AppendTimedEvent(ctx.guild, pauseTimedEvent)
         await asyncio.sleep(duration)
         await database.ResumeMod(ctx.guild, key)
-        self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = True
+        # self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = True
         embed.title = f'The {args[0][0].upper()}{args[0][1:]} module has resumed'
         embed.description = ''
         await status.edit(embed=embed)
@@ -534,11 +529,11 @@ class Misc(commands.Cog):
         args = [a.lower() for a in args]
         if 'antispam' in args:
             await database.ResumeMod(ctx.guild, 'antispam')
-            self.bot.lightningLogging[ctx.guild.id]['antispam']['enabled'] = True
+            # self.bot.lightningLogging[ctx.guild.id]['antispam']['enabled'] = True
             await ctx.send("✅Successfully resumed antispam moderation")
         if 'logging' in args:
             await database.ResumeMod(ctx.guild, 'cyberlog')
-            self.bot.lightningLogging[ctx.guild.id]['cyberlog']['enabled'] = True
+            # self.bot.lightningLogging[ctx.guild.id]['cyberlog']['enabled'] = True
             await ctx.send("✅Successfully resumed logging")
 
     @commands.command()
@@ -549,10 +544,10 @@ class Misc(commands.Cog):
         await ctx.trigger_typing()
         if target is None: target = ctx.author
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        p = cyber.prefix(ctx.guild)
-        embed=discord.Embed(color=yellow[cyber.colorTheme(ctx.guild)])
-        if not cyber.privacyEnabledChecker(target, 'default', 'attributeHistory'):
-            if cyber.privacyVisibilityChecker(target, 'default', 'attributeHistory'):
+        p = await utility.prefix(ctx.guild)
+        embed=discord.Embed(color=yellow[await utility.color_theme(ctx.guild)])
+        if not await cyber.privacyEnabledChecker(target, 'default', 'attributeHistory'):
+            if await cyber.privacyVisibilityChecker(target, 'default', 'attributeHistory'):
                 embed.title = 'Attribute History » Feature Disabled' 
                 embed.description = f'{target.name} has disabled their attribute history' if target.id != ctx.author.id else 'You have disabled your attribute history'
             else:
@@ -564,16 +559,16 @@ class Misc(commands.Cog):
         def navigationCheck(r: discord.Reaction, u: discord.User): return str(r) in navigationList and u.id == ctx.author.id and r.message.id == message.id
         async def viewerAbstraction():
             e = copy.deepcopy(embed)
-            if not cyber.privacyEnabledChecker(target, 'attributeHistory', f'{mod}History'):
+            if not await cyber.privacyEnabledChecker(target, 'attributeHistory', f'{mod}History'):
                 e.description = f'{target.name} has disabled their {mod} history feature' if target != ctx.author else f'You have disabled your {mod} history.'
                 return e, []
-            if not cyber.privacyVisibilityChecker(target, 'attributeHistory', f'{mod}History'):
+            if not await cyber.privacyVisibilityChecker(target, 'attributeHistory', f'{mod}History'):
                 e.description = f'{target.name} has privated their {mod} history feature' if target != ctx.author else f'You have privated your {mod} history. Use this command in DMs to access it.'
                 return e, []
             e.description = ''
             tailMappings = {'avatar': 'imageURL', 'username': 'name', 'customStatus': 'name'}
             backslash = '\\'
-            data = self.bot.lightningUsers[target.id].get(f'{mod}History')
+            data = (await utility.get_user(target)).get(f'{mod}History')
             e.description = f'{len(data) if len(data) < 19 else 19} / {len(data)} entries shown; oldest on top\nWebsite portal coming soon™'
             if mod == 'avatar': e.description += '\nTo set an entry as the embed thumbnail, react with that letter'
             if mod == 'customStatus': e.description += '\nTo set a custom emoji as the embed thumbnail, react with that letter'
@@ -598,12 +593,12 @@ class Misc(commands.Cog):
             e.title = header
             return e, data[-19:]
         while not self.bot.is_closed():
-            embed=discord.Embed(color=yellow[cyber.colorTheme(ctx.guild)])
+            embed=discord.Embed(color=yellow[await utility.color_theme(ctx.guild)])
             if any(attempt in mod.lower() for attempt in ['avatar', 'picture', 'pfp']): mod = 'avatar'
             elif any(attempt in mod.lower() for attempt in ['name']): mod = 'username'
             elif any(attempt in mod.lower() for attempt in ['status', 'emoji', 'presence', 'quote']): mod = 'customStatus'
             elif mod != '': 
-                members = await self.FindMoreMembers(ctx.guild.members, mod)
+                members = await utility.FindMoreMembers(ctx.guild.members, mod)
                 members.sort(key = lambda x: x.get('check')[1], reverse=True)
                 if len(members) == 0: return await ctx.send(embed=discord.Embed(description=f'Unknown history module type or invalid user \"{mod}\"\n\nUsage: `{"." if ctx.guild is None else p}history |<member>| |<module>|`\n\nSee the [help page](https://disguard.netlify.app/history.html) for more information'))
                 target = members[0].get('member')
@@ -667,15 +662,6 @@ class Misc(commands.Cog):
                     elif b.lower() == "d":              #Parsing days
                         duration+=24*60*60*int(number)
         return duration
-
-    def getServer(self, s: discord.Guild):
-        return self.bot.lightningLogging.get(s.id)
-
-    def nameZone(self, s: discord.Guild):
-        return self.getServer(s).get('tzname', 'EST')
-
-    def timeZone(self, s: discord.Guild):
-        return self.getServer(s).get('offset', -4)
 
 def clean(s):
     return re.sub(r'[^\w\s]', '', s.lower())

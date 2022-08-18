@@ -44,7 +44,7 @@ class Info(commands.Cog):
         message = await ctx.send('{}Searching'.format(self.loading))
         mainKeys=[]
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        main=discord.Embed(title='Info results viewer', color=yellow[cyber.colorTheme(ctx.guild)])
+        main=discord.Embed(title='Info results viewer', color=yellow[await utility.color_theme(ctx.guild)])
         embeds=[]
         PartialEmojiConverter = commands.PartialEmojiConverter()
         if len(arg) > 0:
@@ -239,7 +239,7 @@ class Info(commands.Cog):
                 try: webhooks = await ctx.guild.webhooks()
                 except: webhooks = False
             counter += 1
-        loadContent = discord.Embed(title='{}Loading {}', color=yellow[cyber.colorTheme(ctx.guild)])
+        loadContent = discord.Embed(title='{}Loading {}', color=yellow[await utility.colorTheme(ctx.guild)])
         # message = await message.channel.fetch_message(message.id)
         if message.content is not None: await message.edit(content=None)
         past = False
@@ -263,7 +263,7 @@ class Info(commands.Cog):
                     await message.edit(embed=main)
                 else: 
                     await message.delete()
-                    return await self.bot.get_cog('Birthdays').birthday(ctx, str(ctx.author.id))
+                    return await Birthdays.guestBirthdayHandler(self.bot.get_cog('Birthdays'), ctx, ctx.author)
             if len(every) >= 20:
                 for r in ['◀', '▶']: await message.add_reaction(r)
             def check(m):
@@ -304,12 +304,6 @@ class Info(commands.Cog):
                                 break
                     await message.add_reaction('⬅')
                     if 'member details' in message.embeds[0].title.lower(): await message.add_reaction('🍰')
-
-    def colorTheme(self, server: discord.Guild):
-        return self.bot.get_cog('Cyberlog').colorTheme(server)
-
-    def timeZone(self, server: discord.Guild):
-        return self.bot.get_cog('Cyberlog').timeZone(server)
 
     async def ServerInfo(self, s: discord.Guild, logs, bans, hooks, invites):
         '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
@@ -454,9 +448,9 @@ class Info(commands.Cog):
         #tz = timeZone(m.guild)
         #nz = nameZone(m.guild)
         embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=m.color)
-        mA = Cyberlog.lastActive(m) #The dict (timestamp and reason) when a member was last active
+        mA = await Cyberlog.lastActive(m) #The dict (timestamp and reason) when a member was last active
         activeTimestamp = mA.get('timestamp')# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
-        onlineTimestamp = Cyberlog.lastOnline(m)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
+        onlineTimestamp = await Cyberlog.lastOnline(m)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
         onlineDelta = (datetime.datetime.now() - onlineTimestamp) #the timedelta between now and member's last online appearance
         activeDelta = (datetime.datetime.now() - activeTimestamp) #The timedelta between now and when a member was last active
         units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
@@ -472,8 +466,8 @@ class Info(commands.Cog):
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         if len(activeDisplay) == 0: activeDisplay = ['0s']
         activities = {discord.Status.online: self.emojis['online'], discord.Status.idle: self.emojis['idle'], discord.Status.dnd: self.emojis['dnd'], discord.Status.offline: self.emojis['offline']}
-        lastOnlineString = f'''\nLast online {f"{utility.DisguardRelativeTimestamp(onlineTimestamp)}{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > Cyberlog.lastOnline(m) and m.status == discord.Status.offline else ''}" if cyber.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if cyber.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
-        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{utility.DisguardRelativeTimestamp(activeTimestamp)} ({mA['reason']})" if cyber.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if cyber.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}{lastOnlineString if m.status == discord.Status.offline else ""}'''
+        lastOnlineString = f'''\nLast online {f"{utility.DisguardRelativeTimestamp(onlineTimestamp)}{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > await Cyberlog.lastOnline(m) and m.status == discord.Status.offline else ''}" if await cyber.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if await cyber.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
+        embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{utility.DisguardRelativeTimestamp(activeTimestamp)} ({mA['reason']})" if await cyber.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if await cyber.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}{lastOnlineString if m.status == discord.Status.offline else ""}'''
         if len(m.activities) > 0:
             current=[]
             for act in m.activities:

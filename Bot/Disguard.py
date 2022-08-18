@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands, tasks
 import secure
 import database
+import lightningdb
 import Antispam
 import Cyberlog
 import Birthdays
@@ -49,16 +50,8 @@ handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w'
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 
-def prefix(bot, message):
-    try: p = bot.lightningLogging[message.guild.id]['prefix']
-    except (AttributeError, KeyError): return '.'
-    return p if p is not None else '.'
-
-def getData(bot):
-    return bot.lightningLogging
-
-def getUserData(bot):
-    return bot.lightningUsers
+async def prefix(bot: commands.Bot, message: discord.Message):
+    return (await utility.prefix(message.guild)) or '.'
 
 intents = discord.Intents.all()
 
@@ -93,8 +86,9 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
             except Exception as e: 
                 print(f'Cog load error: {e}')
                 traceback.print_exc()
-        emojis = bot.get_cog('Cyberlog').emojis
-        def initializeCheck(m: discord.Message): return m.author.id == bot.user.id and m.channel.id == bot.get_cog('Cyberlog').imageLogChannel.id and m.content == 'Completed'
+        cyber: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
+        emojis = cyber.emojis
+        def initializeCheck(m: discord.Message): return m.author.id == bot.user.id and m.channel.id == cyber.imageLogChannel.id and m.content == 'Completed'
         print('Waiting for database callback...')
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
         presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
@@ -114,7 +108,7 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
     try: os.makedirs(path)
     except FileExistsError: pass
     path += f'/{channel.id}.json'
-    try: saveImages = bot.lightningLogging[server.id]['cyberlog'].get('image') and not channel.is_nsfw()
+    try: saveImages = (await utility.get_server(server))['cyberlog'].get('image') and not channel.is_nsfw()
     except AttributeError: return
     if not os.path.exists(path): 
         with open(path, 'w+') as f: f.write('{}')
@@ -173,8 +167,8 @@ async def index(ctx, t: int = None):
     await status.delete()
 
 @bot.command()
-async def help(ctx):
-    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands 'https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{getData(bot).get(ctx.guild.id).get('prefix') if ctx.guild else '.'}ticket` command", color=yellow[getData(bot)[ctx.guild.id]['colorTheme'] if ctx.guild else 1])
+async def help(ctx: commands.Context):
+    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands 'https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{await utility.prefix(ctx.guild) if ctx.guild else '.'}ticket` command", color=yellow[await utility.color_theme(ctx.guild) if ctx.guild else 1])
     await ctx.send(embed=e)
 
 @bot.command()
@@ -203,13 +197,13 @@ async def dashboard(ctx):
 async def server(ctx: commands.Context):
     '''Pulls up information about the current server, configuration-wise'''
     g = ctx.guild
-    config = getData(bot).get(g.id)
+    config = await utility.get_server(ctx.guild)
     cyberlog = config.get('cyberlog')
     antispam = config.get('antispam')
     baseURL = f'http://disguard.herokuapp.com/manage/{ctx.guild.id}'
     green = emojis['online']
     red = emojis['dnd']
-    embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[bot.get_cog('Cyberlog').colorTheme(ctx.guild)])
+    embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[await utility.color_theme(ctx.guild)])
     embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
     embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else f"{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
     embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else f"{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n'''
@@ -242,10 +236,10 @@ async def evaluate(ctx, *args):
 
 @commands.is_owner()
 @bot.command()
-async def broadcast(ctx):
+async def broadcast(ctx: commands.Context):
     await ctx.send('Please type broadcast message')
     def patchCheck(m): return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
-    try: message = await bot.wait_for('message', check=patchCheck, timeout=300)
+    try: message: discord.Message = await bot.wait_for('message', check=patchCheck, timeout=300)
     except asyncio.TimeoutError: return
     query = await ctx.send('Embed?')
     for r in ('❌', '☑'): await query.add_reaction(r)
@@ -270,10 +264,10 @@ async def broadcast(ctx):
     except asyncio.TimeoutError: return
     destinations = []
     letters = message.content.lower().split(', ')
-    if 'a' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('cyberlog').get('defaultChannel')) for g in servers]
-    if 'b' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('moderatorChannel')[0]) for g in servers]
-    if 'c' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('announcementsChannel')[0]) for g in servers]
-    if 'd' in letters: destinations += [bot.get_channel(getData(bot).get(g.id).get('generalChannel')[0]) for g in servers]
+    if 'a' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('cyberlog').get('defaultChannel')) for g in servers]
+    if 'b' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('moderatorChannel')[0]) for g in servers]
+    if 'c' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('announcementsChannel')[0]) for g in servers]
+    if 'd' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('generalChannel')[0]) for g in servers]
     if 'e' in letters: destinations += [g.owner for g in servers]
     destinations = list(dict.fromkeys(destinations))
     waiting = await ctx.send(content='These are the destinations. Ready to send it?', embed=discord.Embed(description='\n'.join(d.name for d in destinations if d)))
@@ -292,8 +286,8 @@ async def broadcast(ctx):
     await status.edit(content=f'Successfully sent broadcast to {len(successfulList)} / {len(destinations)} destinations')
 
 @bot.command()
-async def data(ctx):
-    def accept(r, u): return str(r) in ['🇦', '🇧'] and u.id == ctx.author.id and r.message.id == requestMessage.id
+async def data(ctx: commands.Context):
+    def accept(r: discord.Reaction, u: discord.User): return str(r) in ['🇦', '🇧'] and u.id == ctx.author.id and r.message.id == requestMessage.id
     requestMessage = await ctx.send(f'Data retrieval command: I will gather all of the data I store about you and DM it to you as an archive file\nTo continue, please choose a file format\n{qlf}A - .zip\n{qlf}B - .7z')
     for reac in ['🇦', '🇧']: await requestMessage.add_reaction(reac)
     result = await bot.wait_for('reaction_add', check=accept)
@@ -361,7 +355,7 @@ async def data(ctx):
     readMe += '\n\nThis readME is also saved just inside of the zipped folder. If you do not have a code editor to open .json files and make them look nice, web browsers can open them (drag into new tab area or use ctrl + o in your web browser), along with Notepad or Notepad++ (or any text editor)\n\nA guide on how to interpret the data fields will be available soon on my website. In the meantime, if you have a question about any of the data, contact my developer through the `ticket` command or ask in my support server (`invite` command)'
     with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
         f.write(readMe)
-    fileName = f'Attachments/Temp/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=getData(bot)[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    fileName = f'Attachments/Temp/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
     await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find(str(loading))] + f'{loading}Zipping data...')
     shutil.register_archive_format('7zip', py7zr.pack_7zarchive, description='7zip archive')
     shutil.make_archive(fileName, '7zip' if ext == '7z' else 'zip', basePath)
@@ -371,7 +365,7 @@ async def data(ctx):
 
 @commands.is_owner()
 @bot.command()
-async def retrieveAttachments(ctx, user: discord.User):
+async def retrieveAttachments(ctx: commands.Context, user: discord.User):
     statusMessage = await ctx.send(f'{loading}Retrieving attachments for {user.name}')
     basePath = f'Attachments/Temp/{ctx.message.id}'
     def convertToFilename(string):
@@ -399,7 +393,7 @@ async def retrieveAttachments(ctx, user: discord.User):
                     except FileNotFoundError: pass
     with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
         f.write(f"📁MessageAttachments --> Master Folder\n|-- 📁[Server Name] --> Folder of channel names in this server\n|-- |-- 📁[Channel Name] --> Folder of message attachments sent by you in this channel in the following format: MessageID_AttachmentName.xxx\n\nWhy are message attachments stored? Solely for the purposes of message deletion logging. Additionally, attachment storing is a per-server basis, and will only be done if the moderators of the server choose to tick 'Log images and attachments that are deleted' on the web dashboard. If a message containing an attachment is sent in a channel, I attempt to save the attachment, and if a message containing an attachment is deleted, I attempt to retrieve the attachment - which is then permanently deleted from my records.")
-    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(datetime.datetime.utcnow() + datetime.timedelta(hours=getData(bot)[ctx.guild.id]["offset"] if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(datetime.datetime.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
     shutil.make_archive(fileName, 'zip', basePath)
     await statusMessage.edit(content=f'{os.path.abspath(fileName)}.zip')
 
@@ -480,7 +474,7 @@ async def test(ctx):
     '''Generating random birthdays for each member on the test bot'''
     for user in bot.users:
         try:
-            if not bot.lightningUsers[user.id].get('birthday'):
+            if not (await utility.get_user(user)).get('birthday'):
                 birthday = datetime.datetime(datetime.date.today().year, 1, 1)
                 month = random.randint(1, 12)
                 daysPerMonth = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
@@ -494,20 +488,8 @@ async def test(ctx):
 @commands.is_owner()
 @bot.command()
 async def test2(ctx):
-    status = await ctx.send('Working')
-    
-    for u in bot.lightningUsers.values():
-        user = bot.get_user(u['user_id'])
-        if user.bot:
-            if u.get('usernameHistory') and len(u['usernameHistory']) > 1000:
-                u['usernameHistory'] = u['usernameHistory'][-1000:]
-                asyncio.create_task(database.SetUsernameHistory(user, u['usernameHistory']))
-            if u.get('avatarHistory') and len(u['avatarHistory']) > 1000:
-                u['avatarHistory'] = u['avatarHistory'][-1000:]
-                asyncio.create_task(database.SetAvatarHistory(user, u['avatarHistory']))
-        
-
-    await status.edit(content='Done')
+    print(await lightningdb.get_users())
+    await ctx.send(await lightningdb.get_users())
 
 @commands.is_owner()
 @bot.command()
@@ -516,7 +498,7 @@ async def daylight(ctx):
     for s in bot.guilds:
         try:
             if await database.AdjustDST(s):
-                defaultLogchannel = bot.get_channel(getData(bot)[s.id]['cyberlog'].get('defaultChannel'))
+                defaultLogchannel = bot.get_channel((await utility.get_server(s))['cyberlog'].get('defaultChannel'))
                 if defaultLogchannel:
                     e = discord.Embed(title='🕰 Server Time Zone update', color=yellow[1])
                     e.description = 'Your server\'s `time zone offset from UTC` setting via Disguard has automatically been incremented one hour, as it appears your time zone is in the USA & Daylight Savings Time has started (Spring Forward).\n\nTo revert this, you may enter your server\'s general settings page on my web dashboard (use the `config` command to retrieve a quick link).'

@@ -50,16 +50,17 @@ class Birthdays(commands.Cog):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         for userID in birthdayDict[datetime.date.today().strftime('%m%d')]:
             user = self.bot.get_user(userID)
-            try: bday: datetime.datetime = self.bot.lightningUsers[userID].get('birthday')
+            user_data = await utility.get_user(user)
+            try: bday: datetime.datetime = user_data.get('birthday')
             except KeyError: continue #User not in cache
             # If there's no birthday set for this user or they've disabled the birthday module, return
-            if not bday or not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
+            if not bday or not await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
             # If this user has an age set on their profile, increment it
-            if cyber.privacyEnabledChecker(user, 'birthdayModule', 'age'):
-                age = self.bot.lightningUsers[userID].get('age', 0) + 1
+            if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'age'):
+                age = user_data.get('age', 0) + 1
                 if age > 1: asyncio.create_task(database.SetAge(user, age))
             # Construct their next birthday to set in the database
-            messages = self.bot.lightningUsers[userID].get('birthdayMessages', []) if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
+            messages = user_data.get('birthdayMessages', []) if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
             filteredMessages = [m for m in messages if user.dm_channel.id in m['servers']]
             # Construct the happy birthday embed
             embed = discord.Embed(title=f'🍰 Happy {f"{age - 1}{utility.suffix(age - 1)}" if age > 1 else ""}Birthday, {user.name}! 🍰', color=yellow[1])
@@ -81,24 +82,26 @@ class Birthdays(commands.Cog):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         for userID in birthdayDict.get(datetime.date.today().strftime('%m%d'), []):
             user = self.bot.get_user(userID)
-            if not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
-            try: bday: datetime.datetime = self.bot.lightningUsers[userID].get('birthday')
+            user_data = await utility.get_user(user)
+            if not await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
+            try: bday: datetime.datetime = user_data.get('birthday')
             except KeyError: continue #User not in cache
             # If there's no birthday set for this user or they've disabled the birthday module, return
-            if not bday or not cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
+            if not bday or not await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayDay'): continue
             # TODO: Make mutual servers member to member generator to improve speed
             servers = mutualServersMemberToMember(self, user, self.bot.user)
             for server in servers:
-                timezone = cyber.timeZone(server)
+                timezone = await utility.time_zone(server)
                 started = datetime.datetime.utcnow() + datetime.timedelta(hours=timezone)
-                channel = self.bot.get_channel(self.bot.lightningLogging[server.id].get('birthday')) #Doing this instead of try/except since birthday channels usually default to 0 if not set
-                if started.strftime('%H:%M') == self.bot.lightningLogging[server.id].get('birthdate', datetime.datetime.min).strftime('%H:%M') or not channel: continue
+                server_data = await utility.get_server(server)
+                channel = self.bot.get_channel(server_data.get('birthday')) #Doing this instead of try/except since birthday channels usually default to 0 if not set
+                if started.strftime('%H:%M') == server_data.get('birthdate', datetime.datetime.min).strftime('%H:%M') or not channel: continue
                 # print(f'Announcing birthday for {member.name} to {server.name}')
-                messages = [a for a in self.bot.lightningUsers[user.id].get('birthdayMessages', []) if server.id in a['servers']] if cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
+                messages = [a for a in user_data.get('birthdayMessages', []) if server.id in a['servers']] if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
                 messageString = f'Members from this server also wrote {len(messages)} birthday messages to be delivered here on {user.name}\'s birthday:' if messages else ''
                 if userID == 247412852925661185: toSend = f'🍰🎊🍨🎈 Greetings {server.name}! It\'s my developer {user.mention}\'s birthday!! Let\'s wish him a very special day! 🍰🎊🍨🎈'
                 else: 
-                    if cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰"
+                    if await cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰"
                     else: toSend = f"🍰 Greetings {server.name}! We have an anonymous member with a birthday today! Let\'s all wish them a very special day! 🍰"
                 if messages:
                     toSend += f'\n{messageString}'
@@ -113,7 +116,7 @@ class Birthdays(commands.Cog):
     @tasks.loop(hours=24)
     async def deleteBirthdayMessages(self):
         for user in self.bot.users:
-            try: bday: datetime.datetime = self.bot.lightningUsers[user.id].get('birthday')
+            try: bday: datetime.datetime = (await utility.get_user(user)).get('birthday')
             except KeyError: continue #if user not found in the cache
             if bday:
                 if bday.strftime('%m%d%y') == datetime.datetime.now().strftime('%m%d%y'): await database.ResetBirthdayMessages(user)
@@ -143,7 +146,7 @@ class Birthdays(commands.Cog):
         for k, v in globalList.items():
             birthdayList[k] = v
         for user in self.bot.users:
-            try: bday: datetime.datetime = self.bot.lightningUsers[user.id].get('birthday')
+            try: bday: datetime.datetime = (await utility.get_user(user)).get('birthday')
             except KeyError: bday: datetime.datetime = await database.GetMemberBirthday(user)
             if not bday: continue
             if user.id not in birthdayList[bday.strftime('%m%d')]: birthdayList[bday.strftime('%m%d')].append(user.id)
@@ -159,23 +162,24 @@ class Birthdays(commands.Cog):
         if ctx.valid:
             if any([message.content.startswith(w) for w in [ctx.prefix + 'bday', ctx.prefix + 'birthday']]): return #Don't auto detect birthday information if the user is using a command
         try: 
-            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
-            if not self.bot.get_cog('Cyberlog').privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #This person disabled the birthday module
+            if (await utility.get_server(message.guild)).get('birthdayMode') in [None, 0]: return #Birthday auto detect is disabled
+            if not await self.bot.get_cog('Cyberlog').privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #This person disabled the birthday module
         except AttributeError: pass
         asyncio.create_task(self.birthdayMessagehandler(message))
         asyncio.create_task(self.ageMessageHandler(message))
 
     async def birthdayMessagehandler(self, message: discord.Message):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        if not cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #User disabled the birthday features
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.bot.lightningLogging.get(message.guild.id).get('offset', -4))
+        server_data = await utility.get_server(message.guild)
+        if not await cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #User disabled the birthday features
+        adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await utility.time_zone(message.guild))
         birthday = calculateDate(message, adjusted)
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
         #First we make sure the user is talking about themself
         target = await verifyBirthday(message, adjusted, birthday)
         #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
         if birthday and target:
-            if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1:
+            if server_data.get('birthdayMode') == 1:
                 # Make user click button to proceed if the server setting is set like that
                 def cakeAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🍰' and r.message.id == message.id
                 await message.add_reaction('🍰')
@@ -189,11 +193,11 @@ class Birthdays(commands.Cog):
     
     async def ageMessageHandler(self, message: discord.Message):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        if not cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'age'): return #User disabled the age features
+        if not await cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'age'): return #User disabled the age features
         ages = calculateAges(message)
         ages = [a for a in ages if await verifyAge(message, a)]
         if not ages: return #No ages detected in message
-        if self.bot.lightningLogging.get(message.guild.id).get('birthdayMode') == 1: #Make user add candle reaction
+        if (await utility.get_server(message.guild)).get('birthdayMode') == 1: #Make user add candle reaction
             def candleAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🕯' and r.message.id == message.id
             await message.add_reaction('🕯')
             await self.bot.wait_for('reaction_add', check=candleAutoVerify)
@@ -219,7 +223,7 @@ class Birthdays(commands.Cog):
     @commands.command(aliases=['bday'])
     async def birthday(self, ctx: commands.Context, *args):
         await ctx.trigger_typing()
-        theme = self.colorTheme(ctx.guild) if ctx.guild else 1
+        theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         if len(args) == 0:
             homeView = BirthdayHomepageView(self, ctx, None)
             embed = await homeView.createEmbed()
@@ -239,7 +243,7 @@ class Birthdays(commands.Cog):
             memberList = [m.get('member') for m in memberList if m.get('check')[1] >= 33] #Only take member results with at least 33% relevance to avoid ID searches when people only want to get their age
             memberList = [m for m in memberList if mutualServerMemberToMember(self, ctx.author, m)]
             actionList += memberList
-            date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=self.bot.lightningLogging[ctx.guild.id].get('offset', -4)))
+            date = calculateDate(ctx.message, datetime.datetime.utcnow() + datetime.timedelta(days=await utility.time_zone(ctx.guild)))
             if date:
                 view = BirthdayView(self, ctx.author, ctx.message, message, None, date)
                 embed = await view.createEmbed()
@@ -285,10 +289,6 @@ class Birthdays(commands.Cog):
     @commands.command()
     async def wishlist(self, ctx: commands.Context):
         return await wishlistHandler(self, ctx, None, None)
-    
-    def colorTheme(self, s: discord.Guild):
-        return self.bot.lightningLogging[s.id]['colorTheme']
-                        
         
 async def guestBirthdayHandler(self: Birthdays, ctx: commands.Context, target: discord.User):
     view = GuestBirthdayView(self, ctx, target)
@@ -690,20 +690,20 @@ class BirthdayHomepageView(discord.ui.View):
         self.cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
 
     async def createEmbed(self):
-        theme = self.birthdays.colorTheme(self.ctx.guild) if self.ctx.guild else 1
+        theme = await utility.color_theme(self.ctx.guild) if self.ctx.guild else 1
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
-        user = self.birthdays.bot.lightningUsers[self.ctx.author.id]
+        user = await utility.get_user(self.ctx.author)
         bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
         embed = discord.Embed(title = '🍰 Birthday Overview', color=yellow[theme])
         embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
-        if not cyber.privacyEnabledChecker(self.ctx.author, 'default', 'birthdayModule'):
+        if not await cyber.privacyEnabledChecker(self.ctx.author, 'default', 'birthdayModule'):
             embed.description = 'Birthday module disabled due to your privacy settings'
             self.add_item(discord.ui.Button(label='Edit privacy settings', url='http://disguard.herokuapp.com/manage/profile'))
             if not self.message: return await self.ctx.send(embed=embed, view=self)
             else: return await self.message.edit(embed=embed, view=self)
-        embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
-        embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'age') else age)
-        if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
+        embed.add_field(name='Your Birthday',value='Not configured' if not bday else 'Hidden' if self.ctx.guild and not await cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
+        embed.add_field(name='Your Age', value='Not configured' if not age else 'Hidden' if self.ctx.guild and not await cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'age') else age)
+        if len(wishlist) > 0: embed.add_field(name='Your Wishlist', value='Hidden' if self.ctx.guild and not await cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist') else f'{len(wishlist)} items')
         embed.description = f'{self.birthdays.loading} Processing global birthday information'
         return embed
 
@@ -712,7 +712,7 @@ class BirthdayHomepageView(discord.ui.View):
         currentServer = []
         disguardSuggest = []
         weekBirthday = []
-        user = self.birthdays.bot.lightningUsers[self.ctx.author.id]
+        user = await utility.get_user(self.ctx.author)
         bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
         memberIDs = set([m.id for m in self.ctx.guild.members]) if self.ctx.guild else () #June 2021 (v0.2.27): Changed from list to set to improve performance // Holds list of member IDs for the current server
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
@@ -720,13 +720,13 @@ class BirthdayHomepageView(discord.ui.View):
             try:
                 #Skip members whose privacy settings show they don't want to partake in public features of the birthday module
                 if not all((
-                    cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
-                    cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
-                    cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
-                    cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
+                    await cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
+                    await cyber.privacyEnabledChecker(u, 'default', 'birthdayModule'),
+                    await cyber.privacyEnabledChecker(u, 'birthdayModule', 'birthdayDay'),
+                    await cyber.privacyVisibilityChecker(u, 'birthdayModule', 'birthdayDay')
                     )):
                     continue
-                userBirthday: datetime.datetime = self.birthdays.bot.lightningUsers[u.id].get('birthday')
+                userBirthday: datetime.datetime = (await utility.get_user(u)).get('birthday')
                 if not userBirthday: continue
                 if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
                 elif mutualServerMemberToMember(self.birthdays, self.ctx.author, u):
@@ -764,7 +764,7 @@ class BirthdayHomepageView(discord.ui.View):
             super().__init__(label=f'{verb} birthday', emoji='📆')
         async def callback(self, interaction: discord.Interaction):
             view: BirthdayHomepageView = self.view
-            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'birthdayDay'):
+            if await view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'birthdayDay'):
                 self.disabled = True
                 await interaction.response.edit_message(view=view)
                 await birthdayHandler(view.birthdays, view.ctx, view.message, view)
@@ -776,7 +776,7 @@ class BirthdayHomepageView(discord.ui.View):
             super().__init__(label=f'{verb} age', emoji='🕯')
         async def callback(self, interaction: discord.Interaction):
             view: BirthdayHomepageView = self.view
-            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'age'):
+            if await view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'age'):
                 self.disabled = True
                 await interaction.response.edit_message(view=view)
                 await ageHandler(view.birthdays, view.ctx, view.message, view)
@@ -788,7 +788,7 @@ class BirthdayHomepageView(discord.ui.View):
             super().__init__(label=f'{verb} wishlist', emoji='📝')
         async def callback(self, interaction: discord.Interaction):
             view: BirthdayHomepageView = self.view
-            if view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'wishlist'):
+            if await view.cyber.privacyEnabledChecker(view.ctx.author, 'birthdayModule', 'wishlist'):
                 self.disabled = True
                 await interaction.response.edit_message(view=view)
                 await wishlistHandler(view.birthdays, view.ctx, view.message, view)
@@ -807,16 +807,16 @@ class GuestBirthdayView(discord.ui.View):
 
     async def createEmbed(self):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
-        user = self.birthdays.bot.lightningUsers[self.target.id]
+        user = await utility.get_user(self.target)
         bday = user.get('birthday')
         age = user.get('age')
         wishlist = user.get('wishList', []) #TODO: implement privacy settings
-        wishlistHidden = not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'wishlist')
+        wishlistHidden = not await cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'wishlist')
         description = f'**{"WISH LIST":–^70}**\n{newline.join([f"• {wish}" for wish in wishlist]) if wishlist and not wishlistHidden else "Set to private by user" if wishlistHidden else ""}'
-        embed = discord.Embed(title = f'🍰 {self.target.name}\'s Birthday Page', description=description, color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+        embed = discord.Embed(title = f'🍰 {self.target.name}\'s Birthday Page', description=description, color=yellow[await utility.color_theme(self.ctx.guild)])
         embed.set_author(name=self.target.name, icon_url=self.target.avatar.url)
-        embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
-        embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else age)
+        embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not await cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
+        embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not await cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else age)
         return embed
 
     class OverviewButton(discord.ui.Button):
@@ -865,11 +865,11 @@ class AgeView(discord.ui.View):
 
     async def createEmbed(self):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
-        self.ageHidden = self.originalMessage.guild and not cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'age')
-        self.currentAge = self.birthdays.bot.lightningUsers[self.author.id].get('age')
+        self.ageHidden = self.originalMessage.guild and not await cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'age')
+        self.currentAge = (await utility.get_user(self.author)).get('age')
         ageModuleDescription = 'Entering your age is a fun but optional feature of the birthday module and has no relation to Discord Inc. It will only be used to personalize the message DMd to you on your birthday. If you set your age, others can view it on your birthday profile by default. If you wish to set your age but don\'t want others to view it, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
         instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if self.ageHidden else 'Type your desired age' if not self.newAge else f'{self.author.name} | Update your age to **{self.newAge}**?' if 13 <= self.newAge <= 105 else f'⚠ | **{self.newAge}** falls outside the age range of 13 to 105, inclusive. Please type a new age.'
-        embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not self.currentAge else ""}{instructions}\n\nCurrent value: {"🔒 Hidden" if self.ageHidden else self.currentAge}', color=yellow[self.birthdays.colorTheme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
+        embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not self.currentAge else ""}{instructions}\n\nCurrent value: {"🔒 Hidden" if self.ageHidden else self.currentAge}', color=yellow[await utility.color_theme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
         embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
         self.embed = embed
         return embed
@@ -943,7 +943,7 @@ class AgeView(discord.ui.View):
         await database.SetAge(self.author, self.newAge)
         if not self.usedPrivateInterface:
             self.embed.description = f'✔ | Age successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newAge}'
-            if not self.birthdays.bot.lightningUsers[self.author.id].get('birthday'):
+            if not (await utility.get_user(self.author)).get('birthday'):
                 self.embed.description += '\n\nYou may add your birthday from the menu on the original embed if desired'
             await self.message.edit(embed=self.embed, view=SuccessAndDeleteView(), delete_after=30)
         else: await self.message.delete()
@@ -977,12 +977,12 @@ class BirthdayView(discord.ui.View):
 
     async def createEmbed(self):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
-        self.bdayHidden = self.originalMessage.guild and not cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'birthdayDay')
-        self.currentBday = self.birthdays.bot.lightningUsers[self.author.id].get('birthday')
+        self.bdayHidden = self.originalMessage.guild and not await cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'birthdayDay')
+        self.currentBday = (await utility.get_user(self.author)).get('birthday')
         birthdayModuleDescription = 'The Disguard birthday module provides fun, voluntary features for those wanting to use it. Setting your birthday will allow Disguard to make an announcement on your birthday in servers with this feature enabled, and Disguard will DM you a message on your birthday. By default, others can view your birthday on your profile. If you wish to change this, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
         instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if self.bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Disguard does not process your birth year, so just enter a month and a day.' if not self.newBday else f'{self.author.name} | Update your birthday to **{self.newBday}**?'
         acceptableFormats = 'Inputs are not case sensitive. Examples of acceptable birthday formats:\nFebruary 28\nFeb 28\nFeb 28th\n2/28\n2-28\n02 28\nin two weeks\nin 5 days\nnext monday\ntomorrow'
-        embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not self.currentBday else ""}{instructions}{f"{newline}{newline}{acceptableFormats}" if not self.newBday else ""}\n\nCurrent value:  {"🔒 Hidden" if self.bdayHidden else self.currentBday.strftime("%B %d")}', color=yellow[self.birthdays.colorTheme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
+        embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not self.currentBday else ""}{instructions}{f"{newline}{newline}{acceptableFormats}" if not self.newBday else ""}\n\nCurrent value:  {"🔒 Hidden" if self.bdayHidden else self.currentBday.strftime("%B %d")}', color=yellow[await utility.color_theme(self.originalMessage.guild)], timestamp=datetime.datetime.utcnow())
         embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
         self.embed = embed
         return embed
@@ -1031,7 +1031,7 @@ class BirthdayView(discord.ui.View):
                 for f in pending: f.cancel()
                 if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'): break #If the user cancels or finishes setup, close the loop
                 if not self.usedPrivateInterface:
-                    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=self.birthdays.bot.lightningLogging.get(self.message.guild.id).get('offset', -5))
+                    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=(await utility.get_server(self.message.guild)).get('offset', -5))
                     self.newBday = calculateDate(result, adjusted) #If private interface was used, submitValue will store the value
                 try:
                     self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
@@ -1055,11 +1055,11 @@ class BirthdayView(discord.ui.View):
         await database.SetBirthday(self.author, self.newBday)
         if not self.usedPrivateInterface:
             self.embed.description = f'✔ | Birthday successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}'
-            bdayAnnounceChannel = self.birthdays.bot.lightningLogging[self.message.guild.id].get('birthday', 0)
+            bdayAnnounceChannel = (await utility.get_server(self.message.guild)).get('birthday', 0)
             if bdayAnnounceChannel > 0: bdayAnnounceText = f'Since birthday announcements are enabled for this server, your birthday will be announced to {self.birthdays.bot.get_channel(bdayAnnounceChannel).mention}.'
             else: bdayAnnounceText = f'Birthday announcements are not enabled for this server. Moderators may enable this feature [here](http://disguard.herokuapp.com/manage/{self.message.guild.id}/server).'
             self.embed.description += f'\n\n{bdayAnnounceText}'
-            if not self.birthdays.bot.lightningUsers[self.author.id].get('age'):
+            if not (await utility.get_user(self.author)).get('age'):
                 self.embed.description += '\n\nYou may add your age from the menu on the original embed if desired'
             await self.message.edit(embed=self.embed, view=SuccessAndDeleteView(), delete_after=30)
         else: await self.message.delete()
@@ -1088,10 +1088,10 @@ class WishlistView(discord.ui.View):
 
     async def createEmbed(self):
         cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
-        self.wishlistHidden = self.ctx.guild and not cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist')
-        self.wishlist = self.birthdays.bot.lightningUsers[self.ctx.author.id].get('wishlist', []) if not self.wishlistHidden and not self.cameFromSaved else self.cameFromSaved if self.cameFromSaved else []
+        self.wishlistHidden = self.ctx.guild and not await cyber.privacyVisibilityChecker(self.ctx.author, 'birthdayModule', 'wishlist')
+        self.wishlist = (await utility.get_user(self.ctx.author)).get('wishlist', []) if not self.wishlistHidden and not self.cameFromSaved else self.cameFromSaved if self.cameFromSaved else []
         wishlistDisplay = ['You have set your wishlist to private'] if self.wishlistHidden else self.wishlist
-        embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlistDisplay]) if wishlistDisplay else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+        embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in wishlistDisplay]) if wishlistDisplay else "Empty"}', color=yellow[await utility.color_theme(self.ctx.guild)])
         embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
         if self.cameFromSaved: embed.set_footer(text='Wishlist changes successfully saved')
         return embed
@@ -1182,8 +1182,8 @@ class WishlistEditView(discord.ui.View):
             embed = await newView.createEmbed()
             await view.message.edit(embed=embed, view=newView)
 
-    def regenEmbed(self):
-        return discord.Embed('📝 Edit Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[self.birthdays.colorTheme(self.ctx.guild)])
+    async def regenEmbed(self):
+        return discord.Embed('📝 Edit Wishlist', description=f'**{"YOUR WISH LIST":–^70}**\n{newline.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[await utility.color_theme(self.ctx.guild)])
 
     async def editWishlist(self):
         def addCheck(m: discord.Message): return m.author == self.ctx.author and m.channel == self.ctx.channel
@@ -1436,7 +1436,7 @@ class UpcomingBirthdaysView(discord.ui.View):
             select = view.memberDropdown
             def messageCheck(m: discord.Message): return m.author == view.author and m.channel == view.message.channel
             def selectCheck(i: discord.Interaction): return i.user == view.author and i.data['custom_id'] == str(view.message.id)
-            def getBirthday(u: discord.User): return view.bot.lightningUsers[u.id].get('birthday')
+            async def getBirthday(u: discord.User): return (await utility.get_user(u)).get('birthday')
             await interaction.response.edit_message(content=None, embed=view.embed, view=view)
             while not view.bot.is_closed():
                 done, pending = await asyncio.wait([view.bot.wait_for('message', check=messageCheck, timeout=300), view.bot.wait_for('interaction', check=selectCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
@@ -1452,12 +1452,12 @@ class UpcomingBirthdaysView(discord.ui.View):
                     await result.delete()
                 except (discord.Forbidden, discord.HTTPException): pass
                 users = [r['member'] for r in results if all((
-                    cyber.privacyEnabledChecker(r['member'], 'default', 'birthdayModule'),
-                    cyber.privacyEnabledChecker(r['member'], 'default', 'birthdayModule'),
-                    cyber.privacyEnabledChecker(r['member'], 'birthdayModule', 'birthdayDay'),
-                    cyber.privacyVisibilityChecker(r['member'], 'birthdayModule', 'birthdayDay')
+                    await cyber.privacyEnabledChecker(r['member'], 'default', 'birthdayModule'),
+                    await cyber.privacyEnabledChecker(r['member'], 'default', 'birthdayModule'),
+                    await cyber.privacyEnabledChecker(r['member'], 'birthdayModule', 'birthdayDay'),
+                    await cyber.privacyVisibilityChecker(r['member'], 'birthdayModule', 'birthdayDay')
                 ))] #filter out members who have designated not wanting to participate in the birthday module
-                listToPass = [{'data': u, 'bday': getBirthday(u)} for u in users]
+                listToPass = [{'data': u, 'bday': await getBirthday(u)} for u in users]
                 select.updatePopulation(listToPass, str(view.message.id))
                 if len(view.children) == 1: view.add_item(select)
                 await view.message.edit(view=view)
@@ -1531,12 +1531,13 @@ class ComposeMessageView(discord.ui.View):
             intro = 'Until [input forms](https://cdn.discordapp.com/attachments/697138785317814292/940761395883024424/c896cb74-1206-4632-bcb4-99eccf1c0356.png) are fully implmented, this process will take place in DMs. Make sure your DMs are open, then press the button below this embed.'
             self.add_item(self.buttonDM)
         else:
+            user_data = await utility.get_user(self.target)
             intro = f'Type your message for {self.target.name}. Note that you cannot send server invites or hyperlinks in birthday messages.'
-            existingMessages = self.birthdays.bot.lightningUsers[self.target.id].get('birthdayMessages')
+            existingMessages = user_data.get('birthdayMessages')
             filtered = [m for m in existingMessages if self.target.id == m['author']]
             if filtered:
                 intro += f'\n\nℹ | You already have {len(filtered)} messages queued for {self.target.name}. If you wish to add another, you may continue by sending your desired message.'
-            if not self.birthdays.bot.lightningUsers[self.target.id].get('birthday'): intro += f'\n\nℹ | {self.target.name} hasn\'t set their birthday yet. You may still write a message, but it will only be delivered if they set their birthday.'
+            if not user_data.get('birthday'): intro += f'\n\nℹ | {self.target.name} hasn\'t set their birthday yet. You may still write a message, but it will only be delivered if they set their birthday.'
         self.embed = discord.Embed(title=f'Compose birthday message for {self.target.name}', description=intro)
         return self.embed
 
@@ -1570,7 +1571,7 @@ class ComposeMessageView(discord.ui.View):
             except: dmChannel = None
         dropdown.add_option(label=f'{self.target.name}\'s DMs', value=self.target.dm_channel.id, description='Recommended' if dmChannel else 'Unable to DM')
         for server in mutualServers:
-            birthdayChannel = server.get_channel(self.birthdays.bot.lightningLogging[server.id].get('birthday'))
+            birthdayChannel = server.get_channel((await utility.get_server(server)).get('birthday'))
             dropdown.add_option(label=server.name, value=server.id, description=f'#{birthdayChannel.name}' if birthdayChannel else 'No announcement channel configured')
         dropdown.max_values = len(mutualServers) + 1
         next = discord.ui.Button(label='Next', style=discord.ButtonStyle.green, custom_id='next')
@@ -1588,7 +1589,7 @@ class ComposeMessageView(discord.ui.View):
         
     async def confirmationPrompt(self, dropdown: discord.ui.Select):
         self.stage = 2
-        birthday = self.birthdays.bot.lightningUsers[self.target.id].get('birthday')
+        birthday = (await utility.get_user(self.target)).get('birthday')
         destinations = [f'• {self.birthdays.bot.get_channel(int(dropdown.values[0]))}'] + [f'• {self.birthdays.bot.get_guild(int(v))}' for v in (dropdown.values[1:] if len(dropdown.values) > 1 else [])]
         serverDestinations = [self.birthdays.bot.get_guild(int(v)) for v in dropdown.values[1:]]
         self.embed.description = f'Your message to {self.target.name} says `{self.msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{newline.join(destinations)}\n\nBy composing this message, you affirm the message conforms with Discord\'s [community guidelines](https://discord.com/guidelines).'

@@ -31,8 +31,9 @@ class Reddit(commands.Cog):
     async def redditFeedHandler(self, server: discord.Guild):
         '''Handles starting/stopping of reddit feeds for servers, along with ensuring there are no duplicates, etc.'''
         runningFeeds = self.redditThreads.get(server.id, [])
-        proposedFeeds = [entry['subreddit'] for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) if self.bot.get_channel(entry['channel'])]
-        feedsToCreate = [entry for entry in self.bot.lightningLogging[server.id].get('redditFeeds', []) if entry['subreddit'] not in runningFeeds and self.bot.get_channel(entry['channel']) and not (await self.reddit.subreddit(entry['subreddit'], fetch=True)).over18]
+        server_data = await utility.get_server(server)
+        proposedFeeds = [entry['subreddit'] for entry in server_data.get('redditFeeds', []) if self.bot.get_channel(entry['channel'])]
+        feedsToCreate = [entry for entry in server_data.get('redditFeeds', []) if entry['subreddit'] not in runningFeeds and self.bot.get_channel(entry['channel']) and not (await self.reddit.subreddit(entry['subreddit'], fetch=True)).over18]
         feedsToDelete = [entry for entry in runningFeeds if entry not in proposedFeeds]
         for feed in feedsToCreate: asyncio.create_task(self.createRedditStream(server, feed))
         for feed in feedsToDelete: self.redditThreads[server.id].remove(feed)
@@ -68,7 +69,7 @@ class Reddit(commands.Cog):
 
     async def redditAutocomplete(self, message: discord.Message):
         if 'r/' not in message.content: return
-        try: config = self.bot.lightningLogging[message.guild.id]['redditComplete']
+        try: config = (await utility.get_server(message.guild))['redditComplete']
         except KeyError: return
         if config == 0: return #Feature is disabled
         if message.author.id == self.bot.user.id: return
@@ -82,7 +83,7 @@ class Reddit(commands.Cog):
                 except: pass
 
     async def redditEnhance(self, message: discord.Message):
-        try: config = self.bot.lightningLogging[message.guild.id]['redditEnhance']
+        try: config = (await utility.get_server(message.guild))['redditEnhance']
         except KeyError: return
         if ('https://www.reddit.com/r/' not in message.content and 'https://old.reddit.com/r/' not in message.content) or config == (False, False): return
         if message.author.id == self.bot.user.id: return
@@ -162,7 +163,7 @@ class Reddit(commands.Cog):
             if submissionType == 'image': 
                 if redditFeed and media != 1: embed.set_image(url=submission.url)
                 elif not redditFeed: embed.set_thumbnail(url=submission.url)
-        if timestamp and not flagForNSFW: embed.set_footer(text=f'{"Posted " if not redditFeed else ""}{(datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=submission.created_utc) + datetime.timedelta(hours=self.bot.get_cog("Cyberlog").timeZone(g))):%b %d, %Y • %I:%M %p} {self.bot.get_cog("Cyberlog").nameZone(g)}')
+        if timestamp and not flagForNSFW: embed.set_footer(text=f'{"Posted " if not redditFeed else ""}{(datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=submission.created_utc) + datetime.timedelta(hours=await utility.time_zone(g))):%b %d, %Y • %I:%M %p} {await utility.name_zone(g)}')
         if channel and flagForNSFW:
             embed.title = f"{self.emojis['alert']} | Title hidden: NSFW submission & this is not a NSFW channel"
             embed.description = f"r/{subreddit.display_name}\n\nTo comply with Discord guidelines, I cannot share content from NSFW reddit submissions to SFW Discord channels"

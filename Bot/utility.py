@@ -4,6 +4,7 @@ from discord.ext import commands
 import typing
 import string
 import datetime
+import lightningdb
 import os
 
 rv9k = 247412852925661185
@@ -358,3 +359,27 @@ async def FindMoreEmojis(g: discord.Guild, arg):
 def compareMatch(arg, search):
     '''Return number between 0 and 100, based on how close the search term is to the result in length'''
     return round(len(arg) / len(search) * 100)
+
+async def name_zone(s: discord.Guild):
+    return (await get_server(s)).get('tzname', 'EST')
+
+async def time_zone(s: discord.Guild):
+    return (await get_server(s)).get('offset', -4)
+
+async def prefix(s: discord.Guild):
+    return (await get_server(s)).get('prefix', '.')
+
+async def color_theme(s):
+    return (await get_server(s)).get('colorTheme', 0)
+
+async def get_server(s: discord.Guild):
+    return await lightningdb.get_server(s.id)
+
+async def get_user(u: discord.User):
+    return await lightningdb.get_user(u.id)
+
+async def getServerMember(m: discord.User):
+    '''Gets the member data given a member object'''
+    for member in get_server(m.guild.id)['members']:
+        if member['id'] == m.id: return member
+    return None

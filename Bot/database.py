@@ -905,7 +905,7 @@ async def VerifyRole(r: discord.Role, new=False):
 async def CalculateGeneralChannel(g: discord.Guild, bot, update=False):
     '''Determines the most active channel based on indexed message count
     r: Whether to return the channel. If False, just set this to the database'''
-    try: currentGeneralChannel = bot.lightningLogging[g.id].get('generalChannel', ())
+    try: currentGeneralChannel = (await utility.get_server(g)).get('generalChannel', ())
     except KeyError: currentGeneralChannel = await GetServer(g).get('generalChannel', ())
     if not currentGeneralChannel or type(currentGeneralChannel) != list or False in currentGeneralChannel:
         channels = {}
@@ -921,7 +921,7 @@ async def CalculateGeneralChannel(g: discord.Guild, bot, update=False):
 async def CalculateAnnouncementsChannel(g: discord.Guild, bot, update=False):
     '''Determines the announcement channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
-    try: currentAnnouncementsChannel = bot.lightningLogging[g.id].get('announcementsChannel', ())
+    try: currentAnnouncementsChannel = (await utility.get_server(g)).get('announcementsChannel', ())
     except KeyError: currentAnnouncementsChannel = await GetServer(g).get('announcementsChannel', ())
     if not currentAnnouncementsChannel or type(currentAnnouncementsChannel) != list or False in currentAnnouncementsChannel:
         try: s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcement'))[0]
@@ -933,7 +933,7 @@ async def CalculateAnnouncementsChannel(g: discord.Guild, bot, update=False):
 async def CalculateModeratorChannel(g: discord.Guild, bot, update=False, *, logChannelID=0):
     '''Determines the moderator channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
-    try: currentModeratorChannel = bot.lightningLogging[g.id].get('moderatorChannel', ())
+    try: currentModeratorChannel = (await utility.get_server(g)).get('moderatorChannel', ())
     except KeyError: currentModeratorChannel = await GetServer(g).get('moderatorChannel', ())
     if not currentModeratorChannel or type(currentModeratorChannel) != list or False in currentModeratorChannel:
         relevanceKeys = {}
