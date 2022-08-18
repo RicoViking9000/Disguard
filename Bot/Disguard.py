@@ -321,19 +321,16 @@ async def data(ctx: commands.Context):
         with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
             f.write(dataToWrite)
         for channel in server.text_channels:
-            try: 
-                with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
-            except FileNotFoundError: continue
+            indexData = await lightningdb.get_messages_by_author(member.id, [channel.id])
             memberIndexData = {}
             for k, v in indexData.items():
-                if v['author0'] == member.id: 
-                    try: os.makedirs(f'{serverPath}/MessageIndexes')
-                    except FileExistsError: pass
-                    memberIndexData.update({k: v})
-                    try:
-                        aPath = f'Attachments/{server.id}/{channel.id}/{k}'
-                        attachmentCount += len(os.listdir(aPath))
-                    except FileNotFoundError: pass
+                try: os.makedirs(f'{serverPath}/MessageIndexes')
+                except FileExistsError: pass
+                memberIndexData.update({k: v})
+                try:
+                    aPath = f'Attachments/{server.id}/{channel.id}/{k}'
+                    attachmentCount += len(os.listdir(aPath))
+                except FileNotFoundError: pass
             if len(memberIndexData) > 0:
                 with open(f'{serverPath}/MessageIndexes/{convertToFilename(channel.name)}.json', 'w+') as f:
                     f.write(json.dumps(memberIndexData, indent=4))
