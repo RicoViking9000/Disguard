@@ -16,6 +16,7 @@ async def wipe():
     '''clears the database'''
     await servers.drop()
     await users.drop()
+    # await mongo.drop_database(database)
 
 async def post_server(data: dict):
     '''adds a server to the database'''
@@ -69,16 +70,19 @@ def message_data(message: Message, index: int = 0):
     }
 
 async def post_message(message: Message):
+    if message.channel.id in (534439214289256478, 910598159963652126): return
     data = message_data(message)
     insertion = await database[str(message.channel.id)].insert_one(data)
     try:
-        if 'author0' not in database[str(message.channel.id)].index_information:
+        if 'author0' not in list((await database[str(message.channel.id)].index_information()).keys()):
             await database[str(message.channel.id)].create_index('author0')
-    except: await database[str(message.channel.id)].create_index('author0')
+    except: 
+        await database[str(message.channel.id)].create_index('author0')
     return insertion
 
 
 async def post_messages(messages: List[Message]):
+    if message.channel.id in (534439214289256478, 910598159963652126): return
     operations = []
     for message in messages:
         data = message_data(message)
@@ -103,8 +107,9 @@ async def get_messages_by_author(author_id: int, channel_ids: List[int] = []):
     return results
 
 async def patch_message(message: Message):
+    if message.channel.id in (534439214289256478, 910598159963652126): return
     existing_message = await get_message(message.channel.id, message.id)
-    index = int(list(existing_message.keys())[1][-1]) + 1
+    index = int(list(existing_message.keys())[-1][-1]) + 1
     data = message_data(message, index=index)
     data.pop('_id')
     return await database[str(message.channel.id)].update_one({'_id': message.id}, {'$set': data})

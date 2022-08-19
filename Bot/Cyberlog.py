@@ -769,7 +769,7 @@ class Cyberlog(commands.Cog):
         if c is None: return #Invalid log channel
         message_data = await lightningdb.get_message(channel.id, after.id)
         if message_data:
-            index = int(list(message_data.keys())[1][-1])
+            index = int(list(message_data.keys())[-1][-1])
             before = message_data[f'content{index}']
         else: before = after.content
         try: await self.MessageEditHandler(before, after, received)
