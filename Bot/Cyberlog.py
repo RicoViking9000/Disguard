@@ -636,7 +636,6 @@ class Cyberlog(commands.Cog):
             url = await self.imageToURL(after.author.display_avatar)
             if settings['thumbnail'] in (1, 2, 4): embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4): embed.set_author(name=after.author.name, icon_url=url)
-        path = f'{indexes}/{after.guild.id}/{after.channel.id}.json'
         await lightningdb.patch_message(after)
         plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{beforeParsed if len(beforeParsed) < 1024 else beforeC}`\nAfter:`{afterParsed if len(afterParsed) < 1024 else afterC}\n`{after.jump_url}'
         try: 
@@ -676,14 +675,14 @@ class Cyberlog(commands.Cog):
                         embed.clear_fields()
                         embed.add_field(name='Before', value=' '.join(beforeParsed), inline=False)
                         embed.add_field(name='After', value=' '.join(afterParsed), inline=False)
-                        embed.description=embed.description[:embed.description.find({utility.DisguardLongTimestamp(received)}) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n> **ℹ: Full edited message**\n{qlf}📜: Message edit history\n{qlf}🗒: Message in context'
+                        embed.description=embed.description[:embed.description.find(utility.DisguardLongTimestamp(received)) + len(utility.DisguardLongTimestamp(received))] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n> **ℹ: Full edited message**\n{qlf}📜: Message edit history\n{qlf}🗒: Message in context'
                         await msg.edit(content=None, embed=embed)
                         for r in ['⬅', '📜', '🗒']: await msg.add_reaction(r)
                     elif str(result[0]) == '📜': 
                         try:
                             await msg.clear_reactions()
                             embed.clear_fields()
-                            embed.description=embed.description[:embed.description.find({utility.DisguardLongTimestamp(received)}) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
+                            embed.description=embed.description[:embed.description.find(utility.DisguardLongTimestamp(received)) + len(utility.DisguardLongTimestamp(received))] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
                             currentMessage = await lightningdb.get_message(after.channel.id, after.id)
                             enum = list(enumerate(currentMessage.values()))
                             def makeHistory(): #This will create groups of 4 from enum; since 4 lines represent the file data for indexes
@@ -700,7 +699,7 @@ class Cyberlog(commands.Cog):
                     elif str(result[0]) == '🗒':
                         try:
                             embed.clear_fields()
-                            embed.description=embed.description[:embed.description.find({utility.DisguardLongTimestamp(received)}) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
+                            embed.description=embed.description[:embed.description.find(utility.DisguardLongTimestamp(received)) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
                             messagesBefore = list(reversed(await after.channel.history(limit=6, before=after).flatten()))
                             messagesAfter = await after.channel.history(limit=6, after=after, oldest_first=True).flatten()
                             combinedMessages = messagesBefore + [after] + messagesAfter
