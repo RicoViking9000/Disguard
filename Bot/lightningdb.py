@@ -1,6 +1,7 @@
 '''Contains the code for the local MongoDB functionality to replace cached lightningLogging'''
 import motor.motor_asyncio
 import pymongo
+from pymongo import errors
 from discord import Message
 from discord.utils import utcnow
 from typing import List
@@ -69,7 +70,13 @@ def message_data(message: Message, index: int = 0):
 
 async def post_message(message: Message):
     data = message_data(message)
-    return await database[str(message.channel.id)].insert_one(data)
+    insertion = await database[str(message.channel.id)].insert_one(data)
+    try:
+        if 'author0' not in database[str(message.channel.id)].index_information:
+            await database[str(message.channel.id)].create_index('author0')
+    except: await database[str(message.channel.id)].create_index('author0')
+    return insertion
+
 
 async def post_messages(messages: List[Message]):
     operations = []
