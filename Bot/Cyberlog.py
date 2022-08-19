@@ -129,7 +129,7 @@ class Cyberlog(commands.Cog):
         started = datetime.datetime.now()
         rawStarted = datetime.datetime.now()
         try:
-            if self.syncData.current_loop % 4 == 0: #This segment activates once per day
+            if self.syncData.current_loop % 4 == 0: #This segment activates once every two days
                 if self.syncData.current_loop == 0: #This segment activates only once while the bot is up (on bootup)
                     await database.Verification(self.bot)
                     asyncio.create_task(self.synchronizeDatabase(True))
@@ -2099,7 +2099,7 @@ class Cyberlog(commands.Cog):
         asyncio.create_task(database.VerifyUsers(self.bot, guild.members))
         #TODO: Improve teh server join experience
         content=f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.com>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
-        content+=f'\nℹMy default prefix is `.` and can be changed on the online dashboard under "General Server Settings."\n\n❔Need help with anything, or just have a question? My developer would be more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `.ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
+        content+=f'\nℹMy default prefix is `.` and can be changed on the online dashboard under "General Server Settings." Slash commands are coming soon.\n\n❔Need help with anything, or just have a question? My developer would be more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `.ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
         try: target = await database.CalculateModeratorChannel(guild, self.bot, False)
         except:
             if guild.system_channel: target = guild.system_channel
