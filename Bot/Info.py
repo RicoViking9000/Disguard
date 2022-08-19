@@ -674,5 +674,5 @@ class Info(commands.Cog):
         if type(obj) is discord.Invite: return await self.InviteInfo(obj, g)
         if type(obj) is discord.PartialEmoji: return await self.PartialEmojiInfo(obj, g)
 
-def setup(bot):
-    bot.add_cog(Info(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Info(bot))

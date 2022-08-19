@@ -83,7 +83,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         await UpdatePresence()
         for cog in cogs:
             try:
-                bot.load_extension(cog)
+                await bot.load_extension(cog)
             except Exception as e: 
                 print(f'Cog load error: {e}')
                 traceback.print_exc()

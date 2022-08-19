@@ -3082,9 +3082,9 @@ def beginPurge(s: discord.Guild):
 def endPurge(s: discord.Guild):
     serverPurge[s.id] = False
 
-def setup(Bot: commands.Bot):
+async def setup(Bot: commands.Bot):
     global bot
-    Bot.add_cog(Cyberlog(Bot))
+    await Bot.add_cog(Cyberlog(Bot))
     bot = Bot
 
 class ErrorView(discord.ui.View):

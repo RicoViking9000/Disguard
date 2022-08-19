@@ -666,5 +666,5 @@ class Misc(commands.Cog):
 def clean(s):
     return re.sub(r'[^\w\s]', '', s.lower())
 
-def setup(bot):
-    bot.add_cog(Misc(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Misc(bot))
