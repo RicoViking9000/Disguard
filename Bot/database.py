@@ -1,7 +1,5 @@
-'''This file creates, verifies, and manages database entries as necessary during Disguard's operation
-   This file also houses various useful methods that can be used across multiple files'''
+'''Contains code that manages the MongoDB cloud database during Disguard's operation'''
 import motor.motor_asyncio
-import dns
 import secure
 import discord
 import profanityfilter
@@ -12,29 +10,28 @@ import copy
 import os
 import json
 import pymongo
-from discord.ext import commands
+from discord.ext import commands, tasks
+import itertools
+import utility
+import queue
+import typing
 
-#mongo = pymongo.MongoClient(secure.mongo()) #Database connection URL stored in another file for security reasons
 mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
-db = None
-servers = None
-users = None
-disguard = None
-bot: commands.Bot = None
+db: motor.motor_asyncio.AsyncIOMotorDatabase = None
+servers: motor.motor_asyncio.AsyncIOMotorCollection = None
+users: motor.motor_asyncio.AsyncIOMotorCollection = None
+disguard: motor.motor_asyncio.AsyncIOMotorCollection = None
 
 lastVerifiedServer = {}
 lastVerifiedUser = {}
 
 def getDatabase(): return db
 
-#yellow=0xffff00
-# green=0x008000
-# red=0xff0000
-# blue=0x0000FF
 yellow = (0xffff00, 0xffff66)
 red = (0xff0000, 0xff6666)
 green = (0x008000, 0x66ff66)
 blue = (0x0000FF, 0x6666ff)
+bot: commands.Bot = None
 
 defaultAgeKickDM = ''''You have been kicked from **{}** temporarily due to their antispam configuration: Your account must be {} days old for you to join the server. You can rejoin the server **{} {}**.'.format(member.guild.name,
                     ageKick, canRejoin.strftime(formatter), timezone)'''
@@ -68,9 +65,8 @@ class LogModule(object):
         if entry:
             try:
                 for k, v in dict(entry).items():
-                    if f'{n:%m%d%Y}' != '02282021':
-                        if k == 'embed': result['plainText'] = not entry['embed']
-                        else: result[k] = v
+                    if k == 'embed': result['plainText'] = not entry['embed']
+                    else: result[k] = v
             except: pass
         return result
     def convert(self, entry): #Takes a LogModule object and returns a NewLogModule object
@@ -128,269 +124,255 @@ def Initialize(token):
 
 '''Verification events'''
 async def Verification(b: commands.Bot):
-    '''Longest operation. Checks entire usable database *twice*, and verifies it's as it should be, creating entries as necessary'''
-    await VerifyServers(b)
-    await VerifyUsers(b)
+    '''Verifies everything (all servers and users)'''
+    await VerifyServers(b, b.guilds, full=True)
+    await VerifyUsers(b, b.users, full=True)
 
-async def VerifyServers(b: commands.Bot, newOnly=False, full=False):
-    '''Ensures all servers have database entries; adding and removing as necessary'''
-    '''First: Index all bot servers, and verify them'''
-    await asyncio.gather(*[VerifyServer(s, b, newOnly, full) for s in b.guilds])
+async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
+    '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
+    gathered = await (servers.find({'server_id': {'$in': [s.id for s in servs]}})).to_list(None)
+    gatheredDict = {s['server_id']: s for s in gathered}
+    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
+    results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
+    await servers.bulk_write(results, ordered=False)
 
-async def VerifyServer(s: discord.Guild, b: commands.Bot, newOnly=False, full=False, *, includeServer=True, includeMembers=True):
-    '''Ensures that an individual server has a database entry, and checks all its variables'''
-    '''First: Update operation verifies that server's variables are standard and up to date; no channels that no longer exist, for example, in the database'''
-    if s.member_count > 250:
-        global lastVerifiedServer
-        if not lastVerifiedServer.get(s.id) or datetime.datetime.now() > lastVerifiedServer.get(s.id) + datetime.timedelta(minutes=5): #Make sure that large servers only go through this once every 5 mins
-            lastVerifiedServer[s.id] = datetime.datetime.now()
-        elif datetime.datetime.now() < lastVerifiedServer.get(s.id) + datetime.timedelta(minutes=5):
-            return
-    global bot
-    if not bot: bot = b
-    print('Verifying server: {} - {}'.format(s.name, s.id))
+async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers=[], parallel=True):
+    '''Ensures that a server has a database entry, and checks/updates all its variables & members
+        newOnly: if True, only create new servers
+        full: if True, go over all variables even for existing servers
+        mode: update = update serially in this method, bulk = return update operations to be performed in bulk from an external method
+        includeServer: if True, update server variables if applicable
+        includeMembers: update the members whose IDs are specified, if any
+    '''
+    print(f'Verifying server: {s.name} - {s.id}')
     started = datetime.datetime.now()
-    serv = await servers.find_one({"server_id": s.id})
-    if b.get_guild(s.id) is None: #If there's a server in the database the bot is no longer a part of, we can delete it
-        await servers.delete_one({'server_id': s.id})
-        return
-    spam = None
-    log = {}
-    if serv:
-        if newOnly: return
-        spam = serv.get("antispam") #antispam object from database
-        log = serv.get("cyberlog") #cyberlog object from database
-    #membIDs = [memb.id for memb in s.members]
+    global bot
+    bot = b
+    if not new and not serv: serv = await servers.find_one({"server_id": s.id}) or {}
+    spam = serv.get('antispam', {})
+    log = serv.get('cyberlog', {})
     serverChannels = []
-    for c in [channel for channel in s.by_category() if not channel[0] and type(channel) is discord.TextChannel]:
-        if len(serverChannels) == 0: serverChannels.append({'name': '-----NO CATEGORY-----', 'id': 0})
-        serverChannels.append({'name': c.name, 'id': c.id})
-    for c in s.categories:
-        serverChannels.append({'name': f'-----{c.name.upper()}-----', 'id': c.id})
-        for channel in c.text_channels: serverChannels.append({'name': channel.name, 'id': channel.id})
+    categoriesAdded = []
+    for category, channels in s.by_category():
+        if (category and category.id not in categoriesAdded) or (not category and 0 not in categoriesAdded): 
+            serverChannels.append({'name': f'-----{category.name if category else "NO CATEGORY"}-----', 'id': category.id if category else 0})
+            categoriesAdded.append(category.id if category else 0)
+        serverChannels += [{'name': channel.name, 'id': channel.id} for channel in channels if type(channel) is discord.TextChannel]
+    updateOperations = []
     if (not serv or full) and includeServer:
-        await servers.update_one({'server_id': s.id}, {"$set": { #add entry for new servers
-        "name": s.name,
-        "prefix": "." if serv is None or serv.get('prefix') is None else serv.get('prefix'),
-        "thumbnail": str(s.icon_url),
-        'offset': -4 if serv is None or serv.get('offset') is None else serv.get('offset'), #Distance from UTC time
-        'tzname': 'EST' if serv is None or serv.get('tzname') is None else serv.get('tzname'), #Custom timezone name (EST by default)
-        'jumpContext': False if serv is None or serv.get('jumpContext') is None else serv.get('jumpContext'), #Whether to provide context for posted message jump URL links
-        'undoSuppression': False if not serv else serv.get('undoSuppression', False), #Whether to enable the undo functionality after a message's embed was collapsed
-        'redditComplete': 0 if not serv else serv.get('redditComplete', 1), #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
-        'redditEnhance': (False, False) if not serv else serv.get('redditEnhance') if type(serv.get('redditEnhance')) is tuple else (False, False), #0: submission, 1: subreddit
-        'birthday': 0 if serv is None or serv.get('birthday') is None else serv.get('birthday'), #Channel to send birthday announcements to
-        'birthdate': datetime.datetime(2020, 1, 1, 12 + (-5 if serv is None or serv.get('offset') is None else serv.get('offset'))) if serv is None or serv.get('birthdate') is None else serv.get('birthdate'), #When to send bday announcements
-        'birthdayMode': 0 if serv is None or serv.get('birthdayMode') is None else serv.get('birthdayMode'), #How to respond to automatic messages
-        'colorTheme': 0 if not serv or not serv.get('colorTheme') else serv.get('colorTheme'), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
-        "channels": serverChannels,
+        #V1.0: Minor format/syntax updates
+        #await servers.update_one(
+        updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': { #add entry for new servers
+        'name': s.name,
+        'prefix': serv.get('prefix', '.'),
+        'thumbnail': s.icon.with_static_format('png').with_size(512).url, #Server icon, 512x512, png or gif
+        'offset': serv.get('offset', utility.daylightSavings() * -1), #Distance from UTC time
+        'tzname': serv.get('tzname', 'EST'), #Custom timezone name (EST by default)
+        'jumpContext': serv.get('jumpContext', False), #Whether to display content for posted message jump URL links
+        'undoSuppression': serv.get('undoSuppression', False), #Whether to enable the undo functionality after a message's embed was collapsed
+        'redditComplete': serv.get('redditComplete', 0), #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
+        'redditEnhance': 0 if serv.get('redditEnhance') == (False, False) else 1 if serv.get('redditEnhance') == (True, False) else 2 if serv.get('redditEnhance') == (False, True) else 3 if serv.get('redditEnhance') == (True, True) else serv.get('redditEnhance', 3), #0: all off, 1: subreddits only, 2: submissions only, 3: all on
+        'birthdayChannel': serv.get('birthdayChannel') or serv.get('birthday', 0), #Channel to send birthday announcements to
+        'birthdate': serv.get('birthdate', datetime.datetime(started.year, 1, 1, 12 - utility.daylightSavings())), #When to send bday announcements
+        'birthdayMode': serv.get('birthdayMode', 0), #How to respond to automatic messages. 0 = disabled, 1 = react, 2 = message
+        'colorTheme': serv.get('colorTheme', 0), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
+        'channels': serverChannels,
         'server_id': s.id,
-        "roles": [{"name": role.name, "id": role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
-        'flags': {'firstBirthdayAnnouncement': False},
-        'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
-        "antispam": { #This part is complicated. So if this variable (antispam) doesn't exist, default values are assigned, otherwise, keep the current ones
-            "enabled": False if serv is None or spam.get('enabled') is None else spam.get('enabled'), #Is the general antispam module enabled?
-            "whisper": False if serv is None or spam.get('whisper') is None else spam.get('whisper'), #when a member is flagged, whisper a notice to them in DM instead of current channel?
-            "log": [None, None] if serv is None or spam.get('log') is None or not b.get_channel(spam.get('log')[1]) else spam.get('log'), #display detailed message to server's log channel? if None, logging is disabled, else, Name | ID of log channel
-            "warn": 3 if serv is None or spam.get('warn') is None else spam.get('warn'), #number of warnings before the <action> is imposed
-            "delete": True if serv is None or spam.get('delete') is None else spam.get('delete'), #if a message is flagged, delete it?
-            "muteTime": 300 if serv is None or spam.get('muteTime') is None else spam.get('muteTime'), #if action is <1> or <4>, this is the length, in seconds, to keep that member with the role
-            "action": 1 if serv is None or spam.get('action') is None else spam.get('action'), #action imposed upon spam detection: 0=nothing, 1=automute, 2=kick, 3=ban, 4=custom role
-            "customRoleID": None if serv is None or spam.get('customRoleID') is None or not b.get_guild(s.id).get_role(spam.get('customRoleID')) else spam.get('customRoleID'), #if action is 4 (custom role), this is the ID of that role
-            "congruent": [4, 7, 300] if serv is None or spam.get('congruent') is None else spam.get('congruent'), #flag if [0]/[1] of user's last messages sent in [2] seconds contain equivalent content
-            "profanityThreshold": 0 if serv is None or spam.get('profanityThreshold') is None else spam.get('profanityThreshold'), #Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message
-            "emoji": 0 if serv is None or spam.get('emoji') is None else spam.get('emoji'), #Emoji to tolerate - 0=no filter, int=value, double=percentage
-            "mentions": 3 if serv is None or spam.get('mentions') is None else spam.get('mentions'), #max @<user> mentions allowed
-            "selfbot": True if serv is None or spam.get('selfbot') is None else spam.get('selfbot'), #Detect possible selfbots or spam advertisers?
-            "caps": 0.0 if serv is None or spam.get('caps') is None else spam.get('caps'), #Caps to tolerate - 0=no filter, int=value, double=percentage
-            "links": True if serv is None or spam.get('links') is None else spam.get('links'), #URLs allowed?
-            'attachments': [False, False, False, False, False, False, False, False, False] if serv is None or spam.get('attachments') is None else spam.get('attachments'), #[All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
-            "invites": True if serv is None or spam.get('invites') is None else spam.get('invites'), #Discord.gg invites allowed?
-            "everyoneTags": 2 if serv is None or spam.get('everyoneTags') is None else spam.get('everyoneTags'), #Max number of @everyone, if it doesn't actually tag; 0=anything tolerated
-            "hereTags": 2 if serv is None or spam.get('hereTags') is None else spam.get('hereTags'), #Max number of @here, if it doesn't actually tag; 0=anything tolerated
-            "roleTags": 3 if serv is None or spam.get('roleTags') is None else spam.get('roleTags'), #Max number of <role> mentions tolerated (0 = anything tolerated)
-            "quickMessages": [5, 10] if serv is None or spam.get('quickMessages') is None else spam.get('quickMessages'), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
-            'consecutiveMessages': [10, 120] if serv is None or spam.get('consecutiveMessages') is None else spam.get('consecutiveMessages'), #If this many messages in a row are sent by the same person, flag them
-            'repeatedJoins': [0, 300, 86400] if serv is None or spam.get('repeatedJoins') is None else spam.get('repeatedJoins'), #If user joins [0] times in [1] seconds, ban them for [2] seconds
-            "ignoreRoled": False if serv is None or spam.get('ignoreRoled') is None else spam.get('ignoreRoled'), #Ignore people with a role?
-            "exclusionMode": 1 if serv is None or spam.get('exclusionMode') is None else spam.get('exclusionMode'), #Blacklist (0) or Whitelist(1) the channel exclusions
-            "channelExclusions": await DefaultChannelExclusions(s) if serv is None or spam.get('channelExclusions') is None else spam.get('channelExclusions'), #Don't filter messages in channels in this list
-            "roleExclusions": await DefaultRoleExclusions(s) if serv is None or spam.get('roleExclusions') is None else spam.get('roleExclusions'), #Don't filter messages sent by members with a role in this list
-            "memberExclusions": await DefaultMemberExclusions(s) if serv is None or spam.get('memberExclusions') is None else spam.get('memberExclusions'), #Don't filter messages sent by a member in this list
-            "profanityEnabled": False if serv is None or spam.get("profanityEnabled") is None else spam.get('profanityEnabled'), #Is the profanity filter enabled
-            "profanityTolerance": 0.25 if serv is None or spam.get('profanityTolerance') is None else spam.get('profanityTolerance'), #% of message to be profanity to be flagged
-            "filter": [] if serv is None or spam.get("filter") is None else spam.get("filter"), #Profanity filter list
-            'ageKick': None if serv is None or spam.get('ageKick') is None else spam.get('ageKick'), #NEED TO REDO DATABASE ALGORITHM SO ON DEMAND VARIABLES ARENT OVERWRITTEN
-            'ageKickDM': defaultAgeKickDM if serv is None or spam.get('ageKickDM') is None else spam.get('ageKickDM'),
-            'ageKickOwner': False if serv is None or spam.get('ageKickOwner') is None else spam.get('ageKickOwner'),
-            'ageKickWhitelist': [] if serv is None or spam.get('ageKickWhitelist') is None else spam.get('ageKickWhitelist'),
+        'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
+        'flags': {},
+        #'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
+        'antispam': {
+            'enabled': spam.get('enabled', False), #Master switch for the antispam module
+            'whisper': spam.get('whisper', False), #whether to DM members of flagged messages instead of using the current channel
+            'log': spam.get('log', 0), #display detailed message to server's log channel? if None, logging is disabled, else, ID of log channel. UPDATE THE ANTISPAM PAGE/CODE TO ONLY USE ID
+            'warn': spam.get('warn', 3), #number of warnings before <action> is imposed
+            'delete': 1 if spam.get('delete') == False else 3 if spam.get('delete') == True else spam.get('delete', 3), #what to do when message is flagged. 0 = nothing, 1 = notify member only, 2 = delete message only, 3 = both
+            'muteTime': spam.get('muteTime', 300), #the duration a muted member keeps their mute role
+            'action': spam.get('action', 1), #action imposed upon spam detection: 0=nothing, 1=automute, 2=kick, 3=ban, 4=custom role
+            'customRoleID': spam.get('customRoleID', None), #if action is 4 (custom role), this is the ID of that role
+            'congruent': spam.get('congruent', [4, 7, 300]), #flag if [0]/[1] of user's last messages sent in [2] seconds contain equivalent content
+            #'profanityThreshold': spam.get('profanityThreshold', 0), #Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message. also this hasn't been used in the history of Disguard apparently
+            'emoji': spam.get('emoji', 0), #Emoji to tolerate - 0=no filter, int=value, double=percentage
+            'mentions': spam.get('mentions', 3), #max @<user> mentions allowed
+            'selfbot': spam.get('selfbot', True), #Detect possible selfbots or spam advertisers?
+            'caps': spam.get('caps', 0), #Caps to tolerate - 0=no filter, int=value, double=percentage
+            'links': spam.get('links', False), #Flag links (does not include discord invites?
+            'attachments': spam.get('attachments', [False, False, False, False, False, False, False, False, False]), #[All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
+            'invites': spam.get('invites', False), #Flag discord.gg invites
+            'everyoneTags': spam.get('everyoneTags', 2), #Max number of unsuccessful @everyone tags; 0=anything tolerated
+            'hereTags': spam.get('hereTags', 2), #Max number of unsuccessful @here tags; 0=anything tolerated
+            'roleTags': spam.get('roleTags', 3), #Max number of <role> mentions tolerated; 0 = anything tolerated
+            'quickMessages': spam.get('quickMessages', [5, 10]), #If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
+            'consecutiveMessages': spam.get('consecutiveMessages', [10, 120]), #If this many messages in a row are sent by the same person, flag them
+            'repeatedJoins': spam.get('repeatedJoins', [0, 300, 86400]), #If user joins [0] times in [1] seconds, ban them for [2] seconds ([0]=0: disabled)
+            'ignoreRoled': spam.get('ignoreRoled', False), #Ignore members with a role
+            'exclusionMode': spam.get('exclusionMode', 1), #Blacklist (0) or Whitelist(1) the channel exclusions
+            'channelExclusions': spam.get('channelExclusions', await DefaultChannelExclusions(s)), #Don't filter messages in channels in this list
+            'roleExclusions': spam.get('roleExclusions', await DefaultRoleExclusions(s)), #Don't filter messages sent by members with a role in this list
+            'memberExclusions': spam.get('memberExclusions', await DefaultMemberExclusions(s)), #Don't filter messages sent by a member in this list
+            'profanityEnabled': spam.get('profanityEnabled', False), #Is the profanity filter enabled
+            'profanityTolerance': spam.get('profanityTolerance', 0), #Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message
+            'filter': spam.get('filter', []), #Profanity filter list
+            'ageKick': spam.get('ageKick', None), #Kick accounts joining the server under this many days old
+            'ageKickDM': spam.get('ageKickDM', defaultAgeKickDM), #The message sent to members kicked by the ageKick system
+            #'ageKickOwner': spam.get('ageKickOwner', False), #Whether the ageKick system can only be edited by the owner. Deprecated in V1.0 due to giving too much power to the server owner
+            'ageKickWhitelist': spam.get('ageKickWhitelist', []), #The list of members who can bypass the ageKick system
             'warmup': spam.get('warmup', 0), #If > 0, mute members for this amount of time when they join the server
-            'timedEvents': [] if serv is None or spam.get('timedEvents') is None else spam.get('timedEvents'), #Bans, mutes, etc
-            'automuteRole': 0 if not spam else spam.get('automuteRole', 0)},
-        "cyberlog": {
-            "enabled": False if log is None or log.get('enabled') is None else log.get('enabled'),
-            'ghostReactionEnabled': log.get('ghostReactionEnabled') or True,
-            'disguardLogRecursion': log.get('disguardLogRecursion') or False, #Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
-            "image": False if log is None or log.get('image') is None else log.get('enabled'),
-            "defaultChannel": None if log is None or log.get('defaultChannel') is None else log.get('defaultChannel'),
-            'library': 1 if not log or not log.get('library') else log.get('library'), #0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
-            'thumbnail': 1 if not log or not log.get('thumbnail') else log.get('thumbnail'), #0: off, 1: target or none, 2: target or moderator, 3: moderator or none, 4: moderator or target
-            'author': 3 if not log or not log.get('author') else log.get('author'), #0: off, 1: target or none, 2: target or moderator 3: moderator or none, 4: moderator or target
-            'context': (1, 1) if not log or not log.get('context') else log.get('context'), #0 = no emojis, 1 = emojis and descriptions, 2 = just emojis. index 0 = title, index 1 = description
-            'hoverLinks': 1 if not log or not log.get('hoverLinks') else log.get('hoverLinks'), #0: data hidden, 1: data under hover links, 2: data under hover links & option to expand, 3: data visible. LATER
-            'embedTimestamp': 3 if not log or not log.get('embedTimestamp') else log.get('embedTimestamp'), #0: All off, 1: Just footer, 2: Just description, 3: All on
-            'botLogging': log.get('botLogging') if f'{started:%m%d%Y}' != '02282021' else 2,                #0: Disabled, 1: Plaintext, 2: Embeds
-            'color': ['auto', 'auto', 'auto'] if not log or not log.get('color') else log.get('color'),
-            'plainText': False if not log or not log.get('plainText') else log.get('plainText'),
-            'read': True if not log or not log.get('read') else log.get('read'),
-            'flashText': False if not log or not log.get('flashText') else log.get('flashText'),
-            'tts': False if not log or not log.get('tts') else log.get('tts'),
-            'onlyVCJoinLeave': False if log is None or log.get('onlyVCJoinLeave') is None else log.get('onlyVCJoinLeave'),
-            'onlyVCForceActions': True if log is None or log.get('onlyVCForceActions') is None else log.get('onlyVCForceActions'),
-            'voiceChatLogRecaps': True if log is None or log.get('voiceChatLogRecaps') is None else log.get('voiceChatLogRecaps'),
-            'ghostReactionTime': 10 if not log or not log.get('ghostReactionTime') else log.get('ghostReactionTime'),
-            'memberGlobal': 2 if log is None or log.get('memberGlobal') is None else log.get('memberGlobal'),
-            "channelExclusions": [] if log is None or log.get('channelExclusions') is None else log.get('channelExclusions'),
-            'roleExclusions': [] if log is None or log.get('roleExclusions') is None else log.get('roleExclusions'),
-            'memberExclusions': [] if log is None or log.get('memberExclusions') is None else log.get('memberExclusions'),
-            'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
-            'lastUpdate': datetime.datetime.utcnow() if serv is None or serv.get('lastUpdate') is None else serv.get('lastUpdate'),
-            "message": vars(LogModule("message", "Send logs when a message is edited or deleted")) if log is None or log.get('message') is None else (LogModule("message", "Send logs when a message is edited or deleted").update(log.get('message'))),
-            "doorguard": vars(LogModule("doorguard", "Send logs when a member joins or leaves server")) if log is None or log.get('doorguard') is None else (LogModule("doorguard", "Send logs when a member joins or leaves server").update(log.get('doorguard'))),
-            "channel": vars(LogModule("channel", "Send logs when channel is created, edited, or deleted")) if log is None or log.get('channel') is None else (LogModule("channel", "Send logs when channel is created, edited, or deleted").update(log.get('channel'))),
-            "member": vars(LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator")) if log is None or log.get('member') is None else (LogModule("member", "Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator").update(log.get('member'))),
-            "role": vars(LogModule("role", "Send logs when a role is created, edited, or deleted")) if log is None or log.get('role') is None else (LogModule("role", "Send logs when a role is created, edited, or deleted").update(log.get('role'))),
-            "emoji": vars(LogModule("emoji", "Send logs when emoji is created, edited, or deleted")) if log is None or log.get('emoji') is None else (LogModule("emoji", "Send logs when emoji is created, edited, or deleted").update(log.get('emoji'))),
-            "server": vars(LogModule("server", "Send logs when server is updated, such as thumbnail")) if log is None or log.get('server') is None else (LogModule("server", "Send logs when server is updated, such as thumbnail").update(log.get('server'))),
-            "voice": vars(LogModule('voice', "Send logs when members' voice chat attributes change")) if log is None or log.get('voice') is None else (LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice'))),
-            "misc": vars(LogModule('misc', "Logging for various bonus features that don't fit into an above category (currently only ghost reaction logging)")) if log is None or log.get('misc') is None else (LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc')))
-        }}}, upsert=True)
+            'timedEvents': spam.get('timedEvents', []), #Bans, mutes, etc
+            'automuteRole': spam.get('automuteRole', 0)}, #This might make custom mute role obsolete, will have to look into this when I redo the antispam module
+        'cyberlog': {
+            'enabled': log.get('enabled', False),
+            'ghostReactionEnabled': log.get('ghostReactionEnabled', True),
+            'disguardLogRecursion': log.get('disguardLogRecursion', False), #Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
+            'image': log.get('enabled', False),
+            'defaultChannel': log.get('defaultChannel', 0),
+            'library': log.get('library', 1), #0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
+            'thumbnail': log.get('thumbnail', 1), #0: off, 1: target or none, 2: target or moderator, 3: moderator or none, 4: moderator or target
+            'author': log.get('author', 3), #0: off, 1: target or none, 2: target or moderator 3: moderator or none, 4: moderator or target
+            'context': log.get('context', (1, 1)), #0 = no emojis, 1 = emojis and descriptions, 2 = just emojis. index 0 = title, index 1 = description
+            'hoverLinks': log.get('hoverLinks', 1), #0: data hidden, 1: data under hover links, 2: data under hover links & option to expand, 3: data visible. LATER
+            'embedTimestamp': log.get('embedTimestamp', 2), #0: All off, 1: Just footer, 2: Just description, 3: All on
+            'botLogging': 0 if log.get('botLogging') == None else log.get('botLogging', 0), #0: Disabled, 1: Plaintext, 2: Embeds
+            'color': log.get('color', ('auto', 'auto', 'auto')), #Log embed colors - 0: Create, 1: Edit, 2: Delete
+            'plainText': log.get('plainText', False), #Send logs in plaintext form
+            'read': log.get('read', True), #Read server audit log
+            'flashText': log.get('flashText'), #Send plaintext with the log embed so that push notifications display something that makes sense
+            'tts': log.get('tts'), #Enable TTS when sending logs
+            'onlyVCJoinLeave': log.get('onlyVCJoinLeave', False), #Whether to only send live logs of members joining/leaving voice channels
+            'onlyVCForceActions': log.get('onlyVCForceActions', True), #Whether to only send live logs of moderator-enforced events for voice chat
+            'voiceChatLogRecaps': log.get('voiceChatLogRecaps', True),
+            'ghostReactionTime': log.get('ghostReactionTime', 10), #If a reaction is added then removed in this time frame, count it as a ghost reaction
+            'memberGlobal': log.get('memberGlobal', 2), #Which profile update types to include with user update logs
+            'channelExclusions': log.get('channelExclusions', []),
+            'roleExclusions': log.get('roleExclusions', []),
+            'memberExclusions': log.get('memberExclusions', []),
+            #'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
+            'lastUpdate': serv.get('lastUpdate', datetime.datetime.utcnow()),
+            'message': LogModule('message', 'Send logs when a message is edited or deleted').update(log.get('message', {})),
+            'doorguard': LogModule('doorguard', 'Send logs when a member joins or leaves server').update(log.get('doorguard', {})),
+            'channel': LogModule('channel', 'Send logs when channel is created, edited, or deleted').update(log.get('channel', {})),
+            'member': LogModule('member', 'Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator').update(log.get('member', {})),
+            'role': LogModule('role', 'Send logs when a role is created, edited, or deleted').update(log.get('role', {})),
+            'emoji': LogModule('emoji', 'Send logs when emoji is created, edited, or deleted').update(log.get('emoji', {})),
+            'server': LogModule('server', 'Send logs when server is updated, such as thumbnai').update(log.get('server', {})),
+            'voice': LogModule('voice', 'Send logs when members\' voice chat attributes change').update(log.get('voice', {})),
+            'misc': LogModule('misc', 'Logging for various bonus features that don\'t fit into an above category').update(log.get('misc', {}))
+        }}}, upsert=True))
     elif includeServer: #only update things that may have changed (on discord's side) if the server already exists; otherwise we're literally putting things back into the variable for no reason
         base = {} #Empty dict, to be added to when things need to be updated
         roleGen = [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]
         if s.name != serv['name']: base.update({'name': s.name})
-        if str(s.icon_url) != serv['thumbnail']: base.update({'thumbnail': str(s.icon_url)})
+        if s.icon.with_static_format('png').with_size(512).url != serv['thumbnail']: base.update({'thumbnail': s.icon.with_static_format('png').with_size(512).url})
         if serverChannels != serv['channels']: base.update({'channels': serverChannels})
         if roleGen != serv['roles']: base.update({'roles': roleGen})
-        await servers.update_one({'server_id': s.id}, {"$set": base})
+        if base: updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': base}))
     if includeMembers:
-        started2 = datetime.datetime.now()
-        membDict = {}
-        if not serv: serv = await servers.find_one({'server_id': s.id})
-        if serv:
-            spam = serv.get("antispam") #antispam object from database
-            log = serv.get("cyberlog") #cyberlog object from database
-            members = serv.get("members") or []
-        else: return
-        serverMembIDs = set()
-        membersToUpdate = []
-        for m in s.members: #Create dict 
-            membDict[str(m.id)] = m.name
-            #membDict[m.name] = m.id
-            serverMembIDs.add(m.id)
-            if len(members) < 1: membersToUpdate.append({'id': m.id, 'name': m.name, 'warnings': spam['warn']})
-        if len(members) < 1: 
-            await servers.update_one({'server_id': s.id}, {'$set': {'members': membersToUpdate}}, True)
-        else: #Need to update existing members
-            fullMembDict = {}
-            for m in members: fullMembDict[m['id']] = m
-            databaseMembIDs = set(m.get('id') for m in members)
-            toInsert = []
-            for m in serverMembIDs:
-                if m not in databaseMembIDs:
-                    #toInsert.append({'id': m, 'name': membDict[str(m)], 'warnings': spam['warn'], 'quickMessages': [], 'lastMessages': []}) #Add members that aren't in the database yet
-                    fullMembDict[m] = {'id': m, 'name': membDict[str(m)], 'warnings': spam['warn']}
-            #await servers.update_one({'server_id': s.id}, {"$push": {'members': {'$each': toInsert}}}, True)
-            bulkUpdates = []
-            bulkRemovals = []
-            for member in members:
-                serverMember = s.get_member(member['id'])
-                if not serverMember:
-                    #bulkRemovals.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}))
-                    fullMembDict.pop(member['id'])
-                else:
-                    #if serverMember.name != member['name']: bulkUpdates.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': serverMember.id}, {'$set': {'members.$.name': serverMember.name}}))
-                    if serverMember.name != member['name']: fullMembDict[member['id']].update({'name': serverMember.name})
-            #if bulkUpdates or bulkRemovals: await servers.bulk_write(bulkUpdates + bulkRemovals, ordered=False)
-            await servers.update_one({'server_id': s.id}, {'$set': {'members': list(fullMembDict.values())}})
-    print(f'Verified Server {s.name}:\n Server only: {(started2 - started).seconds if includeServer else "N/A"}s\n Members only: {(datetime.datetime.now() - started2).seconds if includeMembers else "N/A"}s\n Total: {(datetime.datetime.now() - started).seconds}s')
-    return (serv.get('name'), serv.get('server_id'))
+        results = await VerifyMembers(s, includeMembers, serv, mode=mode, parallel=parallel)
+        if mode == 'return': updateOperations += results
+    started2 = datetime.datetime.now()
+    if mode == 'update': await servers.bulk_write(updateOperations, ordered=not parallel)
+    print(f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Database write: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
+    if mode == 'return': return updateOperations
 
-async def VerifyUsers(b: commands.Bot):
-    '''Ensures every global Discord user in a bot server has one unique entry. No use for these variables at the moment; usage to come'''
-    '''First: Go through all members, verifying they have entries and variables'''
-    await asyncio.gather(*[VerifyUser(m, b) for m in b.users])
-    await users.delete_many({'user_id': {'$nin': [m.id for m in b.users]}}) #Remove all of the user data that no longer exists
+async def VerifyMembers(s: discord.Guild, members: list, serv=None, *, mode='update', parallel=True):
+    '''Verifies multiple server members'''
+    membDict = {} #Holds ID:name values for quick lookups for members that aren't in the database yet
+    serverMemberIDs = set()
+    membersToCreate = []
+    if not serv: serv = await servers.find_one({'server_id': s.id})
+    warnings = serv.get('antispam', {}).get('warn', 3) #Number of warnings to give to new members
+    empty = not serv.get('members', [])
+    for m in members:
+        membDict[m.id] = m.name
+        serverMemberIDs.add(m.id)
+        if empty: membersToCreate.append({'id': m.id, 'name': m.name, 'warnings': warnings})
+    if not empty: dbMembers = [m for m in serv['members'] if m['id'] in serverMemberIDs]
+    else: dbMembers = []
+    databaseMembIDs = set(m.get('id') for m in dbMembers)
+    updateOperations = []
+    if empty: 
+        updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': {'members': membersToCreate}}, True))
+    else: #Need to update existing members
+        toInsert = []
+        for m in serverMemberIDs:
+            if m not in databaseMembIDs:
+                toInsert.append({'id': m, 'name': membDict[m], 'warnings': warnings}) #Add members that aren't in the database yet
+        updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$push': {'members': {'$each': toInsert}}}, True))
+        for member in dbMembers:
+            serverMember = s.get_member(member['id'])
+            if not serverMember: updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}))
+            else:
+                if serverMember.name != member['name']: updateOperations.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': serverMember.id}, {'$set': {'members.$.name': serverMember.name}}))
+    if mode == 'update': await servers.bulk_write(updateOperations, ordered=not parallel)
+    else: return updateOperations
+
+async def AddMembers(s: discord.Guild, members: list, warnings: int):
+    '''Support method to quickly add members to a server'''
+    operations = [{'id': m.id, 'name': m.name, 'warnings': warnings} for m in members]
+    await servers.update_one({'server_id': s.id}, {'$push': {'members': {'$each': operations}}})
+
+async def RemoveMembers(s: discord.Guild, members: list):
+    '''Support method to quickly remove members from a server'''
+    await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': {'$in': [m.id for m in members]}}}})
+
+async def VerifyUsers(b: commands.Bot, usrs: list, full=False):
+    '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
+    gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
+    gatheredDict = {u['user_id']: u for u in gathered}
+    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
+    results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
+    await users.bulk_write(results, ordered=False)
     
-async def VerifyUser(m: discord.User, b: commands.Bot):
-    '''Ensures that an individual user is in the database, and checks its variables'''
+async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
+    '''Ensures that an individual user is in the database, and checks their variables'''
     #started = datetime.datetime.now()
-    current = await users.find_one({'user_id': m.id})
-    if b.get_user(m.id) is None: return await users.delete_one({'user_id': m.id})
-    global lastVerifiedUser
-    if not lastVerifiedUser.get(m.id) or datetime.datetime.now() > lastVerifiedUser.get(m.id) + datetime.timedelta(minutes=10):
-        lastVerifiedUser[m.id] = datetime.datetime.now()
-    elif datetime.datetime.now() < lastVerifiedUser.get(m.id) + datetime.timedelta(minutes=10):
-        return
-    if current and current.get('privacy'): 
-        flags = current.get('flags', {})
-        if flags.get('birthdayDataPurgeAnnouncement', -1) == -1: flags.update({'birthdayDataPurgeAnnouncement': False})
-        #str(m.avatar_url_as(static_format='png', size=2048))
-        #str(server.icon_url)
-        await users.update_one({'user_id': m.id}, {'$set': {'username': m.name, 'avatar': str(m.avatar_url_as(static_format='png', size=2048)), 'flags': flags, 'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon_url)} for server in b.guilds if await DashboardManageServer(server, m)]}})
-    else:
-        await users.update_one({"user_id": m.id}, {"$set": { #For new members, set them up. For existing members, the only things that that may have changed that we care about here are the two fields above
-        "username": m.name,
-        #'discriminator': m.discriminator,
-        "user_id": m.id,
-        'avatar': str(m.avatar_url_as(static_format='png', size=2048)),
-        'lastActive': {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'},
-        'lastOnline': datetime.datetime.min,
-        'birthdayMessages': [],
-        'wishlist': [],
-        "servers": [{"server_id": server.id, "name": server.name, "thumbnail": str(server.icon_url)} for server in iter(b.guilds) if await DashboardManageServer(server, m)],
-        # 'profile': {
-        #     
-        #     'bio': None,
-        #     'tzoffset': -4,
-        #     'tzname': 'EDT',
-        #     'favColor': 0x000000,
-        #     'colorTheme': 1, #0: Original, 1: New
-        #     'name': '',
-        # },
+    if not new and not current: current = await users.find_one({'user_id': u.id}) or {}
+    #if b.get_user(m.id) is None: return await users.delete_one({'user_id': m.id})
+    updateOperations = []
+    if full or not current:
+        updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': {
+        'username': u.name,
+        'user_id': u.id,
+        'avatar': u.display_avatar.with_static_format('png').with_size(2048).url, #d.py V2.0
+        'lastActive': current.get('lastActive', {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'}),
+        'lastOnline': current.get('lastOnline', datetime.datetime.min),
+        'birthdayMessages': current.get('birthdayMessages', []),
+        'wishlist': current.get('wishlist', []),
+        'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': server.icon.with_static_format('png').with_size(512).url} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))], #d.py V2.0
         'privacy': {
-            'default': (1, 1), #Index 0 - 0: Disable features, 1: Enable features || Index 1 - 0: Hidden to others, 1: Visible to everyone, Array: List of user IDs allowed to view the profile
-            'birthdayModule': (2, 2), #Index 0 - 0: Disable, 1: Enable, 2: Default || Index 1 - 0: Hidden, 1: Everyone, 2: Default, Array: Certain users || Applies to the next fields unless otherwise specified
-            'age': (2, 2),
-            'birthdayDay': (2, 2),
-            'wishlist': (2, 2),
-            'birthdayMessages': (2, 2), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
-            'attributeHistory': (2, 2),
-            'customStatusHistory': (2, 2),
-            'usernameHistory': (2, 2),
-            'avatarHistory': (2, 2),
-            'lastOnline': (2, 2),
-            'lastActive': (2, 2),
-            'profile': (2, 2),
-            'bio': (2, 2),
-            'timezone': (2, 2),
-            'favColor': (2, 2),
-            'colorTheme': (2, 2),
-            'name': (2, 0)
+            'default': current.get('privacy', {}).get('default', (1, 1)), #Index 0 - 0: Disable features, 1: Enable features || Index 1 - 0: Hidden to others, 1: Visible to everyone, Array: List of user IDs allowed to view the profile
+            'birthdayModule': current.get('privacy', {}).get('birthdayModule', (2, 2)), #Index 0 - 0: Disable, 1: Enable, 2: Default || Index 1 - 0: Hidden, 1: Everyone, 2: Default, Array: Certain users || Applies to the next fields unless otherwise specified
+            'age': current.get('privacy', {}).get('age', (2, 2)),
+            'birthdayDay': current.get('privacy', {}).get('birthdayDay', (2, 2)),
+            'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
+            'birthdayMessages': current.get('privacy', {}).get('birthdayMessages', (2, 2)), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
+            'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
+            'customStatusHistory': current.get('privacy', {}).get('customStatusHistory', (2, 2)),
+            'usernameHistory': current.get('privacy', {}).get('usernameHistory', (2, 2)),
+            'avatarHistory': current.get('privacy', {}).get('avatarHistory', (2, 2)),
+            'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
+            'lastActive': current.get('privacy', {}).get('lastActive', (2, 2)),
+            'profile': current.get('privacy', {}).get('profile', (2, 2))
         },
         'flags': {
-            'birthdayDataPurgeAnnouncement': False,
-            'usedFirstCommand': False,
-            'announcedPrivacySettings': False,
-        }
-        }}, True)
+            'usedFirstCommand': current.get('flags', {}).get('usedFirstCommand', False),
+        }}}, True))
+    else: 
+        base = {}
+        serverGen = [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon.with_static_format('png').url)} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] #d.py V2.0
+        if u.name != current['name']: base.update({'username': u.name})
+        if u.display_avatar.with_static_format('png').with_size(2048).url != current['avatar']: base.update({'avatar': u.display_avatar.with_static_format('png').with_size(2048).url})
+        if serverGen != current['servers']: base.update({'servers': serverGen})
+        if base: updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': base}))
+    if mode == 'update': await users.bulk_write(updateOperations, ordered=not parallel)
+    elif mode == 'return': return updateOperations
     #print(f'Verified User {m.name} in {(datetime.datetime.now() - started).seconds}s')
 
-async def DeleteServer(s, bot):
+async def DeleteServer(s: int, bot: commands.Bot):
     if not bot.get_guild(s):
         await servers.delete_one({'server_id': s})
 
-async def DeleteUser(u, bot):
+async def DeleteUser(u: int, bot: commands.Bot):
     if not bot.get_user(u):
         await users.delete_one({'user_id': u})
 
@@ -426,9 +408,9 @@ async def SimpleGetEnabled(s: discord.Guild, mod: str):
     #return (await servers.find_one({"server_id": s.id})).get("cyberlog").get('modules')[await getModElement(s, mod)].get("enabled") and (await servers.find_one({"server_id": s.id})).get("cyberlog").get('enabled')
     return (await servers.find_one({"server_id": s.id})).get("cyberlog").get(mod).get("enabled") and (await servers.find_one({"server_id": s.id})).get("cyberlog").get('enabled')
 
-async def GetImageLogPerms(s: discord.Guild):
-    '''Check if image logging is enabled for the current server'''
-    return (await servers.find_one({"server_id": s.id})).get("cyberlog").get('image')
+# async def GetImageLogPerms(s: discord.Guild):
+#     '''Check if image logging is enabled for the current server'''
+#     return (await servers.find_one({'server_id': s.id})).get('cyberlog').get('image')
 
 async def GetAntiSpamObject(s: discord.Guild):
     '''Return the Antispam database object - use 'get' to get the other objects'''
@@ -470,31 +452,31 @@ async def GetUserCollection():
     '''Returns the users collection object'''
     return users
 
-async def GetMember(m: discord.Member):
-    '''Returns a member of a server'''
-    return ([a for a in (await servers.find_one({"server_id": m.guild.id})).get('members') if a.get('id') == m.id][0])
+# async def GetMember(m: discord.Member):
+#     '''Returns a member of a server'''
+#     return (await servers.find_one({'server_id': m.guild.id, 'members.id': m.id}))
 
-async def GetProfanityFilter(s: discord.Guild):
-    '''Return profanityfilter object'''
-    return (await GetAntiSpamObject(s)).get("filter")
+# async def GetProfanityFilter(s: discord.Guild):
+#     '''Return profanityfilter object'''
+#     return (await GetAntiSpamObject(s)).get("filter")
 
-async def GetPrefix(s: discord.Guild):
-    '''Return prefix associated with the server'''
-    return (await servers.find_one({"server_id": s.id})).get('prefix')
+# async def GetPrefix(s: discord.Guild):
+#     '''Return prefix associated with the server'''
+#     return (await servers.find_one({"server_id": s.id})).get('prefix')
 
-async def UpdateMemberLastMessages(server: int, member: int, messages):
-    '''Updates database entry for lastMessages modification
-    Server: id of server the member belongs to
-    Member: id of member
-    Messages: list of messages to replace the old list with'''
-    await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.lastMessages": messages}})
+# async def UpdateMemberLastMessages(server: int, member: int, messages):
+#     '''Updates database entry for lastMessages modification
+#     Server: id of server the member belongs to
+#     Member: id of member
+#     Messages: list of messages to replace the old list with'''
+#     await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.lastMessages": messages}})
 
-async def UpdateMemberQuickMessages(server: int, member: int, messages):
-    '''Updates database entry for quickMessages modification
-    Server: id of server the member belongs to
-    Member: id of member
-    Messages: list of messages to replace the old list with'''
-    await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.quickMessages": messages}})
+# async def UpdateMemberQuickMessages(server: int, member: int, messages):
+#     '''Updates database entry for quickMessages modification
+#     Server: id of server the member belongs to
+#     Member: id of member
+#     Messages: list of messages to replace the old list with'''
+#     await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.quickMessages": messages}})
 
 async def UpdateMemberWarnings(server: discord.Guild, member: discord.Member, warnings: int):
     '''Updates database entry for a member's warnings
@@ -532,56 +514,15 @@ async def GetLogMemberExclusions(s: discord.Guild):
 
 async def DefaultChannelExclusions(server: discord.Guild): 
     '''For now, return array of IDs of all channels with 'spam' in the name. Will be customizable later'''
-    return [a.id for a in iter(server.channels) if any(word in a.name for word in ['spam', 'bot'])]
+    return [a.id for a in server.channels if any(word in a.name for word in ['spam', 'bot'])]
 
 async def DefaultRoleExclusions(server: discord.Guild): 
     '''For now, return array of IDs of all roles that can manage server. Will be customizable later'''
-    return [a.id for a in iter(server.roles) if a.permissions.administrator or a.permissions.manage_guild]
+    return [a.id for a in server.roles if a.permissions.administrator or a.permissions.manage_guild]
 
 async def DefaultMemberExclusions(server: discord.Guild): 
     '''For now, return array of the ID of server owner. Will be customizable later'''
     return [server.owner.id]
-
-async def ManageServer(member: discord.Member): #Check if a member can manage server, used for checking if they can edit dashboard for server
-    server = bot.get_guild(member.guild.id)
-    if member.id == server.owner.id: return True
-    if member.id == 247412852925661185: return True
-    for a in member.roles:
-        if a.permissions.administrator or a.permissions.manage_guild:
-            return True
-    return False
-
-async def ManageRoles(member: discord.Member):
-    '''Does this member have the Manage Roles permission'''
-    if member.id == member.guild.owner.id: return True
-    for a in member.roles:
-        if a.permissions.administrator or a.permissions.manage_roles:
-            return True
-    return False
-
-async def ManageChannels(member: discord.Member):
-    '''Does this member have the Manage Channels permission'''
-    if member.id == member.guild.owner.id: return True
-    for a in member.roles:
-        if a.permissions.administrator or a.permissions.manage_channels:
-            return True
-    return False
-
-async def KickMembers(member: discord.Member):
-    '''Does this member have the Kick Members permission'''
-    if member.id == member.guild.owner.id: return True
-    for a in member.roles:
-        if a.permissions.administrator or a.permissions.kick_members:
-            return True
-    return False
-
-async def BanMembers(member: discord.Member):
-    '''Does this member have the Ban Members permission'''
-    if member.id == member.guild.owner.id: return True
-    for a in member.roles:
-        if a.permissions.administrator or a.permissions.ban_members:
-            return True
-    return False
 
 async def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.Member):
     '''Check to see if we shouldn't log a message delete event
@@ -594,70 +535,67 @@ async def CheckCyberlogExclusions(channel: discord.TextChannel, member: discord.
             return False
     return True
 
-async def DashboardManageServer(server: discord.Guild, user: discord.User):
-    '''Initialize dashboard permissions; which servers a member can manage'''
-    if user.id == 247412852925661185: return True
-    member = server.get_member(user.id)
-    if not member: return False
-    return await ManageServer(member)
+async def getModElement(s: discord.Guild, mod):
+    '''Return the placement of the desired log module'''
+    return (await GetCyberlogObject(s)).get('modules').index([x for x in (await GetCyberlogObject(s)).get('modules') if x.get('name').lower() == mod][0])
 
-async def GetSummarize(s: discord.Guild, mod):
-    '''Get the summarize value'''
-    return (await GetCyberlogObject(s)).get(mod).get('summarize') if (await GetCyberlogObject(s)).get('summarize') != (await GetCyberlogObject(s)).get(mod).get('summarize') else (await GetCyberlogObject(s)).get('summarize')
+# async def GetSummarize(s: discord.Guild, mod):
+#     '''Get the summarize value'''
+#     return (await GetCyberlogObject(s)).get('modules')[await getModElement(s, mod)].get('summarize') if (await GetCyberlogObject(s)).get('summarize') != (await GetCyberlogObject(s)).get('modules')[await getModElement(s, mod)].get('summarize') else (await GetCyberlogObject(s)).get('summarize')
 
-async def SummarizeEnabled(s: discord.Guild, mod):
-    '''Is summarizing enabled for this module?'''
-    return (await GetCyberlogObject(s)).get('summarize') != 0 and (await GetCyberlogObject(s)).get(mod).get('summarize') != 1
+# async def SummarizeEnabled(s: discord.Guild, mod):
+#     '''Is summarizing enabled for this module?'''
+#     return (await GetCyberlogObject(s)).get('summarize') != 0 and (await GetCyberlogObject(s)).get('modules')[await getModElement(s, mod)].get('summarize') != 1
 
-async def GeneralSummarizeEnabled(s: discord.Guild):
-    '''Is summarizing enabled for this server?'''
-    return (await GetCyberlogObject(s)).get('summarize') != 0
+# async def GeneralSummarizeEnabled(s: discord.Guild):
+#     '''Is summarizing enabled for this server?'''
+#     return (await GetCyberlogObject(s)).get('summarize') != 0
 
-async def StringifyPermissions(p: discord.Permissions):
-    '''Turn a permissions object into a partially stringified version'''
-    return [a[0] for a in iter(p) if a[1]]
+# async def StringifyPermissions(p: discord.Permissions):
+#     '''Turn a permissions object into a partially stringified version'''
+#     return [a[0] for a in iter(p) if a[1]]
 
-async def AppendSummary(s: discord.Guild, summary):
-    '''Appends a Cyberlog.Summary object to a server's database entry'''
-    await servers.update_one({'server_id': s.id}, {'$push': {'summaries': vars(summary) }})
+# async def AppendSummary(s: discord.Guild, summary):
+#     '''Appends a Cyberlog.Summary object to a server's database entry'''
+#     await servers.update_one({'server_id': s.id}, {'$push': {'summaries': vars(summary) }})
 
-async def GetSummary(s: discord.Guild, id: int):
-    '''Return a summary object from a server and message ID'''
-    return await servers.find_one({'server_id': s.id, 'summaries.$.id': id})
+# async def GetSummary(s: discord.Guild, id: int):
+#     '''Return a summary object from a server and message ID'''
+#     return await servers.find_one({'server_id': s.id, 'summaries.$.id': id})
 
-async def StringifyExtras(r: discord.Role):
-    '''Turns a role into a partially stringified version for things like mentionable/displayed separately'''
-    s = []
-    if r.hoist: s.append('displayed separately')
-    if r.mentionable: s.append('mentionable')
-    return s
+# async def StringifyExtras(r: discord.Role):
+#     '''Turns a role into a partially stringified version for things like mentionable/displayed separately'''
+#     s = []
+#     if r.hoist: s.append('displayed separately')
+#     if r.mentionable: s.append('mentionable')
+#     return s
 
-async def StringifyBoth(r: discord.Role):
-    '''Turns a role into a combination of the above two'''
-    perms = await StringifyPermissions(r.permissions)
-    perms.extend(await StringifyExtras(r))
-    return perms
+# async def StringifyBoth(r: discord.Role):
+#     '''Turns a role into a combination of the above two'''
+#     perms = await StringifyPermissions(r.permissions)
+#     perms.extend(await StringifyExtras(r))
+#     return perms
 
-async def ComparePerms(b: discord.Role, a: discord.Role):
-    '''Bold or strikethrough differences'''
-    bef = await StringifyBoth(b)
-    aft = await StringifyBoth(a)
-    s = []
-    for perm in bef:
-        if perm not in aft: s.append('~~{}~~'.format(perm))
-        else: s.append(perm)
-    for perm in aft:
-        if perm not in bef and perm not in s: s.append('**{}**'.format(perm))
-    return s
+# async def ComparePerms(b: discord.Role, a: discord.Role):
+#     '''Bold or strikethrough differences'''
+#     bef = await StringifyBoth(b)
+#     aft = await StringifyBoth(a)
+#     s = []
+#     for perm in bef:
+#         if perm not in aft: s.append('~~{}~~'.format(perm))
+#         else: s.append(perm)
+#     for perm in aft:
+#         if perm not in bef and perm not in s: s.append('**{}**'.format(perm))
+#     return s
 
-async def UnchangedPerms(b: discord.Role, a: discord.Role):
-    '''Only return things that aren't changed'''
-    root = await StringifyBoth(b)
-    new = await StringifyBoth(a)
-    returns = []
-    for r in root:
-        if r in new: returns.append(r)
-    return returns
+# async def UnchangedPerms(b: discord.Role, a: discord.Role):
+#     '''Only return things that aren't changed'''
+#     root = await StringifyBoth(b)
+#     new = await StringifyBoth(a)
+#     returns = []
+#     for r in root:
+#         if r in new: returns.append(r)
+#     return returns
 
 async def GetTimezone(s: discord.Guild):
     '''Return the timezone offset from UTC for a given server'''
@@ -697,9 +635,9 @@ async def SetBirthdayMessage(m: discord.Member, msg, auth, servers):
         'created': datetime.datetime.utcnow(),
         'servers': [s.id for s in servers]}}}) 
 
-async def ResetBirthdayMessages(m: discord.Member):
+async def ResetBirthdayMessages(u: discord.User):
     '''Resets a member's birthday messages (once their birthday has happened)'''
-    await users.update_one({'user_id': m.id}, {'$set': {'birthdayMessages': []}})
+    await users.update_one({'user_id': u.id}, {'$set': {'birthdayMessages': []}})
 
 async def GetAge(m: discord.Member):
     '''Return the age of a member'''
@@ -711,15 +649,15 @@ async def SetAge(m: discord.Member, age):
 
 async def AppendWishlistEntry(m: discord.Member, entry):
     '''Append a wishlist entry to a member's wish list'''
-    await users.update_one({'user_id': m.id}, {'$push': {'wishList': entry}}, True)
+    await users.update_one({'user_id': m.id}, {'$push': {'wishlist': entry}}, True)
 
 async def SetWishlist(m: discord.Member, wishlist):
     '''Sets a member's wishlist to the specified list'''
-    await users.update_one({'user_id': m.id}, {'$set': {'wishList': wishlist}}, True)
+    await users.update_one({'user_id': m.id}, {'$set': {'wishlist': wishlist}}, True)
 
 async def GetWishlist(m: discord.Member):
     '''Return the wishlist of a member'''
-    return (await users.find_one({'user_id': m.id})).get('wishList')
+    return (await users.find_one({'user_id': m.id})).get('wishlist')
 
 async def SetBirthdayMode(s: discord.Guild, mode):
     '''Sets auto birthday detection mode: Disabled (0), cake only (1), enabled (2)'''
@@ -780,7 +718,8 @@ async def RemoveTimedEvent(s: discord.Guild, event):
 
 async def AppendCustomStatusHistory(m: discord.Member, emoji, status):
     '''Appends a custom status event to a user listing of them. Member object because only they have custom status attributes, not just user objects.'''
-    await users.update_one({'user_id': m.id}, {'$push': {'customStatusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'customStatusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'customStatusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}}})
 
 async def SetCustomStatusHistory(m: discord.Member, entries):
     '''Overwrites the member's custom status history list'''
@@ -788,7 +727,8 @@ async def SetCustomStatusHistory(m: discord.Member, entries):
 
 async def AppendUsernameHistory(m: discord.User):
     '''Appends a username update to a user's listing of them'''
-    await users.update_one({'user_id': m.id}, {'$push': {'usernameHistory': {'name': m.name, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'usernameHistory': {'name': m.name, 'timestamp': datetime.datetime.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'usernameHistory': {'name': m.name, 'timestamp': datetime.datetime.utcnow()}}})
 
 async def SetUsernameHistory(m: discord.User, entries):
     '''Overwrites the user's username history list'''
@@ -796,74 +736,102 @@ async def SetUsernameHistory(m: discord.User, entries):
 
 async def AppendAvatarHistory(m: discord.User, url):
     '''Appends an avatar update to a user's listing of them. Old is the discord CDN avatar link used for comparisons, new is the permanent link from the image log channel (copy attachment)'''
-    await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': str(m.avatar_url), 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'avatarHistory': {'discordURL': m.avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': m.avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}})
 
 async def SetAvatarHistory(m: discord.User, entries):
     '''Overwrites the user's avatar history list'''
     await users.update_one({'user_id': m.id}, {'$set': {'avatarHistory': entries}})
 
-async def UnduplicateHistory(u: discord.User):
+async def BulkUpdateHistory(entries: dict):
+    '''New in v1.0. Given a dict of dicts, perform bulk updates for the users' attribute history'''
+    #For the queue, pass the bot to the methods above. If we need to use the queue, we'll add stuff to the queue, and whatever method opened the queue will pass the queue here afterwards
+    updateOperations = []
+    for k,v in entries.items():
+        updateOperations.append(pymongo.UpdateOne({'user_id': k}, {'$push': {kk: vv for kk,vv in v.items()}}))
+    if updateOperations: await users.bulk_write(updateOperations, ordered=False)
+
+async def UnduplicateUsers(usrs, ctx=None):
+    '''Removes duplicate entries from the given users' history lists, making use of bulk operations'''
+    if ctx: message = await ctx.send(f'Unduplicating {len(usrs)} users')
+    gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
+    gatheredDict = {u['user_id']: u for u in gathered}
+    chunkSize = 1000
+    counter = 0
+    fullCounter = 0
+    updateOperations = []
+    for u in gathered:
+        counter += 1
+        fullCounter += 1
+        updateOperations += await UnduplicateHistory(u, gatheredDict.get(u.id), mode='return')
+        if counter >= chunkSize:
+            await users.bulk_write(updateOperations, ordered=False)
+            counter = 0
+            updateOperations = []
+            if ctx: await message.edit(content=f'Unduplicating {fullCounter}/{len(usrs)} users')
+    await users.bulk_write(updateOperations, ordered=False)
+    if ctx: await message.edit(content=f'Successfully unduplicated {len(usrs)} users')
+
+async def UnduplicateHistory(u: discord.User, userEntry=None, *, mode='update'):
     '''Removes duplicate entries from a user's history lists'''
-    userEntry = await users.find_one({'user_id': u.id})
+    #v1.0: Changed behavior to build list locally instead of spam MongoDB operations repeatedly. The new algorithm also reduces data loss and improves speed.
+    if not userEntry: userEntry = await users.find_one({'user_id': u.id})
     csh, uh, ah = [], [], []
+    cache = None
     try:
-        for c in userEntry.get('customStatusHistory'):
-            if len(csh) > 0 and {'emoji': c.get('emoji'), 'name': c.get('name')} != {'emoji': csh[-1].get('emoji'), 'name': csh[-1].get('name')}: csh.append(c)
-            elif len(csh) == 0: csh.append(c)
+        for entry in userEntry.get('customStatusHistory'):
+            current = {'emoji': entry.get('emoji'), 'name': entry.get('name')}
+            if cache != current:
+                cache = current
+                csh.append(entry)
     except TypeError: pass
     try:
-        for c in userEntry.get('usernameHistory'):
-            if c.get('name') not in [i.get('name') for i in uh]: uh.append(c)
+        for entry in userEntry.get('usernameHistory'):
+            if cache != entry.get('name'):
+                cache = entry.get('name')
+                uh.append(entry)
     except TypeError: pass
     try:
-        for c in userEntry.get('avatarHistory'):
-            if c.get('discordURL') not in [i.get('discordURL') for i in ah]: ah.append(c)
+        for entry in userEntry.get('avatarHistory'):
+            if cache != entry.get('discordURL'):
+                cache = entry.get('discordURL')
+                ah.append(entry)
     except TypeError: pass
-    customStatusPulls = []
-    for c in csh:
-        def inRange(time, comp): return comp >= time - datetime.timedelta(minutes=30) and comp <= time + datetime.timedelta(minutes=30)
-        for e in userEntry['customStatusHistory']:
-            if inRange(e['timestamp'], c['timestamp']): customStatusPulls.append(pymongo.UpdateOne({'user_id': u.id}, {'$pull': {'customStatusHistory': e}}))
-    if customStatusPulls: await users.bulk_write(customStatusPulls)
-    for c in csh: await users.update_one({'user_id': u.id}, {'$push': {'customStatusHistory': c}})
-    for c in uh: 
-        await users.update_one({'user_id': u.id}, {'$pull': {'usernameHistory': {'name': c.get('name')}}})
-        await users.update_one({'user_id': u.id}, {'$push': {'usernameHistory': c}})
-    for c in ah:
-        await users.update_one({'user_id': u.id}, {'$pull': {'avatarHistory': {'discordURL': c.get('discordURL')}}})
-        await users.update_one({'user_id': u.id}, {'$push': {'avatarHistory': c}})
+    if mode == 'update': await users.update_one({'user_id': u.id}, {'$set': {'customStatusHistry': csh, 'usernameHistory': uh, 'avatarHistory': ah}})
+    elif mode == 'return': return pymongo.UpdateOne({'user_id': u.id}, {'$set': {'customStatusHistry': csh, 'usernameHistory': uh, 'avatarHistory': ah}})
 
-async def ClearMemberMessages(s: discord.Guild):
-    '''Empties the lastMessage and quickMessage lists belonging to members of the specified server'''
-    bulkUpdates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': m.id}, {'$set': {'members.$.lastMessages': [], 'members.$.quickMessages': []}}) for m in s.members]
-    if bulkUpdates: await servers.bulk_write(bulkUpdates)
+# async def ClearMemberMessages(s: discord.Guild):
+#     '''Empties the lastMessage and quickMessage lists belonging to members of the specified server'''
+#     bulkUpdates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': m.id}, {'$set': {'members.$.lastMessages': [], 'members.$.quickMessages': []}}) for m in s.members]
+#     if bulkUpdates: await servers.bulk_write(bulkUpdates)
 
-async def SetLastActive(u: discord.User, timestamp, reason):
+async def SetLastActive(u: typing.List[discord.User], timestamp, reason):
     '''Updates the last active attribute'''
-    await users.update_one({'user_id': u.id}, {'$set': {'lastActive': {'timestamp': timestamp, 'reason': reason}}})
+    await users.update_many({'user_id': {'$in': [user.id for user in u]}}, {'$set': {'lastActive': {'timestamp': timestamp, 'reason': reason}}})
 
-async def SetLastOnline(u: discord.User, timestamp):
+async def SetLastOnline(u: typing.List[discord.User], timestamp):
     '''Updates the last online attribute'''
-    await users.update_one({'user_id': u.id}, {'$set': {'lastOnline': timestamp}})
+    await users.update_many({'user_id': {'$in': [user.id for user in u]}}, {'$set': {'lastOnline': timestamp}})
 
 async def SetLogChannel(s: discord.Guild, channel):
     '''Sets whether the ageKick configuration for the specified server can only be modified by the server owner'''
     await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.defaultChannel': channel.id}}, True)
 
-async def NameVerify(s: discord.Guild):
-    '''Verifies a server by name to counter the database code error'''
-    await servers.update_one({'name': s.name}, {'$set': {'server_id': s.id}}, True)
+# async def NameVerify(s: discord.Guild):
+#     '''Verifies a server by name to counter the database code error'''
+#     await servers.update_one({'name': s.name}, {'$set': {'server_id': s.id}}, True)
 
 async def ZeroRepeatedJoins(s: discord.Guild):
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.repeatedJoins': [0, 0, 0]}}, True)
 
 async def AppendMemberJoinEvent(s: discord.Guild, m: discord.Member):
     '''Appends a member join event to a server's log, uses for member join logs'''
+    #Was this one of the many features I want to do but can't implement in full for the time being?
     await servers.update_one({'server_id': s.id}, {'$push': {'cyberlog.joinLogHistory': {'id': m.id, 'timestamp': datetime.datetime.utcnow()}}})
 
-async def GetNamezone(s: discord.Guild):
-    '''Return the custom timezone name for a given server'''
-    return (await servers.find_one({"server_id": s.id})).get('tzname')
+# async def GetNamezone(s: discord.Guild):
+#     '''Return the custom timezone name for a given server'''
+#     return (await servers.find_one({"server_id": s.id})).get('tzname')
 
 async def GetServer(s: discord.Guild):
     '''Return server object'''
@@ -874,61 +842,60 @@ async def SetLastUpdate(s: discord.Guild, d: datetime.datetime, mod: None):
     if mod is None: await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.lastUpdate': d}})
     else: await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.'+mod+'.lastUpdate': d}})
 
-async def GetLastUpdate(s: discord.Guild, mod: None):
-    '''Returns a datetime object representing the last time the server or a module was recapped'''
-    if mod is None: return await servers.find_p({"server_id": s.id}).get("cyberlog.lastUpdate")
-    else: return await GetCyberMod(s, mod).get('lastUpdate')
+# async def GetLastUpdate(s: discord.Guild, mod: None):
+#     '''Returns a datetime object representing the last time the server or a module was recapped'''
+#     if mod is None: return await servers.find_p({"server_id": s.id}).get("cyberlog.lastUpdate")
+#     else: return await GetCyberMod(s, mod).get('lastUpdate')
 
-async def GetOldestUpdate(s: discord.Guild, mods):
-    '''Returns the oldest update date from a list of provided modules. Useful for when people configure different settings for different modules'''
-    return min([GetLastUpdate(s, m) for m in mods]) + datetime.timedelta(hours=await GetTimezone(s))
+# async def GetOldestUpdate(s: discord.Guild, mods):
+#     '''Returns the oldest update date from a list of provided modules. Useful for when people configure different settings for different modules'''
+#     return min([GetLastUpdate(s, m) for m in mods]) + datetime.timedelta(hours=await GetTimezone(s))
 
-async def UpdateChannel(channel: discord.abc.GuildChannel):
-    '''Updates the channel.updated and channel.name attributes of the given channel. .updated is used for stats on channel edit'''
-    servers.update_one({'server_id': channel.guild.id, 'allChannels.id': channel.id}, {'$set': {
-        'allChannels.$.updated': datetime.datetime.utcnow(),
-        'allChannels.$.name': channel.name,
-        'allChannels.$.oldUpdate': await GetChannelUpdate(channel)}})
+# async def UpdateChannel(channel: discord.abc.GuildChannel):
+#     '''Updates the channel.updated and channel.name attributes of the given channel. .updated is used for stats on channel edit'''
+#     servers.update_one({'server_id': channel.guild.id, 'allChannels.id': channel.id}, {'$set': {
+#         'allChannels.$.updated': datetime.datetime.utcnow(),
+#         'allChannels.$.name': channel.name,
+#         'allChannels.$.oldUpdate': await GetChannelUpdate(channel)}})
 
-async def UpdateRole(role: discord.Role):
-    '''Updates the role.updated and role.name attributes of the given role. .updated is used for stats on role edit'''
-    servers.update_one({'server_id': role.guild.id, 'roles.id': role.id}, {'$set': {
-        'roles.$.updated': datetime.datetime.utcnow(),
-        'roles.$.name': role.name,
-        'roles.$.oldUpdate': await GetRoleUpdate(role)}})
+# async def UpdateRole(role: discord.Role):
+#     '''Updates the role.updated and role.name attributes of the given role. .updated is used for stats on role edit'''
+#     servers.update_one({'server_id': role.guild.id, 'roles.id': role.id}, {'$set': {
+#         'roles.$.updated': datetime.datetime.utcnow(),
+#         'roles.$.name': role.name,
+#         'roles.$.oldUpdate': await GetRoleUpdate(role)}})
 
-async def GetChannelUpdate(channel: discord.abc.GuildChannel):
-    '''Returns the channel.updated attribute, which is the last time the channel was updated'''
-    return (await servers.find_one({'server_id': channel.guild.id, 'channels.$.id': channel.id})).get('updated')
+# async def GetChannelUpdate(channel: discord.abc.GuildChannel):
+#     '''Returns the channel.updated attribute, which is the last time the channel was updated'''
+#     return (await servers.find_one({'server_id': channel.guild.id, 'channels.$.id': channel.id})).get('updated')
 
-async def GetOldChannelUpdate(channel: discord.abc.GuildChannel):
-    '''Returns the channel.oldUpdate attribute, which is the time it was updated 2 times ago'''
-    return (await servers.find_one({'server_id': channel.guild.id, 'channels.$.id': channel.id})).get('oldUpdate')
+# async def GetOldChannelUpdate(channel: discord.abc.GuildChannel):
+#     '''Returns the channel.oldUpdate attribute, which is the time it was updated 2 times ago'''
+#     return (await servers.find_one({'server_id': channel.guild.id, 'channels.$.id': channel.id})).get('oldUpdate')
 
-async def GetRoleUpdate(role: discord.Role):
-    '''Returns the role.updated attribute, which is the last time the role was updated'''
-    return (await servers.find_one({'server_id': role.guild.id, 'roles.$.id': role.id})).get('updated')
+# async def GetRoleUpdate(role: discord.Role):
+#     '''Returns the role.updated attribute, which is the last time the role was updated'''
+#     return (await servers.find_one({'server_id': role.guild.id, 'roles.$.id': role.id})).get('updated')
 
-async def GetOldRoleUpdate(role: discord.Role):
-    '''Returns the role.oldUpdate attribute, which is the time it was updated 2 times ago'''
-    return (await servers.find_one({'server_id': role.guild.id, 'roles.$.id': role.id})).get('oldUpdate')
+# async def GetOldRoleUpdate(role: discord.Role):
+#     '''Returns the role.oldUpdate attribute, which is the time it was updated 2 times ago'''
+#     return (await servers.find_one({'server_id': role.guild.id, 'roles.$.id': role.id})).get('oldUpdate')
 
 async def VerifyChannel(c: discord.abc.GuildChannel, new=False):
     '''Verifies a channel. Single database operation of VerifyServer'''
     if new: await servers.update_one({'server_id': c.guild.id}, {'$push': {'channels': {'name': c.name, 'id': c.id}}})
     else: await servers.update_one({"server_id": c.guild.id, 'channels.$.id': c.id}, {"$set": {"name": c.name}})
 
-async def VerifyMember(m: discord.Member, new=False):
+async def VerifyMember(m: discord.User, new=False, warnings=None):
     '''Verifies a member. Single database operation of VerifyServer'''
-    antis = await servers.find_one({"server_id": m.guild.id}).get('antispam')
+    if new and not warnings: warnings = await servers.find_one({"server_id": m.guild.id}).get('antispam', {}).get('warn', 3)
     if new:
         await servers.update_one({'server_id': m.guild.id}, {'$push': { 'members': {
             'id': m.id,
             'name': m.name,
-            'warnings': antis.get('warn'),
-            'quickMessages': [],
-            'lastMessages': []}}})
-    else: await servers.update_one({"server_id": m.guild.id, "members.id": id}, {"$set": {"members.$.name": m.name}})
+            'warnings': warnings,
+            }}})
+    else: await servers.update_one({"server_id": m.guild.id, "members.id": m.id}, {"$set": {"members.$.name": m.name}})
 
 async def VerifyRole(r: discord.Role, new=False):
     '''Verifies a role. Single database operation of VerifyServer'''
@@ -938,22 +905,26 @@ async def VerifyRole(r: discord.Role, new=False):
 async def CalculateGeneralChannel(g: discord.Guild, bot, update=False):
     '''Determines the most active channel based on indexed message count
     r: Whether to return the channel. If False, just set this to the database'''
-    currentGeneralChannel = bot.lightningLogging[g.id].get('generalChannel', ())
+    try: currentGeneralChannel = (await utility.get_server(g)).get('generalChannel', ())
+    except KeyError: currentGeneralChannel = await GetServer(g).get('generalChannel', ())
     if not currentGeneralChannel or type(currentGeneralChannel) != list or False in currentGeneralChannel:
         channels = {}
         for c in g.text_channels:
-            with open(f'Indexes/{g.id}/{c.id}.json') as f: channels[c] = len([v for v in json.load(f).values() if (datetime.datetime.utcnow() - datetime.datetime.fromisoformat(v['timestamp0'])).days < 14]) #Most messages sent in last two weeks
+            try:
+                with open(f'Indexes/{g.id}/{c.id}.json') as f: channels[c] = len([v for v in json.load(f).values() if (discord.utils.utcnow() - datetime.datetime.fromisoformat(v['timestamp0'])).days < 14]) #Most messages sent in last two weeks
+            except FileNotFoundError: pass
         popular = max(channels, key = channels.get, default=0)
-        if update: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': (popular.id, False)}})
+        if update and channels: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': (popular.id, False)}})
     else: popular = bot.get_channel(currentGeneralChannel[0])
     return popular
 
 async def CalculateAnnouncementsChannel(g: discord.Guild, bot, update=False):
     '''Determines the announcement channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
-    currentAnnouncementsChannel = bot.lightningLogging[g.id].get('announcementsChannel', ())
+    try: currentAnnouncementsChannel = (await utility.get_server(g)).get('announcementsChannel', ())
+    except KeyError: currentAnnouncementsChannel = await GetServer(g).get('announcementsChannel', ())
     if not currentAnnouncementsChannel or type(currentAnnouncementsChannel) != list or False in currentAnnouncementsChannel:
-        try: s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcements'))[0]
+        try: s = sorted([c for c in g.text_channels if 'announcement' in c.name.lower() and not c.overwrites_for(g.default_role).send_messages], key=lambda x: len(x.name) - len('announcement'))[0]
         except IndexError: return 0
         if update: await servers.update_one({'server_id': g.id}, {'$set': {'announcementsChannel': (s.id, False)}})
     else: s = bot.get_channel(currentAnnouncementsChannel[0])
@@ -962,7 +933,8 @@ async def CalculateAnnouncementsChannel(g: discord.Guild, bot, update=False):
 async def CalculateModeratorChannel(g: discord.Guild, bot, update=False, *, logChannelID=0):
     '''Determines the moderator channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
-    currentModeratorChannel = bot.lightningLogging[g.id].get('moderatorChannel', ())
+    try: currentModeratorChannel = (await utility.get_server(g)).get('moderatorChannel', ())
+    except KeyError: currentModeratorChannel = await GetServer(g).get('moderatorChannel', ())
     if not currentModeratorChannel or type(currentModeratorChannel) != list or False in currentModeratorChannel:
         relevanceKeys = {}
         for c in g.text_channels:
@@ -996,18 +968,6 @@ async def GetSupportTickets():
     '''Returns entire support ticket collection'''
     return (await disguard.find_one({})).get('tickets')
 
-async def SetSchedule(u: discord.User, schedule):
-    '''Updates a member's school schedule'''
-    await users.update_one({'user_id': u.id}, {'$set': {'schedule': schedule}}, True)
-
-async def SetHSDaysOff(days):
-    '''Updates the listing under the RicoViking9000 user entry for the custom schedule command for my friends at the high school I went to'''
-    await users.update_one({'user_id': 247412852925661185}, {'$set': {'highSchoolDaysOffSpring2021': days}})
-
-async def SetHSEventDays(days):
-    '''Updates the listing under the RicoViking9000 user entry for the custom schedule command for my friends at the high school I went to'''    
-    await users.update_one({'user_id': 247412852925661185}, {'$set': {'highSchoolEventDaysSpring2021': days}})
-
 async def SetWarnings(members, warnings):
     bulkUpdates = [pymongo.UpdateOne({'server_id': members[0].guild.id, 'members.id': member.id}, {'$set': {'members.$.warnings': warnings}}) for member in members]
     await servers.bulk_write(bulkUpdates)
@@ -1038,7 +998,7 @@ async def AdjustDST(s: discord.Guild):
 
 async def GetBirthdayList():
     '''Returns the global birthday dictionary'''
-    return (await disguard.find_one({})).get('birthdays')
+    return (await disguard.find_one({})).get('birthdays', {})
 
 async def UpdateBirthdayList(u: discord.User, d: datetime.datetime):
     '''Adds a member's birthday to the global dictionary'''
@@ -1047,7 +1007,11 @@ async def UpdateBirthdayList(u: discord.User, d: datetime.datetime):
     try: birthdayList[d.strftime('%m/%d/%Y')].append({u.id: d})
     except KeyError: birthdayList[d.strftime('%m/%d/%Y')] = [{u.id: d}]
     await disguard.update_one({}, {'$set': {'birthdays': birthdayList}}, True)
-   
+
+async def SetBirthdayList(input: dict):
+    '''Sets the global birthday directory to the passed dictionary'''
+    await disguard.update_one({}, {'$set': {'birthdays': await GetBirthdayList()}}, True)
+
 async def SetWarmup(s: discord.Guild, warmup: int):
     '''Sets a server's warmup value'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.warmup': warmup}})
