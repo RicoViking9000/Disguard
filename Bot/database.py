@@ -174,7 +174,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         'redditEnhance': 0 if serv.get('redditEnhance') == (False, False) else 1 if serv.get('redditEnhance') == (True, False) else 2 if serv.get('redditEnhance') == (False, True) else 3 if serv.get('redditEnhance') == (True, True) else serv.get('redditEnhance', 3), #0: all off, 1: subreddits only, 2: submissions only, 3: all on
         'birthdayChannel': serv.get('birthdayChannel') or serv.get('birthday', 0), #Channel to send birthday announcements to
         'birthdate': serv.get('birthdate', datetime.datetime(started.year, 1, 1, 12 - utility.daylightSavings())), #When to send bday announcements
-        'birthdayMode': serv.get('birthdayMode', 0), #How to respond to automatic messages. 0 = disabled, 1 = react, 2 = message
+        'birthdayMode': serv.get('birthdayMode', 1), #How to respond to automatic messages. 0 = disabled, 1 = react, 2 = message
         'colorTheme': serv.get('colorTheme', 0), #Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
         'channels': serverChannels,
         'server_id': s.id,
