@@ -170,4 +170,4 @@ class Reddit(commands.Cog):
         return (embed, submission.over_18) if not channel else embed
 
 async def setup(bot: commands.Bot):
-    bot.add_cog(Reddit(bot))
+    await bot.add_cog(Reddit(bot))

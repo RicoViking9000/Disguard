@@ -139,6 +139,7 @@ class Cyberlog(commands.Cog):
                 await self.bot.get_cog('Birthdays').verifyBirthdaysDict()
             for g in self.bot.guilds:
                 timeString = f'Processing attributes for {g.name}'
+                print(timeString)
                 started = datetime.datetime.now()
                 serverStarted = datetime.datetime.now()
                 try: asyncio.gather(database.CalculateGeneralChannel(g, self.bot, True), database.CalculateAnnouncementsChannel(g, self.bot, True), database.CalculateModeratorChannel(g, self.bot, True))
@@ -154,12 +155,13 @@ class Cyberlog(commands.Cog):
                 for c in g.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
                     except (discord.Forbidden): pass
+                midway = datetime.datetime.now()
                 for c in g.categories:
                     try: self.categories[c.id] = c.channels
                     except (discord.Forbidden): pass
                 try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None] #This can be made faster without a generator
                 except (discord.Forbidden): pass
-                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s'
+                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s\n  •Pins: {(midway - started).seconds}s\n  •Categories: {(datetime.datetime.now() - midway).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
                 indexesPath = f'{indexes}/{g.id}'
@@ -179,6 +181,7 @@ class Cyberlog(commands.Cog):
                     except (discord.HTTPException): pass
                 except: pass
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
+                print(timeString)
             print('About to process users\' attribute history')
             started = datetime.datetime.now()
             started2 = datetime.datetime.now()

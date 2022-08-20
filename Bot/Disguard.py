@@ -59,6 +59,13 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions.none())
 bot.remove_command('help')
 
+async def main():
+    lightningdb.initialize()
+    # database.initialize(secure.beta())
+    # await bot.start(secure.beta())
+    database.initialize(secure.token())
+    await bot.start(secure.token())
+        
 indexes = 'Indexes'
 
 async def UpdatePresence():
@@ -497,7 +504,4 @@ def serializeJson(o):
     if type(o) is datetime.datetime: return o.isoformat()
 
 
-database.Initialize(secure.token())
-bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
-#database.Initialize(secure.beta())
-#bot.run(secure.beta())
+asyncio.run(main())
