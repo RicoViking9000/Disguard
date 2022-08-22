@@ -236,6 +236,10 @@ class Cyberlog(commands.Cog):
                 for g in self.bot.guilds:
                     try: await verifyLogChannel(self.bot, g)
                     except: pass
+            # elif self.syncData.current_loop % 3 == 0 and self.syncData.current_loop != 0:
+            #     for g in self.bot.guilds:
+            #         for c in g.text_channels:
+            #             asyncio.create_task(self.indexChannel(c, 0.0040))
             await updateLastOnline([m for m in self.bot.get_all_members() if m.status != discord.Status.offline], datetime.datetime.now())
             print(f'Finished everything else in {(datetime.datetime.now() - started).seconds}s')
             print(f'Garbage collection: {gc.collect()} objects')
@@ -2117,9 +2121,9 @@ class Cyberlog(commands.Cog):
         try: await target.send(content)
         except: pass
         await self.CheckDisguardServerRoles(guild.members, mode=1, reason='Bot joined a server')
-        await asyncio.gather(*[self.indexServer(c) for c in guild.text_channels])
+        await asyncio.gather(*[self.indexChannel(c) for c in guild.text_channels])
 
-    async def indexServer(self, channel: discord.TextChannel):
+    async def indexChannel(self, channel: discord.TextChannel, sleepTime = 0.0025):
         '''This will fully index messages.'''
         try: os.makedirs(f'{indexes}/{channel.guild.id}')
         except FileExistsError: pass
@@ -2128,7 +2132,7 @@ class Cyberlog(commands.Cog):
                 try:
                     await lightningdb.post_message(message)
                 except: continue
-                await asyncio.sleep(0.0025)
+                await asyncio.sleep(sleepTime)
         except Exception as e: print(f'Index error for {channel.guild.name} - {channel.name}: {e}')
 
     @commands.Cog.listener()
