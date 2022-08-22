@@ -164,16 +164,11 @@ class Cyberlog(commands.Cog):
                 timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s\n  •Pins: {(midway - started).seconds}s\n  •Categories: {(datetime.datetime.now() - midway).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
-                indexesPath = f'{indexes}/{g.id}'
-                try:
-                    for p in os.listdir(indexesPath):
-                        if 'json' in p and not self.bot.get_channel(int(p[:p.find('.')])): os.remove(f'{indexes}/{g.id}/{p}')
-                except FileNotFoundError: pass
                 try:
                     for p in os.listdir(attachmentsPath):
                         if p != 'LogArchive' and not self.bot.get_channel(int(p)): shutil.rmtree(f'Attachments/{g.id}/{p}', ignore_errors=True)
                 except FileNotFoundError: pass
-                timeString += f'\n •Local file management: {(datetime.datetime.now() - started).seconds}s'
+                timeString += f'\n •Local attachment management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 try:
                     self.invites[str(g.id)] = await g.invites()
@@ -182,6 +177,11 @@ class Cyberlog(commands.Cog):
                 except: pass
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
                 print(timeString)
+            started = datetime.datetime.now()
+            for collection in await lightningdb.database.list_collection_names():
+                if collection not in ('servers', 'users') and not self.bot.get_channel(int(collection)):
+                    await lightningdb.delete_channel(int(collection))
+            print(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
             print('About to process users\' attribute history')
             started = datetime.datetime.now()
             started2 = datetime.datetime.now()
