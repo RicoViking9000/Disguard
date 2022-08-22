@@ -123,13 +123,13 @@ class Cyberlog(commands.Cog):
                     print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
     
-    @tasks.loop(hours=12) #V1.0: Halved frequency this loop runs
+    @tasks.loop(hours=24) #V1.0: This now only runs once per day
     async def syncData(self):
         print('Syncing data')
         started = datetime.datetime.now()
         rawStarted = datetime.datetime.now()
         try:
-            if self.syncData.current_loop % 4 == 0: #This segment activates once every two days
+            if self.syncData.current_loop % 2 == 0: #This segment activates once every two days
                 if self.syncData.current_loop == 0: #This segment activates only once while the bot is up (on bootup)
                     await database.Verification(self.bot)
                     asyncio.create_task(self.synchronizeDatabase(True))
@@ -230,7 +230,7 @@ class Cyberlog(commands.Cog):
             await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
             self.bot.attributeHistoryQueue = []
             started = datetime.datetime.now()
-            if self.syncData.current_loop % 4 == 0:
+            if self.syncData.current_loop % 2 == 0:
                 if self.syncData.current_loop == 0:
                     self.bot.get_cog('Reddit').syncRedditFeeds.start()
                 for g in self.bot.guilds:
@@ -240,10 +240,10 @@ class Cyberlog(commands.Cog):
             print(f'Finished everything else in {(datetime.datetime.now() - started).seconds}s')
             print(f'Garbage collection: {gc.collect()} objects')
         except Exception as e: 
-            print('Summarize error: {}'.format(traceback.format_exc()))
+            print('Data sync error: {}'.format(traceback.format_exc()))
             traceback.print_exc()
         finally: await self.imageLogChannel.send('Completed') #Moved this into finally so that message indexing and other bootup tasks can commence even if this fails
-        print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
+        print(f'Done syncing data: {(datetime.datetime.now() - rawStarted).seconds}s')
 
     async def synchronizeDatabase(self, notify=False):
         '''This method downloads data from the database and puts it in the local mongoDB variables, then is kept updated in the motorMongo changeStream method (trackChanges)'''
