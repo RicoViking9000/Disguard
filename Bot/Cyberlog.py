@@ -215,6 +215,9 @@ class Cyberlog(commands.Cog):
                                 updateOperations[m.id].update({'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': await self.imageToURL(m.display_avatar), 'timestamp': discord.utils.utcnow()}})
                                 updatedAvatar = True
                         except Exception as e: print(f'Avatar error for {m.name}: {e}')
+                        if m.bot and len(cache.get('avatarHistory')) > 150:
+                            stripped_avatar_history = cache.get('avatarHistory')[-150:]
+                            asyncio.create_task(database.SetAvatarHistory(m, stripped_avatar_history))
                     if updatedAvatar: await discord.utils.sleep_until(datetime.datetime.now() + datetime.timedelta(seconds=1)) #To prevent ratelimiting if Disguard sends a message to retrieve the image URL
                     if i % 1000 == 0 and i > 0:
                         print(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
