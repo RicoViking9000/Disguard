@@ -259,10 +259,7 @@ class Cyberlog(commands.Cog):
                 await lightningdb.post_server(s)
             else: 
                 attachmentsPath = f'Attachments/{s["server_id"]}'
-                indexesPath = f'{indexes}/{s["server_id"]}'
                 try: shutil.rmtree(attachmentsPath)
-                except FileNotFoundError: pass
-                try: shutil.rmtree(indexesPath)
                 except FileNotFoundError: pass
         async for u in await database.GetAllUsers():
             if self.bot.get_user(u['user_id']):
