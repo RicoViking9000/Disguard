@@ -59,6 +59,13 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions.none())
 bot.remove_command('help')
 
+async def main():
+    lightningdb.initialize()
+    # database.initialize(secure.beta())
+    # await bot.start(secure.beta())
+    database.initialize(secure.token())
+    await bot.start(secure.token())
+        
 indexes = 'Indexes'
 
 async def UpdatePresence():
@@ -79,11 +86,11 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         booted=True
         print('Booting...')
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
-        presence['activity'] = discord.Activity(name="my boss (Verifying database...)", type=discord.ActivityType.listening)
+        presence['activity'] = discord.Activity(name='my boss (Syncing data...)', type=discord.ActivityType.listening)
         await UpdatePresence()
         for cog in cogs:
             try:
-                bot.load_extension(cog)
+                await bot.load_extension(cog)
             except Exception as e: 
                 print(f'Cog load error: {e}')
                 traceback.print_exc()
@@ -92,11 +99,11 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         def initializeCheck(m: discord.Message): return m.author.id == bot.user.id and m.channel.id == cyber.imageLogChannel.id and m.content == 'Completed'
         print('Waiting for database callback...')
         await bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
-        presence['activity'] = discord.Activity(name="my boss (Indexing messages...)", type=discord.ActivityType.listening)
+        presence['activity'] = discord.Activity(name='my boss (Indexing messages...)', type=discord.ActivityType.listening)
         await UpdatePresence()
         print('Starting indexing...')
         for server in bot.guilds:
-            print('Indexing {}'.format(server.name))
+            print(f'Indexing {server.name}')
             await asyncio.gather(*[indexMessages(server, c) for c in server.text_channels])
             Cyberlog.indexed[server.id] = True
         presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
@@ -117,15 +124,15 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
                 existing_message_counter += 1
                 if existing_message_counter >= 15: break
         if not message.author.bot and (discord.utils.utcnow() - message.created_at).days < 7 and saveImages:
-            attach = 'Attachments/{}/{}/{}'.format(message.guild.id, message.channel.id, message.id)
-            try: os.makedirs(attach)
+            attachments_path = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
+            try: os.makedirs(attachments_path)
             except FileExistsError: pass
             for attachment in message.attachments:
                 if attachment.size / 1000000 < 8:
-                    try: await attachment.save('{}/{}'.format(attach, attachment.filename))
+                    try: await attachment.save(f'{attachments_path}/{attachment.filename}')
                     except discord.HTTPException: pass
-        if full: await asyncio.sleep(0.0010)
-    print('Indexed {}: {} in {} seconds'.format(server.name, channel.name, (datetime.datetime.now() - start).seconds))
+        if full: await asyncio.sleep(0.0015)
+    print(f'Indexed {server.name}: {channel.name} in {(datetime.datetime.now() - start).seconds} seconds')
 
 @commands.is_owner()
 @bot.command()
@@ -497,7 +504,4 @@ def serializeJson(o):
     if type(o) is datetime.datetime: return o.isoformat()
 
 
-database.Initialize(secure.token())
-bot.run(secure.token()) #Bot token stored in another file, otherwise anyone reading this could start the bot
-#database.Initialize(secure.beta())
-#bot.run(secure.beta())
+asyncio.run(main())

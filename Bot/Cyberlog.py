@@ -125,13 +125,13 @@ class Cyberlog(commands.Cog):
                     print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
         except Exception as e: print(f'Tracking error: {e}')
     
-    @tasks.loop(hours=12) #V1.0: Halved frequency this loop runs
+    @tasks.loop(hours=24) #V1.0: This now only runs once per day
     async def syncData(self):
         print('Syncing data')
         started = datetime.datetime.now()
         rawStarted = datetime.datetime.now()
         try:
-            if self.syncData.current_loop % 4 == 0: #This segment activates once per day
+            if self.syncData.current_loop % 2 == 0: #This segment activates once every two days
                 if self.syncData.current_loop == 0: #This segment activates only once while the bot is up (on bootup)
                     await database.Verification(self.bot)
                     asyncio.create_task(self.synchronizeDatabase(True))
@@ -141,6 +141,7 @@ class Cyberlog(commands.Cog):
                 await self.bot.get_cog('Birthdays').verifyBirthdaysDict()
             for g in self.bot.guilds:
                 timeString = f'Processing attributes for {g.name}'
+                print(timeString)
                 started = datetime.datetime.now()
                 serverStarted = datetime.datetime.now()
                 try: asyncio.gather(database.CalculateGeneralChannel(g, self.bot, True), database.CalculateAnnouncementsChannel(g, self.bot, True), database.CalculateModeratorChannel(g, self.bot, True))
@@ -156,24 +157,20 @@ class Cyberlog(commands.Cog):
                 for c in g.text_channels: 
                     try: self.pins[c.id] = [m.id for m in await c.pins()]
                     except (discord.Forbidden): pass
+                midway = datetime.datetime.now()
                 for c in g.categories:
                     try: self.categories[c.id] = c.channels
                     except (discord.Forbidden): pass
                 try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None] #This can be made faster without a generator
                 except (discord.Forbidden): pass
-                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s'
+                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s\n  •Pins: {(midway - started).seconds}s\n  •Categories: {(datetime.datetime.now() - midway).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
-                indexesPath = f'{indexes}/{g.id}'
-                try:
-                    for p in os.listdir(indexesPath):
-                        if 'json' in p and not self.bot.get_channel(int(p[:p.find('.')])): os.remove(f'{indexes}/{g.id}/{p}')
-                except FileNotFoundError: pass
                 try:
                     for p in os.listdir(attachmentsPath):
                         if p != 'LogArchive' and not self.bot.get_channel(int(p)): shutil.rmtree(f'Attachments/{g.id}/{p}', ignore_errors=True)
                 except FileNotFoundError: pass
-                timeString += f'\n •Local file management: {(datetime.datetime.now() - started).seconds}s'
+                timeString += f'\n •Local attachment management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 try:
                     self.invites[str(g.id)] = await g.invites()
@@ -181,6 +178,12 @@ class Cyberlog(commands.Cog):
                     except (discord.HTTPException): pass
                 except: pass
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
+                print(timeString)
+            started = datetime.datetime.now()
+            for collection in await lightningdb.database.list_collection_names():
+                if collection not in ('servers', 'users') and not self.bot.get_channel(int(collection)):
+                    await lightningdb.delete_channel(int(collection))
+            print(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
             print('About to process users\' attribute history')
             started = datetime.datetime.now()
             started2 = datetime.datetime.now()
@@ -214,6 +217,9 @@ class Cyberlog(commands.Cog):
                                 updateOperations[m.id].update({'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': await self.imageToURL(m.display_avatar), 'timestamp': discord.utils.utcnow()}})
                                 updatedAvatar = True
                         except Exception as e: print(f'Avatar error for {m.name}: {e}')
+                        if m.bot and len(cache.get('avatarHistory')) > 150:
+                            stripped_avatar_history = cache.get('avatarHistory')[-150:]
+                            asyncio.create_task(database.SetAvatarHistory(m, stripped_avatar_history))
                     if updatedAvatar: await discord.utils.sleep_until(datetime.datetime.now() + datetime.timedelta(seconds=1)) #To prevent ratelimiting if Disguard sends a message to retrieve the image URL
                     if i % 1000 == 0 and i > 0:
                         print(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
@@ -226,20 +232,24 @@ class Cyberlog(commands.Cog):
             await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
             self.bot.attributeHistoryQueue = []
             started = datetime.datetime.now()
-            if self.syncData.current_loop % 4 == 0:
+            if self.syncData.current_loop % 2 == 0:
                 if self.syncData.current_loop == 0:
                     self.bot.get_cog('Reddit').syncRedditFeeds.start()
                 for g in self.bot.guilds:
                     try: await verifyLogChannel(self.bot, g)
                     except: pass
+            # elif self.syncData.current_loop % 3 == 0 and self.syncData.current_loop != 0:
+            #     for g in self.bot.guilds:
+            #         for c in g.text_channels:
+            #             asyncio.create_task(self.indexChannel(c, 0.0040))
             await updateLastOnline([m for m in self.bot.get_all_members() if m.status != discord.Status.offline], datetime.datetime.now())
             print(f'Finished everything else in {(datetime.datetime.now() - started).seconds}s')
             print(f'Garbage collection: {gc.collect()} objects')
         except Exception as e: 
-            print('Summarize error: {}'.format(traceback.format_exc()))
+            print('Data sync error: {}'.format(traceback.format_exc()))
             traceback.print_exc()
         finally: await self.imageLogChannel.send('Completed') #Moved this into finally so that message indexing and other bootup tasks can commence even if this fails
-        print(f'Done summarizing: {(datetime.datetime.now() - rawStarted).seconds}s')
+        print(f'Done syncing data: {(datetime.datetime.now() - rawStarted).seconds}s')
 
     async def synchronizeDatabase(self, notify=False):
         '''This method downloads data from the database and puts it in the local mongoDB variables, then is kept updated in the motorMongo changeStream method (trackChanges)'''
@@ -251,10 +261,7 @@ class Cyberlog(commands.Cog):
                 await lightningdb.post_server(s)
             else: 
                 attachmentsPath = f'Attachments/{s["server_id"]}'
-                indexesPath = f'{indexes}/{s["server_id"]}'
                 try: shutil.rmtree(attachmentsPath)
-                except FileNotFoundError: pass
-                try: shutil.rmtree(indexesPath)
                 except FileNotFoundError: pass
         async for u in await database.GetAllUsers():
             if self.bot.get_user(u['user_id']):
@@ -2101,7 +2108,7 @@ class Cyberlog(commands.Cog):
         asyncio.create_task(database.VerifyUsers(self.bot, guild.members))
         #TODO: Improve teh server join experience
         content=f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.com>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
-        content+=f'\nℹMy default prefix is `.` and can be changed on the online dashboard under "General Server Settings."\n\n❔Need help with anything, or just have a question? My developer would be more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `.ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
+        content+=f'\nℹMy default prefix is `.` and can be changed on the online dashboard under "General Server Settings." Slash commands are coming soon.\n\n❔Need help with anything, or just have a question? My developer would be more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `.ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
         try: target = await database.CalculateModeratorChannel(guild, self.bot, False)
         except:
             if guild.system_channel: target = guild.system_channel
@@ -2113,9 +2120,9 @@ class Cyberlog(commands.Cog):
         try: await target.send(content)
         except: pass
         await self.CheckDisguardServerRoles(guild.members, mode=1, reason='Bot joined a server')
-        await asyncio.gather(*[self.indexServer(c) for c in guild.text_channels])
+        await asyncio.gather(*[self.indexChannel(c) for c in guild.text_channels])
 
-    async def indexServer(self, channel: discord.TextChannel):
+    async def indexChannel(self, channel: discord.TextChannel, sleepTime = 0.0025):
         '''This will fully index messages.'''
         try: os.makedirs(f'{indexes}/{channel.guild.id}')
         except FileExistsError: pass
@@ -2124,7 +2131,7 @@ class Cyberlog(commands.Cog):
                 try:
                     await lightningdb.post_message(message)
                 except: continue
-                await asyncio.sleep(0.0025)
+                await asyncio.sleep(sleepTime)
         except Exception as e: print(f'Index error for {channel.guild.name} - {channel.name}: {e}')
 
     @commands.Cog.listener()
@@ -3084,9 +3091,9 @@ def beginPurge(s: discord.Guild):
 def endPurge(s: discord.Guild):
     serverPurge[s.id] = False
 
-def setup(Bot: commands.Bot):
+async def setup(Bot: commands.Bot):
     global bot
-    Bot.add_cog(Cyberlog(Bot))
+    await Bot.add_cog(Cyberlog(Bot))
     bot = Bot
 
 class ErrorView(discord.ui.View):

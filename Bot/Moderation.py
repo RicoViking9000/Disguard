@@ -929,9 +929,9 @@ def ParseDuration(string):
         except: pass
     return duration
 
-def setup(bot):
+async def setup(bot):
     global loading
-    bot.add_cog(Moderation(bot))
+    await bot.add_cog(Moderation(bot))
     loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
 
 class WarmupActionView(discord.ui.View):

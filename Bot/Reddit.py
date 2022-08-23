@@ -169,5 +169,5 @@ class Reddit(commands.Cog):
             embed.description = f"r/{subreddit.display_name}\n\nTo comply with Discord guidelines, I cannot share content from NSFW reddit submissions to SFW Discord channels"
         return (embed, submission.over_18) if not channel else embed
 
-def setup(bot):
-    bot.add_cog(Reddit(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Reddit(bot))

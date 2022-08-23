@@ -597,5 +597,5 @@ async def PrepareMembers(bot: commands.Bot):
         except Exception as e: print(f'Passing - {e}')
     print(members)
 
-def setup(bot):
-    bot.add_cog(Antispam(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Antispam(bot))

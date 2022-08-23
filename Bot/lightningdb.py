@@ -6,11 +6,21 @@ from discord import Message
 from discord.utils import utcnow
 from typing import List
 
-mongo = motor.motor_asyncio.AsyncIOMotorClient()
+# mongo = motor.motor_asyncio.AsyncIOMotorClient()
 
-database:motor.motor_asyncio.AsyncIOMotorDatabase = mongo.database
-servers:motor.motor_asyncio.AsyncIOMotorCollection = database.servers
-users:motor.motor_asyncio.AsyncIOMotorCollection = database.users
+database:motor.motor_asyncio.AsyncIOMotorDatabase = None
+servers:motor.motor_asyncio.AsyncIOMotorCollection = None
+users:motor.motor_asyncio.AsyncIOMotorCollection = None
+
+def initialize():
+    global mongo
+    global database
+    global servers
+    global users
+    mongo = motor.motor_asyncio.AsyncIOMotorClient()
+    database = mongo.database
+    servers = database.servers
+    users = database.users
 
 async def wipe():
     '''clears the database'''
