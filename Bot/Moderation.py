@@ -5,6 +5,7 @@ from discord.ext import commands
 import database
 import datetime
 import Cyberlog #Used to prevent delete logs upon purging
+import utility
 import asyncio
 import os
 import traceback
@@ -48,7 +49,7 @@ class PurgeObject(object):
         self.lastUpdate = None
 
 class Moderation(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.emojis = self.bot.get_cog('Cyberlog').emojis
         self.roleCache = {}
@@ -73,14 +74,13 @@ class Moderation(commands.Cog):
             warmup = int(duration) * conversion[unit]
         else: warmup = 0
         await database.SetWarmup(ctx.guild, warmup)
-        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{duration} {units[unit]}{"s" if duration != 1 else ""}** before chatting', color=orange[self.colorTheme(ctx.guild)])
-        # view = WarmupActionView(self.bot)
-        # await ctx.send(embed=embed, view=view)
-        await ctx.send(embed=embed)
+        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{duration} {units[unit]}{"s" if duration != 1 else ""}** before chatting', color=orange[await utility.color_theme(ctx.guild)])
+        view = WarmupActionView(self.bot)
+        await ctx.send(embed=embed, view=view)
 
     @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
-    async def lock(self, ctx, member: discord.Member, *, reason=''):
+    async def lock(self, ctx: commands.Context, member: discord.Member, *, reason=''):
         status = await ctx.send(f'{loading}Locking...')
         messages = []
         for c in ctx.guild.channels:
@@ -95,7 +95,7 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
-    async def unlock(self, ctx, member: discord.Member):
+    async def unlock(self, ctx: commands.Context, member: discord.Member):
         status = await ctx.send(f'{loading}Unlocking...')
         for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None)
         errorMessage = None
@@ -105,13 +105,13 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
     @commands.command()
-    async def mute(self, ctx, members: commands.Greedy[discord.Member], duration=None, *, reason=''):
+    async def mute(self, ctx: commands.Context, members: commands.Greedy[discord.Member], duration=None, *, reason=''):
         '''Mutes the specified member(s) for a specified amount of time, if given
            Preliminary for v0.2.25.1 - very basic interface, snappy, takes members or list of members, no fancy UI, expand later by 0.2.26
         '''
-        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to mute\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}mute [list of members to mute] [duration:optional] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]\nDuration: 3d = 3 days, 6h30m = 6 hours 30 mins, etc. s=sec, m=min, h=hour, d=day, w=week, mo=month, y=year')
+        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to mute\nFormat: `{await utility.prefix(ctx.guild)}mute [list of members to mute] [duration:optional] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]\nDuration: 3d = 3 days, 6h30m = 6 hours 30 mins, etc. s=sec, m=min, h=hour, d=day, w=week, mo=month, y=year')
         if duration: duration = ParseDuration(duration)
-        embed = discord.Embed(title=f'{self.emojis["muted"]}Muting {len(members)} member{"s" if len(members) != 1 else ""} for {duration if duration else "∞"}s', description=f"{self.emojis['loading']}\n", color=orange[self.colorTheme(ctx.guild)])
+        embed = discord.Embed(title=f'{self.emojis["muted"]}Muting {len(members)} member{"s" if len(members) != 1 else ""} for {duration if duration else "∞"}s', description=f"{self.emojis['loading']}\n", color=orange[await utility.color_theme(ctx.guild)])
         message = await ctx.send(embed=embed)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.muteMembers(members, ctx.author, duration=duration, reason=reason)
@@ -123,10 +123,10 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
     @commands.command()
-    async def unmute(self, ctx, members: commands.Greedy[discord.Member], *, reason=''):
+    async def unmute(self, ctx: commands.Context, members: commands.Greedy[discord.Member], *, reason=''):
         '''Unmuted the specified members'''
-        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to unmute\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}unmute [list of members to unmute] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
-        embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmuting {len(members)} member{"s" if len(members) != 1 else ""}', description=f"{self.emojis['loading']}\n", color=orange[self.colorTheme(ctx.guild)])
+        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to unmute\nFormat: `{await utility.prefix(ctx.guild)}unmute [list of members to unmute] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
+        embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmuting {len(members)} member{"s" if len(members) != 1 else ""}', description=f"{self.emojis['loading']}\n", color=orange[await utility.color_theme(ctx.guild)])
         message = await ctx.send(embed=embed)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.unmuteMembers(members, ctx.author, {}, reason=reason)
@@ -138,12 +138,12 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(kick_members=True)
     @commands.command()
-    async def kick(self, ctx, members: commands.Greedy[discord.Member], *, reason=''):
+    async def kick(self, ctx: commands.Context, members: commands.Greedy[discord.Member], *, reason=''):
         '''Kicks the specified members'''
-        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to kick\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}kick [list of members to kick] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
+        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to kick\nFormat: `{await utility.prefix(ctx.guild)}kick [list of members to kick] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
         await ctx.trigger_typing()
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        embed = discord.Embed(title=f'👢Kick {len(members)} member{"s" if len(members) != 1 else ""}', description='', color=orange[self.colorTheme(ctx.guild)])
+        embed = discord.Embed(title=f'👢Kick {len(members)} member{"s" if len(members) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
         for m in members:
             try: 
                 if await database.ManageServer(m): raise Exception("You cannot kick a moderator")
@@ -154,13 +154,13 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(ban_members=True)
     @commands.command()
-    async def ban(self, ctx, users: commands.Greedy[typing.Union[discord.User, int]], deleteMessageDays: typing.Optional[int] = 0, *, reason=''):
+    async def ban(self, ctx: commands.Context, users: commands.Greedy[typing.Union[discord.User, int]], deleteMessageDays: typing.Optional[int] = 0, *, reason=''):
         '''Bans the specified members'''
-        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to ban\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}ban [list of users to ban] [deleteMessageDays:optional[int] = 0 ▷ must be 0 <= x <= 7] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nUse a user\'s ID if you want to ban someone not in this server\n\nExample: `.ban {self.bot.user.mention} 5 Muted me for spamming` Would ban Disguard, delete its message sent within the past 5 days, with the reason "Muted me for spamming"')
+        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to ban\nFormat: `{await utility.prefix(ctx.guild)}ban [list of users to ban] [deleteMessageDays:optional[int] = 0 ▷ must be 0 <= x <= 7] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nUse a user\'s ID if you want to ban someone not in this server\n\nExample: `.ban {self.bot.user.mention} 5 Muted me for spamming` Would ban Disguard, delete its message sent within the past 5 days, with the reason "Muted me for spamming"')
         users = await self.UserProcessor(users)
         await ctx.trigger_typing()
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[self.colorTheme(ctx.guild)])
+        embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
         for m in users:
             try: 
                 member = ctx.guild.get_member(m.id)
@@ -172,12 +172,12 @@ class Moderation(commands.Cog):
 
     @commands.has_guild_permissions(ban_members=True)
     @commands.command()
-    async def unban(self, ctx, users: commands.Greedy[typing.Union[discord.User, int]], *, reason=''):
-        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to unban\nFormat: `{self.bot.lightningLogging[ctx.guild.id]["prefix"]}unban [list of users to unban] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nID is the only argument guaranteed to work, as that would be the only way I can retrieve a User not in any of my servers')
+    async def unban(self, ctx: commands.Context, users: commands.Greedy[typing.Union[discord.User, int]], *, reason=''):
+        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to unban\nFormat: `{await utility.prefix(ctx.guild)}unban [list of users to unban] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nID is the only argument guaranteed to work, as that would be the only way I can retrieve a User not in any of my servers')
         users = await self.UserProcessor(users)
         await ctx.trigger_typing()
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[self.colorTheme(ctx.guild)])
+        embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
         for u in users:
             try: 
                 await ctx.guild.unban(u, reason=reason)
@@ -188,7 +188,7 @@ class Moderation(commands.Cog):
     @commands.guild_only()
     @commands.has_guild_permissions(manage_messages=True)
     @commands.command()
-    async def purge(self, ctx, *args):
+    async def purge(self, ctx: commands.Context, *args):
         '''Purge messages'''
         global filters
         current = copy.deepcopy(PurgeObject())
@@ -201,7 +201,7 @@ class Moderation(commands.Cog):
             path = 'Indexes/{}/{}'
             cancel=discord.Embed(title='Purge command',description='Cancelled')
             url='https://cdn.discordapp.com/emojis/605060517861785610.gif'
-            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n',timestamp=datetime.datetime.utcnow(),color=blue[self.colorTheme(ctx.guild)])
+            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n',timestamp=datetime.datetime.utcnow(),color=blue[await utility.color_theme(ctx.guild)])
             embed.description+='First, what channel(s) are you thinking of purging? Make sure the channel(s) are hyperlinked. To purge from this channel ({}), type `here`, to purge from all text channels, type `all`'.format(ctx.channel.mention)
             embed.set_footer(text='Type cancel to cancel the command. Timeout is 120s')
             embed.set_author(name='Waiting for input')
@@ -683,7 +683,7 @@ class Moderation(commands.Cog):
             count = 0
             async for message in current.channel[0].history(limit=current.limit, before=current.endDate, after=current.startDate):
                 if PurgeFilter(message): count += 1
-            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=blue[self.colorTheme(ctx.guild)], timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=blue[await utility.color_theme(ctx.guild)], timestamp=datetime.datetime.utcnow())
             embed.set_footer(text="To actually purge, copy & paste your command message, but add 'purge:true' to the filters")
             embed.description+="\n**"+str(count)+" messages matched the filters**"
             await current.botMessage.edit(content=None,embed=embed)
@@ -696,9 +696,6 @@ class Moderation(commands.Cog):
             await m.delete()
         except: return 1
         return 2
-    
-    def colorTheme(self, s: discord.Guild):
-        return self.bot.lightningLogging[s.id]['colorTheme']
 
     async def UserProcessor(self, users):
         returnQueue = []
@@ -709,7 +706,7 @@ class Moderation(commands.Cog):
                 except discord.NotFound: pass
         return returnQueue
 
-    async def muteMembers(self, members, author, *, duration=None, reason=None, harsh=False, waitToUnmute=True, muteRole=None):
+    async def muteMembers(self, members: typing.List[discord.Member], author: discord.Member, *, duration=None, reason=None, harsh=False, waitToUnmute=True, muteRole=None):
         '''Applies automated mute to the given member, returning a status tuple (bool:success, string explanation)'''
         '''Harsh: If True, apply permission overwrites to each channel for this member in addition to for the mute role'''
         # Vars
@@ -717,7 +714,7 @@ class Moderation(commands.Cog):
         results = {'Notes': []} #0 holds notes
         #First: Check if we have an automute role stored
         if not muteRole:
-            muteRole = g.get_role(self.bot.lightningLogging[g.id]['antispam'].get('automuteRole', 0))
+            muteRole = g.get_role((await utility.get_server(g))['antispam'].get('automuteRole', 0))
             #If we don't have a mute role, we gotta make one
             if not muteRole:
                 try: muteRole = await g.create_role(name='Disguard AutoMute', reason='This role will be used when Disguard needs to mute a member. As long as this role exists, its ID will be stored in my database. You may edit the name of this role as you wish.')
@@ -771,7 +768,7 @@ class Moderation(commands.Cog):
             except Exception as e: results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')
         asyncio.create_task(database.SetMuteCache(m.guild, members, memberRolesTaken))
         asyncio.create_task(database.SetPermissionsCache(m.guild, members, permissionsTaken))
-        if duration and waitToUnmute: asyncio.create_task(self.waitToUnmute(members, author, muteTimedEvents, datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)))
+        if duration and waitToUnmute: asyncio.create_task(self.waitToUnmute(members, author, muteTimedEvents, discord.utils.utcnow() + datetime.timedelta(seconds=duration)))
         return results
 
     async def waitToUnmute(self, members, author, events, expires, reason=None):
@@ -795,8 +792,8 @@ class Moderation(commands.Cog):
                     results[m]['Remove Mute Role'].append(f'{self.emojis["greenCheck"]}')
                 except Exception as e: results[m]['Remove Mute Role'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
                 if events and events.get(m.id): asyncio.create_task(database.RemoveTimedEvent(m.guild, events[m.id]))
-                removedRoles[m.id] = copy.deepcopy(self.roleCache.get(f'{m.guild.id}_{m.id}')) or [m.guild.get_role(r) for r in self.bot.get_cog('Cyberlog').getServerMember(m).get('roleCache', [])]
-                removedOverwrites[m.id] = copy.deepcopy(self.permissionsCache.get(f'{m.guild.id}_{m.id}', {})) or self.bot.get_cog('Cyberlog').getServerMember(m).get('permissionsCache', {})
+                removedRoles[m.id] = copy.deepcopy(self.roleCache.get(f'{m.guild.id}_{m.id}')) or [m.guild.get_role(r) for r in await utility.getServerMember(m).get('roleCache', [])]
+                removedOverwrites[m.id] = copy.deepcopy(self.permissionsCache.get(f'{m.guild.id}_{m.id}', {})) or await utility.getServerMember(m).get('permissionsCache', {})
                 if self.roleCache.get(f'{m.guild.id}_{m.id}'): self.roleCache.pop(f'{m.guild.id}_{m.id}')
                 if self.permissionsCache.get(f'{m.guild.id}_{m.id}'): self.permissionsCache.pop(f'{m.guild.id}_{m.id}')
                 results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
@@ -932,7 +929,30 @@ def ParseDuration(string):
         except: pass
     return duration
 
-def setup(bot):
+async def setup(bot):
     global loading
-    bot.add_cog(Moderation(bot))
+    await bot.add_cog(Moderation(bot))
     loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
+
+class WarmupActionView(discord.ui.View):
+    def __init__(self, bot: commands.Bot):
+        super().__init__()
+        self.bot = bot
+    
+    @discord.ui.button(label='Apply to existing members')
+    async def apply(self, button: discord.ui.Button, interaction: discord.Interaction):
+        button.disabled = True
+        await interaction.response.edit_message(view=self)
+        antispam = (await utility.get_server(interaction.guild)).get('antispam')
+        warmup = antispam.get('warmup', 0)
+        embed = interaction.message.embeds[0]
+        muted = 0
+        for member in interaction.guild.members:
+            serverAge: datetime.datetime = discord.utils.utcnow() - member.joined_at
+            if serverAge.second < warmup:
+                muteTime = (member.joined_at + datetime.timedelta(seconds=warmup)) - discord.utils.utcnow()
+                if muteTime > discord.utils.utcnow():
+                    await self.bot.get_cog('Moderation').muteMembers([member], member.guild.me, duration=muteTime, reason=f'[Antispam: Warmup] This new member will be able to begin chatting at {utility.DisguardStandardTimestamp(discord.utils.utcnow() + muteTime)}.')
+                    muted += 1
+        embed.description += f'\n\nApplied filters and muted {muted} members for now'
+        await interaction.message.edit(embed=embed, view=self)
