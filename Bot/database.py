@@ -167,7 +167,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': { #add entry for new servers
         'name': s.name,
         'prefix': serv.get('prefix', '.'),
-        'thumbnail': s.icon.with_static_format('png').with_size(512).url, #Server icon, 512x512, png or gif
+        'thumbnail': s.icon.with_static_format('png').with_size(512).url if s.icon else '', #Server icon, 512x512, png or gif
         'offset': serv.get('offset', utility.daylightSavings() * -1), #Distance from UTC time
         'tzname': serv.get('tzname', 'EST'), #Custom timezone name (EST by default)
         'jumpContext': serv.get('jumpContext', False), #Whether to display content for posted message jump URL links
