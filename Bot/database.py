@@ -341,7 +341,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
         'lastOnline': current.get('lastOnline', datetime.datetime.min),
         'birthdayMessages': current.get('birthdayMessages', []),
         'wishlist': current.get('wishlist', []),
-        'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': server.icon.with_static_format('png').with_size(512).url} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] if u.id != b.user.id else [], #d.py V2.0
+        'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': server.icon.with_static_format('png').with_size(512).url if server.icon else ''} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] if u.id != b.user.id else [], #d.py V2.0
         'privacy': {
             'default': current.get('privacy', {}).get('default', (1, 1)), #Index 0 - 0: Disable features, 1: Enable features || Index 1 - 0: Hidden to others, 1: Visible to everyone, Array: List of user IDs allowed to view the profile
             'birthdayModule': current.get('privacy', {}).get('birthdayModule', (2, 2)), #Index 0 - 0: Disable, 1: Enable, 2: Default || Index 1 - 0: Hidden, 1: Everyone, 2: Default, Array: Certain users || Applies to the next fields unless otherwise specified
