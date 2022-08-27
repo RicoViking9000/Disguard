@@ -264,7 +264,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         base = {} #Empty dict, to be added to when things need to be updated
         roleGen = [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]
         if s.name != serv['name']: base.update({'name': s.name})
-        if s.icon.with_static_format('png').with_size(512).url != serv['thumbnail']: base.update({'thumbnail': s.icon.with_static_format('png').with_size(512).url})
+        if s.icon.with_static_format('png').with_size(512).url != serv['thumbnail']: base.update({'thumbnail': s.icon.with_static_format('png').with_size(512).url if s.icon else ''})
         if serverChannels != serv['channels']: base.update({'channels': serverChannels})
         if roleGen != serv['roles']: base.update({'roles': roleGen})
         if base: updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': base}))
