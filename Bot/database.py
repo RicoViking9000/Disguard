@@ -134,9 +134,11 @@ async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
     gathered = await (servers.find({'server_id': {'$in': [s.id for s in servs]}})).to_list(None)
     gatheredDict = {s['server_id']: s for s in gathered}
-    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
-    results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
-    await servers.bulk_write(results, ordered=False)
+    await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='update', includeMembers=s.members) for s in servs])
+    await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
+    # results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
+    # results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
+    # await servers.bulk_write(results, ordered=False)
 
 async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers=[], parallel=True):
     '''Ensures that a server has a database entry, and checks/updates all its variables & members
@@ -147,6 +149,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         includeMembers: update the members whose IDs are specified, if any
     '''
     print(f'Verifying server: {s.name} - {s.id}')
+    mode = 'update'
     started = datetime.datetime.now()
     global bot
     bot = b
@@ -322,9 +325,11 @@ async def VerifyUsers(b: commands.Bot, usrs: list, full=False):
     '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
-    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
-    results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
-    await users.bulk_write(results, ordered=False)
+    await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
+    await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
+    # results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
+    # results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
+    # await users.bulk_write(results, ordered=False)
     
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
     '''Ensures that an individual user is in the database, and checks their variables'''
