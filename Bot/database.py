@@ -282,7 +282,8 @@ async def VerifyMembers(s: discord.Guild, members: list, serv=None, *, mode='upd
     serverMemberIDs = set()
     membersToCreate = []
     if not serv: serv = await servers.find_one({'server_id': s.id})
-    warnings = serv.get('antispam', {}).get('warn', 3) #Number of warnings to give to new members
+    antispam = serv.get('antispam', {})
+    warnings = antispam.get('warn', 3) #Number of warnings to give to new members
     empty = not serv.get('members', [])
     for m in members:
         membDict[m.id] = m.name
