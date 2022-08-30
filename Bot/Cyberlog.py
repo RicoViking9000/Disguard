@@ -28,6 +28,7 @@ import asyncpraw
 import textwrap
 import logging
 import aiofiles
+from pymongo import errors
 
 bot = None
 serverPurge = {}
@@ -258,14 +259,16 @@ class Cyberlog(commands.Cog):
         await lightningdb.wipe()
         async for s in await database.GetAllServers():
             if self.bot.get_guild(s['server_id']):
-                await lightningdb.post_server(s)
+                try: await lightningdb.post_server(s)
+                except errors.DuplicateKeyError: pass
             else: 
                 attachmentsPath = f'Attachments/{s["server_id"]}'
                 try: shutil.rmtree(attachmentsPath)
                 except FileNotFoundError: pass
         async for u in await database.GetAllUsers():
             if self.bot.get_user(u['user_id']):
-                await lightningdb.post_user(u)
+                try: await lightningdb.post_user(u)
+                except errors.DuplicateKeyError: pass
         if notify: await self.imageLogChannel.send('Synchronized')
         print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s')
 
