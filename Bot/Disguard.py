@@ -31,7 +31,7 @@ from pymongo import errors as mongoErrors
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit']
+cogs = ['Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit']
 
 print("Connecting...")
 
@@ -88,6 +88,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name='my boss (Syncing data...)', type=discord.ActivityType.listening)
         await UpdatePresence()
+        await bot.load_extension('Cyberlog')
+        await asyncio.sleep(2)
         for cog in cogs:
             try:
                 await bot.load_extension(cog)

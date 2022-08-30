@@ -91,7 +91,6 @@ class Cyberlog(commands.Cog):
         self.channelCacheHelper = {}
         self.syncData.start()
         self.DeleteAttachments.start()
-        self.DeleteTemporaryFiles.start()
         self.trackChanges.start()
 
     def cog_unload(self):
@@ -102,6 +101,7 @@ class Cyberlog(commands.Cog):
     @tasks.loop()
     async def trackChanges(self):
         #The global variables exist for the rare instances the cache data needs to be accessed outside of the Cyberlog class instance, in a read-only mode.
+        await asyncio.sleep(3)
         reddit: Reddit.Reddit = self.bot.get_cog('Reddit')
         try:
             async with database.getDatabase().watch(full_document='updateLookup', resume_after=self.resumeToken) as change_stream:

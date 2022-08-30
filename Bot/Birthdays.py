@@ -487,8 +487,8 @@ def isLeapYear():
         else:
             return True
 
-def setup(bot: commands.Bot):
-    bot.add_cog(Birthdays(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Birthdays(bot))
 
 class UpcomingBirthdayDict(typing.TypedDict):
     data: discord.Member
