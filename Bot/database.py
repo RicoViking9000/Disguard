@@ -129,6 +129,7 @@ async def Verification(b: commands.Bot):
     '''Verifies everything (all servers and users)'''
     await VerifyServers(b, b.guilds, full=True)
     await VerifyUsers(b, list(b.get_all_members()), full=True)
+    print(f'Finished verification for {len(b.guilds)} servers and {len(list(b.get_all_members()))} users')
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
@@ -325,11 +326,11 @@ async def VerifyUsers(b: commands.Bot, usrs: list, full=False):
     '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
-    await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
-    await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
-    # results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
-    # results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
-    # await users.bulk_write(results, ordered=False)
+    # await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
+    # await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
+    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
+    results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
+    await users.bulk_write(results, ordered=False)
     
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
     '''Ensures that an individual user is in the database, and checks their variables'''
