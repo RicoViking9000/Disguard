@@ -155,16 +155,12 @@ class Cyberlog(commands.Cog):
                 for m in g.members: self.memberPermissions[g.id][m.id] = m.guild_permissions
                 timeString += f'\n •Member cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
-                for c in g.text_channels: 
-                    try: self.pins[c.id] = [m.id for m in await c.pins()]
-                    except (discord.Forbidden): pass
-                midway = datetime.datetime.now()
                 for c in g.categories:
                     try: self.categories[c.id] = c.channels
                     except (discord.Forbidden): pass
                 try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None] #This can be made faster without a generator
                 except (discord.Forbidden): pass
-                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s\n  •Pins: {(midway - started).seconds}s\n  •Categories: {(datetime.datetime.now() - midway).seconds}s'
+                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
                 try:
@@ -302,6 +298,13 @@ class Cyberlog(commands.Cog):
                     except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
             print('Removed {} items in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
         except Exception as e: print('Attachment deletion fail: {}'.format(e))
+    
+    async def grab_pins(self):
+        '''Fetches pinned messages to be stored locally'''
+        for g in self.bot.guilds:
+            for c in g.text_channels: 
+                try: self.pins[c.id] = [m.id for m in await c.pins()]
+                except (discord.Forbidden): pass
     
     @commands.Cog.listener()
     async def on_command(self, ctx):
@@ -2446,7 +2449,7 @@ class Cyberlog(commands.Cog):
                 if before.permissions != after.permissions:
                     for m in after.members: self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
         await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
-        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, self.bot, includeMembers=before.permissions != after.permissions))
+        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, self.bot, includeMembers=after.members if before.permissions != after.permissions else []))
         for member in after.members:
             await database.VerifyUser(member, self.bot)
         if message and len(embed.fields) > 0 or before.name != after.name:
