@@ -253,18 +253,12 @@ class Cyberlog(commands.Cog):
         started = datetime.datetime.now()
         print('Synchronizing Database')
         await lightningdb.wipe()
-        async for s in await database.GetAllServers():
-            if self.bot.get_guild(s['server_id']):
-                try: await lightningdb.post_server(s)
-                except errors.DuplicateKeyError: pass
-            else: 
-                attachmentsPath = f'Attachments/{s["server_id"]}'
-                try: shutil.rmtree(attachmentsPath)
-                except FileNotFoundError: pass
-        async for u in await database.GetAllUsers():
-            if self.bot.get_user(u['user_id']):
-                try: await lightningdb.post_user(u)
-                except errors.DuplicateKeyError: pass
+        for s in self.bot.guilds:
+            try: await lightningdb.post_server(s)
+            except errors.DuplicateKeyError: pass
+        for m in self.bot.get_all_members():
+            try: await lightningdb.post_user(m)
+            except errors.DuplicateKeyError: pass
         if notify: await self.imageLogChannel.send('Synchronized')
         print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s')
 
@@ -276,6 +270,7 @@ class Cyberlog(commands.Cog):
         try:
             removal=[]
             outstandingTempFiles = os.listdir(tempDir)
+            # gather old attachments to delete
             for server in self.bot.guilds:
                 for channel in server.text_channels:
                     try:
@@ -284,12 +279,17 @@ class Cyberlog(commands.Cog):
                         for folder in os.listdir(path):
                             timestamp = datetime.datetime.fromisoformat(messages[folder]['timestamp0'])
                             if (datetime.datetime.utcnow() - timestamp).days > 365:
-                                removal.append(folder) #Mark year-old attachments for deletion
+                                removal.append(os.path.join(path, folder)) #Mark year-old attachments for deletion
                             elif not os.listdir(folder):
-                                removal.append(folder) #Mark empty folders for deletion
+                                removal.append(os.path.join(path, folder)) #Mark empty folders for deletion
                     except: pass
+            # gather attachments for servers the bot is no longer a member of
+            attachments_path = f'Attachments'
+            for folder in os.listdir(path):
+                if not self.bot.get_guild(int(folder)):
+                    removal.append(os.path.join(attachments_path, path))
             for folder in removal: 
-                try: shutil.rmtree(path)
+                try: shutil.rmtree(folder)
                 except Exception as e: print(f'Attachment folder deletion fail: {e}')
             for fl in outstandingTempFiles:
                 try: shutil.rmtree((os.path.join(tempDir, fl)))
