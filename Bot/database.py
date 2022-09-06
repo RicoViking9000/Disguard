@@ -150,11 +150,11 @@ async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full
     results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
     def divide(r, n):
         for i in range(0, len(r), n): yield r[i:i+n]
-    paginated_results = list(divide(results, 10))
+    paginated_results = list(divide(results, 50))
     for page in paginated_results:
         operation = servers.bulk_write(page, ordered=False)
         await asyncio.wait_for(operation, timeout=None)
-        print(f'Verified {len(page)} servers')
+        print(f'Performed {len(page)} server operations')
         await asyncio.sleep(10)
     # await servers.bulk_write(results, ordered=False)
 
@@ -344,9 +344,15 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     print(f'Verifying {len(usrs)} users...')
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
+    print('Posting users to local database...')
+    count = 0
     for m in usrs:
-        try: await lightningdb.post_user(gatheredDict.get(m.id))
+        try: 
+            if gatheredDict.get(m.id): await lightningdb.post_user(gatheredDict.get(m.id))
         except errors.DuplicateKeyError: pass
+        count += 1
+        if count % 4000 == 0:
+            print(f'Posted a chunk of 4000 users ({count} / {len(usrs)})')
     # await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
     # await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
     results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
@@ -357,7 +363,7 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     for page in paginated_results:
         operation = users.bulk_write(page, ordered=False)
         await asyncio.wait_for(operation, timeout=None)
-        print(f'Verified {len(page)} users')
+        print(f'Performed {len(page)} user operations')
         await asyncio.sleep(5)
     #await users.bulk_write(results, ordered=False)
     
@@ -774,8 +780,8 @@ async def SetUsernameHistory(m: discord.User, entries):
 
 async def AppendAvatarHistory(m: discord.User, url):
     '''Appends an avatar update to a user's listing of them. Old is the discord CDN avatar link used for comparisons, new is the permanent link from the image log channel (copy attachment)'''
-    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'avatarHistory': {'discordURL': m.avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}})
-    else: await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': m.avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}})
 
 async def SetAvatarHistory(m: discord.User, entries):
     '''Overwrites the user's avatar history list'''
