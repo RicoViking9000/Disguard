@@ -2010,7 +2010,7 @@ class Cyberlog(commands.Cog):
             # if after.guild.id == targetServer.id:
             #     for a in after.activities:
             #         if a.type == discord.ActivityType.custom:
-            if await self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity and after.activity.type == discord.ActivityType.custom:
+            if await self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity and after.activity.type == discord.ActivityType.custom and datetime.datetime.now().strftime('%m/%d/%Y') != '09/05/2022':
                 try:
                     try: user = await utility.get_user(after)
                     except KeyError: return
