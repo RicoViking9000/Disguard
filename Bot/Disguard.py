@@ -118,7 +118,7 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
     start = datetime.datetime.now()
     try: saveImages = (await utility.get_server(server))['cyberlog'].get('image') and not channel.is_nsfw()
     except AttributeError: return
-    if not lightningdb.database.get_collection(str(channel.id)): full = True
+    if lightningdb.database.get_collection(str(channel.id)) is None: full = True
     existing_message_counter = 0
     async for message in channel.history(limit=None, oldest_first=full):
         try: await lightningdb.post_message(message)
