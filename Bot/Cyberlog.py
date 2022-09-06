@@ -2015,6 +2015,7 @@ class Cyberlog(commands.Cog):
                     try: user = await utility.get_user(after)
                     except KeyError: return
                     a = after.activity
+                    if not a: return
                     prev = user.get('customStatusHistory', [{}])[-1]
                     proposed = {'e': None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name if a else None}
                     if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}: 
