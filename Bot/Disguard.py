@@ -116,10 +116,9 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
     if channel.id in (534439214289256478, 910598159963652126): return
     start = datetime.datetime.now()
-    print(f'Indexing {server.name}: {channel.name}')
     try: saveImages = (await utility.get_server(server))['cyberlog'].get('image') and not channel.is_nsfw()
     except AttributeError: return
-    if not lightningdb.database.get_collection(str(channel.id)): full = True
+    if lightningdb.database.get_collection(str(channel.id)) is None: full = True
     existing_message_counter = 0
     async for message in channel.history(limit=None, oldest_first=full):
         try: await lightningdb.post_message(message)

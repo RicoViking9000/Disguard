@@ -359,12 +359,12 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
     def divide(r, n):
         for i in range(0, len(r), n): yield r[i:i+n]
-    paginated_results = list(divide(results, 400))
+    paginated_results = list(divide(results, 4000))
     for page in paginated_results:
         operation = users.bulk_write(page, ordered=False)
         await asyncio.wait_for(operation, timeout=None)
         print(f'Performed {len(page)} user operations')
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
     #await users.bulk_write(results, ordered=False)
     
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
@@ -391,7 +391,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
             'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
             'birthdayMessages': current.get('privacy', {}).get('birthdayMessages', (2, 2)), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
             'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
-            'customStatusHistory': (0, 2) if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/06/2022' else current.get('privacy', {}).get('customStatusHistory', (2, 2)),
+            'customStatusHistory': current.get('privacy', {}).get('customStatusHistory', (0, 2)),
             'usernameHistory': current.get('privacy', {}).get('usernameHistory', (2, 2)),
             'avatarHistory': current.get('privacy', {}).get('avatarHistory', (2, 2)),
             'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
@@ -404,7 +404,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
     else: 
         base = {}
         serverGen = [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon.with_static_format('png').url)} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] #d.py V2.0
-        if u.name != current['name']: base.update({'username': u.name})
+        if u.name != current['username']: base.update({'username': u.name})
         if u.display_avatar.with_static_format('png').with_size(2048).url != current['avatar']: base.update({'avatar': u.display_avatar.with_static_format('png').with_size(2048).url})
         if serverGen != current['servers']: base.update({'servers': serverGen})
         if base: updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': base}))
