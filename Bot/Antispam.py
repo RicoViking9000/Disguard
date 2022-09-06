@@ -157,7 +157,6 @@ class Antispam(commands.Cog):
                         lastMessages.pop(0)
                 except: 
                     lastMessages = []
-                    print('Resetting lastmessages for {}, {}'.format(message.author.name, message.guild.name))
             for msg in quickMessages:
                 try:
                     if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
@@ -166,7 +165,6 @@ class Antispam(commands.Cog):
                         quickMessages.pop(0)
                 except:
                     quickMessages = []
-                    print('Resetting quickmessages for {}, {}'.format(message.author.name, message.guild.name))
             person.update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)

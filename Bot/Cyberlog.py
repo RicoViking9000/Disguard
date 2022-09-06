@@ -2010,7 +2010,7 @@ class Cyberlog(commands.Cog):
             # if after.guild.id == targetServer.id:
             #     for a in after.activities:
             #         if a.type == discord.ActivityType.custom:
-            if await self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity:
+            if await self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity and after.activity.type == discord.ActivityType.custom:
                 try:
                     try: user = await utility.get_user(after)
                     except KeyError: return
@@ -2101,7 +2101,7 @@ class Cyberlog(commands.Cog):
                     if msg.content and not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None) #TODO: reduce unnecessary edits
                     self.archiveLogEmbed(server, msg.id, embed, 'User Update')
             except: pass
-        for s in servers: asyncio.create_task(database.VerifyMember(after, warnings=(await utility.get_server(s))['antispam'].get('warn', 3)))
+        for s in servers: asyncio.create_task(database.VerifyMember(s.get_member(after.id), warnings=(await utility.get_server(s))['antispam'].get('warn', 3)))
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):

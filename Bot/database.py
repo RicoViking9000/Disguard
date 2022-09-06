@@ -356,7 +356,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
             'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
             'birthdayMessages': current.get('privacy', {}).get('birthdayMessages', (2, 2)), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
             'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
-            'customStatusHistory': current.get('privacy', {}).get('customStatusHistory', (2, 2)),
+            'customStatusHistory':  0 if datetime.datetime.now('%m/%d/%Y') == '09/05/2022' else current.get('privacy', {}).get('customStatusHistory', (2, 2)),
             'usernameHistory': current.get('privacy', {}).get('usernameHistory', (2, 2)),
             'avatarHistory': current.get('privacy', {}).get('avatarHistory', (2, 2)),
             'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
