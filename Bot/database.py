@@ -129,14 +129,17 @@ async def Verification(b: commands.Bot):
     '''Verifies everything (all servers and users)'''
     await VerifyServers(b, b.guilds, full=True)
     await VerifyUsers(b, list(b.get_all_members()), full=True)
+    print(f'Finished verification for {len(b.guilds)} servers and {len(list(b.get_all_members()))} users')
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
     gathered = await (servers.find({'server_id': {'$in': [s.id for s in servs]}})).to_list(None)
     gatheredDict = {s['server_id']: s for s in gathered}
-    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
-    results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
-    await servers.bulk_write(results, ordered=False)
+    await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='update', includeMembers=s.members) for s in servs])
+    await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
+    # results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
+    # results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
+    # await servers.bulk_write(results, ordered=False)
 
 async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers=[], parallel=True):
     '''Ensures that a server has a database entry, and checks/updates all its variables & members
@@ -147,6 +150,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         includeMembers: update the members whose IDs are specified, if any
     '''
     print(f'Verifying server: {s.name} - {s.id}')
+    mode = 'update'
     started = datetime.datetime.now()
     global bot
     bot = b
@@ -167,7 +171,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': { #add entry for new servers
         'name': s.name,
         'prefix': serv.get('prefix', '.'),
-        'thumbnail': s.icon.with_static_format('png').with_size(512).url, #Server icon, 512x512, png or gif
+        'thumbnail': s.icon.with_static_format('png').with_size(512).url if s.icon else '', #Server icon, 512x512, png or gif
         'offset': serv.get('offset', utility.daylightSavings() * -1), #Distance from UTC time
         'tzname': serv.get('tzname', 'EST'), #Custom timezone name (EST by default)
         'jumpContext': serv.get('jumpContext', False), #Whether to display content for posted message jump URL links
@@ -264,7 +268,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         base = {} #Empty dict, to be added to when things need to be updated
         roleGen = [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]
         if s.name != serv['name']: base.update({'name': s.name})
-        if s.icon.with_static_format('png').with_size(512).url != serv['thumbnail']: base.update({'thumbnail': s.icon.with_static_format('png').with_size(512).url})
+        if s.icon.with_static_format('png').with_size(512).url != serv['thumbnail']: base.update({'thumbnail': s.icon.with_static_format('png').with_size(512).url if s.icon else ''})
         if serverChannels != serv['channels']: base.update({'channels': serverChannels})
         if roleGen != serv['roles']: base.update({'roles': roleGen})
         if base: updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': base}))
@@ -281,8 +285,9 @@ async def VerifyMembers(s: discord.Guild, members: list, serv=None, *, mode='upd
     membDict = {} #Holds ID:name values for quick lookups for members that aren't in the database yet
     serverMemberIDs = set()
     membersToCreate = []
-    if not serv: serv = await servers.find_one({'server_id': s.id})
-    warnings = serv.get('antispam', {}).get('warn', 3) #Number of warnings to give to new members
+    if not serv: serv = (await servers.find_one({'server_id': s.id})) or {}
+    antispam = serv.get('antispam', {})
+    warnings = antispam.get('warn', 3) #Number of warnings to give to new members
     empty = not serv.get('members', [])
     for m in members:
         membDict[m.id] = m.name
@@ -321,9 +326,11 @@ async def VerifyUsers(b: commands.Bot, usrs: list, full=False):
     '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
-    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
-    results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
-    await users.bulk_write(results, ordered=False)
+    await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
+    await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
+    # results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
+    # results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
+    # await users.bulk_write(results, ordered=False)
     
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
     '''Ensures that an individual user is in the database, and checks their variables'''
@@ -340,7 +347,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
         'lastOnline': current.get('lastOnline', datetime.datetime.min),
         'birthdayMessages': current.get('birthdayMessages', []),
         'wishlist': current.get('wishlist', []),
-        'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': server.icon.with_static_format('png').with_size(512).url} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] if u.id != b.user.id else [], #d.py V2.0
+        'servers': [{'server_id': server.id, 'name': server.name, 'thumbnail': server.icon.with_static_format('png').with_size(512).url if server.icon else ''} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] if u.id != b.user.id else [], #d.py V2.0
         'privacy': {
             'default': current.get('privacy', {}).get('default', (1, 1)), #Index 0 - 0: Disable features, 1: Enable features || Index 1 - 0: Hidden to others, 1: Visible to everyone, Array: List of user IDs allowed to view the profile
             'birthdayModule': current.get('privacy', {}).get('birthdayModule', (2, 2)), #Index 0 - 0: Disable, 1: Enable, 2: Default || Index 1 - 0: Hidden, 1: Everyone, 2: Default, Array: Certain users || Applies to the next fields unless otherwise specified
@@ -349,7 +356,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
             'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
             'birthdayMessages': current.get('privacy', {}).get('birthdayMessages', (2, 2)), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
             'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
-            'customStatusHistory': current.get('privacy', {}).get('customStatusHistory', (2, 2)),
+            'customStatusHistory': 0 if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/06/2022' else current.get('privacy', {}).get('customStatusHistory', (2, 2)),
             'usernameHistory': current.get('privacy', {}).get('usernameHistory', (2, 2)),
             'avatarHistory': current.get('privacy', {}).get('avatarHistory', (2, 2)),
             'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
@@ -366,7 +373,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
         if u.display_avatar.with_static_format('png').with_size(2048).url != current['avatar']: base.update({'avatar': u.display_avatar.with_static_format('png').with_size(2048).url})
         if serverGen != current['servers']: base.update({'servers': serverGen})
         if base: updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': base}))
-    if mode == 'update': await users.bulk_write(updateOperations, ordered=not parallel)
+    if mode == 'update': await users.bulk_write(updateOperations, ordered = not parallel)
     elif mode == 'return': return updateOperations
     #print(f'Verified User {m.name} in {(datetime.datetime.now() - started).seconds}s')
 

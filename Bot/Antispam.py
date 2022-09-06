@@ -142,9 +142,9 @@ class Antispam(commands.Cog):
             if not (message.channel.id in spam.get('channelExclusions') and cRE or message.author.id in spam.get('memberExclusions')): return
         else:
             if message.channel.id in spam.get('channelExclusions') or message.author.id in spam.get('memberExclusions') or cRE: return
-        try: lastMessages = person.get("lastMessages")
+        try: lastMessages = person.get("lastMessages", [])
         except AttributeError: lastMessages = []
-        try: quickMessages = person.get("quickMessages")
+        try: quickMessages = person.get("quickMessages", [])
         except AttributeError: quickMessages = []
         if message.content is not None and len(message.content) > 0: lastMessages.append(vars(ParodyMessage(message.content, message.created_at))) #Adds a ParodyMessage object (simplified discord.Message; two variables)
         if message.channel.id not in await GetChannelExclusions(message.guild) and not cRE and message.author.id not in await GetMemberExclusions(message.guild):
@@ -157,7 +157,6 @@ class Antispam(commands.Cog):
                         lastMessages.pop(0)
                 except: 
                     lastMessages = []
-                    print('Resetting lastmessages for {}, {}'.format(message.author.name, message.guild.name))
             for msg in quickMessages:
                 try:
                     if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
@@ -166,7 +165,6 @@ class Antispam(commands.Cog):
                         quickMessages.pop(0)
                 except:
                     quickMessages = []
-                    print('Resetting quickmessages for {}, {}'.format(message.author.name, message.guild.name))
             person.update({'lastMessages': lastMessages, 'quickMessages': quickMessages})
         if spam.get('ignoreRoled') and len(message.author.roles) > 1:
             return #Return if we're ignoring members with roles and they have a role that's not the @everyone role that everyone has (which is why we can tag @everyone)

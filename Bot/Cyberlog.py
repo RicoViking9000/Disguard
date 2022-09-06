@@ -28,6 +28,7 @@ import asyncpraw
 import textwrap
 import logging
 import aiofiles
+from pymongo import errors
 
 bot = None
 serverPurge = {}
@@ -41,6 +42,7 @@ tempDir = 'Attachments/Temp' #Path to save images for profile picture changes an
 gimpedServers = [403698615446536203, 460611346837405696, 366019576661671937]
 try: os.makedirs(tempDir)
 except FileExistsError: pass
+stockImage = 'https://www.femalefirst.co.uk/image-library/land/500/r/rick-astley-whenever-you-need-somebody-album-cover.jpg'
 
 summaries = {}
 grabbedSummaries = {}
@@ -99,6 +101,7 @@ class Cyberlog(commands.Cog):
     @tasks.loop()
     async def trackChanges(self):
         #The global variables exist for the rare instances the cache data needs to be accessed outside of the Cyberlog class instance, in a read-only mode.
+        await asyncio.sleep(3)
         reddit: Reddit.Reddit = self.bot.get_cog('Reddit')
         try:
             async with database.getDatabase().watch(full_document='updateLookup', resume_after=self.resumeToken) as change_stream:
@@ -152,16 +155,12 @@ class Cyberlog(commands.Cog):
                 for m in g.members: self.memberPermissions[g.id][m.id] = m.guild_permissions
                 timeString += f'\n •Member cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
-                for c in g.text_channels: 
-                    try: self.pins[c.id] = [m.id for m in await c.pins()]
-                    except (discord.Forbidden): pass
-                midway = datetime.datetime.now()
                 for c in g.categories:
                     try: self.categories[c.id] = c.channels
                     except (discord.Forbidden): pass
                 try: self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None] #This can be made faster without a generator
                 except (discord.Forbidden): pass
-                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s\n  •Pins: {(midway - started).seconds}s\n  •Categories: {(datetime.datetime.now() - midway).seconds}s'
+                timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
                 try:
@@ -254,16 +253,12 @@ class Cyberlog(commands.Cog):
         started = datetime.datetime.now()
         print('Synchronizing Database')
         await lightningdb.wipe()
-        async for s in await database.GetAllServers():
-            if self.bot.get_guild(s['server_id']):
-                await lightningdb.post_server(s)
-            else: 
-                attachmentsPath = f'Attachments/{s["server_id"]}'
-                try: shutil.rmtree(attachmentsPath)
-                except FileNotFoundError: pass
-        async for u in await database.GetAllUsers():
-            if self.bot.get_user(u['user_id']):
-                await lightningdb.post_user(u)
+        for s in self.bot.guilds:
+            try: await lightningdb.post_server(s)
+            except errors.DuplicateKeyError: pass
+        for m in self.bot.get_all_members():
+            try: await lightningdb.post_user(m)
+            except errors.DuplicateKeyError: pass
         if notify: await self.imageLogChannel.send('Synchronized')
         print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s')
 
@@ -275,6 +270,7 @@ class Cyberlog(commands.Cog):
         try:
             removal=[]
             outstandingTempFiles = os.listdir(tempDir)
+            # gather old attachments to delete
             for server in self.bot.guilds:
                 for channel in server.text_channels:
                     try:
@@ -283,12 +279,17 @@ class Cyberlog(commands.Cog):
                         for folder in os.listdir(path):
                             timestamp = datetime.datetime.fromisoformat(messages[folder]['timestamp0'])
                             if (datetime.datetime.utcnow() - timestamp).days > 365:
-                                removal.append(folder) #Mark year-old attachments for deletion
+                                removal.append(os.path.join(path, folder)) #Mark year-old attachments for deletion
                             elif not os.listdir(folder):
-                                removal.append(folder) #Mark empty folders for deletion
+                                removal.append(os.path.join(path, folder)) #Mark empty folders for deletion
                     except: pass
+            # gather attachments for servers the bot is no longer a member of
+            attachments_path = f'Attachments'
+            for folder in os.listdir(path):
+                if not self.bot.get_guild(int(folder)):
+                    removal.append(os.path.join(attachments_path, path))
             for folder in removal: 
-                try: shutil.rmtree(path)
+                try: shutil.rmtree(folder)
                 except Exception as e: print(f'Attachment folder deletion fail: {e}')
             for fl in outstandingTempFiles:
                 try: shutil.rmtree((os.path.join(tempDir, fl)))
@@ -297,6 +298,13 @@ class Cyberlog(commands.Cog):
                     except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
             print('Removed {} items in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
         except Exception as e: print('Attachment deletion fail: {}'.format(e))
+    
+    async def grab_pins(self):
+        '''Fetches pinned messages to be stored locally'''
+        for g in self.bot.guilds:
+            for c in g.text_channels: 
+                try: self.pins[c.id] = [m.id for m in await c.pins()]
+                except (discord.Forbidden): pass
     
     @commands.Cog.listener()
     async def on_command(self, ctx):
@@ -2002,11 +2010,12 @@ class Cyberlog(commands.Cog):
             # if after.guild.id == targetServer.id:
             #     for a in after.activities:
             #         if a.type == discord.ActivityType.custom:
-            if await self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity:
+            if await self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity and after.activity.type == discord.ActivityType.custom and datetime.datetime.utcnow().strftime('%m/%d/%Y') != '09/06/2022':
                 try:
                     try: user = await utility.get_user(after)
                     except KeyError: return
                     a = after.activity
+                    if not a: return
                     prev = user.get('customStatusHistory', [{}])[-1]
                     proposed = {'e': None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name if a else None}
                     if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}: 
@@ -2093,7 +2102,7 @@ class Cyberlog(commands.Cog):
                     if msg.content and not settings['plainText'] and any((settings['flashText'], settings['tts'])): await msg.edit(content=None) #TODO: reduce unnecessary edits
                     self.archiveLogEmbed(server, msg.id, embed, 'User Update')
             except: pass
-        for s in servers: asyncio.create_task(database.VerifyMember(after, warnings=(await utility.get_server(s))['antispam'].get('warn', 3)))
+        for s in servers: asyncio.create_task(database.VerifyMember(s.get_member(after.id), warnings=(await utility.get_server(s))['antispam'].get('warn', 3)))
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -2441,7 +2450,7 @@ class Cyberlog(commands.Cog):
                 if before.permissions != after.permissions:
                     for m in after.members: self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
         await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason='Server role was updated; member\'s permissions changed')
-        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, self.bot, includeMembers=before.permissions != after.permissions))
+        if before.name != after.name: asyncio.create_task(database.VerifyServer(after.guild, self.bot, includeMembers=after.members if before.permissions != after.permissions else []))
         for member in after.members:
             await database.VerifyUser(member, self.bot)
         if message and len(embed.fields) > 0 or before.name != after.name:

@@ -31,7 +31,7 @@ from pymongo import errors as mongoErrors
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit']
+cogs = ['Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit']
 
 print("Connecting...")
 
@@ -88,6 +88,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name='my boss (Syncing data...)', type=discord.ActivityType.listening)
         await UpdatePresence()
+        await bot.load_extension('Cyberlog')
+        await asyncio.sleep(2)
         for cog in cogs:
             try:
                 await bot.load_extension(cog)
@@ -107,6 +109,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
             await asyncio.gather(*[indexMessages(server, c) for c in server.text_channels])
             Cyberlog.indexed[server.id] = True
         presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
+        await cyber.grab_pins()
     print("Booted")
     await UpdatePresence()
 
@@ -434,7 +437,7 @@ async def _status(ctx):
     m = await ctx.send('React with what you would like my desired status to be')
     #emojis = [e for e in bot.get_cog('Cyberlog').emojis.values() if e.name in ['online', 'idle', 'dnd', 'offline', 'streaming', 'reload']]
     cog = bot.get_cog('Cyberlog')
-    reactions = (emojis['online'], emojis['idle'], emojis['dnd'], emojis['offline'], emojis['streaming'], emojis['loop'])
+    reactions = (emojis['online'], emojis['idle'], emojis['dnd'], emojis['offline'], emojis['streaming'], emojis['reload'])
     for r in reactions: await m.add_reaction(r)
     def reacCheck(r, m): return r.emoji in emojis and m.id == ctx.author.id
     r = await bot.wait_for('reaction_add', check=reacCheck)
@@ -465,19 +468,7 @@ async def _status(ctx):
 @commands.is_owner()
 @bot.command()
 async def test(ctx):
-    #await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-    '''Generating random birthdays for each member on the test bot'''
-    for user in bot.users:
-        try:
-            if not (await utility.get_user(user)).get('birthday'):
-                birthday = datetime.datetime(datetime.date.today().year, 1, 1)
-                month = random.randint(1, 12)
-                daysPerMonth = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
-                day = random.randint(1, daysPerMonth[month])
-                birthday = birthday.replace(month=month, day=day)
-                await database.SetBirthday(user, birthday)
-                print(f'Set {birthday:%B %d} for {user.name}')
-        except KeyError: pass
+    await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
 
 @commands.is_owner()
 @bot.command()
