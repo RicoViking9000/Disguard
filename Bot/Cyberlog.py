@@ -134,11 +134,13 @@ class Cyberlog(commands.Cog):
         try:
             if self.syncData.current_loop % 2 == 0: #This segment activates once every two days
                 if self.syncData.current_loop == 0: #This segment activates only once while the bot is up (on bootup)
-                    await database.Verification(self.bot)
-                    asyncio.create_task(self.synchronizeDatabase(True))
-                    def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
-                    await self.bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
-                else: asyncio.create_task(self.synchronizeDatabase())
+                    task = database.Verification(self.bot)
+                    await asyncio.wait_for(task, timeout=None)
+                    # await database.Verification(self.bot)
+                    # asyncio.create_task(self.synchronizeDatabase(True))
+                    # def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
+                    # await self.bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
+                # else: asyncio.create_task(self.synchronizeDatabase())
                 await self.bot.get_cog('Birthdays').verifyBirthdaysDict()
             for g in self.bot.guilds:
                 timeString = f'Processing attributes for {g.name}'
@@ -248,19 +250,19 @@ class Cyberlog(commands.Cog):
         finally: await self.imageLogChannel.send('Completed') #Moved this into finally so that message indexing and other bootup tasks can commence even if this fails
         print(f'Done syncing data: {(datetime.datetime.now() - rawStarted).seconds}s')
 
-    async def synchronizeDatabase(self, notify=False):
-        '''This method downloads data from the database and puts it in the local mongoDB variables, then is kept updated in the motorMongo changeStream method (trackChanges)'''
-        started = datetime.datetime.now()
-        print('Synchronizing Database')
-        await lightningdb.wipe()
-        for s in self.bot.guilds:
-            try: await lightningdb.post_server(s)
-            except errors.DuplicateKeyError: pass
-        for m in self.bot.get_all_members():
-            try: await lightningdb.post_user(m)
-            except errors.DuplicateKeyError: pass
-        if notify: await self.imageLogChannel.send('Synchronized')
-        print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s')
+    # async def synchronizeDatabase(self, notify=False):
+    #     '''This method downloads data from the database and puts it in the local mongoDB variables, then is kept updated in the motorMongo changeStream method (trackChanges)'''
+    #     started = datetime.datetime.now()
+    #     print('Synchronizing Database')
+    #     await lightningdb.wipe()
+    #     for s in self.bot.guilds:
+    #         try: await lightningdb.post_server(s)
+    #         except errors.DuplicateKeyError: pass
+    #     for m in self.bot.get_all_members():
+    #         try: await lightningdb.post_user(m)
+    #         except errors.DuplicateKeyError: pass
+    #     if notify: await self.imageLogChannel.send('Synchronized')
+    #     print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s')
 
     @tasks.loop(hours=24)
     async def DeleteAttachments(self):
@@ -285,9 +287,9 @@ class Cyberlog(commands.Cog):
                     except: pass
             # gather attachments for servers the bot is no longer a member of
             attachments_path = f'Attachments'
-            for folder in os.listdir(path):
-                if not self.bot.get_guild(int(folder)):
-                    removal.append(os.path.join(attachments_path, path))
+            for folder in os.listdir(attachments_path):
+                if folder.lower() not in ['temp'] and not self.bot.get_guild(int(folder)):
+                    removal.append(os.path.join(attachments_path, folder))
             for folder in removal: 
                 try: shutil.rmtree(folder)
                 except Exception as e: print(f'Attachment folder deletion fail: {e}')
