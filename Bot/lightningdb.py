@@ -38,6 +38,10 @@ def prepare_post_server(data: dict):
     data['_id'] = data['server_id']
     return pymongo.InsertOne(data)
 
+async def post_servers(operations: list):
+    '''bulk write'''
+    return await servers.bulk_write(operations, ordered=False)
+
 async def get_server(server_id: int):
     '''gets a server from the database'''
     return await servers.find_one({'_id': server_id})
@@ -45,7 +49,7 @@ async def get_server(server_id: int):
 async def patch_server(server_id: int, data: dict):
     '''updates a server in the database'''
     data.pop('_id')
-    return await servers.update_one({'_id': server_id}, {'$set': data})
+    return await servers.update_one({'_id': server_id}, {'$set': data}, upsert=True)
 
 async def post_user(data: dict):
     '''adds a user to the database'''
@@ -57,6 +61,10 @@ def prepare_post_user(data: dict):
     data['_id'] = data['user_id']
     return pymongo.InsertOne(data)
 
+async def post_users(operations: list):
+    '''bulk write'''
+    return await users.bulk_write(operations)
+
 async def get_user(user_id: int):
     '''gets a user from the database'''
     return await users.find_one({'_id': user_id})
@@ -64,7 +72,7 @@ async def get_user(user_id: int):
 async def patch_user(user_id: int, data: dict):
     '''updates a user in the database'''
     data.pop('_id')
-    return await users.update_one({'_id': user_id}, {'$set': data})
+    return await users.update_one({'_id': user_id}, {'$set': data}, upsert=True)
 
 def message_data(message: Message, index: int = 0):
     return {
