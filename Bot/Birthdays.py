@@ -147,7 +147,7 @@ class Birthdays(commands.Cog):
             birthdayList[k] = v
         for user in self.bot.users:
             try: bday: datetime.datetime = (await utility.get_user(user)).get('birthday')
-            except KeyError: bday: datetime.datetime = await database.GetMemberBirthday(user)
+            except AttributeError: bday: datetime.datetime = await database.GetMemberBirthday(user)
             if not bday: continue
             if user.id not in birthdayList[bday.strftime('%m%d')]: birthdayList[bday.strftime('%m%d')].append(user.id)
         await database.SetBirthdayList(birthdayList)
@@ -407,9 +407,9 @@ async def verifyBirthday(message: discord.Message, adjusted: datetime.datetime, 
     #User most likely talking about someone else's birthday
     elif any(word in message.content.lower().split(' ') for word in ['is', 'are']) and not any(word in message.content.lower().split(' ') for word in ['my', 'mine']) and len(message.mentions) > 0 and any(word in message.content.lower() for word in ['birthday', 'bday']): return message.mentions
     #User most likely answered a question asked by a user
-    else:
-        async for m in message.channel.history(limit=10): #How many messages to check back for question words
-            if any(word in m.content.lower() for word in ['when', 'what']) and any(word in m.content.lower() for word in ['your birthday', 'your bday', 'yours']): return [message.author]
+    # else:
+    #     async for m in message.channel.history(limit=10): #How many messages to check back for question words
+    #         if any(word in m.content.lower() for word in ['when', 'what']) and any(word in m.content.lower() for word in ['your birthday', 'your bday', 'yours']): return [message.author]
 
 def calculateAges(message: discord.Message):
     '''Returns a list of numbers found in a message'''
