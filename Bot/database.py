@@ -141,9 +141,12 @@ async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
     gathered = await (servers.find({'server_id': {'$in': [s.id for s in servs]}})).to_list(None)
     gatheredDict = {s['server_id']: s for s in gathered}
-    for s in servs: 
-        try: await lightningdb.post_server(gatheredDict.get(s.id))
-        except errors.DuplicateKeyError: pass
+    localOps = [lightningdb.prepare_post_server(gatheredDict.get(s.id)) for s in servs]
+    try: await lightningdb.post_servers(localOps)
+    except errors.DuplicateKeyError: pass
+    # async for s in servs: 
+    #     try: await lightningdb.post_server(gatheredDict.get(s.id))
+    #     except errors.DuplicateKeyError: pass
     # await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='update', includeMembers=s.members) for s in servs])
     # await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
     results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
@@ -345,21 +348,24 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
     print('Posting users to local database...')
-    count = 0
-    for m in usrs:
-        try: 
-            if gatheredDict.get(m.id): await lightningdb.post_user(gatheredDict.get(m.id))
-        except errors.DuplicateKeyError: pass
-        count += 1
-        if count % 4000 == 0:
-            print(f'Posted a chunk of 4000 users ({count} / {len(usrs)})')
+    localOps = [lightningdb.prepare_post_user(gatheredDict.get(m.id)) for m in usrs]
+    try: await lightningdb.post_users(localOps)
+    except errors.DuplicateKeyError: pass
+    # count = 0
+    # for m in usrs:
+    #     try: 
+    #         if gatheredDict.get(m.id): await lightningdb.post_user(gatheredDict.get(m.id))
+    #     except errors.DuplicateKeyError: pass
+    #     count += 1
+    #     if count % 4000 == 0:
+    #         print(f'Posted a chunk of 4000 users ({count} / {len(usrs)})')
     # await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
     # await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
     results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
     results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
     def divide(r, n):
         for i in range(0, len(r), n): yield r[i:i+n]
-    paginated_results = list(divide(results, 4000))
+    paginated_results = list(divide(results, 5000))
     for page in paginated_results:
         operation = users.bulk_write(page, ordered=False)
         await asyncio.wait_for(operation, timeout=None)
