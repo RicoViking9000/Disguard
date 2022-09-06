@@ -15,6 +15,8 @@ import itertools
 import utility
 import queue
 import typing
+import lightningdb
+from pymongo import errors
 
 mongo: motor.motor_asyncio.AsyncIOMotorClient = None
 db: motor.motor_asyncio.AsyncIOMotorDatabase = None
@@ -127,18 +129,33 @@ def initialize(token):
 '''Verification events'''
 async def Verification(b: commands.Bot):
     '''Verifies everything (all servers and users)'''
-    await VerifyServers(b, b.guilds, full=True)
-    await VerifyUsers(b, list(b.get_all_members()), full=True)
+    verify_servers = VerifyServers(b, b.guilds, full=True)
+    await asyncio.wait_for(verify_servers, timeout=None)
+    verify_users = VerifyUsers(b, list(b.get_all_members()), full=True)
+    await asyncio.wait_for(verify_users, timeout=None)
+    # await VerifyServers(b, b.guilds, full=True)
+    # await VerifyUsers(b, list(b.get_all_members()), full=True)
     print(f'Finished verification for {len(b.guilds)} servers and {len(list(b.get_all_members()))} users')
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
     gathered = await (servers.find({'server_id': {'$in': [s.id for s in servs]}})).to_list(None)
     gatheredDict = {s['server_id']: s for s in gathered}
-    await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='update', includeMembers=s.members) for s in servs])
-    await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
-    # results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
-    # results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
+    for s in servs: 
+        try: await lightningdb.post_server(gatheredDict.get(s.id))
+        except errors.DuplicateKeyError: pass
+    # await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='update', includeMembers=s.members) for s in servs])
+    # await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
+    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
+    results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
+    def divide(r, n):
+        for i in range(0, len(r), n): yield r[i:i+n]
+    paginated_results = list(divide(results, 10))
+    for page in paginated_results:
+        operation = servers.bulk_write(page, ordered=False)
+        await asyncio.wait_for(operation, timeout=None)
+        print(f'Verified {len(page)} servers')
+        await asyncio.sleep(10)
     # await servers.bulk_write(results, ordered=False)
 
 async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers=[], parallel=True):
@@ -150,7 +167,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         includeMembers: update the members whose IDs are specified, if any
     '''
     print(f'Verifying server: {s.name} - {s.id}')
-    mode = 'update'
+    #mode = 'update'
     started = datetime.datetime.now()
     global bot
     bot = b
@@ -322,15 +339,27 @@ async def RemoveMembers(s: discord.Guild, members: list):
     '''Support method to quickly remove members from a server'''
     await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': {'$in': [m.id for m in members]}}}})
 
-async def VerifyUsers(b: commands.Bot, usrs: list, full=False):
+async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=False):
     '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
+    print(f'Verifying {len(usrs)} users...')
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
-    await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
-    await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
-    # results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
-    # results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
-    # await users.bulk_write(results, ordered=False)
+    for m in usrs:
+        try: await lightningdb.post_user(gatheredDict.get(m.id))
+        except errors.DuplicateKeyError: pass
+    # await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
+    # await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
+    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
+    results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
+    def divide(r, n):
+        for i in range(0, len(r), n): yield r[i:i+n]
+    paginated_results = list(divide(results, 400))
+    for page in paginated_results:
+        operation = users.bulk_write(page, ordered=False)
+        await asyncio.wait_for(operation, timeout=None)
+        print(f'Verified {len(page)} users')
+        await asyncio.sleep(10)
+    #await users.bulk_write(results, ordered=False)
     
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
     '''Ensures that an individual user is in the database, and checks their variables'''
@@ -356,7 +385,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
             'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
             'birthdayMessages': current.get('privacy', {}).get('birthdayMessages', (2, 2)), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
             'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
-            'customStatusHistory': 0 if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/06/2022' else current.get('privacy', {}).get('customStatusHistory', (2, 2)),
+            'customStatusHistory': (0, 2) if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/06/2022' else current.get('privacy', {}).get('customStatusHistory', (2, 2)),
             'usernameHistory': current.get('privacy', {}).get('usernameHistory', (2, 2)),
             'avatarHistory': current.get('privacy', {}).get('avatarHistory', (2, 2)),
             'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
