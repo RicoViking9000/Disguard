@@ -347,7 +347,8 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     print('Posting users to local database...')
     count = 0
     for m in usrs:
-        try: await lightningdb.post_user(gatheredDict.get(m.id))
+        try: 
+            if gatheredDict.get(m.id): await lightningdb.post_user(gatheredDict.get(m.id))
         except errors.DuplicateKeyError: pass
         count += 1
         if count % 4000 == 0:
