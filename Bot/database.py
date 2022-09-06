@@ -350,7 +350,7 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
         try: await lightningdb.post_user(gatheredDict.get(m.id))
         except errors.DuplicateKeyError: pass
         count += 1
-        if count % 0 == 1500:
+        if count % 1500 == 0:
             print('Posted a chunk of 1500 users')
     # await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
     # await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
