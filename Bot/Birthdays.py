@@ -147,7 +147,9 @@ class Birthdays(commands.Cog):
             birthdayList[k] = v
         for user in self.bot.users:
             try: bday: datetime.datetime = (await utility.get_user(user)).get('birthday')
-            except AttributeError: bday: datetime.datetime = await database.GetMemberBirthday(user)
+            except AttributeError: 
+                try: bday: datetime.datetime = await database.GetMemberBirthday(user)
+                except AttributeError: continue
             if not bday: continue
             if user.id not in birthdayList[bday.strftime('%m%d')]: birthdayList[bday.strftime('%m%d')].append(user.id)
         await database.SetBirthdayList(birthdayList)
