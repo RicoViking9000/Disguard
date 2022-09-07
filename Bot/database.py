@@ -143,7 +143,7 @@ async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full
     gatheredDict = {s['server_id']: s for s in gathered}
     localOps = [lightningdb.prepare_post_server(gatheredDict.get(s.id)) for s in servs]
     try: await lightningdb.post_servers(localOps)
-    except errors.DuplicateKeyError: pass
+    except errors.BulkWriteError: pass
     # async for s in servs: 
     #     try: await lightningdb.post_server(gatheredDict.get(s.id))
     #     except errors.DuplicateKeyError: pass
@@ -350,7 +350,7 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     print('Posting users to local database...')
     localOps = [lightningdb.prepare_post_user(gatheredDict.get(m.id)) for m in usrs]
     try: await lightningdb.post_users(localOps)
-    except errors.DuplicateKeyError: pass
+    except errors.BulkWriteError: pass
     # count = 0
     # for m in usrs:
     #     try: 
