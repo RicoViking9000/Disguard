@@ -141,7 +141,10 @@ async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
     gathered = await (servers.find({'server_id': {'$in': [s.id for s in servs]}})).to_list(None)
     gatheredDict = {s['server_id']: s for s in gathered}
-    localOps = [lightningdb.prepare_post_server(gatheredDict.get(s.id)) for s in servs]
+    localOps = []
+    for s in servs:
+        try: localOps.append(lightningdb.prepare_post_server(gatheredDict.get(s.id)))
+        except (AttributeError, KeyError, TypeError): pass
     try: await lightningdb.post_servers(localOps)
     except errors.BulkWriteError: pass
     # async for s in servs: 
@@ -348,7 +351,10 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
     print('Posting users to local database...')
-    localOps = [lightningdb.prepare_post_user(gatheredDict.get(m.id)) for m in usrs]
+    localOps = []
+    for u in usrs:
+        try: localOps.append(lightningdb.prepare_post_user(gatheredDict.get(u.id)))
+        except (AttributeError, KeyError, TypeError): pass
     try: await lightningdb.post_users(localOps)
     except errors.BulkWriteError: pass
     # count = 0
