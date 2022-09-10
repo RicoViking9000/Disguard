@@ -404,8 +404,8 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
             'birthdayMessages': current.get('privacy', {}).get('birthdayMessages', (2, 2)), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
             'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
             'customStatusHistory': current.get('privacy', {}).get('customStatusHistory', (0, 2)),
-            'usernameHistory': current.get('privacy', {}).get('usernameHistory', (2, 2)),
-            'avatarHistory': current.get('privacy', {}).get('avatarHistory', (2, 2)),
+            'usernameHistory': (0, 2) if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/10/2022' else current.get('privacy', {}).get('usernameHistory', (0, 2)),
+            'avatarHistory': (0, 2) if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/10/2022' else current.get('privacy', {}).get('avatarHistory', (0, 2)),
             'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
             'lastActive': current.get('privacy', {}).get('lastActive', (2, 2)),
             'profile': current.get('privacy', {}).get('profile', (2, 2))
@@ -420,7 +420,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
         if u.display_avatar.with_static_format('png').with_size(2048).url != current['avatar']: base.update({'avatar': u.display_avatar.with_static_format('png').with_size(2048).url})
         if serverGen != current['servers']: base.update({'servers': serverGen})
         if base: updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': base}))
-    if mode == 'update': await users.bulk_write(updateOperations, ordered = not parallel)
+    if mode == 'update' and updateOperations: await users.bulk_write(updateOperations, ordered = not parallel)
     elif mode == 'return': return updateOperations
     #print(f'Verified User {m.name} in {(datetime.datetime.now() - started).seconds}s')
 

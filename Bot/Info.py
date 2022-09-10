@@ -108,7 +108,7 @@ class Info(commands.Cog):
         if any(s == arg for s in ['him', 'her', 'them', 'it', '^']):
             await message.edit(content='{}Loading content'.format(self.loading))
             def pred(m): return m.author != ctx.guild.me and m.author != ctx.author
-            author = sorted((await ctx.channel.history(limit=100).filter(pred).flatten()), key = lambda m: m.created_at, reverse=True)[-1].author
+            author = sorted([message async for message in ctx.channel.history(limit=100).filter(pred)], key = lambda m: m.created_at, reverse=True)[-1].author
             mainKeys.append(f'ℹInformation about the person above you ({author.name})')
             indiv = await self.MemberInfo(author)
         if 'hardware' == arg:
@@ -177,7 +177,7 @@ class Info(commands.Cog):
                 mainKeys.append('ℹInformation about you :)')
                 indiv = await self.MemberInfo(ctx.author)
             if any(s == arg for s in ['him', 'her', 'them', 'it']):
-                author = sorted((await ctx.channel.history(limit=100).filter(pred).flatten()), key = lambda m: m.created_at, reverse=True)[-1].author
+                author = sorted([message async for message in ctx.channel.history(limit=100).filter(pred)], key = lambda m: m.created_at, reverse=True)[-1].author
                 mainKeys.append('ℹInformation about the person above you ({})'.format(author.name))
                 indiv = await self.MemberInfo(author)
             if 'hardware' == arg:
@@ -231,7 +231,7 @@ class Info(commands.Cog):
                         await message.edit(embed=message.embeds[0])
                         break
             if counter == 0:
-                try: logs = await ctx.guild.audit_logs(limit=None).flatten()
+                try: logs = [log async for log in ctx.guild.audit_logs(limit=None)]
                 except: logs = False #signify failure to the end user
                 try: invites = await ctx.guild.invites()
                 except: invites = False
