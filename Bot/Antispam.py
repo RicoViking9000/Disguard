@@ -191,7 +191,7 @@ class Antispam(commands.Cog):
                 short.append("Sending messages too fast")
                 person['quickMessages'] = []
         if spam.get('consecutiveMessages')[0] != 0:
-            messages = await message.channel.history(limit=spam.get('consecutiveMessages')[0]).flatten()
+            messages = [message async for message in message.channel.history(limit=spam.get('consecutiveMessages')[0])]
             if len(messages) >= spam.get('consecutiveMessages')[0] and all([m.author.id == message.author.id for m in messages]) and (messages[0].created_at - messages[-1].created_at).seconds < spam.get('consecutiveMessages')[1]:
                 flag = True
                 reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} messages consecutively in under {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages over {spam.get("consecutiveMessages")[1]} seconds)')

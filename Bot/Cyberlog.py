@@ -717,8 +717,8 @@ class Cyberlog(commands.Cog):
                         try:
                             embed.clear_fields()
                             embed.description=embed.description[:embed.description.find(utility.DisguardLongTimestamp(received)) + len({utility.DisguardLongTimestamp(received)})] + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
-                            messagesBefore = list(reversed(await after.channel.history(limit=6, before=after).flatten()))
-                            messagesAfter = await after.channel.history(limit=6, after=after, oldest_first=True).flatten()
+                            messagesBefore = list(reversed([message async for message in after.channel.history(limit=6, before=after)]))
+                            messagesAfter = [message async for message in after.channel.history(limit=6, after=after, oldest_first=True)]
                             combinedMessages = messagesBefore + [after] + messagesAfter
                             combinedLength = sum(len(m.content) for m in combinedMessages)
                             if combinedLength > 1850: combinedMessageContent = [utility.contentParser(m)[:1850 // len(combinedMessages)] for m in combinedMessages]
@@ -880,9 +880,9 @@ class Cyberlog(commands.Cog):
                     self.updateLogEmbed(g, payload.message_id, {'customKeyMessageIsDeleted': True})
             if (author.bot and not (await utility.get_server(g))['cyberlog'].get('disguardLogRecursion')) or not await logExclusions(channel, memberObject): return
         except: pass
-        try: messageAfter = (await channel.history(limit=1, after=created, oldest_first=True).flatten())[0] #The message directly after the deleted one, if this is N/A the embed will have no hyperlink for this
+        try: messageAfter = [message async for message in channel.history(limit=1, after=created, oldest_first=True)][0] #The message directly after the deleted one, if this is N/A the embed will have no hyperlink for this
         except IndexError: messageAfter = ''
-        try: messageBefore = (await channel.history(limit=1, before=created).flatten())[0] #The message directly before the deleted one
+        try: messageBefore = [message async for message in channel.history(limit=1, before=created)][0] #The message directly before the deleted one
         except IndexError: messageBefore = ''
         created -= datetime.timedelta(hours=DST)
         embed.description=textwrap.dedent(f'''
@@ -906,7 +906,7 @@ class Cyberlog(commands.Cog):
         log = None
         if await readPerms(g, 'message'):
             try:
-                log = (await g.audit_logs(limit=1).flatten())[0]
+                log = [l async for l in g.audit_logs(limit=1)][0]
                 if log.action in (discord.AuditLogAction.message_delete, discord.AuditLogAction.message_bulk_delete) and utility.absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=5)) and log.target.id in (author.id, channel.id) and log.user != author:
                     embed.description += f'''\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{"Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name})'''
                     embed.title = f'''{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["modDelete"])}') if settings["context"][0] > 0 else ""}{"Message was deleted" if settings["context"][1] < 2 else ''}'''
@@ -1258,7 +1258,7 @@ class Cyberlog(commands.Cog):
                         if 'Loading channel information' not in embed.description: embed.description+=f'\n\n{self.loading} Loading channel information: {after.name}'
                         await msg.edit(embed=embed)
                         info: Info.Info = self.bot.get_cog('Info')
-                        result = await info.ChannelInfo(after, None if after.type[0] == 'category' else await after.invites(), None if after.type[0] != 'text' else await after.pins(), await after.guild.audit_logs(limit=None).flatten())
+                        result = await info.ChannelInfo(after, None if after.type[0] == 'category' else await after.invites(), None if after.type[0] != 'text' else await after.pins(), [log async for log in after.guild.audit_logs(limit=None)])
                         await msg.edit(content=result[0], embed=result[1])
                         await msg.add_reaction('⬅')
                         def backCheck(rr, u): return str(rr) == '⬅' and rr.message.id == msg.id and u.id == r[1].id
@@ -1408,7 +1408,7 @@ class Cyberlog(commands.Cog):
             msg = await (await logChannel(member.guild, 'doorguard')).send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             if member.bot and settings['read']:
                 try:
-                    log = (await member.guild.audit_logs(limit=1).flatten())[0]
+                    log = [l async for l in member.guild.audit_logs(limit=1)][0]
                     if log.action == discord.AuditLogAction.bot_add:
                         embed.description = f'''
                             {"🤖" if settings['context'][1] > 0 else ''}{"Bot" if settings['context'][1] < 2 else ''}: {member.mention} ({member.name})
@@ -2227,7 +2227,7 @@ class Cyberlog(commands.Cog):
                         await message.edit(embed=embed)
                         logs, bans, hooks, invites = None, None, None, None
                         try:
-                            logs = await after.audit_logs(limit=None).flatten()
+                            logs = [log async for log in after.audit_logs(limit=None)]
                             bans = await after.bans()
                             hooks = await after.webhooks()
                             invites = await after.invites()
@@ -2373,7 +2373,7 @@ class Cyberlog(commands.Cog):
                 if str(result[0]) == 'ℹ':
                     if 'Loading role information' not in embed.description: embed.description+=f'\n\n{self.loading}Loading role information'
                     await message.edit(embed=embed)
-                    try: logs = await role.guild.audit_logs(limit=None).flatten()
+                    try: logs = [log async for log in role.guild.audit_logs(limit=None)]
                     except: logs = None
                     if not roleInfo: 
                         roleInfo = await self.RoleInfo(role, logs)
@@ -2466,7 +2466,7 @@ class Cyberlog(commands.Cog):
                     if 'Loading role information' not in embed.description: embed.description+=f'\n\n{self.loading}Loading role information'
                     await message.edit(embed=embed)
                     logs = None
-                    try: logs = await after.audit_logs(limit=None).flatten()
+                    try: logs = [log async for log in after.audit_logs(limit=None)]
                     except: pass
                     new = await self.RoleInfo(after, logs)
                     if embed.author.name: new.set_author(icon_url=url, name=log.user.name)
