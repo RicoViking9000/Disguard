@@ -2826,14 +2826,14 @@ class Cyberlog(commands.Cog):
 
     async def privacyEnabledChecker(self, u: discord.User, parent, child):
         try: p = (await utility.get_user(u))['privacy']
-        except KeyError: 
+        except (KeyError, TypeError): 
             return False
         if p[child][0] == 2: return await self.privacyEnabledChecker(u, 'default', parent)
         return p[child][0] == 1
 
     async def privacyVisibilityChecker(self, u: discord.User, parent, child):
         try: p = (await utility.get_user(u))['privacy']
-        except KeyError: return False
+        except (KeyError, TypeError): return False
         if p[child][1] == 2: return await self.privacyEnabledChecker(u, 'default', parent)
         return p[child][1] == 1
     
