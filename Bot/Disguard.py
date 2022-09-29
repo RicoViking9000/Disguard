@@ -498,7 +498,7 @@ async def daylight(ctx):
 def serializeJson(o):
     if type(o) is datetime.datetime: return o.isoformat()
 
-@tasks.loop(minutes=15)
+@tasks.loop(minutes=2)
 async def profile_memory():
     try:
         snapshot = tracemalloc.take_snapshot()
