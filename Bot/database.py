@@ -139,30 +139,13 @@ async def Verification(b: commands.Bot):
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
-    gathered = await (servers.find({'server_id': {'$in': [s.id for s in servs]}})).to_list(None)
-    gatheredDict = {s['server_id']: s for s in gathered}
-    localOps = []
-    for s in servs:
-        try: localOps.append(lightningdb.prepare_post_server(gatheredDict.get(s.id)))
-        except (AttributeError, KeyError, TypeError): pass
-    try: await lightningdb.post_servers(localOps)
-    except errors.BulkWriteError: pass
-    # async for s in servs: 
-    #     try: await lightningdb.post_server(gatheredDict.get(s.id))
-    #     except errors.DuplicateKeyError: pass
-    # await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='update', includeMembers=s.members) for s in servs])
-    # await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
-    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyServer(s, b, gatheredDict.get(s.id, {}), full, True, mode='return', includeMembers=s.members) for s in servs])))
-    results.append(pymongo.DeleteMany({'server_id': {'$nin': [s.id for s in servs]}}))
-    def divide(r, n):
-        for i in range(0, len(r), n): yield r[i:i+n]
-    paginated_results = list(divide(results, 50))
-    for page in paginated_results:
-        operation = servers.bulk_write(page, ordered=False)
-        await asyncio.wait_for(operation, timeout=None)
-        print(f'Performed {len(page)} server operations')
-        await asyncio.sleep(10)
-    # await servers.bulk_write(results, ordered=False)
+    server_id_list = [s.id for s in servs]
+    async for server in servers.find({'server_id': {'$in': server_id_list}}):
+        s = b.get_guild(server['server_id'])
+        try: await lightningdb.post_server(server)
+        except (AttributeError, KeyError, TypeError, errors.DuplicateKeyError): pass
+        asyncio.create_task(VerifyServer(s, b, server, full, True, mode='update', includeMembers=s.members))
+    await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
 
 async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers=[], parallel=True):
     '''Ensures that a server has a database entry, and checks/updates all its variables & members
@@ -348,36 +331,13 @@ async def RemoveMembers(s: discord.Guild, members: list):
 async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=False):
     '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
     print(f'Verifying {len(usrs)} users...')
-    gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
-    gatheredDict = {u['user_id']: u for u in gathered}
-    print('Posting users to local database...')
-    localOps = []
-    for u in usrs:
-        try: localOps.append(lightningdb.prepare_post_user(gatheredDict.get(u.id)))
-        except (AttributeError, KeyError, TypeError): pass
-    try: await lightningdb.post_users(localOps)
-    except errors.BulkWriteError: pass
-    # count = 0
-    # for m in usrs:
-    #     try: 
-    #         if gatheredDict.get(m.id): await lightningdb.post_user(gatheredDict.get(m.id))
-    #     except errors.DuplicateKeyError: pass
-    #     count += 1
-    #     if count % 4000 == 0:
-    #         print(f'Posted a chunk of 4000 users ({count} / {len(usrs)})')
-    # await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='update') for u in usrs])
-    # await users.delete_many({'user_id': {'$nin': [u.id for u in usrs]}})
-    results = list(itertools.chain.from_iterable(await asyncio.gather(*[VerifyUser(u, b, current=gatheredDict.get(u.id, {}), full=full, new=True, mode='return') for u in usrs])))
-    results.append(pymongo.DeleteMany({'user_id': {'$nin': [u.id for u in usrs]}})) #Remove users no longer in any of Disguard's servers
-    def divide(r, n):
-        for i in range(0, len(r), n): yield r[i:i+n]
-    paginated_results = list(divide(results, 5000))
-    for page in paginated_results:
-        operation = users.bulk_write(page, ordered=False)
-        await asyncio.wait_for(operation, timeout=None)
-        print(f'Performed {len(page)} user operations')
-        await asyncio.sleep(5)
-    #await users.bulk_write(results, ordered=False)
+    user_id_list = [u.id for u in usrs]
+    async for user in users.find({'user_id': {'$in': user_id_list}}):
+        u = b.get_user(user['user_id'])
+        try: await lightningdb.post_user(user)
+        except (AttributeError, KeyError, TypeError, errors.DuplicateKeyError): pass
+        asyncio.create_task(VerifyUser(u, b, user, full, True, mode='update'))
+    await users.delete_many({'user_id': {'$nin': user_id_list}})
     
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
     '''Ensures that an individual user is in the database, and checks their variables'''

@@ -67,7 +67,6 @@ async def main():
     # database.initialize(secure.beta())
     # await bot.start(secure.beta())
     database.initialize(secure.token())
-    profile_memory.start()
     await bot.start(secure.token())
         
 indexes = 'Indexes'
@@ -497,37 +496,5 @@ async def daylight(ctx):
 
 def serializeJson(o):
     if type(o) is datetime.datetime: return o.isoformat()
-
-@tasks.loop(seconds=30)
-async def profile_memory():
-    try:
-        snapshot = tracemalloc.take_snapshot()
-        display_top(snapshot, limit=10)
-    except: traceback.print_exc()
-
-def display_top(snapshot, key_type='lineno', limit=3):
-    snapshot = snapshot.filter_traces((
-        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
-        tracemalloc.Filter(False, "<unknown>"),
-    ))
-    top_stats = snapshot.statistics(key_type)
-
-    print("Top %s lines" % limit)
-    for index, stat in enumerate(top_stats[:limit], 1):
-        frame = stat.traceback[0]
-        # replace "/path/to/module/file.py" with "module/file.py"
-        filename = os.sep.join(frame.filename.split(os.sep)[-2:])
-        print("#%s: %s:%s: %.1f MB"
-              % (index, filename, frame.lineno, stat.size / (1024**2)))
-        line = linecache.getline(frame.filename, frame.lineno).strip()
-        if line:
-            print('    %s' % line)
-
-    other = top_stats[limit:]
-    if other:
-        size = sum(stat.size for stat in other)
-        print("%s other: %.1f MB" % (len(other), size / (1024**2)))
-    total = sum(stat.size for stat in top_stats)
-    print("Total allocated size: %.1f MB" % (total / (1024**2)))
 
 asyncio.run(main())
