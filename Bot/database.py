@@ -139,15 +139,21 @@ async def Verification(b: commands.Bot):
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
+    async def yield_servers():
+        async for server in servers.find({'server_id': {'$in': server_id_list}}):
+            yield server
+    def yield_members():
+        for member in s.members:
+            yield member
     server_id_list = [s.id for s in servs]
-    async for server in servers.find({'server_id': {'$in': server_id_list}}):
+    async for server in yield_servers():
         s = b.get_guild(server['server_id'])
         try: await lightningdb.post_server(server)
         except (AttributeError, KeyError, TypeError, errors.DuplicateKeyError): pass
-        asyncio.create_task(VerifyServer(s, b, server, full, True, mode='update', includeMembers=s.members))
+        asyncio.create_task(VerifyServer(s, b, server, full, True, mode='update', includeMembers=yield_members()))
     await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
 
-async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers=[], parallel=True):
+async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers:typing.Generator[discord.Member, None, None]=[], parallel=True):
     '''Ensures that a server has a database entry, and checks/updates all its variables & members
         newOnly: if True, only create new servers
         full: if True, go over all variables even for existing servers
@@ -286,7 +292,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
     print(f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Database write: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     if mode == 'return': return updateOperations
 
-async def VerifyMembers(s: discord.Guild, members: list, serv=None, *, mode='update', parallel=True):
+async def VerifyMembers(s: discord.Guild, members: typing.Generator[discord.Member, None, None], serv=None, *, mode='update', parallel=True):
     '''Verifies multiple server members'''
     membDict = {} #Holds ID:name values for quick lookups for members that aren't in the database yet
     serverMemberIDs = set()
@@ -331,12 +337,16 @@ async def RemoveMembers(s: discord.Guild, members: list):
 async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=False):
     '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
     print(f'Verifying {len(usrs)} users...')
+    async def yield_users():
+        async for user in users.find({'user_id': {'$in': user_id_list}}):
+            yield user
     user_id_list = [u.id for u in usrs]
-    async for user in users.find({'user_id': {'$in': user_id_list}}):
+    async for user in yield_users():
         u = b.get_user(user['user_id'])
         try: await lightningdb.post_user(user)
         except (AttributeError, KeyError, TypeError, errors.DuplicateKeyError): pass
-        asyncio.create_task(VerifyUser(u, b, user, full, True, mode='update'))
+        await asyncio.wait_for(VerifyUser(u, b, user, full, True, mode='update'), timeout=None)
+        # asyncio.create_task(VerifyUser(u, b, user, full, True, mode='update'))
     await users.delete_many({'user_id': {'$nin': user_id_list}})
     
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):
@@ -926,9 +936,7 @@ async def CalculateGeneralChannel(g: discord.Guild, bot, update=False):
     if not currentGeneralChannel or type(currentGeneralChannel) != list or False in currentGeneralChannel:
         channels = {}
         for c in g.text_channels:
-            try:
-                with open(f'Indexes/{g.id}/{c.id}.json') as f: channels[c] = len([v for v in json.load(f).values() if (discord.utils.utcnow() - datetime.datetime.fromisoformat(v['timestamp0'])).days < 14]) #Most messages sent in last two weeks
-            except FileNotFoundError: pass
+            channels[c.id] = len(await lightningdb.get_messages_by_timestamp(after=discord.utils.utcnow() - datetime.timedelta(days=14), channel_ids=[c.id]))
         popular = max(channels, key = channels.get, default=0)
         if update and channels: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': (popular.id, False)}})
     else: popular = bot.get_channel(currentGeneralChannel[0])
