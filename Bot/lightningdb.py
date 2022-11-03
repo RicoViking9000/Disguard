@@ -5,6 +5,7 @@ from pymongo import errors
 from discord import Message
 from discord.utils import utcnow
 from typing import List
+import datetime
 
 # mongo = motor.motor_asyncio.AsyncIOMotorClient()
 
@@ -122,6 +123,17 @@ async def get_messages_by_author(author_id: int, channel_ids: List[int] = []):
         for collection in await database.list_collection_names():
             if collection not in ('servers', 'users'):
                 results += await database[collection].find({'author0': author_id}).to_list(None)
+    return results
+
+async def get_messages_by_timestamp(after: datetime.datetime = None, before: datetime.datetime = None, channel_ids: List[int] = []):
+    results = []
+    if channel_ids:
+        for channel_id in channel_ids:
+            results += await database[str(channel_id)].find({'timestamp0': {'$gte': after, '$lte': before}}).to_list(None)
+    else:
+        for collection in await database.list_collection_names():
+            if collection not in ('servers', 'users'):
+                results += await database[collection].find({'timestamp0': {'$gte': after, '$lte': before}}).to_list(None)
     return results
 
 async def patch_message(message: Message):
