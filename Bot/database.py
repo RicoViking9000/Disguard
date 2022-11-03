@@ -150,7 +150,7 @@ async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full
         s = b.get_guild(server['server_id'])
         try: await lightningdb.post_server(server)
         except (AttributeError, KeyError, TypeError, errors.DuplicateKeyError): pass
-        asyncio.create_task(VerifyServer(s, b, server, full, True, mode='update', includeMembers=yield_members()))
+        await asyncio.wait_for(VerifyServer(s, b, server, full, True, mode='update', includeMembers=yield_members()), timeout=None)
     await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
 
 async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers:typing.Generator[discord.Member, None, None]=[], parallel=True):
