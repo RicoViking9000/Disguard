@@ -284,12 +284,13 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         if serverChannels != serv['channels']: base.update({'channels': serverChannels})
         if roleGen != serv['roles']: base.update({'roles': roleGen})
         if base: updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': base}))
+    started2 = datetime.datetime.now()
     if includeMembers:
         results = await VerifyMembers(s, includeMembers, serv, mode=mode, parallel=parallel)
         if mode == 'return': updateOperations += results
-    started2 = datetime.datetime.now()
+    started3 = datetime.datetime.now()
     if mode == 'update': await servers.bulk_write(updateOperations, ordered=not parallel)
-    print(f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Database write: {(datetime.datetime.now() - started2).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
+    print(f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Member updates: {(started3 - started2).seconds}s\n Database write: {(datetime.datetime.now() - started3).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     if mode == 'return': return updateOperations
 
 async def VerifyMembers(s: discord.Guild, members: typing.Generator[discord.Member, None, None], serv=None, *, mode='update', parallel=True):
