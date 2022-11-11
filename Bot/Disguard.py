@@ -112,6 +112,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
             # await asyncio.gather(*[indexMessages(server, c) for c in server.text_channels])
             # Cyberlog.indexed[server.id] = True
         presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
+        await UpdatePresence()
         await cyber.grab_pins()
     print("Booted")
     await UpdatePresence()
