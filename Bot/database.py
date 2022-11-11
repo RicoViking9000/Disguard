@@ -179,7 +179,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
     updateOperations = []
     if (not serv or full) and includeServer:
         #V1.0: Minor format/syntax updates
-        #await servers.update_one(
+        # TODO: consider Pydantic
         updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': { #add entry for new servers
         'name': s.name,
         'prefix': serv.get('prefix', '.'),
@@ -293,38 +293,25 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
     print(f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Member updates: {(started3 - started2).seconds}s\n Database write: {(datetime.datetime.now() - started3).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s')
     if mode == 'return': return updateOperations
 
-async def VerifyMembers(s: discord.Guild, members: typing.Generator[discord.Member, None, None], serv=None, *, mode='update', parallel=True):
+async def VerifyMembers(s: discord.Guild, members: typing.Generator[discord.Member, None, None], serv=None, *, mode='update', parallel=True) -> None:
     '''Verifies multiple server members'''
-    membDict = {} #Holds ID:name values for quick lookups for members that aren't in the database yet
-    serverMemberIDs = set()
-    membersToCreate = []
     if not serv: serv = (await servers.find_one({'server_id': s.id})) or {}
     antispam = serv.get('antispam', {})
     warnings = antispam.get('warn', 3) #Number of warnings to give to new members
-    empty = not serv.get('members', [])
-    for m in members:
-        membDict[m.id] = m.name
-        serverMemberIDs.add(m.id)
-        if empty: membersToCreate.append({'id': m.id, 'name': m.name, 'warnings': warnings})
-    if not empty: dbMembers = [m for m in serv['members'] if m['id'] in serverMemberIDs]
-    else: dbMembers = []
-    databaseMembIDs = set(m.get('id') for m in dbMembers)
-    updateOperations = []
-    if empty: 
-        updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': {'members': membersToCreate}}, True))
-    else: #Need to update existing members
-        toInsert = []
-        for m in serverMemberIDs:
-            if m not in databaseMembIDs:
-                toInsert.append({'id': m, 'name': membDict[m], 'warnings': warnings}) #Add members that aren't in the database yet
-        updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$push': {'members': {'$each': toInsert}}}, True))
-        for member in dbMembers:
-            serverMember = s.get_member(member['id'])
-            if not serverMember: updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': member['id']}}}))
-            else:
-                if serverMember.name != member['name']: updateOperations.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': serverMember.id}, {'$set': {'members.$.name': serverMember.name}}))
-    if mode == 'update': await servers.bulk_write(updateOperations, ordered=not parallel)
-    else: return updateOperations
+    update_operations = []
+    for server_member, database_member in itertools.zip_longest(members, serv['members']):
+        if server_member:
+            update_operations.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': server_member.id}, {'$set': {
+                'id': server_member.id,
+                'name': server_member.name,
+                'warnings': warnings
+            }}))
+        # red flag below... that turns into o(n^2) with list comparison. dict would reduce that to o(n)
+        # dict would also solve the issue of duplicates
+        if database_member and database_member['id'] not in s.members: # this can be vastly improved by changing members to a dict
+            update_operations.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': database_member['id']}}}))
+    if mode == 'update': await servers.bulk_write(update_operations, ordered=not parallel)
+    else: return update_operations
 
 async def AddMembers(s: discord.Guild, members: list, warnings: int):
     '''Support method to quickly add members to a server'''
