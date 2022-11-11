@@ -922,11 +922,11 @@ async def CalculateGeneralChannel(g: discord.Guild, bot, update=False):
     try: currentGeneralChannel = (await utility.get_server(g)).get('generalChannel', ())
     except KeyError: currentGeneralChannel = await GetServer(g).get('generalChannel', ())
     if not currentGeneralChannel or type(currentGeneralChannel) != list or False in currentGeneralChannel:
-        channels = {}
+        channels: typing.Dict[int, int] = {}
         for c in g.text_channels:
             channels[c.id] = len(await lightningdb.get_messages_by_timestamp(after=discord.utils.utcnow() - datetime.timedelta(days=14), channel_ids=[c.id]))
         popular = max(channels, key = channels.get, default=0)
-        if update and channels: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': (popular.id, False)}})
+        if update and channels: await servers.update_one({'server_id': g.id}, {'$set': {'generalChannel': (popular, False)}})
     else: popular = bot.get_channel(currentGeneralChannel[0])
     return popular
 
@@ -950,13 +950,13 @@ async def CalculateModeratorChannel(g: discord.Guild, bot, update=False, *, logC
     if not currentModeratorChannel or type(currentModeratorChannel) != list or False in currentModeratorChannel:
         relevanceKeys = {}
         for c in g.text_channels:
-            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
+            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c.id: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
         for k in relevanceKeys:
             if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
             if any(word in k.name.lower() for word in ['chat', 'discussion', 'talk']): relevanceKeys[k] += 10
             if 'announce' in k.name.lower(): relevanceKeys[k] = 1
         result = max(relevanceKeys, key=relevanceKeys.get, default=0)
-        if update: await servers.update_one({'server_id': g.id}, {'$set': {'moderatorChannel': (result.id, False)}})
+        if update: await servers.update_one({'server_id': g.id}, {'$set': {'moderatorChannel': (result, False)}})
     else: result = bot.get_channel(currentModeratorChannel[0])
     return result
     
