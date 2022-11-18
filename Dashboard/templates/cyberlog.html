@@ -355,8 +355,8 @@
                     {%endfor%}
                     </select>
                     <br><br><br><label>Members:</label> <select class=multiSelect name="memberExclusions" multiple>
-                    {%for member in members%}
-                        <option value={{member.id}} {%if member.id in cyberlog.memberExclusions%}selected{%endif%}>{{member.name}}</option>
+                    {%for member_id, member_data in members.items()%}
+                        <option value={{member_id}} {%if member_id in cyberlog.memberExclusions%}selected{%endif%}>{{member_data['name']}}</option>
                     {%endfor%}
                     </select>
                         </div>

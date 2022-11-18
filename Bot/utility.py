@@ -378,8 +378,6 @@ async def get_server(s: discord.Guild):
 async def get_user(u: discord.User):
     return await lightningdb.get_user(u.id)
 
-async def getServerMember(m: discord.User):
+async def getServerMember(m: discord.Member):
     '''Gets the member data given a member object'''
-    for member in get_server(m.guild.id)['members']:
-        if member['id'] == m.id: return member
-    return None
+    return get_server(m.guild.id)['members'].get(str(m.id))
