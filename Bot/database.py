@@ -865,7 +865,7 @@ async def VerifyMember(m: discord.Member, new=False, warnings=None):
     server = await servers.find_one({'server_id': m.guild.id})
     warnings - server.get('antispam', {}).get('warn', 3)
     await servers.update_one({"server_id": m.guild.id}, {"$set": {
-        f"members.{m.id}.": {
+        f"members.{m.id}": {
             'id': m.id,
             'name': m.name,
             'warnings': warnings
