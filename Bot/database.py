@@ -298,29 +298,20 @@ async def VerifyMembers(s: discord.Guild, members: typing.Generator[discord.Memb
     if not serv: serv = (await servers.find_one({'server_id': s.id})) or {}
     antispam = serv.get('antispam', {})
     warnings = antispam.get('warn', 3) #Number of warnings to give to new members
-    update_operations = []
-    for server_member, database_member in itertools.zip_longest(members, serv['members']):
-        if server_member:
-            update_operations.append(pymongo.UpdateOne({'server_id': s.id, 'members.id': server_member.id}, {'$set': {
-                'id': server_member.id,
-                'name': server_member.name,
-                'warnings': warnings
-            }}))
-        # red flag below... that turns into o(n^2) with list comparison. dict would reduce that to o(n)
-        # dict would also solve the issue of duplicates
-        if database_member and database_member['id'] not in s.members: # this can be vastly improved by changing members to a dict
-            update_operations.append(pymongo.UpdateOne({'server_id': s.id}, {'$pull': {'members': {'id': database_member['id']}}}))
-    if mode == 'update': await servers.bulk_write(update_operations, ordered=not parallel)
-    else: return update_operations
-
-async def AddMembers(s: discord.Guild, members: list, warnings: int):
-    '''Support method to quickly add members to a server'''
-    operations = [{'id': m.id, 'name': m.name, 'warnings': warnings} for m in members]
-    await servers.update_one({'server_id': s.id}, {'$push': {'members': {'$each': operations}}})
-
-async def RemoveMembers(s: discord.Guild, members: list):
-    '''Support method to quickly remove members from a server'''
-    await servers.update_one({'server_id': s.id}, {'$pull': {'members': {'id': {'$in': [m.id for m in members]}}}})
+    db_memb = serv.get('members', {})
+    if type(db_memb) is list:
+        old_list = copy.deepcopy(db_memb)
+        db_memb = {}
+        for member in old_list:
+            db_memb.update({str(member['id']): {
+                'name': member['name'],
+                'warnings': member['warnings']
+            }})
+    member_dict = {str(member.id): {
+        'name': member.name,
+        'warnings': db_memb.get(str(member.id), {}).get('warnings', warnings),
+    } for member in members}
+    await servers.update_one({'server_id': s.id}, {'$set': {'members': member_dict}})
 
 async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=False):
     '''Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date'''
@@ -434,8 +425,8 @@ async def GetCyberlogObject(s: discord.Guild):
     '''Return the cyberlog database object'''
     return (await servers.find_one({"server_id": s.id})).get("cyberlog")
 
-async def GetMembersList(s: discord.Guild):
-    '''Return list of members DB entry objects for a server'''
+async def GetMembersList(s: discord.Guild) -> typing.Dict[int, dict]:
+    '''Return dict of members DB entry objects for a server'''
     return (await servers.find_one({"server_id": s.id})).get("members")
 
 async def PauseMod(s: discord.Guild, mod):
@@ -466,38 +457,12 @@ async def GetUserCollection():
     '''Returns the users collection object'''
     return users
 
-# async def GetMember(m: discord.Member):
-#     '''Returns a member of a server'''
-#     return (await servers.find_one({'server_id': m.guild.id, 'members.id': m.id}))
-
-# async def GetProfanityFilter(s: discord.Guild):
-#     '''Return profanityfilter object'''
-#     return (await GetAntiSpamObject(s)).get("filter")
-
-# async def GetPrefix(s: discord.Guild):
-#     '''Return prefix associated with the server'''
-#     return (await servers.find_one({"server_id": s.id})).get('prefix')
-
-# async def UpdateMemberLastMessages(server: int, member: int, messages):
-#     '''Updates database entry for lastMessages modification
-#     Server: id of server the member belongs to
-#     Member: id of member
-#     Messages: list of messages to replace the old list with'''
-#     await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.lastMessages": messages}})
-
-# async def UpdateMemberQuickMessages(server: int, member: int, messages):
-#     '''Updates database entry for quickMessages modification
-#     Server: id of server the member belongs to
-#     Member: id of member
-#     Messages: list of messages to replace the old list with'''
-#     await servers.update_one({"server_id": server, "members.id": member}, {"$set": {"members.$.quickMessages": messages}})
-
 async def UpdateMemberWarnings(server: discord.Guild, member: discord.Member, warnings: int):
     '''Updates database entry for a member's warnings
     Server: Server the member belongs to
     Member: The member to update
     Warnings: Number of warnings to replace current version with'''
-    await servers.update_one({"server_id": server.id, "members.id": member.id}, {"$set": {"members.$.warnings": warnings}})
+    await servers.update_one({"server_id": server.id}, {"$set": {f"members.{member.id}.warnings": warnings}})
 
 async def GetChannelExclusions(s: discord.Guild):
     '''Not to be confused with DefaultChannelExclusions(). Returns server's channel exclusions
@@ -814,10 +779,6 @@ async def UnduplicateHistory(u: discord.User, userEntry=None, *, mode='update'):
     if mode == 'update': await users.update_one({'user_id': u.id}, {'$set': {'customStatusHistry': csh, 'usernameHistory': uh, 'avatarHistory': ah}})
     elif mode == 'return': return pymongo.UpdateOne({'user_id': u.id}, {'$set': {'customStatusHistry': csh, 'usernameHistory': uh, 'avatarHistory': ah}})
 
-# async def ClearMemberMessages(s: discord.Guild):
-#     '''Empties the lastMessage and quickMessage lists belonging to members of the specified server'''
-#     bulkUpdates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': m.id}, {'$set': {'members.$.lastMessages': [], 'members.$.quickMessages': []}}) for m in s.members]
-#     if bulkUpdates: await servers.bulk_write(bulkUpdates)
 
 async def SetLastActive(u: typing.List[discord.User], timestamp, reason):
     '''Updates the last active attribute'''
@@ -900,16 +861,17 @@ async def VerifyChannel(c: discord.abc.GuildChannel, new=False):
     if new: await servers.update_one({'server_id': c.guild.id}, {'$push': {'channels': {'name': c.name, 'id': c.id}}})
     else: await servers.update_one({"server_id": c.guild.id, 'channels.$.id': c.id}, {"$set": {"name": c.name}})
 
-async def VerifyMember(m: discord.User, new=False, warnings=None):
+async def VerifyMember(m: discord.Member, new=False, warnings=None):
     '''Verifies a member. Single database operation of VerifyServer'''
-    if new and not warnings: warnings = await servers.find_one({"server_id": m.guild.id}).get('antispam', {}).get('warn', 3)
-    if new:
-        await servers.update_one({'server_id': m.guild.id}, {'$push': { 'members': {
+    server = await servers.find_one({'server_id': m.guild.id})
+    warnings - server.get('antispam', {}).get('warn', 3)
+    await servers.update_one({"server_id": server.id}, {"$set": {
+        f"members.{m.id}.": {
             'id': m.id,
             'name': m.name,
-            'warnings': warnings,
-            }}})
-    else: await servers.update_one({"server_id": m.guild.id, "members.id": m.id}, {"$set": {"members.$.name": m.name}})
+            'warnings': warnings
+        }
+    }})
 
 async def VerifyRole(r: discord.Role, new=False):
     '''Verifies a role. Single database operation of VerifyServer'''
@@ -942,21 +904,21 @@ async def CalculateAnnouncementsChannel(g: discord.Guild, bot, update=False):
     else: s = bot.get_channel(currentAnnouncementsChannel[0])
     return s
 
-async def CalculateModeratorChannel(g: discord.Guild, bot, update=False, *, logChannelID=0):
+async def CalculateModeratorChannel(g: discord.Guild, bot: commands.Bot, update=False, *, logChannelID=0):
     '''Determines the moderator channel based on channel name and permissions
     r: Whether to return the channel. If False, just set this to the database'''
     try: currentModeratorChannel = (await utility.get_server(g)).get('moderatorChannel', ())
     except KeyError: currentModeratorChannel = await GetServer(g).get('moderatorChannel', ())
     if not currentModeratorChannel or type(currentModeratorChannel) != list or False in currentModeratorChannel:
-        relevanceKeys = {}
+        relevanceKeys: typing.Dict[discord.TextChannel, int] = {}
         for c in g.text_channels:
-            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c.id: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
+            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
         for k in relevanceKeys:
             if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
             if any(word in k.name.lower() for word in ['chat', 'discussion', 'talk']): relevanceKeys[k] += 10
             if 'announce' in k.name.lower(): relevanceKeys[k] = 1
-        result = max(relevanceKeys, key=relevanceKeys.get, default=0)
-        if update: await servers.update_one({'server_id': g.id}, {'$set': {'moderatorChannel': (result, False)}})
+        result: discord.TextChannel = max(relevanceKeys, key=relevanceKeys.get, default=0)
+        if update: await servers.update_one({'server_id': g.id}, {'$set': {'moderatorChannel': (result.id, False)}})
     else: result = bot.get_channel(currentModeratorChannel[0])
     return result
     
@@ -980,22 +942,22 @@ async def GetSupportTickets():
     '''Returns entire support ticket collection'''
     return (await disguard.find_one({})).get('tickets')
 
-async def SetWarnings(members, warnings):
-    bulkUpdates = [pymongo.UpdateOne({'server_id': members[0].guild.id, 'members.id': member.id}, {'$set': {'members.$.warnings': warnings}}) for member in members]
+async def SetWarnings(members: typing.List[discord.Member], warnings: int):
+    bulkUpdates = [pymongo.UpdateOne({'server_id': members[0].guild.id}, {'$set': {f'members.{member.id}.warnings': warnings}}) for member in members]
     await servers.bulk_write(bulkUpdates)
 
 async def SetMuteRole(s: discord.Guild, r: discord.Role):
     '''Sets the automute role for a server'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.automuteRole': r.id}})
 
-async def SetMuteCache(s: discord.Guild, members, rlist):
+async def SetMuteCache(s: discord.Guild, members: typing.List[discord.Member], rlist: typing.Dict[int, typing.List[discord.Role]]):
     '''Stores a list of roles to a member's database cache to be used to unmute in the future'''
-    updates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': m.id}, {'$set': {'members.$.roleCache': [r.id for r in rlist[m.id]] if type(rlist) is dict else []}}) for m in members]
+    updates = [pymongo.UpdateOne({'server_id': s.id}, {'$set': {f'members.{member.id}.roleCache': [r.id for r in rlist[member.id]] if type(rlist) is dict else []}}) for member in members]
     await servers.bulk_write(updates)
 
-async def SetPermissionsCache(s: discord.Guild, members, plist):
+async def SetPermissionsCache(s: discord.Guild, members: typing.List[discord.Member], plist: typing.Dict[str, typing.Dict[any, any]]):
     '''Stores a list of permission overwrites to a member's database cache to be used to unmute in the future'''
-    updates = [pymongo.UpdateOne({'server_id': s.id, 'members.id': m.id}, {'$set': {'members.$.permissionsCache': plist[str(m.id)] if type(plist) is not list else {}}}) for m in members]
+    updates = [pymongo.UpdateOne({'server_id': s.id}, {'$set': {f'members.{member.id}.permissionsCache': plist[str(member.id)] if type(plist) is not list else {}}}) for member in members]
     await servers.bulk_write(updates)
 
 async def AdjustDST(s: discord.Guild):

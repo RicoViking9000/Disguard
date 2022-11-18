@@ -10,10 +10,8 @@ import traceback
 import copy
 import collections
 import utility
-import lightningdb
 
 filters = {}
-members = {} #serverID_memberID: member
 
 green = (0x008000, 0x66ff66)
 blue = (0x0000FF, 0x6666ff)
@@ -83,10 +81,7 @@ class Antispam(commands.Cog):
 
     async def filterAntispam(self, message: discord.Message, spam):
         received = datetime.datetime.now()
-        try:
-            for person in (await utility.get_server(message.guild))['members']:
-                if person['id'] == message.author.id: break #we found our current member
-        except: return
+        person = (await utility.get_server(message.guild))['members'].get(str(message.author.id))
         #dont store quick/last messages in the database - they'll be local only... just figure out how to do this without looping through all the members each time to find the person
         if not person: return
         warningsAtStart = person['warnings']
@@ -521,7 +516,7 @@ class Antispam(commands.Cog):
         
     @commands.is_owner()
     @commands.command()
-    async def setWarnings(self, ctx, members: commands.Greedy[discord.Member], setTo: int = 0):
+    async def setWarnings(self, ctx: commands.Context, members: commands.Greedy[discord.Member], setTo: int = 0):
         embed=discord.Embed(title='Set Member Warnings', description=f'{self.loading}Updating member data...', color=yellow[await utility.color_theme(ctx.guild)])
         if len(members) == 0: members = ctx.guild.members
         server_data = await utility.get_server(ctx.guild)
@@ -530,15 +525,15 @@ class Antispam(commands.Cog):
             except KeyError: setTo = 3
         status = await ctx.send(embed=embed)
         oldWarnings = {}
-        for m in server_data['members']:
-            if m['id'] in [member.id for member in members]: oldWarnings[m['id']] = copy.deepcopy(m)['warnings'] 
+        for member in members:
+            if server_data['members'].get(str(member.id)): oldWarnings[member.id] = server_data['members'].get(str(member.id), {}).get('warnings', 3)
         await database.SetWarnings(members, setTo)
         configured = [k for k, v in oldWarnings.items() if v != setTo]
         if len(configured) == 0:
             embed.description='All members up to date already'
         elif len(configured) <= 15:
             for identification in configured: 
-                embed.add_field(name=m.name, value=f'> {oldWarnings[identification]} → **{setTo}** warnings', inline=False)
+                embed.add_field(name=ctx.guild.get_member(identification), value=f'> {oldWarnings[identification]} → **{setTo}** warnings', inline=False)
                 embed.description = ''
         else: embed.description = f'Updated warnings for {len(configured)} members\n> Set to {setTo} warnings'
         await status.edit(embed=embed)
@@ -558,9 +553,7 @@ class Antispam(commands.Cog):
         else: await ctx.send(f'{ctx.author.mention}, I was unable to retrieve your warning count')
 
     async def FetchWarnings(self, member: discord.Member):
-        for m in (await utility.get_server(member.guild))['members']:
-            if m['id'] == member.id: return m['warnings']
-        return -1
+        return (await utility.get_server(member.guild)).get('members', {}).get(str(member.id), {}).get('warnings', -1)
 
 async def CheckRoleExclusions(member: discord.Member):
     '''Checks a member's roles to determine if their roles are in the exceptions list
@@ -585,15 +578,6 @@ def GetRoleManagementPermissions(member: discord.Member):
         if role.permissions.manage_roles or role.permissions.administrator:
             return True
     return False
-
-async def PrepareMembers(bot: commands.Bot):
-    '''Initialize the local profanityfilter objects'''
-    global members
-    for server in bot.guilds:
-        try:
-            for m in (await utility.get_server(server)).get('members'): members[f'{server.id}_{m.get("id")}'] = m
-        except Exception as e: print(f'Passing - {e}')
-    print(members)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Antispam(bot))
