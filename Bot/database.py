@@ -865,7 +865,7 @@ async def VerifyMember(m: discord.Member, new=False, warnings=None):
     '''Verifies a member. Single database operation of VerifyServer'''
     server = await servers.find_one({'server_id': m.guild.id})
     warnings - server.get('antispam', {}).get('warn', 3)
-    await servers.update_one({"server_id": server.id}, {"$set": {
+    await servers.update_one({"server_id": m.guild.id}, {"$set": {
         f"members.{m.id}.": {
             'id': m.id,
             'name': m.name,
