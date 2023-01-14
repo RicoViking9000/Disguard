@@ -59,6 +59,7 @@ async def prefix(bot: commands.Bot, message: discord.Message):
 
 intents = discord.Intents.all()
 intents.presences = False
+intents.members = False
 
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions.none())
 bot.remove_command('help')
