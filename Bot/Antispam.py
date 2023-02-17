@@ -41,7 +41,7 @@ class Antispam(commands.Cog):
         if self.checkTimedEvents.current_loop == 0: await asyncio.sleep(300)
         try:
             for g in self.bot.guilds:
-                events = (await utility.get_server(g)).get('antispam').get('timedEvents')
+                events = (await utility.get_server(g, {})).get('antispam', {}).get('timedEvents', [])
                 for e in events:
                     if datetime.datetime.utcnow() > e.get('expires'):
                         try:

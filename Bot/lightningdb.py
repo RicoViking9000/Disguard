@@ -43,9 +43,9 @@ async def post_servers(operations: list):
     '''bulk write'''
     return await servers.bulk_write(operations, ordered=False)
 
-async def get_server(server_id: int):
+async def get_server(server_id: int, return_value: None):
     '''gets a server from the database'''
-    return await servers.find_one({'_id': server_id})
+    return await servers.find_one({'_id': server_id}) or return_value
 
 async def patch_server(server_id: int, data: dict):
     '''updates a server in the database'''
