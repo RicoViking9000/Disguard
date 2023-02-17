@@ -372,8 +372,8 @@ async def prefix(s: discord.Guild):
 async def color_theme(s):
     return (await get_server(s)).get('colorTheme', 0)
 
-async def get_server(s: discord.Guild):
-    return await lightningdb.get_server(s.id)
+async def get_server(s: discord.Guild, return_value=None):
+    return await lightningdb.get_server(s.id, return_value)
 
 async def get_user(u: discord.User):
     return await lightningdb.get_user(u.id)
