@@ -2999,6 +2999,7 @@ async def verifyLogChannel(bot, s: discord.Guild):
             await database.SetLogChannel(s, None)
 
 async def logExclusions(channel: discord.TextChannel, member: discord.Member):
+    if not member: return False
     server_data = await utility.get_server(channel.guild)
     if type(member) is not discord.Member: member = channel.guild.get_member(member.id)
     return not any([channel.id in server_data.get('cyberlog').get('channelExclusions'),

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+    {% macro loadUI() %}
+    <div class="loadingBar blue"></div>
+    <div class="loadingBar red"></div>
+    <div class='loader'>
+        <div class="bg"></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div>
+        <p id=loadText>Saving</p>
+    </div>
+    {% endmacro %}
+
+    {% macro options(limited=False) %}
+    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
+    <div class=inputOptions>
+        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+        {%if not limited%}<div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>{%endif%}
+    </div>
+    {% endmacro %}
+
+    {% macro textInput(id, label, value, default, description, required=true, reliesOn=false) %}
+        <div class=inputPod {%if reliesOn%}reliesOn="{{reliesOn}}"{%endif%}>
+            <label for="{{id}}">{{label}}</label>
+            <input type="text" id={{id}} name={{id}} value={{value}} default="{{default}}" {%if required%}required{%endif%}>
+            {{options()}}
+            <div class=hoverDescBox><p class=hoverDesc>{{description}}</p></div>
+            <div class=inputOptions>
+                <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+            </div>
+        </div>
+    {% endmacro %}
+
+    {% macro selectInput(id, label, selected, default, description, options, required=true, reliesOn=false) %}
+        <div class=inputPod {%if reliesOn%}reliesOn="{{reliesOn}}"{%endif%}>
+            <label for="{{id}}">{{label}}</label>
+            <select id={{id}} name={{id}} default={{default}}>
+                <option value=0 {%if server.birthday == 0%}selected{%endif%}>--Disabled--</option>
+                {%for channel in server.channels%}
+                    <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if server.birthday == channel.id%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
+                {%endfor%}
+            </select>
+            {{options()}}
+            <div class=hoverDescBox><p class=hoverDesc>{{description}}</p></div>
+            <div class=inputOptions>
+                <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
+                <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
+            </div>
+        </div>
+    {% endmacro %}
+</html>

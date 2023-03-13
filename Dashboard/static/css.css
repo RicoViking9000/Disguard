@@ -71,7 +71,13 @@ button:focus {outline: none;}
 
 /* Form Styling */
 .inputPod {display: block; margin: 1.5em; border-radius: 5px; border-left: 5px solid transparent; height: 4em; position: relative; transition: border 0.5s;}
+.inputPod.tall {
+  height: 14em;
+}
 select {padding: 10px 20px; font-size: 16px}
+.multiSelect {
+  height: 10em;
+}
 #revert {width: 20%; margin: 1.5em 15px; background-color: rgba(202, 66, 66, 0.5);}
 input[type=submit] {width: 76.5%; background-color: rgba(89, 89, 248, 0.5); margin: 1.5em 1em}
 input[type=submit]:focus {outline: none;}
@@ -82,13 +88,25 @@ input:not([type=submit]):not([type=checkbox]), textarea, select {padding: 0.75em
 input:not([type=submit]):focus, select:focus, textarea:focus {border: 1px solid darkgray; outline: none;}
 input:invalid, select:invalid, textarea:invalid {border-left: 5px solid rgba(202, 66, 66, 1);}
 select:disabled, input:disabled {background-color: black}
-option {height: 40px;}
+option {height: 1.5em;}
 label {margin: 0 15px; height: 3.5em; font-size: 16.5px; display: inline-block; width: 20%; text-align: right;}
 fieldset {border: none; margin-top: 50px;}
 fieldset:not(.selected) {display: none;}
+fieldset > p {
+  text-align: center;
+  display: block;
+}
 .threeDots {display: inline-block; margin-left: 3em; top: 4px; position: relative; cursor: pointer; background-color: transparent;}
 .dot {display: inline-block; border: 5px solid darkgray; border-radius: 50%; transition: border 0.1s; margin: 3px;}
-legend {text-align: center; font-size: 40px; color: rgb(220, 221, 222);}
+legend {
+  text-align: center;
+  font-size: 40px;
+  color: rgb(220, 221, 222);
+}
+.switchPod > legend {
+  float: right;
+  transform: translateY(0.1em);
+}
 legend.subLegend {font-size: 20px;}
 .hoverDescBox {width: 57%; background-color: transparent; z-index: 2; position: absolute; right: 20%; height: 3.5em; top: 0.4em; border-radius: 5px; display: none;}
 .hoverDesc {background-color: rgb(54, 57, 63); text-align: right; width: 100%; font-size: 14px; margin: 0; vertical-align: middle; background-color: transparent;}
@@ -97,11 +115,28 @@ legend.subLegend {font-size: 20px;}
 .inputOptions div:hover {background-color: rgb(202, 66, 66);}
 .inputOptions span {display: inline-block; height: 100%; vertical-align: middle; line-height: normal; background-color: transparent; max-width: 80%; color: rgb(185, 187, 190); padding-left: 10%; padding-top: 0.5em;}
 .inputOptions img {height: 1.6em; display: inline-block; background-color: transparent; position: absolute; right: 5%; vertical-align: middle; line-height: normal; padding-top: 0.2em;}
-.tabs {display: block; justify-content: space-between; height: 3em; width: 90%; background-color: transparent; margin: 0 5%;}
-.tab {display: inline-block; height: 100%; border-radius: 25px; background-color: rgb(24, 25, 28); color: rgb(220, 221, 222); cursor: pointer; transition: background-color 0.5s;}
+
+.tabs {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  height: 3em; width: 100%;
+  background-color: transparent;
+  margin: 0;
+}
+.tab {
+  display: inline-block;
+  height: 100%;
+  border-radius: 25px;
+  background-color: rgb(24, 25, 28);
+  color: rgb(220, 221, 222);
+  cursor: pointer;
+  transition: background-color 0.5s;
+}
 .tab:hover:not(.selected) {background-color: rgb(39, 41, 45.5);}
 .tab.selected {border-radius: 25px 25px 0 0; background-color: transparent; background-image: linear-gradient(rgb(24, 25, 28), rgb(54, 57, 63)); z-index: 1;}
 .tab p, .addPod span {display: inline-block; text-align: center; vertical-align: middle; background-color: transparent; width: 100%;}
+
 .addPod {height: 3em; width: 90%; margin: 4em 5%; background-color: rgb(39, 41, 45.5); transition: background-color 0.5s; line-height: 3em; border-radius: 25px; cursor: pointer;}
 .addPod:hover {background-color: rgb(24, 25, 28);}
 .addPod span {width: 75%;}
@@ -120,4 +155,80 @@ legend.subLegend {font-size: 20px;}
 .inputPod.twoColumn .threeDots {position: absolute; right: 50px; top: 33%;}
 .inputPod.twoColumn .hoverDescBox {right: 13%; width: 62%;}
 .inputPod.twoColumn .inputOptions {right: 0; width: 22%; z-index: 1; top: -75px}
+
+.switchPod {
+  height: 4em;
+  width: 37em;
+  margin: 0.5em auto
+}
+.switch input
+{
+  display: none;
+}
+
+.switch 
+{
+  display: inline-block;
+  float: left;
+  width: 60px; /*=w*/
+  height: 30px; /*=h*/
+  transform: translateY(50%);
+  position: relative;
+  vertical-align: middle;
+}
+
+.slider
+{
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 30px;
+  box-shadow: 0 0 0 2px #777, 0 0 4px #777;
+  cursor: pointer;
+  border: 4px solid transparent;
+  overflow: hidden;
+  transition: 0.2s;
+}
+
+.slider:before
+{
+  position: absolute;
+  left: 0;
+  content: "";
+  width: 100%;
+  height: 100%;
+  background-color: #777;
+  border-radius: 30px;
+  transform: translateX(-30px); /*translateX(-(w-h))*/
+  transition: 0.2s;
+}
+
+input:checked + .slider:before
+{
+  transform: translateX(30px); /*translateX(w-h)*/
+  background-color: rgb(89, 89, 248);
+}
+
+input:checked + .slider
+{
+  box-shadow: 0 0 0 2px rgb(89, 89, 248), 0 0 8px rgb(89, 89, 248);
+}
+
+.switch200 .slider:before
+{
+  width: 200%;
+  transform: translateX(-82px); /*translateX(-(w-h))*/
+}
+
+.switch200 input:checked + .slider:before
+{
+  background-color: red;
+}
+
+.switch200 input:checked + .slider
+{
+  box-shadow: 0 0 0 2px red, 0 0 8px red;
+}
 

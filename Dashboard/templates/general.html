@@ -20,12 +20,8 @@
         {%set x = channelIndexes.update({key: channel.name})%}
     {%endfor%}
     <body>
-        <div class="loadingBar blue"></div>
-        <div class="loadingBar red"></div>
-        <div class='loader'>
-            <div class="bg"></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div>
-            <p id=loadText>Saving</p>
-        </div>
+        {% import 'components.html' as components %}
+        {{ components.loadUI() }}
         <div class=breadcrumbs>
             {%for breadcrumb in breadcrumbs%}
                 <a {%if loop.last%}class=breadcrumbCurrent{%endif%} href='{{breadcrumb.url}}'><span {%if loop.last%}class=breadcrumbCurrent{%endif%}>{{breadcrumb.text}}</span></a>
@@ -42,31 +38,20 @@
                 <div class=inputPod>
                     <label for=prefix>Commands prefix</label>
                     <input type="text" id=prefix name=prefix value={{server.prefix}} default="." required>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>The character(s) used before typing the name of a command in order to activate the bot's commands</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for=offset>Server time</label>
                     <input type="datetime-local" id=offset name=offset value={{date}} required>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>The current time, used to configure distance from UTC time. The Dashboard will not take exact minutes into account at all.</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                    </div>
+                    {{ components.options(limited=True) }}
                 </div>
                 <div class="inputPod">
                     <label for=tzname>Server time zone name</label>
                     <input type='text' id=tzname name='tzname' value={{server.tzname}} default="EST">
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>The name of your server's time zone, displayed when applicable</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for=colorTheme>Embed color theme</label>
@@ -74,12 +59,8 @@
                         <option value=0 {%if server.colorTheme == 0%}selected{%endif%}>Classic</option>
                         <option value=1 {%if server.colorTheme == 1%}selected{%endif%}>Modern</option>
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>New in 0.2.25. Which color theme Disguard should use when sending embeds with colored borders in the main modules. Classic refers to the same pastel colors Disguard always used, whereas Modern is a new theme that is easier on the eyes (less oversaturation). Applies to orange, purple, yellow, red, blue, and green borders.</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="birthday">Announce birthdays</label>
@@ -89,22 +70,14 @@
                             <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if server.birthday == channel.id%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
                         {%endfor%}
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>Whether to announce birthdays members have configured, and if so, to which channel</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod" reliesOn="birthday">
                     <label for="birthdate">Announce birthdays at</label>
                     <input type="time" id=birthdate name=birthdate value={{date2}} step="300" default="07:00">
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>What time to announce birthdays at. Must be an increment of 5 minutes (ending in 5 or 0)</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="birthdayMode">Birthday Auto-detect</label>
@@ -113,12 +86,8 @@
                         <option value=1 {%if server.birthdayMode == 1%}selected{%endif%}>Enabled - React if birthday detected in message</option>
                         <option value=2 {%if server.birthdayMode == 2%}selected{%endif%}>Enabled - Send embed if birthday detected in message</option>
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>Whether to allow Disguard to scan all server messages for members stating when their birthdays are. If enabled, Disguard will create an event handler when it detects a birthay or age in proper context in a message. For the middle option, Disguard will react to the message when this happens, and for the last option, Disguard will send an embed when this happens.</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="announcementsChannel">Server's announcements channel</label>
@@ -128,12 +97,8 @@
                             <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if server.announcementsChannel[0] == channel.id and server.announcementsChannel[1]%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
                         {%endfor%}
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>Leaving this on auto-detect means Disguard will calculate the most relevant channel, otherwise fill out the best match</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="moderatorChannel">Server's moderator channel</label>
@@ -143,12 +108,8 @@
                             <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if server.moderatorChannel[0] == channel.id and server.moderatorChannel[1]%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
                         {%endfor%}
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>Leaving this on auto-detect means Disguard will calculate the most relevant channel, otherwise fill out the best match</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="generalChannel">Server's general channel</label>
@@ -158,12 +119,8 @@
                             <option value={{channel.id}} {%if '-----' in channel.name%}class=blue disabled{%endif%} {%if server.generalChannel[0] == channel.id and server.generalChannel[1]%}selected{%endif%}>{%if '-----' not in channel.name%}#{%endif%}{{channel.name}}</option>
                         {%endfor%}
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>Leaving this on auto-detect means Disguard will calculate the most relevant channel, otherwise fill out the best match</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
             </fieldset>
             <fieldset id=utilitySettings>
@@ -173,12 +130,8 @@
                         <option value=true {%if server.jumpContext%}selected{%endif%}>Enabled</option>
                         <option value=false {%if not server.jumpContext%}selected{%endif%}>Disabled</option>
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>If enabled, Disguard will post an embed containing the content (including images/embeds) of the message a posted jump URL goes to - This is essentially a message sharing feature for servers with Disguard</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="undoSuppression">Allow undoing of embed supressions</label>
@@ -186,12 +139,8 @@
                         <option value=true {%if server.undoSuppression%}selected{%endif%}>Enabled</option>
                         <option value=false {%if not server.undoSuppression%}selected{%endif%}>Disabled</option>
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>If enabled, upon a moderator suppressing embeds to a message, Disguard will react to that message with a ∨ reaction. Clicking it will return the embed to the message. This feature is useful due to it not being available from the Discord GUI, yet it's a part of the API bots use.</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="redditComplete">Link to r/subreddit messages</label>
@@ -199,12 +148,8 @@
                         <option value=true {%if server.redditComplete%}selected{%endif%}>Enabled</option>
                         <option value=false {%if not server.redditComplete%}selected{%endif%}>Disabled</option>
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>If enabled, Disguard will post an embed containing information (and a link to) subreddits posted in the chat in the form of r/subreddit. Made possible by PRAW & the Reddit API.</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
                 <div class="inputPod">
                     <label for="redditEnhance">Reddit URL enhancements</label>
@@ -214,12 +159,8 @@
                         <option value=2 {%if server.redditEnhance[0] and not server.redditEnhance[1]%}selected{%endif%}>Only submission URLs</option>
                         <option value=3 {%if server.redditEnhance[1] and server.redditEnhance[1]%}selected{%endif%}>Both subreddit and submission URLs</option>
                     </select>
-                    <div class="threeDots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>If enabled, Disguard will remove any auto-generated embeds attached to messages with reddit URLs, and send a message containing a more informative embed about the subreddit or submission. Made possible by PRAW & the Reddit API.</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
+                    {{ components.options() }}
                 </div>
             </fieldset>
 
