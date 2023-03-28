@@ -246,7 +246,7 @@ def moderation(id):
     
 
 @app.route('/manage/<int:id>/cyberlog', methods=['GET', 'POST'])
-@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.cyberlog', 'Cybersecurity/Logging')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.cyberlog', 'Logging')
 def cyberlog(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))
@@ -273,7 +273,7 @@ def cyberlog(id):
         "enabled": r.get('enabled').lower() == 'true',
         'ghostReactionEnabled': r.get('ghostReactionEnabled') == '1',
         'disguardLogRecursion': r.get('disguardLogRecursion') == '1',
-        "image": r.get('imageLogging').lower() == 'true',
+        "image": r.get('imageLogging') == '1',
         "defaultChannel": r.get('defaultChannel', None, type=int),
         'library': r.get('defaultLibrary', type=int),
         'thumbnail': r.get('defaultThumbnail', type=int),
@@ -305,7 +305,7 @@ def cyberlog(id):
         'voice': moduleDict['voice'],
         'misc': moduleDict['misc']}}})
         return redirect(url_for('cyberlog', id=id))
-    return render_template('cyberlog.html', servid=id, server=servObj, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"), redesign=False)
+    return render_template('cyberlog.html', servid=id, server=servObj, cyberlog=servObj.get("cyberlog"), channels=servObj.get("channels"), roles=servObj.get("roles"), members=servObj.get("members"), redesign=True)
 
 @app.route('/manage/profile', methods=['GET', 'POST'])
 def profile():

@@ -40,7 +40,7 @@ $(document).ready(function(){
     // CSS adjustments //
     var tabs = $('.tabs').children()
     tabs.each(function() {
-        $(this).css({"width": 90 / tabs.length + "%", "margin": "0 " + 9.4 / (tabs.length * 2) + "%"});
+        $(this).css({"width": 90 / tabs.length + "%", "margin": "0 " + 7.4 / (tabs.length * 2) + "%"});
     })
 
     $('input, select').each(function() {
