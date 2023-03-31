@@ -779,7 +779,6 @@ async def UnduplicateHistory(u: discord.User, userEntry=None, *, mode='update'):
     if mode == 'update': await users.update_one({'user_id': u.id}, {'$set': {'customStatusHistry': csh, 'usernameHistory': uh, 'avatarHistory': ah}})
     elif mode == 'return': return pymongo.UpdateOne({'user_id': u.id}, {'$set': {'customStatusHistry': csh, 'usernameHistory': uh, 'avatarHistory': ah}})
 
-
 async def SetLastActive(u: typing.List[discord.User], timestamp, reason):
     '''Updates the last active attribute'''
     await users.update_many({'user_id': {'$in': [user.id for user in u]}}, {'$set': {'lastActive': {'timestamp': timestamp, 'reason': reason}}})
@@ -912,7 +911,7 @@ async def CalculateModeratorChannel(g: discord.Guild, bot: commands.Bot, update=
     if not currentModeratorChannel or type(currentModeratorChannel) != list or False in currentModeratorChannel:
         relevanceKeys: typing.Dict[discord.TextChannel, int] = {}
         for c in g.text_channels:
-            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
+            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c.id: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
         for k in relevanceKeys:
             if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
             if any(word in k.name.lower() for word in ['chat', 'discussion', 'talk']): relevanceKeys[k] += 10

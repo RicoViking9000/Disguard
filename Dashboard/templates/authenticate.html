@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>Authenticate - Disguard Dashboard</title>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='TW17thBDAY.css') }}">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+        <script>
+            $(document).ready(function() {
+                $('body').css('display', 'block');
+            });
+        </script>
+        <style>
+            p.subtitle {
+                font-size: 2.5em;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body class="birthdayMessage">
+        <h1 class="title">Welcome!</h1>
+        <p class="subtitle">Please log in to continue to your destination</p>
+        <p class=pageTitle></p>
+        <div class="buttons">
+            {% for service in services %}
+                <a href="{{url_for('authenticate_service', service=service | lower)}}">
+                    <button type="button" class="largeButton" id="service">Login with {{service}}</button>
+                </a>
+            {% endfor %}
+        </div>
+    </body>
+</html>
