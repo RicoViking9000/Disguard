@@ -6,7 +6,7 @@
         <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
         <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css.css') }}">
         <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='design.css') }}">
-        <link rel='icon' type='image/png' href="{{user.avatar}}">
+        <!-- <link rel='icon' type='image' href="{{user.avatar_url}}"> -->
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
         <script type="text/javascript">
 
@@ -36,7 +36,12 @@
         </script>
         <script src="{{url_for('static', filename='functions.js')}}"></script>
         <style>
-            .avatarBanner {background-image: url("{{user.avatar}}"); height: 100px; width: 80%; margin: 0 10%; background-position: center; background-repeat: no-repeat;}
+            .avatarBanner {
+                background-image: url("{{user.avatar_url}}");
+                height: 8vh; width: 80%; margin: 0 10%;
+                background-position: center;
+                background-repeat: no-repeat;
+            }
             fieldset:not(.selected) {display: block;}
             input:disabled {background-color: transparent; opacity: 75%;}
             label {width: 20%;}
@@ -60,7 +65,7 @@
         <div class="loadingBar blue"></div>
         <div class='loader'><div class="bg"></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div><div class='circle'></div></div>
         <div class=avatarBanner></div>
-        <h3 class=pageTitle>{{user.username}}</h3>
+        <h3 class=pageTitle>{{userGet.username}}</h3>
         <form id=settings method="POST" autocomplete="off">
             {%raw%}
             <!-- <fieldset id=basicInfo>
@@ -191,107 +196,7 @@
                     </div>
                 </div>
                 <div class="inputPod twoColumn">
-                    <label for="bioEnabled">Enable personal bio</label>
-                    <select name="bioEnabled" default=2 disabled><option value=0 {%if user.privacy.bio[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.bio[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.bio[0] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="bioVisibility">Personal bio visibility</label>
-                    <select name="bioVisibility" default=2 disabled><option value=0 {%if user.privacy.bio[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.bio[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.bio[1] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="tzEnabled">Enable timezone personalization</label>
-                    <select name="tzEnabled" default=2 disabled><option value=0 {%if user.privacy.timezone[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.timezone[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.timezone[0] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="tzVisibility">Timezone visibility</label>
-                    <select name="tzVisibility" default=2 disabled><option value=0 {%if user.privacy.timezone[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.timezone[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.timezone[1] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="favColorEnabled">Use your favorite color</label>
-                    <select name="favColorEnabled" default=2 disabled><option value=0 {%if user.privacy.favColor[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.favColor[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.favColor[0] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="favColorVisibility">Favorite color visibility</label>
-                    <select name="favColorVisibility" default=2 disabled><option value=0 {%if user.privacy.favColor[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.favColor[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.favColor[1] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="colorThemeEnabled">Enable embed color theme personalization</label>
-                    <select name="colorThemeEnabled" default=2 disabled><option value=0 {%if user.privacy.colorTheme[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.colorTheme[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.colorTheme[0] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="colorThemeVisibility">Embed color theme visibility</label>
-                    <select name="colorThemeVisibility" default=2 disabled><option value=0 {%if user.privacy.colorTheme[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.colorTheme[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.colorTheme[1] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>This feature is coming soon</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="nameEnabled">Use your name</label>
-                    <select name="nameEnabled" default=2><option value=0 {%if user.privacy.name[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.name[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.name[0] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>I have no clue if or what I'm going to implement name features (coming soon) into. I'm debating if I should have this as an option but I know some people have names that differ from their Discord username who still want to appear searchable by their name. That's probably what I'll do when I redo Disguard's info command.</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="nameVisibility">Name visibility</label>
-                    <select name="nameVisibility" default=0><option value=0 {%if user.privacy.name[1] == 0%}selected{%endif%}>Only you</option><option value=1 {%if user.privacy.name[1] == 1%}selected{%endif%}>Everyone you share a server with</option><option value=x disabled>Specific people (Coming soon)</option><option value=2 {%if user.privacy.name[1] == 2%}selected{%endif%}>Use Default</option></select>
-                    <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
-                    <div class=hoverDescBox><p class=hoverDesc>Implementation not determined yet</p></div>
-                    <div class=inputOptions>
-                        <div class=revertSingle><span class=inputOptionText>Revert</span><img class=inputOptionIcon src="{{url_for('static', filename='undoArrow.png')}}"></div>
-                        <div class=resetSingle><span class=inputOptionText>Reset to Default</span><img class=inputOptionIcon src="{{url_for('static', filename='loop.png')}}"></div>
-                    </div>
-                </div>
-                <div class="inputPod twoColumn">
-                    <label for="lastOnlineEnabled">Enable tracking when you were last online</label>
+                    <label for="lastOnlineEnabled">Retain when you were last online</label>
                     <select name="lastOnlineEnabled" default=2><option value=0 {%if user.privacy.lastOnline[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.lastOnline[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.lastOnline[0] == 2%}selected{%endif%}>Use Default</option></select>
                     <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>By default, Disguard stores stores the timestamp your account was last online to display on your info command page. If you wish for Disguard to no longer track this information, you may disable this feature</p></div>
@@ -312,7 +217,7 @@
                     </div>
                 </div>
                 <div class="inputPod twoColumn">
-                    <label for="lastActiveEnabled">Enable tracking when you were last active</label>
+                    <label for="lastActiveEnabled">Retain when you were last active</label>
                     <select name="lastActiveEnabled" default=2><option value=0 {%if user.privacy.lastActive[0] == 0%}selected{%endif%}>Disabled</option><option value=1 {%if user.privacy.lastActive[0] == 1%}selected{%endif%}>Enabled</option><option value=2 {%if user.privacy.lastActive[0] == 2%}selected{%endif%}>Use Default</option></select>
                     <div class=threeDots><div class=dot></div><div class=dot></div><div class=dot></div></div>
                     <div class=hoverDescBox><p class=hoverDesc>By default, Disguard stores your last public account activity (such as when you send a message in a server) and the timestamp of you performing it to display on your info command page. If you wish for Disguard to no longer track this information, you may disable this feature</p></div>
@@ -530,7 +435,7 @@
             </fieldset>
             <button id=revert onclick="revertChanges()">Revert</button>
             <input id=submit type="submit" value="Save">
-            <p>This page is new and under construction. These privacy settings were very quickly put together over the course of a couple days to ensure you have control over your privacy. Work is being done over the month of June to ensure this page holds all desired features and proper functionality. Once work is complete, your profile page will hold much more than privacy settings. Click <a href="{{url_for('manage')}}">here</a> to go back to the server selection page.</p>
+            <p><a href="{{url_for('manage')}}">Click here to go back to the server selection page</a></p>
 
         </form>
     </body>

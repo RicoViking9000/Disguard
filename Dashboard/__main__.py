@@ -387,9 +387,22 @@ def cyberlog(id):
 @app.route('/manage/profile', methods=['GET', 'POST'])
 def profile():
     # Make sure redirect works at the end
-    if 'user_id' not in session: return url_for('index')
+    if 'user_id' not in session: 
+        return redirect(ReRoute(request.url))
     uID = int(session['user_id'])
     user = users.find_one({'user_id': uID})
+    credentials = oauth.Oauth(service='discord')
+    if request.method == 'GET':
+        oAuth = authentication.OAuth2Handler(
+            service='discord',
+            CLIENT_ID=credentials.client_id,
+            CLIENT_SECRET=credentials.client_secret,
+            REDIRECT_URI=DEV_REDIRECT_URI if app.debug else REDIRECT_URI,
+            API_BASE_URL='https://discordapp.com/api'
+        )
+        flow = oAuth.make_session(token=session.get('oauth2_token'))
+        userGet = flow.get(oAuth.API_BASE_URL + '/users/@me').json()
+        user['avatar_url'] = f'https://cdn.discordapp.com/avatars/{uID}/{userGet["avatar"]}?size=2048'
     if request.method == 'POST':
         r = request.form
         updateDict = {
@@ -425,7 +438,7 @@ def profile():
         if (r.get('defaultCOE') == 'on' or r.get('attributeHistoryCOE') == 'on' or r.get('avatarHistoryCOE') == 'on'): updateDict.update({'avatarHistory': []})
         users.update_one({'user_id': uID}, {'$set': updateDict})
         return redirect(url_for('profile'))
-    return render_template('profile.html', user=user)
+    return render_template('profile.html', user=user, userGet=userGet)
 
 @app.route('/special/<string:landing>')
 def specialLanding(landing):
