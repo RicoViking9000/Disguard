@@ -126,7 +126,7 @@ class Antispam(commands.Cog):
                 else:
                     p = message.author.guild_permissions
                     if not p.administrator or p.manage_guild or message.author.id == message.guild.owner.id:
-                        await message.channel.trigger_typing()
+                        await message.channel.typing()
                         if await Cyberlog.logEnabled(message.guild, 'message') and (await utility.get_server(message.guild)).get('cyberlog').get('image'): await asyncio.sleep(2) #Wait two seconds if image logging is enabled
                         try: await message.delete()
                         except discord.Forbidden: pass
@@ -330,7 +330,7 @@ class Antispam(commands.Cog):
             if len(self.antispamProcessTimes) > 5000: self.antispamProcessTimes.pop(0)
             self.antispamProcessTimes.append((datetime.datetime.now() - received).seconds)
             return
-        await message.channel.trigger_typing()
+        await message.channel.typing()
         if spam.get("delete"):
             try:
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(message)
@@ -445,9 +445,8 @@ class Antispam(commands.Cog):
     
     @commands.hybrid_command(description='Kick members from the server if their account is under <x> days old')
     async def age_kick(self, ctx: commands.Context, target: str):
-        await ctx.trigger_typing()
         newline = '\n'
-        if not await utility.ManageServer(ctx.author): return await ctx.send('You need manage server, administrator, or server owner permissions to use this')
+        if not utility.ManageServer(ctx.author): return await ctx.send('You need manage server, administrator, or server owner permissions to use this')
         config = (await utility.get_server(ctx.guild)).get('antispam')
         wl = config.get('ageKickWhitelist')
         theme = await utility.color_theme(ctx.guild)

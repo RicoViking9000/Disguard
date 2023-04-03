@@ -70,7 +70,7 @@ class Misc(commands.Cog):
     @commands.hybrid_command(description='View and edit your privacy settings')
     async def privacy(self, ctx: commands.Context):
         user = await utility.get_user(ctx.author)
-        users = database.GetUserCollection()
+        # users = await database.GetUserCollection()
         privacy = user['privacy']
         prefix = await utility.prefix(ctx.guild) if ctx.guild else '.'
         def slideToggle(i): return self.emojis['slideToggleOff'] if i == 0 else self.emojis['slideToggleOn'] if i == 1 else slideToggle(privacy['default'][0]) #Uses recursion to use default value if specific setting says to
@@ -94,7 +94,6 @@ class Misc(commands.Cog):
         1: opened (dev has viewed)
         2: in progress (dev has replied)
         3: closed'''
-        await ctx.trigger_typing()
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         details = cyber.emojis['details']
@@ -121,7 +120,7 @@ class Misc(commands.Cog):
             opener = result2.content
         #If the command was used in DMs, ask the user if they wish to represent one of their servers
         if not ctx.guild:
-            await ctx.trigger_typing()
+            await ctx.typing()
             serverList = [g for g in self.bot.guilds if ctx.author in g.members] + ['<Prefer not to answer>']
             if len(serverList) > 2: #If the member is in more than one server with the bot, prompt for which server they're in
                 alphabet = '🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿'

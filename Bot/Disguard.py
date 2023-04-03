@@ -187,10 +187,10 @@ async def invite(ctx: commands.Context):
 #     await ctx.send("https://disguard.netlify.app/privacybasic")
 
 @bot.hybrid_command(description='Delete one of Disguard\'s messages from your DMs')
-async def delete(ctx: commands.Context, messageID: int):
+async def delete(ctx: commands.Context, message_id: str):
     '''Deletes a message from DMs with the user'''
     try:
-        message = await ctx.author.fetch_message(messageID)
+        message = await ctx.author.fetch_message(int(message_id))
         await message.delete()
         await ctx.message.add_reaction('✅')
     except: await ctx.message.add_reaction('❌')
@@ -304,7 +304,7 @@ async def broadcast(ctx: commands.Context):
             except: await ctx.send(f'Error with destination {d.name}')
     await status.edit(content=f'Successfully sent broadcast to {len(successfulList)} / {len(destinations)} destinations')
 
-@bot.hybrid_command(help='Retrieve the data Disguard stores about you as a zip file')
+@bot.hybrid_command(help='Retrieve the data Disguard stores about you')
 async def data(ctx: commands.Context):
     def accept(r: discord.Reaction, u: discord.User): return str(r) in ['🇦', '🇧'] and u.id == ctx.author.id and r.message.id == requestMessage.id
     requestMessage = await ctx.send(f'Data retrieval command: I will gather all of the data I store about you and DM it to you as an archive file\nTo continue, please choose a file format\n{qlf}A - .zip\n{qlf}B - .7z')
@@ -345,13 +345,14 @@ async def data(ctx: commands.Context):
             dataToWrite = json.dumps(serverData, indent=4, default=serializeJson)
             with open(f'{serverPath}/ServerDatabaseEntry.json', 'w+') as f:
                 f.write(dataToWrite)
-        dataToWrite = json.dumps(await database.GetMember(member), indent=4, default=serializeJson)
+        dataToWrite = json.dumps(await lightningdb.get_member(server.id, member.id), indent=4, default=serializeJson)
         with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
             f.write(dataToWrite)
         for channel in server.text_channels:
             indexData = await lightningdb.get_messages_by_author(member.id, [channel.id])
+            if not indexData: continue
             memberIndexData = {}
-            for k, v in indexData.items():
+            for k, v in indexData[0].items():
                 try: os.makedirs(f'{serverPath}/MessageIndexes')
                 except FileExistsError: pass
                 memberIndexData.update({k: v})
@@ -365,7 +366,7 @@ async def data(ctx: commands.Context):
         with codecs.open(f'{serverPath}/MessageAttachments/README.TXT', 'w+', 'utf-8-sig') as f: 
             f.write(f"I also have {attachmentCount} file attachments on file that you've uploaded, but I can't attach them due to the 8MB file size limit. If you would like to receive these files, contact my developer (RicoViking9000#2395) in one of the following ways:\n{qlf}•Use the `invite` command to join my support server\n{qlf}•Use the `ticket` command to get in direct contact with my developer through the Ticket System\n{qlf}•If you share a server with my developer, you may DM him - but he won\'t accept random friend requests from users sharing no servers with him'")
     readMe = f'Directory Format\n\nDisguardUserDataRequest_[Timestamp]\n|-- 📄UserData.json --> Contains the database entry for your global data, not specific to a server\n|-- 📁[Server name] --> Contains the data for this server'
-    readMe += f'\n|-- |-- 📄ServerDatabaseEntry.json --> If you are an administrator of this server, this will be a file containing the database entry for this server\n|-- |-- 📄Server-MemberInfo.json --> Contains your server-indepedent data entry for this server'
+    readMe += f'\n|-- |-- 📄ServerDatabaseEntry.json --> If you are an administrator of this server, this will contain the database entry for this server\n|-- |-- 📄Server-MemberInfo.json --> Contains your server-indepedent data entry for this server'
     readMe += f'\n|-- |-- 📁MessageIndexes --> Folder containing message indexes authored by you for this server\n|-- |-- |-- 📄[channel name].json --> File containing message indexes authored by you for this channel'
     readMe += f'\n|-- |-- 📁MessageAttachments --> Folder containing a ReadMe file explaining how to obtain message attachment data'
     readMe += '\n\nThis readME is also saved just inside of the zipped folder. If you do not have a code editor to open .json files and make them look nice, web browsers can open them (drag into new tab area or use ctrl + o in your web browser), along with Notepad or Notepad++ (or any text editor)\n\nA guide on how to interpret the data fields will be available soon on my website. In the meantime, if you have a question about any of the data, contact my developer through the `ticket` command or ask in my support server (`invite` command)'

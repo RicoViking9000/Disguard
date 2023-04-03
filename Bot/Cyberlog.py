@@ -2807,17 +2807,14 @@ class Cyberlog(commands.Cog):
     @commands.hybrid_command(aliases=['archives'], description='Retrieve the log archive file for this server')
     @commands.guild_only()
     async def archive(self, ctx: commands.Context):
-        await ctx.trigger_typing()
         embed = discord.Embed(title=f'Log Archives', description=f'{self.emojis["loading"]}', color=yellow[await utility.color_theme(ctx.guild)])
-        m = await ctx.send(embed=embed)
         p = f'Attachments/{ctx.guild.id}/LogArchive/modLogs.json'
         f = discord.File(p)
         try: 
             await ctx.send(file=f)
-            await m.delete()
         except: 
             embed.description = 'Unable to upload Log Archive file'
-            await m.edit(emned=embed)
+            await ctx.send(embed=embed)
 
     def AvoidDeletionLogging(self, messages: typing.Union[typing.List[discord.Message], discord.Message]):
         '''Don't log the deletion of passed messages'''

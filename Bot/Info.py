@@ -40,7 +40,7 @@ class Info(commands.Cog):
 
     # TODO: rewrite command
     @commands.guild_only()
-    @commands.hybrid_command(description='Get information on a member, server, role, emoji, invite, channel, member list, role list, emoji list, invite list, channel list, bans list, and more')
+    @commands.hybrid_command(description='Get information about a server object such as a member, role, channel, and more')
     async def info(self, ctx: commands.Context, search: str = ''): #queue system: message, embed, every 3 secs, check if embed is different, edit message to new embed
         arg = search.lower()
         message = await ctx.send('{}Searching'.format(self.loading))

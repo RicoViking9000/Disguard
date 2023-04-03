@@ -224,7 +224,6 @@ class Birthdays(commands.Cog):
 
     @commands.hybrid_command(aliases=['bday'])
     async def birthday(self, ctx: commands.Context, search: str = ''):
-        await ctx.trigger_typing()
         theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         if not search:
             homeView = BirthdayHomepageView(self, ctx, None)

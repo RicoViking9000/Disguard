@@ -138,7 +138,6 @@ class Moderation(commands.Cog):
     async def kick(self, ctx: commands.Context, members: commands.Greedy[discord.Member], reason: str = ''):
         '''Kicks the specified member(s)'''
         if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to kick\nFormat: `{await utility.prefix(ctx.guild)}kick [list of members to kick] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
-        await ctx.trigger_typing()
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         embed = discord.Embed(title=f'👢Kick {len(members)} member{"s" if len(members) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
         for m in members:
@@ -171,7 +170,6 @@ class Moderation(commands.Cog):
     async def unban(self, ctx: commands.Context, users: commands.Greedy[typing.Union[discord.User, int]], reason: str = ''):
         if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to unban\nFormat: `{await utility.prefix(ctx.guild)}unban [list of users to unban] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nID is the only argument guaranteed to work, as that would be the only way I can retrieve a User not in any of my servers')
         users = await self.UserProcessor(users)
-        await ctx.trigger_typing()
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
         for u in users:
@@ -197,7 +195,7 @@ class Moderation(commands.Cog):
             path = 'Indexes/{}/{}'
             cancel=discord.Embed(title='Purge command',description='Cancelled')
             url='https://cdn.discordapp.com/emojis/605060517861785610.gif'
-            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n',timestamp=datetime.datetime.utcnow(),color=blue[await utility.color_theme(ctx.guild)])
+            embed=discord.Embed(title='Purge command',description='Welcome to the interactive purge command! You\'ll be taken through a setup walking you through the purging features I have.\n\n', color=blue[await utility.color_theme(ctx.guild)])
             embed.description+='First, what channel(s) are you thinking of purging? Make sure the channel(s) are hyperlinked. To purge from this channel ({}), type `here`, to purge from all text channels, type `all`'.format(ctx.channel.mention)
             embed.set_footer(text='Type cancel to cancel the command. Timeout is 120s')
             embed.set_author(name='Waiting for input')
