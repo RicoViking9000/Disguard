@@ -38,10 +38,11 @@ class Info(commands.Cog):
         self.loading = self.emojis['loading']
         self.bot = bot
 
+    # TODO: rewrite command
     @commands.guild_only()
-    @commands.command()
-    async def info(self, ctx: commands.Context, *args): #queue system: message, embed, every 3 secs, check if embed is different, edit message to new embed
-        arg = ' '.join([a.lower() for a in args])
+    @commands.hybrid_command(description='Get information on a member, server, role, emoji, invite, channel, member list, role list, emoji list, invite list, channel list, bans list, and more')
+    async def info(self, ctx: commands.Context, search: str = ''): #queue system: message, embed, every 3 secs, check if embed is different, edit message to new embed
+        arg = search.lower()
         message = await ctx.send('{}Searching'.format(self.loading))
         mainKeys=[]
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')

@@ -141,6 +141,7 @@ class Cyberlog(commands.Cog):
                     # def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                     # await self.bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 # else: asyncio.create_task(self.synchronizeDatabase())
+                await asyncio.sleep(0.5)
                 await self.bot.get_cog('Birthdays').verifyBirthdaysDict()
             for g in self.bot.guilds:
                 timeString = f'Processing attributes for {g.name}'
@@ -309,7 +310,7 @@ class Cyberlog(commands.Cog):
                 except (discord.Forbidden): pass
     
     @commands.Cog.listener()
-    async def on_command(self, ctx):
+    async def on_command(self, ctx: commands.Context):
         pass #But eventually add command statistics
     
     @commands.Cog.listener()
@@ -2796,7 +2797,6 @@ class Cyberlog(commands.Cog):
     async def on_webhooks_update(self, c: discord.TextChannel):
         await updateLastActive(await c.guild.audit_logs(limit=3).find(lambda x: x.action in (discord.AuditLogAction.webhook_create, discord.AuditLogAction.webhook_update, discord.AuditLogAction.webhook_delete)), 'updated webhooks')
 
-    #TODO: Implement views
     @commands.Cog.listener()
     async def on_command_error(self, ctx: commands.Context, error: Exception):
         occurrence = discord.utils.utcnow()
@@ -2804,9 +2804,9 @@ class Cyberlog(commands.Cog):
         view = ErrorView(self, ctx, error, occurrence)
         await ctx.send(f'{self.emojis["alert"]} | {error}', view=view)
 
+    @commands.hybrid_command(aliases=['archives'], description='Retrieve the log archive file for this server')
     @commands.guild_only()
-    @commands.command(aliases=['archives'])
-    async def archive(self, ctx: commands.Context, filter='all'):
+    async def archive(self, ctx: commands.Context):
         await ctx.trigger_typing()
         embed = discord.Embed(title=f'Log Archives', description=f'{self.emojis["loading"]}', color=yellow[await utility.color_theme(ctx.guild)])
         m = await ctx.send(embed=embed)

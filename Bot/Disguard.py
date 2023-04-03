@@ -2,6 +2,7 @@
 
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 import secure
 import database
 import lightningdb
@@ -58,7 +59,6 @@ async def prefix(bot: commands.Bot, message: discord.Message):
     return (await utility.prefix(message.guild)) or '.'
 
 intents = discord.Intents.all()
-intents.presences = False
 
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions.none())
 bot.remove_command('help')
@@ -93,7 +93,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         presence['activity'] = discord.Activity(name='my boss (Syncing data...)', type=discord.ActivityType.listening)
         await UpdatePresence()
         await bot.load_extension('Cyberlog')
-        await asyncio.sleep(2)
+        #await asyncio.sleep(2)
         for cog in cogs:
             try:
                 await bot.load_extension(cog)
@@ -142,16 +142,16 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
         if full: await asyncio.sleep(0.0015)
     print(f'Indexed {server.name}: {channel.name} in {(datetime.datetime.now() - start).seconds} seconds')
 
+@bot.hybrid_command()
 @commands.is_owner()
-@bot.command()
 async def verify(ctx):
     status = await ctx.send("Verifying...")
     await database.Verification(bot)
     await status.delete()
 
+@bot.hybrid_command(description='Index a server or channel')
 @commands.is_owner()
-@bot.command()
-async def index(ctx, t: int = None):
+async def index(ctx, t: int = 0):
     if not t: target = bot.guilds
     else:
         target = bot.get_channel(t)
@@ -172,13 +172,13 @@ async def index(ctx, t: int = None):
     else: await asyncio.wait([indexMessages(ctx.guild, target, full)], return_when=asyncio.FIRST_COMPLETED)
     await status.delete()
 
-@bot.command()
+@bot.hybrid_command(help='Disguard\'s quick start guide')
 async def help(ctx: commands.Context):
     e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands 'https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{await utility.prefix(ctx.guild) if ctx.guild else '.'}ticket` command", color=yellow[await utility.color_theme(ctx.guild) if ctx.guild else 1])
     await ctx.send(embed=e)
 
-@bot.command()
-async def invite(ctx):
+@bot.hybrid_command(help='Get Disguard\'s invite link')
+async def invite(ctx: commands.Context):
     e = discord.Embed(title='Invite Links', description='• Invite Disguard to your server: https://discord.com/oauth2/authorize?client_id=558025201753784323&permissions=8&scope=bot\n\n• Join the Disguard discord server: https://discord.gg/xSGujjz')
     await ctx.send(embed=e)
 
@@ -186,7 +186,7 @@ async def invite(ctx):
 # async def privacy(ctx):
 #     await ctx.send("https://disguard.netlify.app/privacybasic")
 
-@bot.command()
+@bot.hybrid_command(description='Delete one of Disguard\'s messages from your DMs')
 async def delete(ctx: commands.Context, messageID: int):
     '''Deletes a message from DMs with the user'''
     try:
@@ -195,11 +195,11 @@ async def delete(ctx: commands.Context, messageID: int):
         await ctx.message.add_reaction('✅')
     except: await ctx.message.add_reaction('❌')
 
-@bot.command()
-async def dashboard(ctx):
-    await ctx.send(f"https://disguard.herokuapp.com/manage/{ctx.guild.id if ctx.guild else ''}\n\nUpon clicking the link, please allow a few seconds for the server to wake up")
+@bot.hybrid_command(help='Get a link to Disguard\'s web dashboard')
+async def dashboard(ctx: commands.Context):
+    await ctx.send(f"https://disguard.herokuapp.com/manage/{ctx.guild.id if ctx.guild else ''}")
 
-@bot.command(aliases=['config', 'configuration', 'setup'])
+@bot.hybrid_command(aliases=['config', 'configuration', 'setup'], help='View Disguard\'s configuration for this server')
 async def server(ctx: commands.Context):
     '''Pulls up information about the current server, configuration-wise'''
     g = ctx.guild
@@ -215,33 +215,46 @@ async def server(ctx: commands.Context):
     embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else f"{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n'''
     await ctx.send(embed=embed)
 
-@bot.command()
+@bot.hybrid_command(help='Check Disguard\'s response time')
 async def ping(ctx):
     await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms')
 
+@bot.hybrid_command(help='Create a temporary webhook to mimic <member> in <channel> by saying <message>')
 @commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
-@bot.command()
-async def say(ctx: commands.Context, m: typing.Optional[discord.Member] = None, c: typing.Optional[discord.TextChannel] = None, *, t='Hello World'):
+async def say(ctx: commands.Context, member: typing.Optional[discord.Member] = None, channel: typing.Optional[discord.TextChannel] = None, *, message: str = 'Hello World'):
     '''Uses webhook to say something. T is text to say, m is member. Author if none provided. C is channel, ctx.channel if none provided'''
     bot.get_cog('Cyberlog').AvoidDeletionLogging(ctx.message)
     await ctx.message.delete()
-    if c is None: c = ctx.channel
-    if m is None: m = ctx.author
-    w = await c.create_webhook(name='automationSayCommand', avatar=await m.avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.name} to imitate {m.name} by saying "{t}"')
-    await w.send(t, username=m.name)
-    await w.delete()
+    if channel is None: channel = ctx.channel
+    if member is None: member = ctx.author
+    webhook = await channel.create_webhook(name='automationSayCommand', avatar=await member.avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.name} to imitate {member.name} by saying "{message}"')
+    await webhook.send(message, username=member.name)
+    await webhook.delete()
 
+@bot.hybrid_command(name='eval')
 @commands.is_owner()
-@bot.command(name='eval')
-async def evaluate(ctx, *args):
-    global variables
-    args = ' '.join(args)
-    result = eval(args)
-    if inspect.iscoroutine(result): await ctx.send(await eval(args))
+async def evaluate(ctx, func: str):
+    # global variables
+    # args = ' '.join(args)
+    result = eval(func)
+    if inspect.iscoroutine(result): await ctx.send(await eval(func))
     else: await ctx.send(result)
 
+@bot.hybrid_command(name='clear_commands')
 @commands.is_owner()
-@bot.command()
+async def clear_sync_tree(ctx: commands.Context):
+    await bot.tree.clear_commands()
+    await bot.tree.sync()
+    await ctx.send('Cleared tree')
+
+@bot.hybrid_command(name='sync')
+@commands.is_owner()
+async def sync_tree(ctx: commands.Context):
+    await bot.tree.sync()
+    await ctx.send('Synced tree')
+
+@bot.hybrid_command()
+@commands.is_owner()
 async def broadcast(ctx: commands.Context):
     await ctx.send('Please type broadcast message')
     def patchCheck(m): return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
@@ -291,7 +304,7 @@ async def broadcast(ctx: commands.Context):
             except: await ctx.send(f'Error with destination {d.name}')
     await status.edit(content=f'Successfully sent broadcast to {len(successfulList)} / {len(destinations)} destinations')
 
-@bot.command()
+@bot.hybrid_command(help='Retrieve the data Disguard stores about you as a zip file')
 async def data(ctx: commands.Context):
     def accept(r: discord.Reaction, u: discord.User): return str(r) in ['🇦', '🇧'] and u.id == ctx.author.id and r.message.id == requestMessage.id
     requestMessage = await ctx.send(f'Data retrieval command: I will gather all of the data I store about you and DM it to you as an archive file\nTo continue, please choose a file format\n{qlf}A - .zip\n{qlf}B - .7z')
@@ -366,9 +379,9 @@ async def data(ctx: commands.Context):
     await statusMessage.delete()
     await ctx.send(content=f'```{readMe}```', file=fl)
 
+@bot.hybrid_command()
 @commands.is_owner()
-@bot.command()
-async def retrieveAttachments(ctx: commands.Context, user: discord.User):
+async def retrieve_attachments(ctx: commands.Context, user: discord.User):
     statusMessage = await ctx.send(f'{loading}Retrieving attachments for {user.name}')
     basePath = f'Attachments/Temp/{ctx.message.id}'
     def convertToFilename(string):
@@ -400,8 +413,8 @@ async def retrieveAttachments(ctx: commands.Context, user: discord.User):
     shutil.make_archive(fileName, 'zip', basePath)
     await statusMessage.edit(content=f'{os.path.abspath(fileName)}.zip')
 
+@bot.hybrid_command(help='Remove duplicate entries from a user\'s status/username/avatar history')
 @commands.is_owner()
-@bot.command()
 async def unduplicate(ctx):
     '''Removes duplicate entries from a user's status/username/avatar history'''
     #status = await ctx.send('Working on it')
@@ -434,8 +447,8 @@ async def nameVerify(ctx):
 #     logging.error(exc_info=True)
 #     traceback.print_exc()
 
+@bot.hybrid_command(name='status', help='set Disguard\'s status')
 @commands.is_owner()
-@bot.command(aliases=['status'])
 async def _status(ctx):
     '''Owner-only command to manually set Disguard's status'''
     global presence
@@ -470,31 +483,15 @@ async def _status(ctx):
     await UpdatePresence()
     await ctx.send('Successfully set')
 
-@commands.is_owner()
-@bot.command()
-async def test(ctx):
+@bot.hybrid_command()
+async def rickroll(ctx: commands.Context):
     await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
 
+@bot.hybrid_command()
 @commands.is_owner()
-@bot.command()
-async def test2(ctx):
+async def test(ctx):
     print(await lightningdb.get_users())
     await ctx.send(await lightningdb.get_users())
-
-@commands.is_owner()
-@bot.command()
-async def daylight(ctx):
-    status = await ctx.send(loading)
-    for s in bot.guilds:
-        try:
-            if await database.AdjustDST(s):
-                defaultLogchannel = bot.get_channel((await utility.get_server(s))['cyberlog'].get('defaultChannel'))
-                if defaultLogchannel:
-                    e = discord.Embed(title='🕰 Server Time Zone update', color=yellow[1])
-                    e.description = 'Your server\'s `time zone offset from UTC` setting via Disguard has automatically been incremented one hour, as it appears your time zone is in the USA & Daylight Savings Time has started (Spring Forward).\n\nTo revert this, you may enter your server\'s general settings page on my web dashboard (use the `config` command to retrieve a quick link).'
-                    await defaultLogchannel.send(embed=e)
-        except: pass
-    await status.edit(content='Done')
 
 def serializeJson(o):
     if type(o) is datetime.datetime: return o.isoformat()
