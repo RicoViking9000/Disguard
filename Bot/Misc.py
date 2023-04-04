@@ -67,10 +67,10 @@ class Misc(commands.Cog):
     async def sendGuideMessage(self, message: discord.Message):
         await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
     
-    @commands.command()
+    @commands.hybrid_command(description='View and edit your privacy settings')
     async def privacy(self, ctx: commands.Context):
         user = await utility.get_user(ctx.author)
-        users = database.GetUserCollection()
+        # users = await database.GetUserCollection()
         privacy = user['privacy']
         prefix = await utility.prefix(ctx.guild) if ctx.guild else '.'
         def slideToggle(i): return self.emojis['slideToggleOff'] if i == 0 else self.emojis['slideToggleOn'] if i == 1 else slideToggle(privacy['default'][0]) #Uses recursion to use default value if specific setting says to
@@ -86,15 +86,14 @@ class Misc(commands.Cog):
         embed.add_field(name='Attribute History', value=f'''{slideToggle(privacy['attributeHistory'][0])}{"Enabled" if enabled(privacy['attributeHistory'][0]) else "Disabled"}\n{f"{viewerEmoji(privacy['attributeHistory'][1])}Attribute History: Visible to {viewerText(privacy['attributeHistory'][1])}" if enabled(privacy['attributeHistory'][0]) else ""}''', inline=False)
         m = await ctx.send(embed=embed)
 
-    @commands.command(aliases=['feedback', 'ticket'])
-    async def support(self, ctx: commands.Context, *, opener=''):
+    @commands.hybrid_command(aliases=['feedback', 'ticket'], description='Opens a support ticket with Disguard\'s developer')
+    async def support(self, ctx: commands.Context, opener=''):
         '''Command to initiate a feedback ticket. Anything typed after the command name will be used to start the support ticket
         Ticket status
         0: unopened by dev
         1: opened (dev has viewed)
         2: in progress (dev has replied)
         3: closed'''
-        await ctx.trigger_typing()
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         details = cyber.emojis['details']
@@ -121,7 +120,7 @@ class Misc(commands.Cog):
             opener = result2.content
         #If the command was used in DMs, ask the user if they wish to represent one of their servers
         if not ctx.guild:
-            await ctx.trigger_typing()
+            await ctx.typing()
             serverList = [g for g in self.bot.guilds if ctx.author in g.members] + ['<Prefer not to answer>']
             if len(serverList) > 2: #If the member is in more than one server with the bot, prompt for which server they're in
                 alphabet = '🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿'
@@ -164,7 +163,7 @@ class Misc(commands.Cog):
         result = await self.bot.wait_for('reaction_add', check=navigationCheck)
         await self.ticketsCommand(ctx, number=ticket['number'])
 
-    @commands.command(name='tickets')
+    @commands.hybrid_command(name='tickets', description='View the support tickets you\'ve opened with Discord')
     async def ticketsCommand(self, ctx: commands.Context, number:int = -1):
         '''Command to view feedback tickets'''
         g = ctx.guild
@@ -467,29 +466,23 @@ class Misc(commands.Cog):
                 if clearAt and datetime.datetime.now() > clearAt: await message.edit(content=None)
             except UnboundLocalError: await message.edit(content=None)
 
+    @commands.hybrid_command(description='Pause the logging or antispam module for a specified duration')
     @commands.has_guild_permissions(manage_guild=True)
-    @commands.command()
-    async def pause(self, ctx: commands.Context, *args):
+    async def pause(self, ctx: commands.Context, module: str, seconds: int = 0):
         '''Pause logging or antispam for a duration'''
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        status = await ctx.send(str(self.loading) + "Please wait...")
         status = await ctx.send(f'{self.emojis["loading"]}Pausing...')
-        args = [a.lower() for a in args]
         server_data = await utility.get_server(ctx.guild)
         defaultChannel = self.bot.get_channel(server_data['cyberlog']['defaultChannel'])
         if not defaultChannel:
             defaultChannel = self.bot.get_channel(server_data['antispam']['log'][1])
             if not defaultChannel:
                 defaultChannel = ctx.channel
-        if 'logging' in args:
-            if 'logging' != args[0]:
-                return
+        if module == 'logging':
             key = 'cyberlog'
-        if 'antispam' in args:
-            if 'antispam' != args[0]:
-                return
+        if module == 'antispam':
             key = 'antispam'
-        seconds = self.ParsePauseDuration((' ').join(args[1:]))
+        seconds = self.ParsePauseDuration(seconds)
         duration = datetime.timedelta(seconds = seconds)
         if seconds > 0: 
             rawUntil = datetime.datetime.utcnow() + duration
@@ -498,15 +491,13 @@ class Misc(commands.Cog):
             rawUntil = datetime.datetime.max
             until = datetime.datetime.max
         embed = discord.Embed(
-            title=f'The {args[0][0].upper()}{args[0][1:]} module was paused',
+            title=f'The {module[0].upper()}{module[1:]} module was paused',
             description=textwrap.dedent(f'''
                 👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.name})
                 {utility.clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=await utility.time_zone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(datetime.datetime.now())}
                 ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{utility.DisguardIntermediateTimestamp(until)} ({utility.DisguardRelativeTimestamp(until)})"}
                 '''),
             color=yellow[await utility.color_theme(ctx.guild)])
-        embed.set_footer(text='Resuming at: ')
-        embed.timestamp = rawUntil
         url = cyber.imageToURL(ctx.author.avatar)
         embed.set_thumbnail(url=url)
         embed.set_author(name=ctx.author.name, icon_url=url)
@@ -514,34 +505,31 @@ class Misc(commands.Cog):
         await database.PauseMod(ctx.guild, key)
         # self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = False
         pauseTimedEvent = {'type': 'pause', 'target': key, 'server': ctx.guild.id}
-        if len(args) == 1: return #If the duration is infinite, we don't wait
+        if seconds == 0: return #If the duration is infinite, we don't wait
         await database.AppendTimedEvent(ctx.guild, pauseTimedEvent)
         await asyncio.sleep(duration)
         await database.ResumeMod(ctx.guild, key)
         # self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = True
-        embed.title = f'The {args[0][0].upper()}{args[0][1:]} module has resumed'
+        embed.title = f'The {module[0].upper()}{module[1:]} module was resumed'
         embed.description = ''
         await status.edit(embed=embed)
         
-    @commands.command()
-    async def unpause(self, ctx: commands.Context, *args):
-        if len(args) < 1: return await ctx.send('Please provide module `antispam` or `logging` to unpause')
-        args = [a.lower() for a in args]
-        if 'antispam' in args:
+    @commands.hybrid_command(description='Resume the logging or antispam module')
+    async def unpause(self, ctx: commands.Context, module: str):
+        if module == 'antispam':
             await database.ResumeMod(ctx.guild, 'antispam')
             # self.bot.lightningLogging[ctx.guild.id]['antispam']['enabled'] = True
             await ctx.send("✅Successfully resumed antispam moderation")
-        if 'logging' in args:
+        elif module == 'logging':
             await database.ResumeMod(ctx.guild, 'cyberlog')
             # self.bot.lightningLogging[ctx.guild.id]['cyberlog']['enabled'] = True
             await ctx.send("✅Successfully resumed logging")
 
-    @commands.command()
-    async def history(self, ctx: commands.Context, target: typing.Optional[discord.Member] = None, *, mod = ''):
+    @commands.hybrid_command(description='View a member\'s avatar, username, or custom status history')
+    async def history(self, ctx: commands.Context, target: typing.Optional[discord.Member] = None, mod: str = ''):
         '''Viewer for custom status, username, and avatar history
         •If no member is provided, it will default to the command author
         •If no module is provided, it will default to the homepage'''
-        await ctx.trigger_typing()
         if target is None: target = ctx.author
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         p = await utility.prefix(ctx.guild)
@@ -569,7 +557,7 @@ class Misc(commands.Cog):
             tailMappings = {'avatar': 'imageURL', 'username': 'name', 'customStatus': 'name'}
             backslash = '\\'
             data = (await utility.get_user(target)).get(f'{mod}History')
-            e.description = f'{len(data) if len(data) < 19 else 19} / {len(data)} entries shown; oldest on top\nWebsite portal coming soon™'
+            e.description = f'{len(data) if len(data) < 19 else 19} / {len(data)} entries shown; oldest on top'
             if mod == 'avatar': e.description += '\nTo set an entry as the embed thumbnail, react with that letter'
             if mod == 'customStatus': e.description += '\nTo set a custom emoji as the embed thumbnail, react with that letter'
             for i, entry in enumerate(data[-19:]): #first twenty entries because that is the max number of reactions

@@ -141,6 +141,7 @@ class Cyberlog(commands.Cog):
                     # def initializeCheck(m): return m.author.id == self.bot.user.id and m.channel == self.imageLogChannel and m.content == 'Synchronized'
                     # await self.bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 # else: asyncio.create_task(self.synchronizeDatabase())
+                await asyncio.sleep(0.5)
                 await self.bot.get_cog('Birthdays').verifyBirthdaysDict()
             for g in self.bot.guilds:
                 timeString = f'Processing attributes for {g.name}'
@@ -309,7 +310,7 @@ class Cyberlog(commands.Cog):
                 except (discord.Forbidden): pass
     
     @commands.Cog.listener()
-    async def on_command(self, ctx):
+    async def on_command(self, ctx: commands.Context):
         pass #But eventually add command statistics
     
     @commands.Cog.listener()
@@ -2804,20 +2805,17 @@ class Cyberlog(commands.Cog):
         view = ErrorView(self, ctx, error, occurrence)
         await ctx.send(f'{self.emojis["alert"]} | {error}', view=view)
 
+    @commands.hybrid_command(aliases=['archives'], description='Retrieve the log archive file for this server')
     @commands.guild_only()
-    @commands.command(aliases=['archives'])
-    async def archive(self, ctx: commands.Context, filter='all'):
-        await ctx.trigger_typing()
+    async def archive(self, ctx: commands.Context):
         embed = discord.Embed(title=f'Log Archives', description=f'{self.emojis["loading"]}', color=yellow[await utility.color_theme(ctx.guild)])
-        m = await ctx.send(embed=embed)
         p = f'Attachments/{ctx.guild.id}/LogArchive/modLogs.json'
         f = discord.File(p)
         try: 
             await ctx.send(file=f)
-            await m.delete()
         except: 
             embed.description = 'Unable to upload Log Archive file'
-            await m.edit(emned=embed)
+            await ctx.send(embed=embed)
 
     def AvoidDeletionLogging(self, messages: typing.Union[typing.List[discord.Message], discord.Message]):
         '''Don't log the deletion of passed messages'''
@@ -3136,7 +3134,7 @@ class ErrorView(discord.ui.View):
             super().__init__(emoji=cyberlog.emojis['details'], label='View error information', custom_id=f'{ctx.message.id}-viewinfo')
         async def callback(self, interaction: discord.Interaction):
             view: ErrorView = self.view
-            embed = discord.Embed(title=f'{view.cyberlog.emojis["alert"]} An error has occured', description=str(view.error), color=red[view.cyberlog.colorTheme(view.ctx.guild)])
+            embed = discord.Embed(title=f'{view.cyberlog.emojis["alert"]} An error has occured', description=str(view.error), color=red[await utility.color_theme(view.ctx.guild)])
             embed.add_field(name='Command', value=f'{view.ctx.prefix}{view.ctx.command}')
             embed.add_field(name='Server', value=f'{view.ctx.guild.name}\n{view.ctx.guild.id}' if view.ctx.guild else 'N/A')
             embed.add_field(name='Channel', value=f'{utility.channelEmoji(view.cyberlog, view.ctx.channel)}{view.ctx.channel.name}\n{view.ctx.channel.id}')

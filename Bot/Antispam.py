@@ -126,7 +126,7 @@ class Antispam(commands.Cog):
                 else:
                     p = message.author.guild_permissions
                     if not p.administrator or p.manage_guild or message.author.id == message.guild.owner.id:
-                        await message.channel.trigger_typing()
+                        await message.channel.typing()
                         if await Cyberlog.logEnabled(message.guild, 'message') and (await utility.get_server(message.guild)).get('cyberlog').get('image'): await asyncio.sleep(2) #Wait two seconds if image logging is enabled
                         try: await message.delete()
                         except discord.Forbidden: pass
@@ -330,7 +330,7 @@ class Antispam(commands.Cog):
             if len(self.antispamProcessTimes) > 5000: self.antispamProcessTimes.pop(0)
             self.antispamProcessTimes.append((datetime.datetime.now() - received).seconds)
             return
-        await message.channel.trigger_typing()
+        await message.channel.typing()
         if spam.get("delete"):
             try:
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(message)
@@ -443,27 +443,25 @@ class Antispam(commands.Cog):
             except discord.Forbidden:
                 pass
     
-    @commands.command()
-    async def ageKick(self, ctx, *args):
-        await ctx.trigger_typing()
+    @commands.hybrid_command(description='Kick members from the server if their account is under <x> days old')
+    async def age_kick(self, ctx: commands.Context, target: str):
         newline = '\n'
-        if not await utility.ManageServer(ctx.author): return await ctx.send('You need manage server, administrator, or server owner permissions to use this')
+        if not utility.ManageServer(ctx.author): return await ctx.send('You need manage server, administrator, or server owner permissions to use this')
         config = (await utility.get_server(ctx.guild)).get('antispam')
         wl = config.get('ageKickWhitelist')
         theme = await utility.color_theme(ctx.guild)
-        if len(args) == 0:
+        if not target:
             e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get("ageKickDM")}''', color=yellow[theme], timestamp=datetime.datetime.utcnow())
             e.add_field(name='Kick Accounts',value=f'Under {config.get("ageKick")} days old')
             e.add_field(name=f'Manageable by {self.emojis["owner"]}{ctx.guild.owner.name} only',value=config.get('ageKickOwner'))
             await ctx.send(embed=e)
         else:
             if config.get('ageKickOwner') and ctx.author.id != ctx.guild.owner.id: return await ctx.send(f'Only the owner of this server ({ctx.guild.owner.name}) can edit the ageKick configuration.')
-            arg = args[0]
             e = discord.Embed(title='Age Kick Configuration',description='{} Saving...'.format(self.loading),color=yellow[theme], timestamp=datetime.datetime.utcnow())
             m = await ctx.send(embed=e)
-            if len(args) == 1:
+            if ' ' not in target:
                 try: 
-                    arg = int(arg)
+                    arg = int(target)
                     if arg > 1000:
                         try: user = await self.bot.fetch_user(arg)
                         except discord.NotFound: return await m.edit(content=f'I was unable to find a valid user matching the ID of `{arg}`.')
@@ -477,10 +475,10 @@ class Antispam(commands.Cog):
                         await database.SetAgeKick(ctx.guild, arg)
                         e.description=f'Successfully updated ageKick configuration from kicking accounts under {config.get("ageKick")} days old to kicking accounts **under {arg} days old.**'
                 except ValueError:
-                    if 'clear' == arg.lower():
+                    if 'clear' == target.lower():
                         await database.ResetWhitelist(ctx.guild)
                         e.description=f'Successfully cleared the agekick whitelist for {ctx.guild.name}. {len(wl)} entries were removed.'
-                    elif 'owner' == arg.lower():
+                    elif 'owner' == target.lower():
                         if ctx.author.id != ctx.guild.owner.id: return await m.edit(content='You need to be the server owner in order to edit this', embed=None)
                         ownerStatus = config.get('ageKickOwner')
                         if not ownerStatus: e.description=f'Successfully updated server ageKick configuration: Now, **only the server owner ({ctx.guild.owner.name})** can edit the ageKick configuration for this server. Type this command again to allow any manager to edit the ageKick configuration.'
@@ -488,11 +486,10 @@ class Antispam(commands.Cog):
                         await database.SetAgeKickOwner(ctx.guild, not ownerStatus)
                     else: return await m.edit(content=f'No actions found for `{arg}`. Acceptable single-word arguments are `owner` to toggle owner-only editability or `clear` to clear the whitelist. To view the ageKick configuration for this server, simpy type `agekick` with no arguments.', embed=None)
             else:
-                arg = ' '.join(args)
                 e.set_author(name='Please wait....')
                 e.description=('Because of the flexibility with customizing the custom DM message, my developer must approve of this message to make sure there are no security flaws. This message will be updated when that happens. My developer will not know any identifying information; all that will be sent is the following text:\n\n{}').format(arg)
                 await m.edit(embed=e)
-                mm = await self.bot.get_channel(681949259192336406).send(embed=discord.Embed(title='Approve or Deny',description=arg))
+                mm = await self.bot.get_channel(681949259192336406).send(embed=discord.Embed(title='Approve or Deny', description=target))
                 for r in ['✅', '❌']: await mm.add_reaction(r)
                 def ownerCheck(r, u): return str(r) in ['✅', '❌'] and u.id == 247412852925661185 and r.message.id == mm.id 
                 r = await self.bot.wait_for('reaction_add', check=ownerCheck)
@@ -513,40 +510,40 @@ class Antispam(commands.Cog):
             await self.bot.wait_for('reaction_add', check=configCheck)
             await m.clear_reactions()
             return await m.edit(embed=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELISTED USERS":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get('ageKickDM')}''', color=yellow[theme], timestamp=datetime.datetime.utcnow()))
-        
+    
+    @commands.hybrid_command()
     @commands.is_owner()
-    @commands.command()
-    async def setWarnings(self, ctx: commands.Context, members: commands.Greedy[discord.Member], setTo: int = 0):
+    async def set_warnings(self, ctx: commands.Context, members: commands.Greedy[discord.Member], new_warnings: int = 0):
         embed=discord.Embed(title='Set Member Warnings', description=f'{self.loading}Updating member data...', color=yellow[await utility.color_theme(ctx.guild)])
         if len(members) == 0: members = ctx.guild.members
         server_data = await utility.get_server(ctx.guild)
-        if setTo == 0: 
-            try: setTo = server_data['antispam']['warn']
-            except KeyError: setTo = 3
+        if new_warnings == 0: 
+            try: new_warnings = server_data['antispam']['warn']
+            except KeyError: new_warnings = 3
         status = await ctx.send(embed=embed)
         oldWarnings = {}
         for member in members:
             if server_data['members'].get(str(member.id)): oldWarnings[member.id] = server_data['members'].get(str(member.id), {}).get('warnings', 3)
-        await database.SetWarnings(members, setTo)
-        configured = [k for k, v in oldWarnings.items() if v != setTo]
+        await database.SetWarnings(members, new_warnings)
+        configured = [k for k, v in oldWarnings.items() if v != new_warnings]
         if len(configured) == 0:
             embed.description='All members up to date already'
         elif len(configured) <= 15:
             for identification in configured: 
-                embed.add_field(name=ctx.guild.get_member(identification), value=f'> {oldWarnings[identification]} → **{setTo}** warnings', inline=False)
+                embed.add_field(name=ctx.guild.get_member(identification), value=f'> {oldWarnings[identification]} → **{new_warnings}** warnings', inline=False)
                 embed.description = ''
-        else: embed.description = f'Updated warnings for {len(configured)} members\n> Set to {setTo} warnings'
+        else: embed.description = f'Updated warnings for {len(configured)} members\n> Set to {new_warnings} warnings'
         await status.edit(embed=embed)
 
+    @commands.hybrid_command()
     @commands.is_owner()
-    @commands.command()
-    async def antispamStats(self, ctx):
+    async def antispam_stats(self, ctx: commands.Context):
         averageSecondsPartial = sum(self.antispamProcessTimes) / len(self.antispamProcessTimes)
         averageSecondsFull = sum(self.fullAntispamProcessTimes) / len(self.fullAntispamProcessTimes)
         await ctx.send(f'Partial avg: {averageSecondsPartial}\nFull average: {averageSecondsFull}\nLast 20 partial: {self.antispamProcessTimes[-20:]}\nLast 20 full: {self.fullAntispamProcessTimes[-20:]}')
 
-    @commands.command()
-    async def warnings(self, ctx):
+    @commands.hybrid_command(description='View your warning count in this server')
+    async def warnings(self, ctx: commands.Context):
         warningCount = await self.FetchWarnings(ctx.author)
         mentions = discord.AllowedMentions(users=False)
         if warningCount: await ctx.send(f'{ctx.author.mention}, you have {warningCount} warning{"s" if warningCount != 1 else ""} in my antispam system', allowed_mentions = mentions)

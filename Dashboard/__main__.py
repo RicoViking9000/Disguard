@@ -3,110 +3,179 @@ import pymongo
 from flask import Flask, g, session, redirect, request, url_for, jsonify, render_template
 import flask_breadcrumbs
 from requests_oauthlib import OAuth2Session
-from oauth import Oauth
 import dns
 import oauth
 import database
 import datetime
 import json
+import authentication
+import google.oauth2.credentials
+import google_auth_oauthlib.flow
+import googleapiclient.discovery
 
-OAUTH2_CLIENT_ID = Oauth.client_id
-OAUTH2_CLIENT_SECRET = Oauth.client_secret
-OAUTH2_REDIRECT_URI = 'https://disguard.herokuapp.com/callback'
-#OAUTH2_REDIRECT_URI = 'http://localhost:5000/callback'
-
-API_BASE_URL = 'https://discordapp.com/api'
-AUTHORIZATION_BASE_URL = API_BASE_URL + '/oauth2/authorize'
-TOKEN_URL = API_BASE_URL + '/oauth2/token'
+REDIRECT_URI = 'https://disguard.herokuapp.com/callback'
+DEV_REDIRECT_URI = 'http://localhost:5000/callback'
 
 app = Flask(__name__)
 flask_breadcrumbs.Breadcrumbs(app=app)
 
-app.debug = True
-app.config['SECRET_KEY'] = Oauth.client_secret
+# app.debug = True
+app.config['SECRET_KEY'] = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 
 mongo = pymongo.MongoClient(oauth.mongo()) #Database connection URL in another file so you peeps don't go editing the database ;)
 db = mongo.disguard
-#db = mongo.disguard_beta #Allows for dashboard to use test database if necessary
+db = mongo.disguard_beta if app.debug else mongo.disguard
 servers = db.servers
 users = db.users
 
-if 'http://' in OAUTH2_REDIRECT_URI:
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = 'true'
-
-
 def token_updater(token):
     session['oauth2_token'] = token
-
-
-def make_session(token=None, state=None, scope=None):
-    return OAuth2Session(
-        client_id=OAUTH2_CLIENT_ID,
-        token=token,
-        state=state,
-        scope=scope,
-        redirect_uri=OAUTH2_REDIRECT_URI,
-        auto_refresh_kwargs={
-            'client_id': OAUTH2_CLIENT_ID,
-            'client_secret': OAUTH2_CLIENT_SECRET,
-        },
-        auto_refresh_url=TOKEN_URL,
-        token_updater=token_updater)
 
 def serverNameGen(*args, **kwargs):
     if 'server_id' not in session: return 'You aren\'t supposed to be here'
     return [{'text': str(servers.find_one({"server_id":session.get('server_id')}).get("name")), 'url': '.'}]
 
+def credentials_to_dict(credentials: google.oauth2.credentials.Credentials):
+    return {'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes}
+
 @app.route('/')
 @flask_breadcrumbs.register_breadcrumb(app, '.', 'Dashboard')
 def index(redir=None):
-    scope = request.args.get(
-        'scope',
-        'identify')
-    #discord = make_session(scope=scope.split(' '))
-    #authorization_url = discord.authorization_url(AUTHORIZATION_BASE_URL)
-    #session['oauth2_state'] = state
     if redir: session['redirect'] = redir
+    session.modified = True
     if 'user_id' not in session:
-        return redirect('https://discordapp.com/api/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope={}'.format(OAUTH2_CLIENT_ID, OAUTH2_REDIRECT_URI, scope))
+        return redirect(url_for('authenticate'))
     else:
         return redirect(url_for('manage'))
+    
+@app.route('/authenticate')
+def authenticate(redir=None, services=['Discord']):
+    if redir: 
+        session['redirect'] = redir
+    session.modified = True
+    if session.get('redirect') and '/special' in session['redirect']:
+        services = ['Discord', 'Google']
+    if 'identity' not in session:
+        return render_template('authenticate.html', services=services)
+    else:
+        return redirect(url_for('manage'))
+    
+@app.route('/authenticate/<string:service>/')
+def authenticate_service(service):
+    if service == 'discord':
+        credentials = oauth.Oauth(service=service)
+        oAuth = authentication.OAuth2Handler(
+            service=service,
+            CLIENT_ID=credentials.client_id,
+            CLIENT_SECRET=credentials.client_secret,
+            REDIRECT_URI=DEV_REDIRECT_URI if app.debug else REDIRECT_URI,
+            API_BASE_URL='https://discordapp.com/api'
+            )
+        app.config['SECRET_KEY'] = credentials.client_secret
+        oAuth.setup(token_updater=token_updater)
+        authorization_url = oAuth.authorization_url(scope='identify')
+    elif service == 'google':
+        credentials = oauth.Oauth(service=service)
+        flow: google_auth_oauthlib.flow.Flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
+            'credentials.json',
+            scopes=[credentials.scope])
+        flow.redirect_uri = DEV_REDIRECT_URI if app.debug else REDIRECT_URI
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true')
+        oAuth = authentication.OAuth2Handler(
+            service=service,
+            CLIENT_ID=credentials.client_id,
+            CLIENT_SECRET=credentials.client_secret,
+            REDIRECT_URI=DEV_REDIRECT_URI if app.debug else REDIRECT_URI,
+            API_BASE_URL='https://www.googleapis.com/oauth2/v3',
+        )
+        session['state'] = state
+    else:
+        return redirect(url_for('authenticate'))
+    app.config['SECRET_KEY'] = credentials.client_secret
+    session['service'] = service
+    session.modified = True
+    return redirect(authorization_url)
+
 
 @app.route('/callback')
 def callback(redir=None):
     if session.get('redirect'):
         redir = session.get('redirect')
         session['redirect'] = None
-    if 'user_id' not in session:
+    if 'identity' not in session:
         if request.values.get('error'):
             return request.values['error']
-        discord = make_session()
-        token = discord.fetch_token(
-            TOKEN_URL,
-            client_secret=OAUTH2_CLIENT_SECRET,
-            authorization_response=request.url)
-        session['oauth2_token'] = token
-        discord = make_session(token=session.get('oauth2_token'))
-        user = discord.get(API_BASE_URL + '/users/@me').json()
-        session['user_id'] = user.get('id')
+        credentials = oauth.Oauth(service=session['service'])
+        if session['service'] == 'discord':
+            oAuth = authentication.OAuth2Handler(
+                service=session['service'],
+                CLIENT_ID=credentials.client_id,
+                CLIENT_SECRET=credentials.client_secret,
+                REDIRECT_URI=DEV_REDIRECT_URI if app.debug else REDIRECT_URI,
+                API_BASE_URL='https://discordapp.com/api'
+            )
+            flow = oAuth.make_session()
+            token = flow.fetch_token(
+                oAuth.TOKEN_URL,
+                client_secret=oAuth.CLIENT_SECRET,
+                authorization_response=request.url
+            )
+            session['oauth2_token'] = token
+            flow = oAuth.make_session(token=session.get('oauth2_token'))
+            user = flow.get(oAuth.API_BASE_URL + '/users/@me').json()
+            session['user_id'], session['identity'], session['username'] = int(user.get('id')), int(user.get('id')), user.get('username')
+        else:
+            flow: google_auth_oauthlib.flow.Flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
+                'credentials.json',
+                scopes=None,
+                state=session['state'])
+            oAuth = authentication.OAuth2Handler(
+                service=session['service'],
+                CLIENT_ID=credentials.client_id,
+                CLIENT_SECRET=credentials.client_secret,
+                REDIRECT_URI=DEV_REDIRECT_URI if app.debug else REDIRECT_URI,
+                API_BASE_URL='https://www.googleapis.com/oauth2/v3'
+            )
+            flow.redirect_uri = DEV_REDIRECT_URI if app.debug else REDIRECT_URI
+            flow.fetch_token(code=request.args.get('code'), authorization_response=request.url)
+            session['credentials'] = credentials_to_dict(flow.credentials)
+            session['oath2_token'] = flow.credentials.token
+            user = flow.oauth2session.get(oAuth.API_BASE_URL + '/userinfo').json()
+            session['identity'], session['username'] = user['email'], user['email']
+        session.modified = True
         session.permanent = True
-        if redir is None: return callback(request.url)
-        else: return callback(redir)
+        # if redir is None: return callback(request.url)
+        # else: return callback(redir)
     #if redir is None: redir = request.url
     #if request.path == '/' or request.path == '/callback': return redirect(url_for('.manage'))
     if redir: return redirect(redir)
     else: return redirect(url_for('.manage'))
 
+@app.route('/logout/')
+def logout():
+    session.clear()
+    return redirect(request.args.get('redir'))
+
 def EnsureVerification(id):
     '''Check if the user is authorized to proceed to editing a server'''
-    discord = make_session(token=session.get('oauth2_token'))
+    credentials = oauth.Oauth('discord')
+    oAuth = authentication.OAuth2Handler('discord', credentials.client_id, credentials.client_secret)
+    discord = oAuth.make_session(token=session.get('oauth2_token'))
     if 'user_id' not in session: return False
-    return id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))] and discord.get(API_BASE_URL + '/users/@me').json().get('id') is not None or int(session['user_id']) == 247412852925661185
+    return id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))] and discord.get(oAuth.API_BASE_URL + '/users/@me').json().get('id') is not None or int(session['user_id']) == 247412852925661185
 
 def ReRoute(redir=None):
     '''If a user isn't authorized to edit a server, determine what to do: send back to login to Discord or send to homepage'''
     if 'user_id' not in session:
         if redir: session['redirect'] = redir
+        session.modified = True
         return url_for('index')
     else:
         return url_for('manage')
@@ -114,20 +183,28 @@ def ReRoute(redir=None):
 @app.route('/manage')
 @flask_breadcrumbs.register_breadcrumb(app, '.manage', 'Select a Server')
 def manage():
-    discord = make_session(token=session.get('oauth2_token'))
+    credentials = oauth.Oauth('discord')
+    oAuth = authentication.OAuth2Handler(
+        'discord',
+        credentials.client_id,
+        credentials.client_secret,
+        API_BASE_URL='https://discordapp.com/api'
+    )
+    discord = oAuth.make_session(token=session.get('oauth2_token'))
     try:
-        user = discord.get(API_BASE_URL + '/users/@me').json()
-        shared = users.find_one({"user_id": int(user.get("id"))}).get("servers")
+        user = discord.get(oAuth.API_BASE_URL + '/users/@me').json()
+        shared = users.find_one({'user_id': int(user.get('id'))}).get('servers')
     except:
         session.clear()
         return redirect(url_for('index')) #If the website can't load servers
-    return render_template('homepage.html', servers=shared, user=user.get("username"))
+    else: return render_template('homepage.html', servers=shared, user=user.get('username'))
 
 @app.route('/manage/<int:id>/')
 @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.', '', dynamic_list_constructor=serverNameGen)
 def manageServer(id):
     if EnsureVerification(id):
         session['server_id'] = id
+        session.modified = True
         return render_template('trio.html', server=id)
     else:
         return redirect(ReRoute(request.url))
@@ -310,9 +387,22 @@ def cyberlog(id):
 @app.route('/manage/profile', methods=['GET', 'POST'])
 def profile():
     # Make sure redirect works at the end
-    if 'user_id' not in session: return url_for('index')
+    if 'user_id' not in session: 
+        return redirect(ReRoute(request.url))
     uID = int(session['user_id'])
     user = users.find_one({'user_id': uID})
+    credentials = oauth.Oauth(service='discord')
+    if request.method == 'GET':
+        oAuth = authentication.OAuth2Handler(
+            service='discord',
+            CLIENT_ID=credentials.client_id,
+            CLIENT_SECRET=credentials.client_secret,
+            REDIRECT_URI=DEV_REDIRECT_URI if app.debug else REDIRECT_URI,
+            API_BASE_URL='https://discordapp.com/api'
+        )
+        flow = oAuth.make_session(token=session.get('oauth2_token'))
+        userGet = flow.get(oAuth.API_BASE_URL + '/users/@me').json()
+        user['avatar_url'] = f'https://cdn.discordapp.com/avatars/{uID}/{userGet["avatar"]}?size=2048'
     if request.method == 'POST':
         r = request.form
         updateDict = {
@@ -348,24 +438,50 @@ def profile():
         if (r.get('defaultCOE') == 'on' or r.get('attributeHistoryCOE') == 'on' or r.get('avatarHistoryCOE') == 'on'): updateDict.update({'avatarHistory': []})
         users.update_one({'user_id': uID}, {'$set': updateDict})
         return redirect(url_for('profile'))
-    return render_template('profile.html', user=user)
+    return render_template('profile.html', user=user, userGet=userGet)
 
 @app.route('/special/<string:landing>')
 def specialLanding(landing):
-    variables = {}
+    # # # authentication # # #
     #disguard = db.disguard.find_one({})
-    disguard = mongo.disguard.disguard.find_one({})
-    if landing == 'kaileyBirthday2020': #When multiple pages requiring verification exist, change to a tuple. This if statement forces user verification for those navigating to the page.
-        discord = make_session(token=session.get('oauth2_token'))
-        if 'user_id' in session and discord.get(API_BASE_URL + '/users/@me').json().get('id'):
-            if landing == 'kaileyBirthday2020':
-                variables['kailey'] = int(session['user_id']) in [596381991151337482, 247412852925661185]
-        else: return redirect(ReRoute(request.url))
+    if landing != 'timekeeper':
+        if 'identity' not in session:
+            session['redirect'] = request.url
+            session.modified = True
+            return redirect(url_for('authenticate'))
+        credentials = oauth.Oauth(session['service'])
+        oAuth = authentication.OAuth2Handler(
+            session['service'],
+            credentials.client_id,
+            credentials.client_secret,
+            API_BASE_URL='https://www.googleapis.com/oauth2/v3' if session['service'] == 'google' else 'https://discordapp.com/api'
+            )
+        if session['service'] == 'discord':
+            capsule = oAuth.make_session(token=session.get('oauth2_token'))
+            API_BASE_URL = oAuth.API_BASE_URL
+            info = capsule.get(API_BASE_URL + '/users/@me').json()
+            identity, username = int(info['id']), info['username']
+        else:
+            credentials = google.oauth2.credentials.Credentials(**session['credentials'])
+            flow = googleapiclient.discovery.build('oauth2', 'v2', credentials=credentials)
+            info = flow.userinfo().get().execute()
+            identity, username = info['email'], info['email']
+            session['credentials'] = credentials_to_dict(credentials)
+        f = open('access.json')
+        access = json.load(f)
+        variables = {}
+        variables['username'] = username
+        disguard = mongo.disguard.disguard.find_one({})
+        if landing in ('tylerBirthday2022', 'tylerq1arc'):
+            variables['authorized'] = identity in access['tylerBirthday2022']
+        else:
+            variables['authorized'] = identity in access[landing]
     del disguard['_id']
     d = json.loads(json.dumps(disguard, default=jsonFormatter))
     if landing == 'timeKeeper': 
         variables['keeperData'] = d['keeperData']
         variables['time'] = time(disguard['keeperData'])
+    session.modified = True
     return render_template(f'{landing}.html', disguard=d, vars=variables)
 
 def jsonFormatter(o):

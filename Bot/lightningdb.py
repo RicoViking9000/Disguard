@@ -52,6 +52,10 @@ async def patch_server(server_id: int, data: dict):
     data.pop('_id')
     return await servers.update_one({'_id': server_id}, {'$set': data}, upsert=True)
 
+async def get_member(server_id: int, member_id: int):
+    '''gets a member from the the designated server'''
+    return await servers.find_one({'_id': server_id, 'members.$.id': member_id})
+
 async def post_user(data: dict):
     '''adds a user to the database'''
     data['_id'] = data['user_id']

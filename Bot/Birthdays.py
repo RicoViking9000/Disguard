@@ -222,11 +222,10 @@ class Birthdays(commands.Cog):
             new = await message.channel.send(embed=embed, view=view)
             view.message = new
 
-    @commands.command(aliases=['bday'])
-    async def birthday(self, ctx: commands.Context, *args):
-        await ctx.trigger_typing()
+    @commands.hybrid_command(aliases=['bday'])
+    async def birthday(self, ctx: commands.Context, search: str = ''):
         theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
-        if len(args) == 0:
+        if not search:
             homeView = BirthdayHomepageView(self, ctx, None)
             embed = await homeView.createEmbed()
             message: discord.Message = await ctx.send(embed=embed) #Consider removing this if load times are quick
@@ -236,11 +235,10 @@ class Birthdays(commands.Cog):
         else:
             embed=discord.Embed(title=f'{self.emojis["search"]} Birthdays', description=f'{self.loading} Searching', color=yellow[theme])
             message = await ctx.send(embed=embed)
-            arg = ' '.join(args)
             actionList = []
             ages = calculateAges(ctx.message)
             actionList += ages
-            memberList = await utility.FindMoreMembers(self.bot.users, arg)
+            memberList = await utility.FindMoreMembers(self.bot.users, search)
             memberList.sort(key = lambda x: x.get('check')[1], reverse=True)
             memberList = [m.get('member') for m in memberList if m.get('check')[1] >= 33] #Only take member results with at least 33% relevance to avoid ID searches when people only want to get their age
             memberList = [m for m in memberList if mutualServerMemberToMember(self, ctx.author, m)]
@@ -265,7 +263,7 @@ class Birthdays(commands.Cog):
                     return await message.edit(embed=embed, view=view)
             if len(actionList) == 1 and type(actionList[0]) in (discord.User, discord.ClientUser): await makeChoice(actionList[0], message)
             elif len(actionList) == 0:
-                embed.description = f'No actions found for **{arg}**'
+                embed.description = f'No actions found for **{search}**'
                 return await message.edit(embed=embed)
             elif len(actionList) > 1:
                 parsed = []
@@ -284,11 +282,11 @@ class Birthdays(commands.Cog):
                     return await message.edit(embed=embed)
                 await makeChoice(actionList[int(view.select.values[0])], message)
     
-    @commands.command(aliases=['setage'])
-    async def age(self, ctx: commands.Context, newAge: int):
-        return await self.birthday(ctx, str(newAge))
+    @commands.hybrid_command(aliases=['setage'], description='Shortcut to update your age under the birthday module')
+    async def age(self, ctx: commands.Context, new_age: int):
+        return await self.birthday(ctx, str(new_age))
 
-    @commands.command()
+    @commands.hybrid_command(description='View or edit your birthday wishlist')
     async def wishlist(self, ctx: commands.Context):
         return await wishlistHandler(self, ctx, None, None)
         

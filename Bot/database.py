@@ -336,9 +336,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
     updateOperations = []
     if full or not current:
         updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': {
-        'username': u.name,
         'user_id': u.id,
-        'avatar': u.display_avatar.with_static_format('png').with_size(2048).url, #d.py V2.0
         'lastActive': current.get('lastActive', {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'}),
         'lastOnline': current.get('lastOnline', datetime.datetime.min),
         'birthdayMessages': current.get('birthdayMessages', []),
@@ -365,8 +363,6 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
     else: 
         base = {}
         serverGen = [{'server_id': server.id, 'name': server.name, 'thumbnail': str(server.icon.with_static_format('png').url)} for server in u.mutual_guilds if utility.ManageServer(server.get_member(u.id))] #d.py V2.0
-        if u.name != current['username']: base.update({'username': u.name})
-        if u.display_avatar.with_static_format('png').with_size(2048).url != current['avatar']: base.update({'avatar': u.display_avatar.with_static_format('png').with_size(2048).url})
         if serverGen != current['servers']: base.update({'servers': serverGen})
         if base: updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': base}))
     if mode == 'update' and updateOperations: await users.bulk_write(updateOperations, ordered = not parallel)
