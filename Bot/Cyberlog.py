@@ -3133,7 +3133,7 @@ class ErrorView(discord.ui.View):
             super().__init__(emoji=cyberlog.emojis['details'], label='View error information', custom_id=f'{ctx.message.id}-viewinfo')
         async def callback(self, interaction: discord.Interaction):
             view: ErrorView = self.view
-            embed = discord.Embed(title=f'{view.cyberlog.emojis["alert"]} An error has occured', description=str(view.error), color=red[view.cyberlog.colorTheme(view.ctx.guild)])
+            embed = discord.Embed(title=f'{view.cyberlog.emojis["alert"]} An error has occured', description=str(view.error), color=red[await utility.color_theme(view.ctx.guild)])
             embed.add_field(name='Command', value=f'{view.ctx.prefix}{view.ctx.command}')
             embed.add_field(name='Server', value=f'{view.ctx.guild.name}\n{view.ctx.guild.id}' if view.ctx.guild else 'N/A')
             embed.add_field(name='Channel', value=f'{utility.channelEmoji(view.cyberlog, view.ctx.channel)}{view.ctx.channel.name}\n{view.ctx.channel.id}')
