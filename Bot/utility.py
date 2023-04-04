@@ -154,10 +154,10 @@ def empty(value):
 
 def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChannel]):
     '''Gives us the proper new emoji for the channel - good for varying channels in a single list'''
+    # Emojis need to be updated
     if c.type == discord.ChannelType.category: return self.emojis['folder']
     elif c.type == discord.ChannelType.private: return self.emojis['member']
     elif c.type == discord.ChannelType.group: return self.emojis['members']
-    elif c.type == discord.ChannelType.store: return self.emojis['storeChannel']
     elif c.type == discord.ChannelType.news: return self.emojis['announcementsChannel']
     else:
         private = c.overwrites_for(c.guild.default_role).read_messages == False
