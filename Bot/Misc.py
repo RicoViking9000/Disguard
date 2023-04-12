@@ -5,6 +5,7 @@ This will initially only contain the Easter/April Fools Day events code, but ove
 import discord
 import secure
 from discord.ext import commands, tasks
+from discord import app_commands
 import database
 import utility
 import lyricsgenius
@@ -631,6 +632,38 @@ class Misc(commands.Cog):
                     if cache: await message.remove_reaction(cache, result[1])
                     cache = str(result[0])
                     await message.edit(embed=newEmbed)
+    
+    @commands.hybrid_command()
+    @commands.guild_only()
+    @commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
+    async def say(self, ctx: commands.Context, member: typing.Optional[str] = None, channel: typing.Optional[str] = None, *, message: str = 'Hello World'):
+        '''
+        Create a temporary webhook to mimic <member> by sending <message> in <channel>
+        Parameters
+        ----------
+        member : discord.Member, optional
+            The member to imitate, defaults to yourself
+        channel : discord.TextChannel, optional
+            The channel to send the message in, defaults to the current channel
+        message : str, optional
+            The message to send, defaults to "Hello World"
+        '''
+        if channel: channel: discord.TextChannel = ctx.guild.get_channel(int(channel))
+        else: channel = ctx.channel
+        if member: discord.Member = ctx.guild.get_member(int(member))
+        else: member = ctx.author
+        webhook = await channel.create_webhook(name='automationSayCommand', avatar=await member.avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.name} to imitate {member.name} by saying "{message}"')
+        await webhook.send(message, username=member.name)
+        await ctx.interaction.response.pong()
+        await webhook.delete()
+    @say.autocomplete('member')
+    async def say_member_autocomplete(self, interaction: discord.Interaction, argument: str) -> list[app_commands.Choice]:
+        members: list[discord.Member] = [member['member'] for member in await utility.FindMoreMembers(interaction.guild.members, argument)][:25]
+        return [app_commands.Choice(name=member.name, value=str(member.id)) for member in members]
+    @say.autocomplete('channel')
+    async def say_channel_autocomplete(self, interaction: discord.Interaction, argument: str) -> list[app_commands.Choice]:
+        channels: list[discord.TextChannel] = [channel['channel'] for channel in await utility.FindMoreChannels(interaction.guild, argument) if channel['channel'].type == discord.ChannelType.text][:25]
+        return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in channels]
     
     def ParsePauseDuration(self, s: str):
         '''Convert a string into a number of seconds to ignore antispam or logging'''
