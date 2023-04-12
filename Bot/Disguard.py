@@ -59,6 +59,7 @@ async def prefix(bot: commands.Bot, message: discord.Message):
     return (await utility.prefix(message.guild)) or '.'
 
 intents = discord.Intents.all()
+intents.presences = False
 
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions.none())
 bot.remove_command('help')
@@ -218,18 +219,6 @@ async def server(ctx: commands.Context):
 @bot.hybrid_command(help='Check Disguard\'s response time')
 async def ping(ctx):
     await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms')
-
-@bot.hybrid_command(help='Create a temporary webhook to mimic <member> in <channel> by saying <message>')
-@commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
-async def say(ctx: commands.Context, member: typing.Optional[discord.Member] = None, channel: typing.Optional[discord.TextChannel] = None, *, message: str = 'Hello World'):
-    '''Uses webhook to say something. T is text to say, m is member. Author if none provided. C is channel, ctx.channel if none provided'''
-    bot.get_cog('Cyberlog').AvoidDeletionLogging(ctx.message)
-    await ctx.message.delete()
-    if channel is None: channel = ctx.channel
-    if member is None: member = ctx.author
-    webhook = await channel.create_webhook(name='automationSayCommand', avatar=await member.avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.name} to imitate {member.name} by saying "{message}"')
-    await webhook.send(message, username=member.name)
-    await webhook.delete()
 
 @bot.hybrid_command(name='eval')
 @commands.is_owner()
@@ -484,7 +473,7 @@ async def _status(ctx):
     await UpdatePresence()
     await ctx.send('Successfully set')
 
-@bot.hybrid_command()
+@bot.hybrid_command(help='You know the rules, and so do I')
 async def rickroll(ctx: commands.Context):
     await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
 
