@@ -5,6 +5,7 @@ This will initially only contain the Easter/April Fools Day events code, but ove
 import discord
 import secure
 from discord.ext import commands, tasks
+from discord import app_commands
 import database
 import utility
 import lyricsgenius
@@ -67,8 +68,11 @@ class Misc(commands.Cog):
     async def sendGuideMessage(self, message: discord.Message):
         await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
     
-    @commands.hybrid_command(description='View and edit your privacy settings')
+    @commands.hybrid_command()
     async def privacy(self, ctx: commands.Context):
+        '''
+        View and edit your privacy settings
+        '''
         user = await utility.get_user(ctx.author)
         # users = await database.GetUserCollection()
         privacy = user['privacy']
@@ -86,14 +90,21 @@ class Misc(commands.Cog):
         embed.add_field(name='Attribute History', value=f'''{slideToggle(privacy['attributeHistory'][0])}{"Enabled" if enabled(privacy['attributeHistory'][0]) else "Disabled"}\n{f"{viewerEmoji(privacy['attributeHistory'][1])}Attribute History: Visible to {viewerText(privacy['attributeHistory'][1])}" if enabled(privacy['attributeHistory'][0]) else ""}''', inline=False)
         m = await ctx.send(embed=embed)
 
-    @commands.hybrid_command(aliases=['feedback', 'ticket'], description='Opens a support ticket with Disguard\'s developer')
-    async def support(self, ctx: commands.Context, opener=''):
-        '''Command to initiate a feedback ticket. Anything typed after the command name will be used to start the support ticket
-        Ticket status
-        0: unopened by dev
-        1: opened (dev has viewed)
-        2: in progress (dev has replied)
-        3: closed'''
+    @commands.hybrid_command(aliases=['feedback', 'ticket'])
+    async def support(self, ctx: commands.Context, opener: str = ''):
+        '''
+        Opens a support ticket with Disguard\'s developer
+        ----------------
+        Parameters:
+        opener : str, optional
+            The message to start the ticket with. If not provided, you\'ll be prompted to provide one
+        '''
+        # '''Command to initiate a feedback ticket. Anything typed after the command name will be used to start the support ticket
+        # Ticket status
+        # 0: unopened by dev
+        # 1: opened (dev has viewed)
+        # 2: in progress (dev has replied)
+        # 3: closed'''
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         details = cyber.emojis['details']
@@ -163,22 +174,28 @@ class Misc(commands.Cog):
         result = await self.bot.wait_for('reaction_add', check=navigationCheck)
         await self.ticketsCommand(ctx, number=ticket['number'])
 
-    @commands.hybrid_command(name='tickets', description='View the support tickets you\'ve opened with Discord')
-    async def ticketsCommand(self, ctx: commands.Context, number:int = -1):
-        '''Command to view feedback tickets'''
+    @commands.hybrid_command(name='tickets')
+    async def ticketsCommand(self, ctx: commands.Context, ticket_number: typing.Optional[int] = -1):
+        '''View the support tickets you\'ve opened with Disguard
+        --------------------------------
+        Parameters:
+        ticket_number: int, optional
+            The number of the ticket you want to view. If not provided, a list of all your tickets will be shown.
+        '''
+        # No autocomplete support unless retrieving tickets moves to local storage
         g = ctx.guild
         alphabet = [l for l in ('🇦🇧🇨🇩🇪🇫🇬🇭🇮🇯🇰🇱🇲🇳🇴🇵🇶🇷🇸🇹🇺🇻🇼🇽🇾🇿')]
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         trashcan = self.emojis['delete']
         statusDict = {0: 'Unopened', 1: 'Viewed', 2: 'In progress', 3: 'Closed', 4: 'Locked'}
-        message = await ctx.send(embed=discord.Embed(description=f'{self.loading}Downloading ticket data'))
+        # message = await ctx.send(embed=discord.Embed(description=f'{self.loading}Downloading ticket data'))
         tickets = await database.GetSupportTickets()
         embed=discord.Embed(title=f"🎟 Disguard Ticket System / {self.emojis['details']} Browse Your Tickets", color=yellow[color_theme])
         embed.set_author(name=ctx.author, icon_url=ctx.author.avatar.with_static_format('png').url)
         if len(tickets) == 0: 
             embed.description = 'There are currently no tickets in the system'
-            return await message.edit(embed=embed)
+            return await ctx.send(embed=embed)
         def organize(sortMode):
             if sortMode == 0: filtered.sort(key = lambda x: x['conversation'][-1]['timestamp'], reverse=True) #Recently active tickets first
             elif sortMode == 1: filtered.sort(key = lambda x: x['conversation'][-1]['timestamp']) #Recently active tickets last
@@ -217,7 +234,7 @@ class Misc(commands.Cog):
         filtered = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]]
         if len(filtered) == 0:
             embed.description = f"There are currently no tickets in the system created by or involving you. To create a feedback ticket, type `{await utility.prefix(ctx.guild) if ctx.guild else '.'}ticket`"
-            return await message.edit(embed=embed)
+            return await ctx.send(embed=embed)
         def optionNavigation(r: discord.Reaction, u: discord.User): return r.emoji in reactions and r.message.id == message.id and u.id == ctx.author.id and not u.bot
         def messageCheck(m: discord.Message): return m.channel.id == ctx.channel.id and m.author.id == ctx.author.id
         while not self.bot.is_closed():
@@ -226,10 +243,10 @@ class Misc(commands.Cog):
             pages = list(paginate(filtered, 5))
             sortDescription = sortDescriptions[sortMode]
             await populateEmbed(pages, currentPage, sortDescription)
-            if number and number > len(tickets): 
-                await message.edit(content=f'The ticket number you provided ({number}) is invalid. Switching to browse view.')
-                number, option = None, [None]
-            if number == -1 or number == None:
+            if ticket_number and ticket_number > len(tickets): 
+                message = await ctx.send(content=f'The ticket number you provided ({ticket_number}) is invalid. Switching to browse view.')
+                ticket_number, option = None, [None]
+            if ticket_number == -1 or ticket_number == None:
                 if ctx.guild: 
                     if clearReactions: await message.clear_reactions()
                     else: clearReactions = True
@@ -262,11 +279,11 @@ class Misc(commands.Cog):
                     if currentPage < 0: currentPage = 0
                     if currentPage == len(pages): currentPage = len(pages) - 1
             elif option[0] and str(option[0]) in alphabet[:len(pages[currentPage])]:
-                if not number or number < 0: number = pages[currentPage][alphabet.index(str(option[0]))]['number']
-                ticket = [t for t in tickets if t['number'] == number][0]
+                if not ticket_number or ticket_number < 0: ticket_number = pages[currentPage][alphabet.index(str(option[0]))]['number']
+                ticket = [t for t in tickets if t['number'] == ticket_number][0]
                 if ctx.author.id not in [m['id'] for m in ticket['members']]: 
-                    await message.edit(content=f'The ticket number you provided ({number}) does not include you, and you do not have a pending invite to it.\n\nIf you were invited to this ticket, then either the ticket author revoked the invite, or you declined the invite.\n\nSwitching to browse view')
-                    number = None
+                    await message.edit(content=f'The ticket number you provided ({ticket_number}) does not include you, and you do not have a pending invite to it.\n\nIf you were invited to this ticket, then either the ticket author revoked the invite, or you declined the invite.\n\nSwitching to browse view')
+                    ticket_number = None
                     continue
                 #If I view the ticket and it's marked as not viewed yet, mark it as viewed
                 if ctx.author.id == 247412852925661185 and ticket['status'] < 1: ticket['status'] = 1
@@ -275,7 +292,7 @@ class Misc(commands.Cog):
                     embed.clear_fields()
                     back = self.emojis['arrowLeft']
                     greenCheck = self.emojis['greenCheck']
-                    embed.description=f"You've been invited to this support ticket (Ticket {number})\n\nWhat would you like to do?\n{back}: Go back\n❌: Decline invite\n{greenCheck}: Accept invite"
+                    embed.description=f"You've been invited to this support ticket (Ticket {ticket_number})\n\nWhat would you like to do?\n{back}: Go back\n❌: Decline invite\n{greenCheck}: Accept invite"
                     reactions = [back, '❌', greenCheck]
                     if ctx.guild: 
                         if clearReactions: await message.clear_reactions()
@@ -295,7 +312,7 @@ class Misc(commands.Cog):
                             ticket['members'].remove(member)
                             ticket['conversation'].append({'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} declined their invite*'})
                             asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-                        number = None
+                        ticket_number = None
                         continue
                 conversationPages = list(paginate(ticket['conversation'], 7))
                 currentConversationPage = len(conversationPages) - 1
@@ -315,7 +332,7 @@ class Misc(commands.Cog):
                     if len(conversationPages) > 0 and currentConversationPage != len(conversationPages) - 1: reactions.insert(reactions.index(self.emojis['reply']) + 1, self.emojis['arrowForward'])
                     if member['permissions'] == 0: reactions.remove(self.emojis['reply'])
                     if ctx.author.id == 247412852925661185: reactions.append(self.emojis['hiddenVoiceChannel'])
-                    embed.title = f'🎟 Disguard Ticket System / Ticket {number}'
+                    embed.title = f'🎟 Disguard Ticket System / Ticket {ticket_number}'
                     embed.description = f'''{'TICKET DATA':-^70}\n{self.emojis['member']}Author: {self.bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{self.emojis['members']}Other members involved: {', '.join([self.bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, self.bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {self.emojis["members"]} to add'}\n⛓Server: {self.bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{self.emojis['bell'] if member['notifications'] else self.emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {self.emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^70}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{newline}{self.emojis["arrowBackward"]} and {self.emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
                     for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}", value=f'> {entry["message"]}', inline=False)
                     if ctx.guild: 
@@ -328,7 +345,7 @@ class Misc(commands.Cog):
                     for r in reactions: await message.add_reaction(r)
                     result: typing.Tuple[discord.Reaction, discord.User] = await self.bot.wait_for('reaction_add', check=optionNavigation)
                     if result[0].emoji == self.emojis['arrowLeft']:
-                        number = None #deselect the ticket
+                        ticket_number = None #deselect the ticket
                         break
                     elif result[0].emoji == self.emojis['hiddenVoiceChannel']:
                         ticket['status'] = 3
@@ -461,15 +478,22 @@ class Misc(commands.Cog):
                     elif result[0].emoji in (self.emojis['bell'], self.emojis['bellMute']): member['notifications'] = not member['notifications']
                     ticket['members'] = [member if i == memberIndex else m for i, m in enumerate(ticket['members'])]
                     asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-            else: number = None #Triggers browse mode
+            else: ticket_number = None #Triggers browse mode
             try:
                 if clearAt and datetime.datetime.now() > clearAt: await message.edit(content=None)
             except UnboundLocalError: await message.edit(content=None)
 
     @commands.hybrid_command(description='Pause the logging or antispam module for a specified duration')
     @commands.has_guild_permissions(manage_guild=True)
-    async def pause(self, ctx: commands.Context, module: str, seconds: int = 0):
-        '''Pause logging or antispam for a duration'''
+    async def pause(self, ctx: commands.Context, module: str, seconds: typing.Optional[int] = 0):
+        '''Pause the logging or antispam module
+        --------------------------------------
+        parameters:
+        module: str
+            The module to pause
+        seconds: int, optional
+            The duration (in seconds) to pause the module for. If omitted, pause indefinitely until manually resumed
+        '''
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         status = await ctx.send(f'{self.emojis["loading"]}Pausing...')
         server_data = await utility.get_server(ctx.guild)
@@ -516,6 +540,12 @@ class Misc(commands.Cog):
         
     @commands.hybrid_command(description='Resume the logging or antispam module')
     async def unpause(self, ctx: commands.Context, module: str):
+        '''Resume the logging or antispam module
+        ---------------------------------------
+        parameters:
+        module: str
+            The module to resume
+        '''
         if module == 'antispam':
             await database.ResumeMod(ctx.guild, 'antispam')
             # self.bot.lightningLogging[ctx.guild.id]['antispam']['enabled'] = True
@@ -524,6 +554,11 @@ class Misc(commands.Cog):
             await database.ResumeMod(ctx.guild, 'cyberlog')
             # self.bot.lightningLogging[ctx.guild.id]['cyberlog']['enabled'] = True
             await ctx.send("✅Successfully resumed logging")
+    @pause.autocomplete('module')
+    @unpause.autocomplete('module')
+    async def unpause_autocomplete(self, interaction: discord.Interaction, argument: str):
+        options = ['logging', 'antispam']
+        return [app_commands.Choice(name=mod, value=mod) for mod in options if argument.lower() in mod]
 
     @commands.hybrid_command(description='View a member\'s avatar, username, or custom status history')
     async def history(self, ctx: commands.Context, target: typing.Optional[discord.Member] = None, mod: str = ''):
@@ -649,7 +684,7 @@ class Misc(commands.Cog):
         '''
         if channel: channel: discord.TextChannel = ctx.guild.get_channel(int(channel))
         else: channel = ctx.channel
-        if member: discord.Member = ctx.guild.get_member(int(member))
+        if member: member: discord.Member = ctx.guild.get_member(int(member))
         else: member = ctx.author
         webhook = await channel.create_webhook(name='automationSayCommand', avatar=await member.avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.name} to imitate {member.name} by saying "{message}"')
         await webhook.send(message, username=member.name)

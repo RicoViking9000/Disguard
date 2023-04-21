@@ -1,7 +1,9 @@
 import collections
 import typing
+from typing import Optional
 import discord
 from discord.ext import commands
+from discord import app_commands
 import database
 import datetime
 import Cyberlog #Used to prevent delete logs upon purging
@@ -11,6 +13,7 @@ import os
 import traceback
 import copy
 import json
+import re
 
 filters = {}
 loading = None
@@ -19,6 +22,7 @@ qlf = '  '
 
 blue = (0x0000FF, 0x6666ff)
 orange = (0xD2691E, 0xffc966)
+units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week', 'mo': 'month', 'y': 'year'}
 
 class PurgeObject(object):
     def __init__(self, message=None, botMessage=None, limit=100, author=[], contains=None, startsWith=None, endsWith=None, links=None, invites=None, images=None, embeds=None, mentions=None, bots=None, channel=[], files=None, reactions=None, appMessages=None, startDate=None, endDate=None, caseSensitive=False, cleanup=False, anyMatch=False):
@@ -55,129 +59,497 @@ class Moderation(commands.Cog):
         self.roleCache = {}
         self.permissionsCache = {}
 
+    @commands.hybrid_group(fallback='moderation_command_info')
+    async def bulk(self, ctx: commands.Context):
+        '''
+        Bulk moderation commands
+        '''
+        pass
+
     @commands.hybrid_command(description='Sets the duration members must remain in the server before being able to chat')
     @commands.guild_only()
     @commands.has_guild_permissions(manage_roles=True)
-    async def warmup(self, ctx: commands.Context, duration: str, unit: str):
-        '''A command to set the duration a member must remain in the server before chatting'''
-        units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week'}
-        # define multipliers to convert higher units into seconds
-        if duration != '0':
-            minutes = 60
-            hours = 60 * minutes
-            days = 24 * hours
-            weeks = 7 * days
-            # define relational dictionary
-            conversion = {'s': 1, 'm': minutes, 'h': hours, 'd': days, 'w': weeks}
-            # now, set the final amount in seconds
-            warmup = int(duration) * conversion[unit]
-        else: warmup = 0
-        await database.SetWarmup(ctx.guild, warmup)
-        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{duration} {units[unit]}{"s" if duration != 1 else ""}** before chatting', color=orange[await utility.color_theme(ctx.guild)])
+    async def warmup(self, ctx: commands.Context, duration: str):
+        '''
+        Set the duration members must wait in the server before being able to chat
+        --------------------------------
+        Parameters:
+        duration: str
+            The duration of time members must wait before being able to chat
+        '''
+        duration, int_arg, unit = utility.ParseDuration(duration)
+        await database.SetWarmup(ctx.guild, duration)
+        embed = discord.Embed(title='Warmup', description=f'Updated server antispam policy: Members must be in the server for **{int_arg} {unit}** before chatting', color=orange[await utility.color_theme(ctx.guild)])
         view = WarmupActionView(self.bot)
         await ctx.send(embed=embed, view=view)
 
-    @commands.hybrid_command(description='Locks out the specified member: prevents them from accessing any channels')
+    @commands.hybrid_command()
+    @commands.guild_only()
     @commands.has_guild_permissions(manage_channels=True)
-    async def lock(self, ctx: commands.Context, member: discord.Member, reason: typing.Optional[str] = ''):
-        status = await ctx.send(f'{loading}Locking...')
+    async def lock(self, ctx: commands.Context, member: discord.Member, reason: Optional[str] = ''):
+        '''
+        Locks out the specified member, preventing them from accessing any channels
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to lock out
+        reason: str, optional
+            The reason for locking out the member
+        '''
+        member: discord.Member = ctx.guild.get_member(str(member))
         messages = []
         for c in ctx.guild.channels:
             try:
-                if c.type[0] == 'text': await c.set_permissions(member, read_messages=False)
-                elif c.type[0] == 'voice': await c.set_permissions(member, connect=False)
+                if c.type[0] == 'text': await c.set_permissions(member, read_messages=False, reason=audit_log_reason(ctx.author, reason))
+                elif c.type[0] == 'voice': await c.set_permissions(member, connect=False, reason=audit_log_reason(ctx.author, reason))
             except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error editing channel permission overwrites for {c.name}: {e.text}')
         if len(reason) > 0:
-            try: await member.send(f'You have been restricted from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}')
+            try: await member.send(f'[Moderation: lockout] A moderator has restricted you from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}.')
             except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error DMing {member.name}: {e.text}')
-        await status.edit(content=f'{member.name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {newline.join(messages)}' if len(messages) > 0 else ''))
+        await ctx.send(content=f'{member.name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {newline.join(messages)}' if messages else ''))
+
+    @bulk.command(name='lock')
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_channels=True)
+    async def bulk_lock(self, ctx: commands.Context,
+                        member: discord.Member, member2: Optional[discord.Member] = None, member3: Optional[discord.Member] = None, member4: Optional[discord.Member] = None, member5: Optional[discord.Member] = None,
+                        member6: Optional[discord.Member] = None, member7: Optional[discord.Member] = None, member8: Optional[discord.Member] = None, member9: Optional[discord.Member] = None, member10: Optional[discord.Member] = None,
+                        reason: Optional[str] = ''):
+        '''
+        Locks out the specified members, preventing them from accessing any channels
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to lock out
+        reason: str, optional
+            The reason for locking out the members
+        '''
+        members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
+        messages = []
+        successful = []
+        for member in members:
+            for c in ctx.guild.channels:
+                try:
+                    if c.type[0] == 'text': await c.set_permissions(member, read_messages=False, reason=audit_log_reason(ctx.author, reason))
+                    elif c.type[0] == 'voice': await c.set_permissions(member, connect=False, reason=audit_log_reason(ctx.author, reason))
+                    successful.append(member)
+                except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error editing channel permission overwrites for {c.name}: {e.text}')
+            if len(reason) > 0:
+                try: await member.send(f'You have been restricted from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}')
+                except (discord.Forbidden, discord.HTTPException, AttributeError) as e: messages.append(f'Error DMing {member.name}: {e.text}')
+        await ctx.send(content=f'{len(successful)} members [{[f", ".join([str(member) for member in successful])]}] are now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {newline.join(messages)}' if messages else ''))
 
     @commands.hybrid_command(description='Unlocks the specified member: allows them to access all channels again')
+    @commands.guild_only()
     @commands.has_guild_permissions(manage_channels=True)
-    async def unlock(self, ctx: commands.Context, member: discord.Member):
-        status = await ctx.send(f'{loading}Unlocking...')
-        for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None)
+    async def unlock(self, ctx: commands.Context, member: discord.Member, reason: Optional[str] = ''):
+        '''
+        Unlocks the specified member: allows them to access all channels again
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to unlock
+        reason: str, optional
+            The reason for unlocking the member
+        '''
+        for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
         errorMessage = None
         try: await member.send(f'You may now access channels again in {ctx.guild.name}')
         except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
-        await status.edit(content=f'{member.name} is now unlocked and can access channels again.{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
+        await ctx.send(content=f'{member.name} is now unlocked and can access channels again{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
+
+    @bulk.command(name='unlock')
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_channels=True)
+    async def bulk_unlock(self, ctx: commands.Context,
+                          member: discord.Member, member2: Optional[discord.Member] = None, member3: Optional[discord.Member] = None, member4: Optional[discord.Member] = None, member5: Optional[discord.Member] = None,
+                          member6: Optional[discord.Member] = None, member7: Optional[discord.Member] = None, member8: Optional[discord.Member] = None, member9: Optional[discord.Member] = None, member10: Optional[discord.Member] = None,
+                          reason: Optional[str] = ''):
+        '''
+        Unlocks the specified members: allows them to access all channels again
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to unlock
+        reason: str, optional
+            The reason for unlocking the members
+        '''
+        members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
+        for member in members:
+            for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
+            errorMessage = None
+            try: await member.send(f'You may now access channels again in {ctx.guild.name}')
+            except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
+        await ctx.send(content=f'{len(members)} members [{[", ".join(str(member) for member in members)]}] are now unlocked and can access channels again{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
 
     @commands.hybrid_command(description='Mutes the specified member(s) for a specified amount of time, if given')
+    @commands.guild_only()
     @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
-    async def mute(self, ctx: commands.Context, members: commands.Greedy[discord.Member], duration: str = '', reason: str = ''):
-        '''Mutes the specified member(s) for a specified amount of time, if given'''
-        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to mute\nFormat: `{await utility.prefix(ctx.guild)}mute [list of members to mute] [duration:optional] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]\nDuration: 3d = 3 days, 6h30m = 6 hours 30 mins, etc. s=sec, m=min, h=hour, d=day, w=week, mo=month, y=year')
-        if duration: duration = ParseDuration(duration)
-        embed = discord.Embed(title=f'{self.emojis["muted"]}Muting {len(members)} member{"s" if len(members) != 1 else ""} for {duration if duration else "∞"}s', description=f"{self.emojis['loading']}\n", color=orange[await utility.color_theme(ctx.guild)])
-        message = await ctx.send(embed=embed)
+    async def mute(self, ctx: commands.Context, member: discord.Member, duration: typing.Optional[str] = '', reason: typing.Optional[str] = ''):
+        '''
+        Mutes the specified member for a specified amount of time, if given
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to mute
+        duration: str
+            The duration to mute the member for
+        reason: str
+            The reason for muting the member
+        
+        '''
+        duration, int_arg, unit = utility.ParseDuration(duration)
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        results = await self.muteMembers([member], ctx.author, duration=duration, reason=reason)
+        def nestMore(array):
+            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+        embed = discord.Embed(title=f'{self.emojis["muted"]}Mute 1 member', color=orange[await utility.color_theme(ctx.guild)])
+        embed.description = f'Member: {member}\nDuration: {int_arg if duration else "∞"} {unit if duration else ""}'
+        embed.description += '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+        await ctx.send(embed=embed)
+
+    @bulk.command(name='mute')
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
+    async def bulk_mute(self, ctx: commands.Context,
+                        member: discord.Member, member2: Optional[discord.Member] = None, member3: Optional[discord.Member] = None, member4: Optional[discord.Member] = None, member5: Optional[discord.Member] = None,
+                        member6: Optional[discord.Member] = None, member7: Optional[discord.Member] = None, member8: Optional[discord.Member] = None, member9: Optional[discord.Member] = None, member10: Optional[discord.Member] = None,
+                        duration: typing.Optional[str] = '', reason: typing.Optional[str] = ''):
+        '''
+        Mutes the specified member(s) for a specified amount of time, if given
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to mute
+        duration: str
+            The duration to mute the members for
+        reason: str
+            The reason for muting the members
+        '''
+        duration, int_arg, unit = utility.ParseDuration(duration)
+        members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
+        embed = discord.Embed(title=f'{self.emojis["muted"]}Mute {len(members)} members', color=orange[await utility.color_theme(ctx.guild)])
+        embed.description = f'Members: {", ".join(str(member) for member in members)}\nDuration: {int_arg if duration else "∞"} {unit if duration else ""}'
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.muteMembers(members, ctx.author, duration=duration, reason=reason)
         def nestMore(array):
             return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
-        embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
-        embed.title = embed.title.replace('Muting', 'Mute')
-        await message.edit(embed=embed)
+        embed.description += '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+        await ctx.send(embed=embed)
+    
 
-    @commands.hybrid_command(description='Unmutes the specified member(s)')
+    @commands.hybrid_command()
+    @commands.guild_only()
     @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
-    async def unmute(self, ctx: commands.Context, members: commands.Greedy[discord.Member], reason: str = ''):
-        '''Unmuted the specified member(s)'''
-        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to unmute\nFormat: `{await utility.prefix(ctx.guild)}unmute [list of members to unmute] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
-        embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmuting {len(members)} member{"s" if len(members) != 1 else ""}', description=f"{self.emojis['loading']}\n", color=orange[await utility.color_theme(ctx.guild)])
-        message = await ctx.send(embed=embed)
+    async def unmute(self, ctx: commands.Context, member: discord.Member, reason: typing.Optional[str] = ''):
+        '''
+        Unmutes the specified member
+        --------------------------------
+        Parameters:
+        members: discord.Member
+            The member to unmute
+        reason: str
+            The reason for unmuting the member
+        '''
+        embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmute {member}', color=orange[await utility.color_theme(ctx.guild)])
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        results = await self.unmuteMembers(members, ctx.author, {}, reason=reason)
+        results = await self.unmuteMembers([member], ctx.author, {}, reason=reason)
         def nestMore(array):
             return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
         embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
-        embed.title = embed.title.replace('Unmuting', 'Unmute')
-        await message.edit(embed=embed)
+        await ctx.send(embed=embed)
 
-    @commands.hybrid_command(description='Kicks the specified member(s)')
+    @bulk.command(name='unmute')
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
+    async def bulk_unmute(self, ctx: commands.Context,
+                        member: discord.Member, member2: Optional[discord.Member] = None, member3: Optional[discord.Member] = None, member4: Optional[discord.Member] = None, member5: Optional[discord.Member] = None,
+                        member6: Optional[discord.Member] = None, member7: Optional[discord.Member] = None, member8: Optional[discord.Member] = None, member9: Optional[discord.Member] = None, member10: Optional[discord.Member] = None,
+                        reason: typing.Optional[str] = ''):
+        '''
+        Unmutes the specified member(s)
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The members to unmute
+        reason: str
+            The reason for unmuting the members
+        '''
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
+        results = await self.unmuteMembers(members, ctx.author, {}, reason=reason)
+        def nestMore(array):
+            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+        embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmute {len(members)} members', description=f'Members: {", ".join(str(member) for member in members)}\n', color=orange[await utility.color_theme(ctx.guild)])
+        embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command()
+    @commands.guild_only()
     @commands.has_guild_permissions(kick_members=True)
-    async def kick(self, ctx: commands.Context, members: commands.Greedy[discord.Member], reason: str = ''):
-        '''Kicks the specified member(s)'''
-        if len(members) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one member to kick\nFormat: `{await utility.prefix(ctx.guild)}kick [list of members to kick] [reason:optional]`\nAcceptable arguments for member: [ID, Mention, name#discrim, name, nickname]')
+    async def kick(self, ctx: commands.Context, member: discord.Member, reason: str = ''):
+        '''
+        Kicks the specified member from the server
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to kick
+        reason: str
+            The reason for kicking the member
+        '''
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        embed = discord.Embed(title=f'👢Kick {len(members)} member{"s" if len(members) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
-        for m in members:
-            try: 
-                if await utility.ManageServer(m): raise Exception("You cannot kick a moderator")
-                await m.kick(reason=reason)
-                embed.description += f'{self.emojis["greenCheck"]} | Succesfully kicked {m}\n'
-            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error kicking {m}: {e}\n'
+        embed = discord.Embed(title=f'👢Kick {member}', description='', color=orange[await utility.color_theme(ctx.guild)])
+        try: 
+            if await utility.ManageServer(member): raise Exception("You cannot kick a moderator")
+            await member.kick(reason=reason)
+            embed.description += f'{self.emojis["greenCheck"]} | Succesfully kicked {member}\n'
+        except Exception as e: embed.description += f'{self.emojis["alert"]} | Error kicking {member}: {e}\n'
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(description='Bans the specified member(s)')
-    @commands.has_guild_permissions(ban_members=True)
-    async def ban(self, ctx: commands.Context, users: commands.Greedy[typing.Union[discord.User, int]], delete_message_days: typing.Optional[int] = 0, reason: str = ''):
-        '''Bans the specified members'''
-        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to ban\nFormat: `{await utility.prefix(ctx.guild)}ban [list of users to ban] [deleteMessageDays:optional[int] = 0 ▷ must be 0 <= x <= 7] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nUse a user\'s ID if you want to ban someone not in this server\n\nExample: `.ban {self.bot.user.mention} 5 Muted me for spamming` Would ban Disguard, delete its message sent within the past 5 days, with the reason "Muted me for spamming"')
-        users = await self.UserProcessor(users)
+    @bulk.command(name='kick')
+    @commands.guild_only()
+    @commands.has_guild_permissions(kick_members=True)
+    async def bulk_kick(self, ctx: commands.Context,
+                        member: discord.Member, member2: Optional[discord.Member] = None, member3: Optional[discord.Member] = None, member4: Optional[discord.Member] = None, member5: Optional[discord.Member] = None,
+                        member6: Optional[discord.Member] = None, member7: Optional[discord.Member] = None, member8: Optional[discord.Member] = None, member9: Optional[discord.Member] = None, member10: Optional[discord.Member] = None,
+                        reason: typing.Optional[str] = ''):
+        '''
+        Kicks the specified member(s) from the server
+        --------------------------------
+        Parameters:
+        member: discord.Member
+            The member to kick
+        reason: str
+            The reason for kicking the members
+        '''
+        embed = discord.Embed(title=f'👢Kick {member}', description='', color=orange[await utility.color_theme(ctx.guild)])
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
-        for m in users:
-            try: 
-                member = ctx.guild.get_member(m.id)
+        members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
+        for member in members:
+            try:
+                if await utility.ManageServer(member): raise Exception("You cannot kick a moderator")
+                await member.kick(reason=reason)
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully kicked {member}\n'
+            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error kicking {member}: {e}\n'
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command()
+    @commands.guild_only()
+    @commands.has_guild_permissions(ban_members=True)
+    async def ban(self, ctx: commands.Context, user: discord.User, duration: typing.Optional[str] = '', delete_message_days: typing.Optional[int] = 0, reason: typing.Optional[str] = ''):
+        '''
+        Bans a specified user currently in the server
+        --------------------------------
+        Parameters:
+        user: discord.User
+            The user to ban
+        duration: str
+            The duration to ban the user for
+        delete_message_days: int
+            This user's messages sent over the past X days will be deleted
+        reason: str
+            The reason for banning the user
+        '''
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
+        try: 
+            member = ctx.guild.get_member(user.id)
+            if member and await utility.ManageServer(member): raise Exception("You cannot ban a moderator")
+            await ctx.guild.ban(member, delete_message_days=delete_message_days, reason=reason)
+            if duration:
+                duration = utility.ParseDuration(duration)
+                event = {'type': 'ban', 'flavor': reason, 'target': member.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                await database.AppendTimedEvent(ctx.guild, event)
+            embed.description += f'{self.emojis["greenCheck"]} | Succesfully banned {member}\n'
+        except Exception as e: embed.description += f'{self.emojis["alert"]} | Error banning {member}: {e}\n'
+        await ctx.send(embed=embed)
+
+    @bulk.command(name='ban')
+    @commands.guild_only()
+    @commands.has_guild_permissions(ban_members=True)
+    async def bulk_ban(self, ctx: commands.Context,
+                        user: discord.User, user2: Optional[discord.User] = None, user3: Optional[discord.User] = None, user4: Optional[discord.User] = None, user5: Optional[discord.User] = None,
+                        user6: Optional[discord.User] = None, user7: Optional[discord.User] = None, user8: Optional[discord.User] = None, user9: Optional[discord.User] = None, user10: Optional[discord.User] = None,
+                        duration: typing.Optional[str] = '', delete_message_days: typing.Optional[int] = 0, reason: typing.Optional[str] = ''):
+        '''
+        Bans the specified users currently in the server
+        --------------------------------
+        Parameters:
+        user: discord.User
+            The user to ban
+        duration: str
+            The duration to ban the user for
+        delete_message_days: int
+            This user's messages sent over the past X days will be deleted
+        reason: str
+            The reason for banning the user
+        '''
+        embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        users = list(filter(lambda u: u, [user, user2, user3, user4, user5, user6, user7, user8, user9, user10]))
+        for user in users:
+            try:
+                member = ctx.guild.get_member(user.id)
                 if member and await utility.ManageServer(member): raise Exception("You cannot ban a moderator")
-                await ctx.guild.ban(m, delete_message_days=delete_message_days, reason=reason)
-                embed.description += f'{self.emojis["greenCheck"]} | Succesfully banned {m}\n'
-            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error banning {m}: {e}\n'
+                await ctx.guild.ban(member, delete_message_days=delete_message_days, reason=reason)
+                if duration:
+                    duration = utility.ParseDuration(duration)
+                    event = {'type': 'ban', 'flavor': reason, 'target': member.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                    await database.AppendTimedEvent(ctx.guild, event)
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully banned {member}\n'
+            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error banning {member}: {e}\n'
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(description='Unbans the specified member(s)')
+    @commands.hybrid_command()
+    @commands.guild_only()
     @commands.has_guild_permissions(ban_members=True)
-    async def unban(self, ctx: commands.Context, users: commands.Greedy[typing.Union[discord.User, int]], reason: str = ''):
-        if len(users) == 0: return await ctx.send(f'{self.emojis["alert"]} | Please specify at least one user to unban\nFormat: `{await utility.prefix(ctx.guild)}unban [list of users to unban] [reason:optional]`\nAcceptable arguments for user: [ID, Mention, name#discrim, name]\nID is the only argument guaranteed to work, as that would be the only way I can retrieve a User not in any of my servers')
-        users = await self.UserProcessor(users)
+    async def shadowban(self, ctx: commands.Context, user_id: str, duration: typing.Optional[str] = '', reason: typing.Optional[str] = ''):
+        '''
+        Bans a user (by ID) not currently in the server
+        --------------------------------
+        Parameters:
+        user_id: int
+            The ID of the user to ban
+        duration: str
+            The duration to ban the user for
+        reason: str
+            The reason for banning the user
+        '''
+        user = await self.bot.fetch_user(int(user_id))
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
-        embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {len(users)} user{"s" if len(users) != 1 else ""}', description='', color=orange[await utility.color_theme(ctx.guild)])
-        for u in users:
-            try: 
-                await ctx.guild.unban(u, reason=reason)
-                embed.description += f'{self.emojis["greenCheck"]} | Succesfully unbanned {u}\n'
-            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error unbanning {u}: {e}\n'
+        embed = discord.Embed(title=f'{self.emojis["ban"]}Shadowban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
+        try: 
+            member = ctx.guild.get_member(user.id)
+            if member and await utility.ManageServer(member): raise Exception("You cannot ban a moderator")
+            await ctx.guild.ban(user, delete_message_days=0, reason=reason)
+            if duration:
+                duration = utility.ParseDuration(duration)
+                event = {'type': 'ban', 'flavor': reason, 'target': user.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                await database.AppendTimedEvent(ctx.guild, event)
+            embed.description += f'{self.emojis["greenCheck"]} | Succesfully shadowbanned {user.name}\n`{reason}`'
+        except Exception as e: embed.description += f'{self.emojis["alert"]} | Error shadowbanning {member}: {e}\n'
         await ctx.send(embed=embed)
+
+    @bulk.command(name='shadowban')
+    @commands.guild_only()
+    @commands.has_guild_permissions(ban_members=True)
+    async def bulk_shadowban(self, ctx: commands.Context, user_id: str, user_id2: Optional[str] = None, user_id3: Optional[str] = None, user_id4: Optional[str] = None, user_id5: Optional[str] = None,
+                        user_id6: Optional[str] = None, user_id7: Optional[str] = None, user_id8: Optional[str] = None, user_id9: Optional[str] = None, user_id10: Optional[str] = None,
+                        duration: typing.Optional[str] = '', reason: typing.Optional[str] = ''):
+        '''
+        Bans multiple users (by ID) not currently in the server
+        --------------------------------
+        Parameters:
+        user_id: int
+            The ID of the user to ban
+        duration: str
+            The duration to ban the user for
+        reason: str
+            The reason for banning the user
+        '''
+        embed = discord.Embed(title=f'{self.emojis["ban"]}Shadowban {user_id}', description='', color=orange[await utility.color_theme(ctx.guild)])
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        user_ids = list(filter(lambda u: u, [user_id, user_id2, user_id3, user_id4, user_id5, user_id6, user_id7, user_id8, user_id9, user_id10]))
+        for user_id in user_ids:
+            try:
+                user = await self.bot.fetch_user(int(user_id))
+                member = ctx.guild.get_member(user.id)
+                if member and await utility.ManageServer(member): raise Exception("You cannot ban a moderator")
+                await ctx.guild.ban(user, delete_message_days=0, reason=reason)
+                if duration:
+                    duration = utility.ParseDuration(duration)
+                    event = {'type': 'ban', 'flavor': reason, 'target': user.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                    await database.AppendTimedEvent(ctx.guild, event)
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully shadowbanned {user.name}\n`{reason}`'
+            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error shadowbanning {member}: {e}\n'
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command()
+    @commands.guild_only()
+    @commands.has_guild_permissions(ban_members=True)
+    async def unban(self, ctx: commands.Context, user: str, reason: typing.Optional[str] = ''):
+        '''
+        Unbans the specified member
+        --------------------------------
+        Parameters:
+        user: str
+            Search the server's banned members for the user to unban
+        reason: str
+            The reason for unbanning the user
+        '''
+        user = await self.bot.fetch_user(int(user))
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
+        try: 
+            await ctx.guild.unban(user, reason=reason)
+            embed.description += f'{self.emojis["greenCheck"]} | Succesfully unbanned {user}\n`{reason}`'
+        except Exception as e: embed.description += f'{self.emojis["alert"]} | Error unbanning {user}: {e}\n'
+        await ctx.send(embed=embed)
+
+    @bulk.command(name='unban')
+    @commands.guild_only()
+    @commands.has_guild_permissions(ban_members=True)
+    async def bulk_unban(self, ctx: commands.Context, user: str, user2: Optional[str] = None, user3: Optional[str] = None, user4: Optional[str] = None, user5: Optional[str] = None,
+                        user6: Optional[str] = None, user7: Optional[str] = None, user8: Optional[str] = None, user9: Optional[str] = None, user10: Optional[str] = None,
+                        reason: typing.Optional[str] = ''):
+        '''
+        Unbans multiple members
+        --------------------------------
+        Parameters:
+        user: str
+            Search the server's banned members for the user to unban
+        reason: str
+            The reason for unbanning the user
+        '''
+        embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
+        reason = f'👮‍♂️: {ctx.author}\n{reason}'
+        users = list(filter(lambda u: u, [user, user2, user3, user4, user5, user6, user7, user8, user9, user10]))
+        for user in users:
+            try:
+                user = await self.bot.fetch_user(int(user))
+                await ctx.guild.unban(user, reason=reason)
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully unbanned {user}\n`{reason}`'
+            except Exception as e: embed.description += f'{self.emojis["alert"]} | Error unbanning {user}: {e}\n'
+        await ctx.send(embed=embed)
+
+    '''Autocompletes'''
+    @warmup.autocomplete('duration')
+    @mute.autocomplete('duration')
+    @bulk_mute.autocomplete('duration')
+    @ban.autocomplete('duration')
+    @bulk_ban.autocomplete('duration')
+    @shadowban.autocomplete('duration')
+    @bulk_shadowban.autocomplete('duration')
+    async def duration_autocomplete(self, interaction: discord.Interaction, argument: str):
+        if argument:
+            hasNumber = re.search(r'\d', argument)
+            hasLetter = re.search(r'\D', argument)
+            if hasLetter: index = hasLetter.start()
+            else: index = len(argument)
+            letters = argument[index:].strip(' ')
+            if hasNumber:
+                return [app_commands.Choice(name=f'{argument[:index]} {units[unit] if int(argument[:index]) == 1 else f"{units[unit]}s"}', value=f'{argument[:index]}{unit}') for unit in units.keys() if (units[unit].startswith(letters) if hasLetter else True)]
+        return []
+    
+    @unban.autocomplete('user')
+    @bulk_unban.autocomplete('user')
+    async def unban_autocomplete(self, interaction: discord.Interaction, argument: str):
+        argument = argument.lower()
+        try: banned_users: list[discord.User] = [ban.user async for ban in interaction.guild.bans()]
+        except discord.Forbidden: banned_users = []
+        if argument:
+            return [app_commands.Choice(name=f'{user}', value=str(user.id)) for user in banned_users if argument in user.name.lower() or argument in str(user.id)][:25]
+        else:
+            return [app_commands.Choice(name=f'{user}', value=str(user.id)) for user in banned_users][:25]
+    
+    @shadowban.autocomplete('user_id')
+    @bulk_shadowban.autocomplete('user_id')
+    async def shadowban_autocomplete(self, interaction: discord.Interaction, argument: str):
+        try:
+            user = await self.bot.fetch_user(int(argument))
+            return [app_commands.Choice(name=f'{user}', value=str(user.id))]
+        except:
+            return []
 
     @commands.hybrid_command(description='Purge messages')
     @commands.guild_only()
@@ -700,8 +1072,26 @@ class Moderation(commands.Cog):
                 except discord.NotFound: pass
         return returnQueue
 
-    async def muteMembers(self, members: typing.List[discord.Member], author: discord.Member, *, duration=None, reason=None, harsh=False, waitToUnmute=True, muteRole=None):
-        '''Applies automated mute to the given member, returning a status tuple (bool:success, string explanation)'''
+    async def muteMembers(self, members: typing.List[discord.Member], author: discord.Member, *, duration: int = 0, reason: str = '', harsh=False, waitToUnmute=True, muteRole=None):
+        '''
+        Applies automated mute to the given member, returning a status tuple (bool:success, string explanation)
+        --------------------
+        Parameters:
+        members: List[discord.Member]
+            The list of members to mute
+        author: discord.Member
+            The member initiating the mute
+        duration: int, optional
+            The duration of the mute, in seconds. If 0, the mute will be permanent
+        reason: str, optional
+            The reason for the mute
+        harsh: bool, optional
+            If True, apply permission overwrites to each channel for this member in addition to for the mute role
+        waitToUnmute: bool, optional
+            If True, the bot will add a loop to unmute the member after the duration has passed
+        muteRole: discord.Role, optional
+            The role to apply to the member. If not provided, the bot will use its default Disguard AutoMute role
+        '''
         '''Harsh: If True, apply permission overwrites to each channel for this member in addition to for the mute role'''
         # Vars
         g = members[0].guild
@@ -769,25 +1159,25 @@ class Moderation(commands.Cog):
         await discord.utils.sleep_until(expires)
         await self.unmuteMembers(members, author, events, reason=reason)
 
-    async def unmuteMembers(self, members, author, events, reason=None):
+    async def unmuteMembers(self, members: list[discord.Member], author: discord.Member, events, reason=None):
         #Note: Possibly make use of discord.Object to reduce iteration counts and running time
         results = {}
         removedRoles = {}
         removedOverwrites = {}
         for m in members: 
             try:
-                results[m] = {'Cache/Data Management': [], 'Remove Mute Role': [], 'Channel Permission Overwrites': []}
+                results[m] = {'Cache/Data Management': [], 'Restore Roles': [], 'Channel Permission Overwrites': []}
                 try:
                     #if muteRole.position > author.top_role.position:
                     #    raise discord.Forbidden("Your top role is below the mute role; operation aborted")
+                    removedRoles[m.id] = copy.deepcopy(self.roleCache.get(f'{m.guild.id}_{m.id}')) or [m.guild.get_role(r) for r in (await utility.getServerMember(m)).get('roleCache', [])]
+                    removedOverwrites[m.id] = copy.deepcopy(self.permissionsCache.get(f'{m.guild.id}_{m.id}', {})) or (await utility.getServerMember(m)).get('permissionsCache', {})
                     if author.top_role.position < m.top_role.position:
                         raise discord.Forbidden("You can't unmute someone with a higher role than you")
-                    await m.edit(roles=removedRoles, reason=reason)
-                    results[m]['Remove Mute Role'].append(f'{self.emojis["greenCheck"]}')
-                except Exception as e: results[m]['Remove Mute Role'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
+                    await m.edit(roles=removedRoles[m.id], reason=reason)
+                    results[m]['Restore Roles'].append(f'{self.emojis["greenCheck"]}')
+                except Exception as e: traceback.print_exc()
                 if events and events.get(m.id): asyncio.create_task(database.RemoveTimedEvent(m.guild, events[m.id]))
-                removedRoles[m.id] = copy.deepcopy(self.roleCache.get(f'{m.guild.id}_{m.id}')) or [m.guild.get_role(r) for r in await utility.getServerMember(m).get('roleCache', [])]
-                removedOverwrites[m.id] = copy.deepcopy(self.permissionsCache.get(f'{m.guild.id}_{m.id}', {})) or await utility.getServerMember(m).get('permissionsCache', {})
                 if self.roleCache.get(f'{m.guild.id}_{m.id}'): self.roleCache.pop(f'{m.guild.id}_{m.id}')
                 if self.permissionsCache.get(f'{m.guild.id}_{m.id}'): self.permissionsCache.pop(f'{m.guild.id}_{m.id}')
                 results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
@@ -907,21 +1297,8 @@ def ConvertToDatetime(string: str):
             pass
     return None
 
-def ParseDuration(string):
-    numbers = '1234567890'
-    startIndex = 0
-    i = 0
-    duration = 0
-    multipliers = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800, 'mo': 2628000, 'y': 31536000}
-    while i < len(string):
-        if string[i] not in numbers:
-            duration += int(string[startIndex:i]) * multipliers[string[i].lower()]
-            startIndex = i
-        i += 1
-    if len(string) > 0 and duration == 0:
-        try: duration += int(string)
-        except: pass
-    return duration
+def audit_log_reason(user: discord.User, reason: str):
+    return f'{user}: {reason}'
 
 async def setup(bot):
     global loading

@@ -1700,7 +1700,7 @@ class Cyberlog(commands.Cog):
         antispam = await antispamObject(member.guild)
         ageKick = antispam.get('ageKick')
         if ageKick is not None: #Check account age; requested feature
-            if acctAge < ageKick and member.id not in antispam.get('ageKickWhitelist'): #If the account age is under the threshold and they're not whitelisted:
+            if member.created_at > (discord.utils.utcnow() - datetime.timedelta(seconds=ageKick)) and member.id not in antispam.get('ageKickWhitelist'): #If the account age is under the threshold and they're not whitelisted:
                 memberCreated = member.created_at + datetime.timedelta(hours=await utility.time_zone(member.guild))
                 canRejoin = memberCreated + datetime.timedelta(days=ageKick)
                 formatter = '%b %d, %Y • %I:%M %p'
@@ -2804,9 +2804,13 @@ class Cyberlog(commands.Cog):
         view = ErrorView(self, ctx, error, occurrence)
         await ctx.send(f'{self.emojis["alert"]} | {error}', view=view)
 
-    @commands.hybrid_command(aliases=['archives'], description='Retrieve the log archive file for this server')
+    @commands.hybrid_command()
     @commands.guild_only()
-    async def archive(self, ctx: commands.Context):
+    @commands.has_permissions(manage_guild=True)
+    async def archives(self, ctx: commands.Context):
+        '''
+        Retrieve the log archive file for this server
+        '''
         embed = discord.Embed(title=f'Log Archives', description=f'{self.emojis["loading"]}', color=yellow[await utility.color_theme(ctx.guild)])
         p = f'Attachments/{ctx.guild.id}/LogArchive/modLogs.json'
         f = discord.File(p)
