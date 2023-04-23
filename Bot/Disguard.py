@@ -187,9 +187,14 @@ async def invite(ctx: commands.Context):
 # async def privacy(ctx):
 #     await ctx.send("https://disguard.netlify.app/privacybasic")
 
-@bot.hybrid_command(description='Delete one of Disguard\'s messages from your DMs')
+@bot.hybrid_command()
 async def delete(ctx: commands.Context, message_id: str):
-    '''Deletes a message from DMs with the user'''
+    '''Delete one of Disguard\'s messages from the user\'s DMs
+    Parameters
+    ----------
+    message_id : str
+        The ID of the message to delete
+    '''
     try:
         message = await ctx.author.fetch_message(int(message_id))
         await message.delete()

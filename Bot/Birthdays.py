@@ -157,8 +157,7 @@ class Birthdays(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         '''Used for parsing and handling of birthday features'''
-        if message.author.bot: return
-        if type(message.channel) is discord.DMChannel: return
+        if message.author.bot or message.channel.type == discord.ChannelType.private or not message.content: return
         if any(word in message.content.lower().replace("'", "").split(' ') for word in ['isnt', 'not', 'you', 'your']): return #Blacklisted words
         ctx = await self.bot.get_context(message)
         if ctx.valid:
@@ -175,10 +174,10 @@ class Birthdays(commands.Cog):
         server_data = await utility.get_server(message.guild)
         if not await cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #User disabled the birthday features
         adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await utility.time_zone(message.guild))
-        birthday = calculateDate(message, adjusted)
+        birthday = calculateDate(message.content, adjusted)
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
         #First we make sure the user is talking about themself
-        target = await verifyBirthday(message, adjusted, birthday)
+        target = await verifyBirthday(message.content, adjusted, birthday)
         #Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
         if birthday and target:
             if server_data.get('birthdayMode') == 1:
@@ -196,8 +195,8 @@ class Birthdays(commands.Cog):
     async def ageMessageHandler(self, message: discord.Message):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         if not await cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'age'): return #User disabled the age features
-        ages = calculateAges(message)
-        ages = [a for a in ages if await verifyAge(message, a)]
+        ages = calculateAges(message.content)
+        ages = [a for a in ages if await verifyAge(message.content, a)]
         if not ages: return #No ages detected in message
         if (await utility.get_server(message.guild)).get('birthdayMode') == 1: #Make user add candle reaction
             def candleAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🕯' and r.message.id == message.id

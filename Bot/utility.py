@@ -5,7 +5,7 @@ import typing
 import string
 import datetime
 import lightningdb
-import os
+import re
 
 rv9k = 247412852925661185
 
@@ -88,6 +88,17 @@ def outputPermissions(p: discord.Permissions):
 def getPermission(p: str):
     '''Given a String in the form of a raw permission string value (aka the keys in <permissionKeys>), return its Discord-UI friendly form if possible'''
     return permissionKeys.get(p, p)
+
+def ParseDuration(string: str) -> typing.Tuple[int, int, str]:
+    '''Parses a string into a duration in seconds, the integer value, and the unit of time'''
+    units = {'s': 'second', 'm': 'minute', 'h': 'hour', 'd': 'day', 'w': 'week', 'mo': 'month', 'y': 'year'}
+    search = re.search(r'\D', string)
+    if not search: return 0, 0, ''
+    int_arg = string[:search.start()]
+    unit_arg = search.group().lower()
+    multipliers = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800, 'mo': 2628000, 'y': 31536000}
+    duration = int(int_arg) * multipliers[unit_arg]
+    return duration, int_arg, units[unit_arg] + ("s" if int_arg != 1 else "")
 
 def suffix(count: int):
     sfx='th'
@@ -269,7 +280,7 @@ async def FindEmojis(g: discord.Guild, arg):
 
 '''Split between initial findings and later findings - optimizations'''
 
-async def FindMoreMembers(members, arg):
+async def FindMoreMembers(members: list[discord.User], arg) -> list[dict[str, typing.Any]]:
     arg=arg.lower()
     def check(m):
         if type(m) is discord.Member and m.nick is not None and m.nick.lower() == arg.lower(): return 'Nickname is \'{}\''.format(m.nick.replace(arg, '**{}**'.format(arg))), compareMatch(arg, m.nick)
@@ -380,4 +391,4 @@ async def get_user(u: discord.User):
 
 async def getServerMember(m: discord.Member):
     '''Gets the member data given a member object'''
-    return get_server(m.guild.id)['members'].get(str(m.id))
+    return (await get_server(m.guild))['members'].get(str(m.id))
