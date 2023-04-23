@@ -280,7 +280,7 @@ async def FindEmojis(g: discord.Guild, arg):
 
 '''Split between initial findings and later findings - optimizations'''
 
-async def FindMoreMembers(members: list[discord.User], arg) -> list[dict[str, typing.Any]]:
+async def FindMoreMembers(members: typing.List[discord.User], arg) -> typing.List[typing.Dict[str, typing.Any]]:
     arg=arg.lower()
     def check(m):
         if type(m) is discord.Member and m.nick is not None and m.nick.lower() == arg.lower(): return 'Nickname is \'{}\''.format(m.nick.replace(arg, '**{}**'.format(arg))), compareMatch(arg, m.nick)
