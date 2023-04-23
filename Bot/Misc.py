@@ -691,11 +691,11 @@ class Misc(commands.Cog):
         await ctx.interaction.response.pong()
         await webhook.delete()
     @say.autocomplete('member')
-    async def say_member_autocomplete(self, interaction: discord.Interaction, argument: str) -> list[app_commands.Choice]:
+    async def say_member_autocomplete(self, interaction: discord.Interaction, argument: str):
         members: list[discord.Member] = [member['member'] for member in await utility.FindMoreMembers(interaction.guild.members, argument)][:25]
         return [app_commands.Choice(name=member.name, value=str(member.id)) for member in members]
     @say.autocomplete('channel')
-    async def say_channel_autocomplete(self, interaction: discord.Interaction, argument: str) -> list[app_commands.Choice]:
+    async def say_channel_autocomplete(self, interaction: discord.Interaction, argument: str):
         channels: list[discord.TextChannel] = [channel['channel'] for channel in await utility.FindMoreChannels(interaction.guild, argument) if channel['channel'].type == discord.ChannelType.text][:25]
         return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in channels]
     
