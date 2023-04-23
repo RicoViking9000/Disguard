@@ -535,7 +535,7 @@ class Moderation(commands.Cog):
     @bulk_unban.autocomplete('user')
     async def unban_autocomplete(self, interaction: discord.Interaction, argument: str):
         argument = argument.lower()
-        try: banned_users: list[discord.User] = [ban.user async for ban in interaction.guild.bans()]
+        try: banned_users: typing.List[discord.User] = [ban.user async for ban in interaction.guild.bans()]
         except discord.Forbidden: banned_users = []
         if argument:
             return [app_commands.Choice(name=f'{user}', value=str(user.id)) for user in banned_users if argument in user.name.lower() or argument in str(user.id)][:25]
@@ -1159,7 +1159,7 @@ class Moderation(commands.Cog):
         await discord.utils.sleep_until(expires)
         await self.unmuteMembers(members, author, events, reason=reason)
 
-    async def unmuteMembers(self, members: list[discord.Member], author: discord.Member, events, reason=None):
+    async def unmuteMembers(self, members: typing.List[discord.Member], author: discord.Member, events, reason=None):
         #Note: Possibly make use of discord.Object to reduce iteration counts and running time
         results = {}
         removedRoles = {}
