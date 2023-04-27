@@ -60,7 +60,7 @@ red = (0xff0000, 0xff6666)
 orange = (0xD2691E, 0xffc966)
 yellow = (0xffff00, 0xffff66)
 
-newline='\n'
+NEWLINE='\n'
 newlineQuote = '\n> '
 qlf = '  ' #Two special characters to represent quoteLineFormat
 
@@ -908,7 +908,7 @@ class Cyberlog(commands.Cog):
         if await readPerms(g, 'message'):
             try:
                 log = [l async for l in g.audit_logs(limit=1)][0]
-                if log.action in (discord.AuditLogAction.message_delete, discord.AuditLogAction.message_bulk_delete) and utility.absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=5)) and log.target.id in (author.id, channel.id) and log.user != author:
+                if log.action in (discord.AuditLogAction.message_delete, discord.AuditLogAction.message_bulk_delete) and utility.absTime(discord.utils.utcnow(), log.created_at, datetime.timedelta(seconds=5)) and log.target.id in (author.id, channel.id) and log.user != author:
                     embed.description += f'''\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{"Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name})'''
                     embed.title = f'''{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["modDelete"])}') if settings["context"][0] > 0 else ""}{"Message was deleted" if settings["context"][1] < 2 else ''}'''
                     if not serverIsGimped(g): await updateLastActive(log.user, datetime.datetime.now(), 'deleted a message')
@@ -995,7 +995,7 @@ class Cyberlog(commands.Cog):
                     log = await channel.guild.audit_logs().get(action=discord.AuditLogAction.channel_create)
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description+=f'''\n{"👮‍♂️" if settings['context'][1] > 0 else ""}{"Created by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description+=f'''\n{"👮‍♂️" if settings['context'][1] > 0 else ""}{"Created by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -1017,10 +1017,10 @@ class Cyberlog(commands.Cog):
             unaccessibleMembers = [m for m in channel.guild.members if not channel.permissions_for(m).read_messages]
             accessibleRoles = [o for o in accessible if type(o) is discord.Role]
             accessibleMembers = [m for m in channel.guild.members if channel.permissions_for(m).read_messages]
-            memberAccessibleNewline = ' ' if len(accessibleMembers) > 20 else newline
-            memberUnaccessibleNewline = ' ' if len(unaccessibleMembers) > 20 else newline
-            roleAccessibleNewline = ' ' if len(accessibleRoles) > 20 else newline
-            roleUnaccessibleNewline = ' ' if len(unaccessibleRoles) > 20 else newline
+            memberAccessibleNewline = ' ' if len(accessibleMembers) > 20 else NEWLINE
+            memberUnaccessibleNewline = ' ' if len(unaccessibleMembers) > 20 else NEWLINE
+            roleAccessibleNewline = ' ' if len(accessibleRoles) > 20 else NEWLINE
+            roleUnaccessibleNewline = ' ' if len(unaccessibleRoles) > 20 else NEWLINE
             accessibleTail = f'ACCESSIBLE TO\n------------------\nROLES\n{roleAccessibleNewline.join([f"🚩 {r.name}" for r in accessibleRoles])}\n\nMEMBERS\n{memberAccessibleNewline.join([f"👤 {m.name}" for m in accessibleMembers])}'
             unaccessibleTail = f'NOT ACCESSIBLE TO\n-----------------------\nROLES\n{roleUnaccessibleNewline.join([f"🚩 {r.name}" for r in unaccessibleRoles])}\n\nMEMBERS\n{memberUnaccessibleNewline.join([f"👤 {m.name}" for m in unaccessibleMembers])}'
             if channel.overwrites_for(channel.guild.default_role).read_messages is not False: tempAccessibleString = f'''\n[{'🔓' if settings['context'][1] > 0 else ''}{'Accessible to' if settings['context'][1] < 2 else ''}: **Everyone by default**]({msg.jump_url} '{accessibleTail}')'''
@@ -1045,8 +1045,8 @@ class Cyberlog(commands.Cog):
             if channel.type[0] != 'category':
                 channelList = channel.category.channels if channel.category is not None else [c for c in channel.guild.channels if c.category is None]
                 cIndexes = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList))
-                plainTextChannelList = f"{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
-                embed.add_field(name=f'Category Tree',value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:cIndexes[0]])} more channel{'s' if len(channelList[:cIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:cIndexes[0]])}'){newline}" if cIndexes[0] > 0 else ""}{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{newline}[Hover to view {len(channelList[cIndexes[1]:])} more channel{'s' if len(channelList[cIndexes:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}''')
+                plainTextChannelList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
+                embed.add_field(name=f'Category Tree',value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:cIndexes[0]])} more channel{'s' if len(channelList[:cIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:cIndexes[0]])}'){NEWLINE}" if cIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{NEWLINE}[Hover to view {len(channelList[cIndexes[1]:])} more channel{'s' if len(channelList[cIndexes:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}''')
                 if len(embed.fields[0].value) > 1024: embed.set_field_at(0, name=embed.fields[0].name, value=plainTextChannelList)
                 if len(embed.fields[0].value) > 1024: embed.remove_field(0)
             await msg.edit(content=msg.content if not any((settings['tts'], settings['flashText'])) and not settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
@@ -1100,7 +1100,7 @@ class Cyberlog(commands.Cog):
                     if log.user.id == self.bot.user.id and before.overwrites != after.overwrites: return #Avoid logging Disguard updates to channel overwrites
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -1116,7 +1116,7 @@ class Cyberlog(commands.Cog):
                     channelPosFlag = True
                     self.channelCacheHelper[after.guild.id] = []
                     for i in range(len(before.category.channels)): indexes.append({'before': bc.index(before.category.channels[i]), 'after': after.category.channels.index(before.category.channels[i]), 'channel': after.category.channels[i]})
-                    embed.add_field(name=f'Channel position changed',value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category.name}\n{newline.join([(f'~~{self.channelKeys.get(before.type[0])}{before.name}~~❌{newline}' if bc.index(before) == c and indexes[c].get('before') > indexes[c].get('after') else '') + f'{self.channelKeys.get(indexes[c].get("channel").type[0])}' + ('__**' if indexes[c].get('channel').id == before.id else '') + f'{indexes[c].get("channel").name} ' + ('**__' if indexes[c].get('channel').id == before.id else '') + ('↩' if abs(indexes[c].get('before') - indexes[c].get('after')) > 1 else '⬆' if indexes[c].get('before') > indexes[c].get('after') else '⬇' if indexes[c].get('before') < indexes[c].get('after') else '') + (f'{newline}~~{self.channelKeys.get(before.type[0])}{before.name}~~❌' if bc.index(before) == c and indexes[c].get('before') < indexes[c].get('after') else '') for c in range(len(indexes))])}''')
+                    embed.add_field(name=f'Channel position changed',value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category.name}\n{NEWLINE.join([(f'~~{self.channelKeys.get(before.type[0])}{before.name}~~❌{NEWLINE}' if bc.index(before) == c and indexes[c].get('before') > indexes[c].get('after') else '') + f'{self.channelKeys.get(indexes[c].get("channel").type[0])}' + ('__**' if indexes[c].get('channel').id == before.id else '') + f'{indexes[c].get("channel").name} ' + ('**__' if indexes[c].get('channel').id == before.id else '') + ('↩' if abs(indexes[c].get('before') - indexes[c].get('after')) > 1 else '⬆' if indexes[c].get('before') > indexes[c].get('after') else '⬇' if indexes[c].get('before') < indexes[c].get('after') else '') + (f'{NEWLINE}~~{self.channelKeys.get(before.type[0])}{before.name}~~❌' if bc.index(before) == c and indexes[c].get('before') < indexes[c].get('after') else '') for c in range(len(indexes))])}''')
                     self.categories[after.category.id] = [c for c in after.category.channels]
             if before.overwrites != after.overwrites:
                 embed.add_field(name='Permission overwrites updated',value='Manually react 🇵 to show/hide') #The rest of this code is later because we need a message link to the current message
@@ -1157,12 +1157,12 @@ class Cyberlog(commands.Cog):
                     newChannelList = after.category.channels if after.category is not None else [c[1] for c in after.guild.by_category() if c[0] is None]
                     oldIndexes = (oldChannelList.index(after) - 3 if oldChannelList.index(after) >= 3 else 0, oldChannelList.index(after) + 4 if oldChannelList.index(after) + 4 < len(oldChannelList) else len(oldChannelList))
                     newIndexes = (newChannelList.index(after) - 3 if newChannelList.index(after) >= 3 else 0, newChannelList.index(after) + 4 if newChannelList.index(after) + 4 < len(newChannelList) else len(newChannelList))
-                    plainTextOldList = f"{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList])}"
-                    plainTextNewList = f"{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList])}"
+                    plainTextOldList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList])}"
+                    plainTextNewList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList])}"
                     for i, field in enumerate(embed.fields):
                         if field.name == 'Old Category':
-                            embed.set_field_at(i, name="Old Category",value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category}\n{f"> [...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channel{'s' if len(oldChannelList[:oldIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){newline}" if oldIndexes[0] > 0 else ""}{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{newline}> [Hover to view {len(oldChannelList[oldIndexes[1]:])} more channel{'s' if len(oldChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] < len(oldChannelList) else ""}''')
-                            embed.set_field_at(i + 1, name="New Category",value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{after.category}\n{f"> [...Hover to view {len(newChannelList[:newIndexes[0]])} more channel{'s' if len(newChannelList[:newIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){newline}" if newIndexes[0] > 0 else ""}{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{newline}> [Hover to view {len(newChannelList[newIndexes[1]:])} more channel{'s' if len(newChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] < len(newChannelList) else ""}''')
+                            embed.set_field_at(i, name="Old Category",value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category}\n{f"> [...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channel{'s' if len(oldChannelList[:oldIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){NEWLINE}" if oldIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(oldChannelList[oldIndexes[1]:])} more channel{'s' if len(oldChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] < len(oldChannelList) else ""}''')
+                            embed.set_field_at(i + 1, name="New Category",value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{after.category}\n{f"> [...Hover to view {len(newChannelList[:newIndexes[0]])} more channel{'s' if len(newChannelList[:newIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){NEWLINE}" if newIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(newChannelList[newIndexes[1]:])} more channel{'s' if len(newChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] < len(newChannelList) else ""}''')
                             if len(embed.fields[i].value) > 1024: embed.set_field_at(i, name=embed.fields[i].name, value=plainTextOldList)
                             if len(embed.fields[i + 1].value) > 1024: embed.set_field_at(i + 1, name=embed.fields[i + 1].name, value=plainTextNewList)
                             break
@@ -1193,7 +1193,7 @@ class Cyberlog(commands.Cog):
                             for kk,vv in v.items():
                                 if not set({kk: vv}.items()).issubset(af.get(k).items()):
                                     displayString.append(f'''   {utility.getPermission(kk):<42} | {f"{english[vv]:^3}":^9} -|- {f"{english[af[k][kk]]:^3}":^9} |''')
-                    permissionString = f'''```{"Permission overwrites updated":<45} | {"Before":^10} | {"After":^10} |\n{newline.join([line.replace('-|-', '|') for line in displayString])}```'''
+                    permissionString = f'''```{"Permission overwrites updated":<45} | {"Before":^10} | {"After":^10} |\n{NEWLINE.join([line.replace('-|-', '|') for line in displayString])}```'''
                     #permissionString = '```{0:<56}|{1:^13}|{2:^20}\n{3}```'.format('Permission overwrites updated', 'Before', 'After', '\n'.join(displayString))
                     for i, f in enumerate(embed.fields):
                         if 'Permission overwrites' in f.name and len(displayString) > 0: 
@@ -1223,9 +1223,9 @@ class Cyberlog(commands.Cog):
                         if v.get('gained') is not None: gainedKeys[v.get('gained')] = [after.guild.get_member(k)]
                 joinKeys = (' 👤 ', ' • ')
                 #Figure out what to do about the hover links.
-                gainDescription = (f'''{newline.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} gained {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([utility.GetPermission(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([utility.GetPermission(p) for p in k.split(' ')])}')" for k, v in gainedKeys.items()])}{newline if len(removedKeys) > 0 and len(gainedKeys) > 0 else ''}''') if len(gainedKeys) > 0 else ''
-                removeDescription = f'''{newline.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} lost {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{newline}{newline.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{newline}{newline}--PERMISSIONS--{newline}{newline.join([utility.GetPermission(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([utility.GetPermission(p) for p in k.split(' ')])}')" for k,v in removedKeys.items()])}''' if len(removedKeys) > 0 else ''
-                if len(gainDescription) > 0 or len(removeDescription) > 0: embed.description+=f'{newline if len(gainDescription) > 0 or len(removeDescription) > 0 else ""}{gainDescription}{removeDescription}'
+                gainDescription = (f'''{NEWLINE.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} gained {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{NEWLINE}{NEWLINE.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{NEWLINE}{NEWLINE}--PERMISSIONS--{NEWLINE}{NEWLINE.join([utility.GetPermission(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([utility.GetPermission(p) for p in k.split(' ')])}')" for k, v in gainedKeys.items()])}{NEWLINE if len(removedKeys) > 0 and len(gainedKeys) > 0 else ''}''') if len(gainedKeys) > 0 else ''
+                removeDescription = f'''{NEWLINE.join([f"[{len(v)} member{'s' if len(v) != 1 else ''} lost {len(k.split(' '))} permission{'s' if len(k.split(' ')) != 1 else ''} • Hover for details]({msg.jump_url} '--MEMBERS--{NEWLINE}{NEWLINE.join([m.name for m in v]) if len(v) < 20 else joinKeys[0].join([m.name for m in v])}{NEWLINE}{NEWLINE}--PERMISSIONS--{NEWLINE}{NEWLINE.join([utility.GetPermission(p) for p in k.split(' ')]) if len(k.split(' ')) < 20 else joinKeys[1].join([utility.GetPermission(p) for p in k.split(' ')])}')" for k,v in removedKeys.items()])}''' if len(removedKeys) > 0 else ''
+                if len(gainDescription) > 0 or len(removeDescription) > 0: embed.description+=f'{NEWLINE if len(gainDescription) > 0 or len(removeDescription) > 0 else ""}{gainDescription}{removeDescription}'
                 else: 
                     if before.overwrites != after.overwrites: embed.description+='\nPermissions were updated, but no members were affected'
                 if settings['embedTimestamp'] > 1: embed.description+=f'''\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)}'''
@@ -1312,7 +1312,7 @@ class Cyberlog(commands.Cog):
                     log = await channel.guild.audit_logs().get(action=discord.AuditLogAction.channel_delete)
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Deleted by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description+=f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Deleted by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -1328,7 +1328,7 @@ class Cyberlog(commands.Cog):
                 channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)                
                 startEnd = (channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0, channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList))
                 #plainTextChannelList = f"{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
-                embed.add_field(name=f'Category Tree',value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){newline}" if startEnd[0] > 0 else ""}{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{newline}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}''')
+                embed.add_field(name=f'Category Tree',value=f'''{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){NEWLINE}" if startEnd[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{NEWLINE}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}''')
                 if channel.category is not None: self.categories[channel.category.id].remove(channel)
                 else: self.categories[channel.guild.id].remove(channel)
             if channel.type[0] == 'text':
@@ -1528,8 +1528,8 @@ class Cyberlog(commands.Cog):
                                 if str(rr[0]) == '✔':
                                     results = await self.bot.get_cog('Moderation').muteMembers(member, rr[1], reason=f"Moderator: {rr[1]}\nSource: Member join log quick actions")
                                     def nestMore(array):
-                                        return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
-                                    embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+                                        return f'\n'.join([f'{NEWLINE}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+                                    embed.description = '\n\n'.join([f'''{m}:\n{NEWLINE.join([f"{qlf}{k}: {NEWLINE.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
                                     await msg.edit(embed=embed)
                                     final.description = embed.description
                             else:
@@ -1759,7 +1759,7 @@ class Cyberlog(commands.Cog):
             if await readPerms(member.guild, 'doorguard'):
                 try:
                     log = await member.guild.audit_logs().find(lambda x: utility.absTime(discord.utils.utcnow(), x.created_at, datetime.timedelta(seconds=3) and x.target.id == member.id))
-                    #if utility.absTime(datetime.datetime.utcnow(), log.created_at, datetime.timedelta(seconds=3)) and log.target.id == member.id:
+                    #if utility.absTime(discord.utils.utcnow(), log.created_at, datetime.timedelta(seconds=3)) and log.target.id == member.id:
                     if log.action in (discord.AuditLogAction.kick, discord.AuditLogAction.ban):
                         if log.action == discord.AuditLogAction.kick:
                             embed.title = f'{(self.emojis["memberLeave"] if settings["library"] > 1 else self.emojis["member"]) if settings["context"][1] > 0 else ""}{"👢" if settings["context"][1] > 0 else ""}{member.name} was kicked'
@@ -1777,7 +1777,7 @@ class Cyberlog(commands.Cog):
                 except: pass
             message = await (await logChannel(member.guild, 'doorguard')).send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             try:
-                sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or datetime.datetime.utcnow())
+                sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or discord.utils.utcnow())
                 memberJoinPlacement = sortedMembers.index(member) + 1
                 hoverPlainText = textwrap.dedent(f'''
                     Here since: {(member.joined_at + datetime.timedelta(hours=await utility.time_zone(member.guild))):%b %d, %Y • %I:%M:%S %p} {await utility.name_zone(member.guild)}
@@ -2164,7 +2164,7 @@ class Cyberlog(commands.Cog):
                     log = await after.audit_logs().get(action=discord.AuditLogAction.guild_update)
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description = f'''{'👮‍♂️' if settings['context'][1] > 0 else ''}{'Updated by' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description = f'''{'👮‍♂️' if settings['context'][1] > 0 else ''}{'Updated by' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -2287,7 +2287,7 @@ class Cyberlog(commands.Cog):
                     log = await role.guild.audit_logs().get(action=discord.AuditLogAction.role_create)
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description += f'''\n👮‍♂️Created by: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description += f'''\n👮‍♂️Created by: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -2337,7 +2337,7 @@ class Cyberlog(commands.Cog):
                     log = await role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_delete).next()
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description += f'''\n👮‍♂️Deleted by: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description += f'''\n👮‍♂️Deleted by: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -2417,7 +2417,7 @@ class Cyberlog(commands.Cog):
                     log = await after.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_update).next()
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description += f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description += f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -2535,16 +2535,16 @@ class Cyberlog(commands.Cog):
             for eID, emoji in beforeDict.items():
                 if eID not in afterDict: #emoji deleted
                     embed.add_field(name=f'{self.emojis["delete"]}{emoji["name"]}', value=f'{emoji["raw"]} • [View image]({emoji["url"]})')
-                    if embed.image.url is embed.Empty and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
+                    if not embed.image.url and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
                     footerIDList.append(eID)
             for eID, emoji in afterDict.items():
                 if eID not in beforeDict: #emoji created
                     embed.add_field(name=f'{self.emojis["darkGreenPlus"]}{emoji["name"]}', value=f'{emoji["raw"]} • [View image]({emoji["url"]})')
-                    if embed.image.url is embed.Empty and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
+                    if not embed.image.url and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
                     footerIDList.append(eID)
                 elif eID in beforeDict and beforeDict[eID]['name'] != emoji['name']: #name updated
                     embed.add_field(name=f'{beforeDict[eID]["name"]} → **{emoji["name"]}**', value=emoji['raw'])
-                    if embed.image.url is embed.Empty and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
+                    if not embed.image.url and settings['thumbnail'] in (1, 2, 4): embed.set_image(url=emoji['url'])
                     footerIDList.append(eID)
             content += utility.embedToPlaintext(embed)
             if await readPerms(guild, "emoji"):
@@ -2552,7 +2552,7 @@ class Cyberlog(commands.Cog):
                     log = await guild.audit_logs(limit=1, action=logType).next()
                     if settings['botLogging'] == 0 and log.user.bot: return
                     elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
-                    embed.description += f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{newline}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    embed.description += f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
                         url = await self.imageToURL(log.user.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
@@ -2913,9 +2913,9 @@ class Cyberlog(commands.Cog):
                 if v.get('gained'): gainedKeys[v['gained']] = [g.get_member(k)]
         embedDescriptionLines: typing.List[str] = []
         for k, v in gainedKeys.items():
-            embedDescriptionLines.append((f'''📥 {k}''', f'''{", ".join(m.name for m in v) if len(v) < 5 else f"[Hover to view the {len(v)} members]({message.jump_url} '{newline.join(m.name for m in v)}')" if len(v) < 30 else f"{len(v)} members"}'''))
+            embedDescriptionLines.append((f'''📥 {k}''', f'''{", ".join(m.name for m in v) if len(v) < 5 else f"[Hover to view the {len(v)} members]({message.jump_url} '{NEWLINE.join(m.name for m in v)}')" if len(v) < 30 else f"{len(v)} members"}'''))
         for k, v in removedKeys.items():
-            embedDescriptionLines.append((f'''📤 {k}''', f'''{", ".join(m.name for m in v) if len(v) < 5 else f"[Hover to view the {len(v)} members]({message.jump_url} '{newline.join(m.name for m in v)}')" if len(v) < 30 else f"{len(v)} members"}'''))
+            embedDescriptionLines.append((f'''📤 {k}''', f'''{", ".join(m.name for m in v) if len(v) < 5 else f"[Hover to view the {len(v)} members]({message.jump_url} '{NEWLINE.join(m.name for m in v)}')" if len(v) < 30 else f"{len(v)} members"}'''))
         if len(embedDescriptionLines) == 0 and permissionsChanged: embed.description += f'''\n{self.emojis['details'] if settings['context'][1] > 0 else ''}No members were affected by the permissions changes'''
         else:
             embed.description += f'''\n{self.emojis['edit'] if settings['context'][1] > 0 else ''}{len(members)} members had their permissions updated (see bottom)'''

@@ -24,7 +24,7 @@ yellow = (0xffff00, 0xffff66)
 placeholderURL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 qlf = '  ' #Two special characters to represent quoteLineFormat
 qlfc = ' '
-newline = '\n'
+NEWLINE = '\n'
 units = ['second', 'minute', 'hour', 'day']
 
 class Misc(commands.Cog):
@@ -61,8 +61,8 @@ class Misc(commands.Cog):
                             except: pass
                         return await message.channel.send(embed=embed)
                     else:
-                        if result.embeds[0].footer.text is discord.Embed.Empty: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y - %I:%M %p} {await utility.name_zone(message.guild)}')
-                        if result.embeds[0].author.name is discord.Embed.Empty: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar.url)
+                        if not result.embeds[0].footer.text: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y - %I:%M %p} {await utility.name_zone(message.guild)}')
+                        if not result.embeds[0].author.name: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar.url)
                         return await message.channel.send(content=result.content, embed=result.embeds[0])
 
     async def sendGuideMessage(self, message: discord.Message):
@@ -333,7 +333,7 @@ class Misc(commands.Cog):
                     if member['permissions'] == 0: reactions.remove(self.emojis['reply'])
                     if ctx.author.id == 247412852925661185: reactions.append(self.emojis['hiddenVoiceChannel'])
                     embed.title = f'🎟 Disguard Ticket System / Ticket {ticket_number}'
-                    embed.description = f'''{'TICKET DATA':-^70}\n{self.emojis['member']}Author: {self.bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{self.emojis['members']}Other members involved: {', '.join([self.bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, self.bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {self.emojis["members"]} to add'}\n⛓Server: {self.bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{self.emojis['bell'] if member['notifications'] else self.emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {self.emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^70}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{newline}{self.emojis["arrowBackward"]} and {self.emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
+                    embed.description = f'''{'TICKET DATA':-^70}\n{self.emojis['member']}Author: {self.bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{self.emojis['members']}Other members involved: {', '.join([self.bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, self.bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {self.emojis["members"]} to add'}\n⛓Server: {self.bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{self.emojis['bell'] if member['notifications'] else self.emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {self.emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^70}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{NEWLINE}{self.emojis["arrowBackward"]} and {self.emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
                     for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}", value=f'> {entry["message"]}', inline=False)
                     if ctx.guild: 
                         if clearReactions: await message.clear_reactions()
@@ -364,17 +364,17 @@ class Misc(commands.Cog):
                             def calculateBio(m): 
                                 return '(No description)' if type(m) is not discord.Member else "Server Owner" if server.owner.id == m.id else "Server Administrator" if m.guild_permissions.administrator else "Server Moderator" if m.guild_permissions.manage_guild else "Junior Server Moderator" if m.guild_permissions.manage_roles or m.guild_permissions.manage_channels else '(No description)'
                             if len(memberResults) == 0: staffMemberResults = [m for m in server.members if any([m.guild_permissions.administrator, m.guild_permissions.manage_guild, m.guild_permissions.manage_channels, m.guild_permissions.manage_roles, m.id == server.owner.id]) and not m.bot and m.id not in [mb['id'] for mb in ticket['members']]][:15]
-                            memberFillerText = [f'{self.bot.get_user(u["id"])}{newline}> {u["bio"]}{newline}> Permissions: {permissionsDict[u["permissions"]]}' for u in ticket['members']]
-                            embed.description = f'''**__{'TICKET SHARING SETTINGS':-^85}__\n\n{'Permanently included':-^40}**\n{newline.join([f'👤{f}' for f in memberFillerText[:3]])}'''
-                            embed.description += f'''\n\n**{'Additional members':-^40}**\n{newline.join([f'{self.emojis["member"]}{f}{f"{newline}> {alphabet[i]} to manage" if ctx.author.id == ticket["author"] else ""}' for i, f in enumerate(memberFillerText[3:])]) if len(memberFillerText) > 2 else 'None yet'}'''
-                            if ctx.author.id == ticket['author']: embed.description += f'''\n\n**{'Add a member':-^40}**\nSend a message to search for a member to add, then react with the corresponding letter to add them{f'{newline}{newline}Moderators of {self.bot.get_guild(ticket["server"])} are listed below as suggestions. You may react with the letter next to their name to quickly add them, otherwise send a message to search for someone else' if ticket['server'] and len(staffMemberResults) > 0 else ''}'''
+                            memberFillerText = [f'{self.bot.get_user(u["id"])}{NEWLINE}> {u["bio"]}{NEWLINE}> Permissions: {permissionsDict[u["permissions"]]}' for u in ticket['members']]
+                            embed.description = f'''**__{'TICKET SHARING SETTINGS':-^85}__\n\n{'Permanently included':-^40}**\n{NEWLINE.join([f'👤{f}' for f in memberFillerText[:3]])}'''
+                            embed.description += f'''\n\n**{'Additional members':-^40}**\n{NEWLINE.join([f'{self.emojis["member"]}{f}{f"{NEWLINE}> {alphabet[i]} to manage" if ctx.author.id == ticket["author"] else ""}' for i, f in enumerate(memberFillerText[3:])]) if len(memberFillerText) > 2 else 'None yet'}'''
+                            if ctx.author.id == ticket['author']: embed.description += f'''\n\n**{'Add a member':-^40}**\nSend a message to search for a member to add, then react with the corresponding letter to add them{f'{NEWLINE}{NEWLINE}Moderators of {self.bot.get_guild(ticket["server"])} are listed below as suggestions. You may react with the letter next to their name to quickly add them, otherwise send a message to search for someone else' if ticket['server'] and len(staffMemberResults) > 0 else ''}'''
                             reactions = [self.emojis['arrowLeft']]
                             if memberIndex > 2: 
                                 embed.description += '\n\nIf you would like to leave the ticket, react 🚪'
                                 reactions.append('🚪')
                             offset = len([a for a in alphabet if a in embed.description])
                             if server and len(memberResults) == 0: memberResults = staffMemberResults
-                            embed.description += f'''\n\n{newline.join([f'{alphabet[i + offset]}{m.name} - {calculateBio(m)}' for i, m in enumerate(memberResults)])}'''
+                            embed.description += f'''\n\n{NEWLINE.join([f'{alphabet[i + offset]}{m.name} - {calculateBio(m)}' for i, m in enumerate(memberResults)])}'''
                             reactions += [l for l in alphabet if l in embed.description]
                             if ctx.guild: 
                                 if clearReactions: await message.clear_reactions()
@@ -384,7 +384,10 @@ class Misc(commands.Cog):
                                 await message.delete()
                                 message = await ctx.send(embed=embed)
                             for r in reactions: await message.add_reaction(r)
-                            d, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=optionNavigation), self.bot.wait_for('message', check=messageCheck)], return_when=asyncio.FIRST_COMPLETED)
+                            d, p = await asyncio.wait([
+                                asyncio.create_task(self.bot.wait_for('reaction_add', check=optionNavigation)),
+                                asyncio.create_task(self.bot.wait_for('message', check=messageCheck))
+                                ], return_when=asyncio.FIRST_COMPLETED)
                             try: result = d.pop().result()
                             except: pass
                             for f in p: f.cancel()
@@ -461,7 +464,10 @@ class Misc(commands.Cog):
                             await message.delete()
                             message = await ctx.send(embed=embed)
                         for r in reactions: await message.add_reaction(r)
-                        d, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=optionNavigation), self.bot.wait_for('message', check=messageCheck)], return_when=asyncio.FIRST_COMPLETED)
+                        d, p = await asyncio.wait([
+                            asyncio.create_task(self.bot.wait_for('reaction_add', check=optionNavigation)),
+                            asyncio.create_task(self.bot.wait_for('message', check=messageCheck))
+                            ], return_when=asyncio.FIRST_COMPLETED)
                         try: result = d.pop().result()
                         except: pass
                         for f in p: f.cancel()
@@ -670,7 +676,7 @@ class Misc(commands.Cog):
     @commands.hybrid_command()
     @commands.guild_only()
     @commands.check_any(commands.has_guild_permissions(manage_guild=True), commands.is_owner())
-    async def say(self, ctx: commands.Context, member: typing.Optional[str] = None, channel: typing.Optional[str] = None, *, message: str = 'Hello World'):
+    async def say(self, ctx: commands.Context, member: discord.Member = None, channel: discord.TextChannel = None, *, message: str = 'Hello World'):
         '''
         Create a temporary webhook to mimic <member> by sending <message> in <channel>
         Parameters
@@ -690,14 +696,6 @@ class Misc(commands.Cog):
         await webhook.send(message, username=member.name)
         await ctx.interaction.response.pong()
         await webhook.delete()
-    @say.autocomplete('member')
-    async def say_member_autocomplete(self, interaction: discord.Interaction, argument: str) -> list[app_commands.Choice]:
-        members: list[discord.Member] = [member['member'] for member in await utility.FindMoreMembers(interaction.guild.members, argument)][:25]
-        return [app_commands.Choice(name=member.name, value=str(member.id)) for member in members]
-    @say.autocomplete('channel')
-    async def say_channel_autocomplete(self, interaction: discord.Interaction, argument: str) -> list[app_commands.Choice]:
-        channels: list[discord.TextChannel] = [channel['channel'] for channel in await utility.FindMoreChannels(interaction.guild, argument) if channel['channel'].type == discord.ChannelType.text][:25]
-        return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in channels]
     
     def ParsePauseDuration(self, s: str):
         '''Convert a string into a number of seconds to ignore antispam or logging'''

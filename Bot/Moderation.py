@@ -17,7 +17,7 @@ import re
 
 filters = {}
 loading = None
-newline = '\n'
+NEWLINE = '\n'
 qlf = '  '
 
 blue = (0x0000FF, 0x6666ff)
@@ -106,7 +106,7 @@ class Moderation(commands.Cog):
         if len(reason) > 0:
             try: await member.send(f'[Moderation: lockout] A moderator has restricted you from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}.')
             except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error DMing {member.name}: {e.text}')
-        await ctx.send(content=f'{member.name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {newline.join(messages)}' if messages else ''))
+        await ctx.send(content=f'{member.name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {NEWLINE.join(messages)}' if messages else ''))
 
     @bulk.command(name='lock')
     @commands.guild_only()
@@ -137,7 +137,7 @@ class Moderation(commands.Cog):
             if len(reason) > 0:
                 try: await member.send(f'You have been restricted from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}')
                 except (discord.Forbidden, discord.HTTPException, AttributeError) as e: messages.append(f'Error DMing {member.name}: {e.text}')
-        await ctx.send(content=f'{len(successful)} members [{[f", ".join([str(member) for member in successful])]}] are now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {newline.join(messages)}' if messages else ''))
+        await ctx.send(content=f'{len(successful)} members [{[f", ".join([str(member) for member in successful])]}] are now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {NEWLINE.join(messages)}' if messages else ''))
 
     @commands.hybrid_command(description='Unlocks the specified member: allows them to access all channels again')
     @commands.guild_only()
@@ -156,7 +156,7 @@ class Moderation(commands.Cog):
         errorMessage = None
         try: await member.send(f'You may now access channels again in {ctx.guild.name}')
         except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
-        await ctx.send(content=f'{member.name} is now unlocked and can access channels again{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
+        await ctx.send(content=f'{member.name} is now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}')
 
     @bulk.command(name='unlock')
     @commands.guild_only()
@@ -180,7 +180,7 @@ class Moderation(commands.Cog):
             errorMessage = None
             try: await member.send(f'You may now access channels again in {ctx.guild.name}')
             except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
-        await ctx.send(content=f'{len(members)} members [{[", ".join(str(member) for member in members)]}] are now unlocked and can access channels again{f"{newline}{newline}{errorMessage}" if errorMessage else ""}')
+        await ctx.send(content=f'{len(members)} members [{[", ".join(str(member) for member in members)]}] are now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}')
 
     @commands.hybrid_command(description='Mutes the specified member(s) for a specified amount of time, if given')
     @commands.guild_only()
@@ -202,10 +202,10 @@ class Moderation(commands.Cog):
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.muteMembers([member], ctx.author, duration=duration, reason=reason)
         def nestMore(array):
-            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+            return f'\n'.join([f'{NEWLINE}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
         embed = discord.Embed(title=f'{self.emojis["muted"]}Mute 1 member', color=orange[await utility.color_theme(ctx.guild)])
         embed.description = f'Member: {member}\nDuration: {int_arg if duration else "∞"} {unit if duration else ""}'
-        embed.description += '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+        embed.description += '\n\n'.join([f'''{m}:\n{NEWLINE.join([f"{qlf}{k}: {NEWLINE.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
         await ctx.send(embed=embed)
 
     @bulk.command(name='mute')
@@ -233,8 +233,8 @@ class Moderation(commands.Cog):
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.muteMembers(members, ctx.author, duration=duration, reason=reason)
         def nestMore(array):
-            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
-        embed.description += '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+            return f'\n'.join([f'{NEWLINE}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+        embed.description += '\n\n'.join([f'''{m}:\n{NEWLINE.join([f"{qlf}{k}: {NEWLINE.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
         await ctx.send(embed=embed)
     
 
@@ -255,8 +255,8 @@ class Moderation(commands.Cog):
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.unmuteMembers([member], ctx.author, {}, reason=reason)
         def nestMore(array):
-            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
-        embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+            return f'\n'.join([f'{NEWLINE}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+        embed.description = '\n\n'.join([f'''{m}:\n{NEWLINE.join([f"{qlf}{k}: {NEWLINE.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
         await ctx.send(embed=embed)
 
     @bulk.command(name='unmute')
@@ -279,9 +279,9 @@ class Moderation(commands.Cog):
         members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
         results = await self.unmuteMembers(members, ctx.author, {}, reason=reason)
         def nestMore(array):
-            return f'\n'.join([f'{newline}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
+            return f'\n'.join([f'{NEWLINE}{qlf}{qlf}{i}' for i in array]) if len(array) > 1 else f'{array[0]}' if len(array) == 1 else ''
         embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmute {len(members)} members', description=f'Members: {", ".join(str(member) for member in members)}\n', color=orange[await utility.color_theme(ctx.guild)])
-        embed.description = '\n\n'.join([f'''{m}:\n{newline.join([f"{qlf}{k}: {newline.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
+        embed.description = '\n\n'.join([f'''{m}:\n{NEWLINE.join([f"{qlf}{k}: {NEWLINE.join([f'{qlf}{nestMore(v)}'])}" for k, v in n.items()])}''' if len(n) > 0 else '' for m, n in results.items()])
         await ctx.send(embed=embed)
 
     @commands.hybrid_command()
