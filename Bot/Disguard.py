@@ -42,7 +42,7 @@ print("Connecting...")
 prefixes = {}
 variables = {}
 emojis = {}
-newline = '\n'
+NEWLINE = '\n'
 qlf = '  ' #Two special characters to represent quoteLineFormat
 qlfc = ' '
 
@@ -143,6 +143,11 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
         if full: await asyncio.sleep(0.0015)
     print(f'Indexed {server.name}: {channel.name} in {(datetime.datetime.now() - start).seconds} seconds')
 
+@bot.listen()
+async def on_message(message: discord.Message):
+    '''Calls the various functions in other cogs'''
+    pass
+
 @bot.hybrid_command()
 @commands.is_owner()
 async def verify(ctx):
@@ -170,7 +175,7 @@ async def index(ctx, t: int = 0):
     if type(target) is discord.Guild: await asyncio.gather(*[indexMessages(target, c, full) for c in target.text_channels])
     elif type(target) is list:
         for t in target: await asyncio.gather(*[indexMessages(t, c, full) for c in t.text_channels])
-    else: await asyncio.wait([indexMessages(ctx.guild, target, full)], return_when=asyncio.FIRST_COMPLETED)
+    else: await asyncio.wait([asyncio.create_task(indexMessages(ctx.guild, target, full))], return_when=asyncio.FIRST_COMPLETED)
     await status.delete()
 
 @bot.hybrid_command(help='Disguard\'s quick start guide')
@@ -484,9 +489,11 @@ async def rickroll(ctx: commands.Context):
 
 @bot.hybrid_command()
 @commands.is_owner()
-async def test(ctx):
-    print(await lightningdb.get_users())
-    await ctx.send(await lightningdb.get_users())
+async def test(ctx: commands.Context):
+    await ctx.interaction.response.defer()
+    for server in bot.guilds:
+        await database.convert_reddit_feeds(server)
+    await ctx.send('Done converting')
 
 def serializeJson(o):
     if type(o) is datetime.datetime: return o.isoformat()

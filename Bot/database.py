@@ -377,6 +377,10 @@ async def DeleteUser(u: int, bot: commands.Bot):
     if not bot.get_user(u):
         await users.delete_one({'user_id': u})
 
+async def edit_server_data(s: discord.Guild, parameter: str, data: any):
+    '''Edits top-level server data'''
+    await servers.update_one({'server_id': s.id}, {'$set': {parameter: data}})
+
 async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
     return s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get('modules')[await getModElement(s, mod)].get("channel")) if (await servers.find_one({"server_id": s.id})).get("cyberlog")[await getModElement(s, mod)].get("channel") is not None else s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
@@ -984,3 +988,20 @@ async def SetBirthdayList(input: dict):
 async def SetWarmup(s: discord.Guild, warmup: int):
     '''Sets a server's warmup value'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.warmup': warmup}})
+
+async def create_reddit_feed(s: discord.Guild, feed: dict):
+    '''Creates a new reddit feed'''
+    await servers.update_one({'server_id': s.id}, {'$set': {f'redditFeeds.{feed["subreddit"]}': feed}})
+
+async def delete_reddit_feed(s: discord.Guild, feed_name: str):
+    '''Deletes a reddit feed'''
+    await servers.update_one({'server_id': s.id}, {'$unset': {f'redditFeeds.{feed_name}': ''}})
+
+async def convert_reddit_feeds(s: discord.Guild):
+    '''Converts the reddit feed data from list to dict'''
+    feeds = (await servers.find_one({'server_id': s.id})).get('redditFeeds', [])
+    if type(feeds) is list:
+        newFeeds = {}
+        for feed in feeds:
+            newFeeds[feed['subreddit']] = feed
+        await servers.update_one({'server_id': s.id}, {'$set': {'redditFeeds': newFeeds}})

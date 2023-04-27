@@ -47,7 +47,7 @@ class Antispam(commands.Cog):
             for g in self.bot.guilds:
                 events = (await utility.get_server(g, {})).get('antispam', {}).get('timedEvents', [])
                 for e in events:
-                    if datetime.datetime.utcnow() > e.get('expires'):
+                    if discord.utils.utcnow() > e.get('expires'):
                         try:
                             if e.get('type') == 'ban':
                                 try: await g.unban(await self.bot.fetch_user(e.get('target')), reason=f'{e.get("flavor")} Ban duration expired')
@@ -74,6 +74,7 @@ class Antispam(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent'''
+        return
         if message.author.bot or type(message.channel) is not discord.TextChannel: #Return if a bot sent the message or it's a DM
             return
         server = await utility.get_server(message.guild)
@@ -150,7 +151,7 @@ class Antispam(commands.Cog):
             quickMessages.append(vars(ParodyMessage(message.content, message.created_at)))
             for msg in lastMessages:
                 try:
-                    if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
+                    if discord.utils.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("congruent")[2]):
                         lastMessages.remove(msg)
                     if len(lastMessages) > spam.get("congruent")[1]:
                         lastMessages.pop(0)
@@ -158,7 +159,7 @@ class Antispam(commands.Cog):
                     lastMessages = []
             for msg in quickMessages:
                 try:
-                    if datetime.datetime.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
+                    if discord.utils.utcnow() - msg.get("created") > datetime.timedelta(seconds=spam.get("quickMessages")[1]):
                         quickMessages.remove(msg)
                     if len(quickMessages) > spam.get("quickMessages")[0]:
                         quickMessages.pop(0)

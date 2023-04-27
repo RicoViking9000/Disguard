@@ -17,7 +17,7 @@ import lightningdb
 
 indexes = 'Indexes'
 qlf = '  ' #Two special characters to represent quoteLineFormat
-newline='\n'
+NEWLINE='\n'
 newlineQuote = '\n> '
 
 green = (0x008000, 0x66ff66)
@@ -247,7 +247,7 @@ class Info(commands.Cog):
         past = False
         while not self.bot.is_closed():
             message = await message.channel.fetch_message(message.id)
-            if past or message.embeds[0].author.name is not discord.Embed.Empty and '⭐' in message.embeds[0].author.name: 
+            if past or (message.embeds[0].author.name and '⭐' in message.embeds[0].author.name): 
                 if len(every) > 0: 
                     for r in ['⬅']: await message.add_reaction(r)
                 try: desired = ctx.guild.get_member(int(message.embeds[0].footer.text[message.embeds[0].footer.text.find(':') + 1:]))
@@ -255,7 +255,10 @@ class Info(commands.Cog):
                 def checkBday(r, u): return u == desired and not u.bot and r.message.id == message.id and str(r) == '🍰'
                 def checkBack(r, u): return u == ctx.author and r.message.id == message.id and str(r) == '⬅'
                 if 'member details' in message.embeds[0].title.lower() and desired: await message.add_reaction('🍰')
-                d, p = await asyncio.wait([self.bot.wait_for('reaction_add', check=checkBack), self.bot.wait_for('reaction_add', check=checkBday)], return_when=asyncio.FIRST_COMPLETED)
+                d, p = await asyncio.wait([
+                    asyncio.create_task(self.bot.wait_for('reaction_add', check=checkBack)),
+                    asyncio.create_task(self.bot.wait_for('reaction_add', check=checkBday))
+                    ], return_when=asyncio.FIRST_COMPLETED)
                 try: r = d.pop().result()
                 except: pass
                 for f in p: f.cancel()
@@ -274,7 +277,10 @@ class Info(commands.Cog):
             past = False
             def reacCheck(r, u): return str(r) in ['◀', '▶'] and u==ctx.author
             while not past:
-                done, pending = await asyncio.wait([self.bot.wait_for('message', check=check, timeout=300), self.bot.wait_for('reaction_add', check=reacCheck, timeout=300)], return_when=asyncio.FIRST_COMPLETED)
+                done, pending = await asyncio.wait([
+                    asyncio.create_task(self.bot.wait_for('message', check=check, timeout=300)),
+                    asyncio.create_task(self.bot.wait_for('reaction_add', check=reacCheck, timeout=300))
+                    ], return_when=asyncio.FIRST_COMPLETED)
                 try: stuff = done.pop().result()
                 except: return
                 for future in pending: future.cancel()
@@ -389,7 +395,7 @@ class Info(commands.Cog):
         updated = None
         if logs:
             for log in logs:
-                if log.action == discord.AuditLogAction.channel_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
+                if log.action == discord.AuditLogAction.channel_update and (discord.utils.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == channel.id:
                         updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
                         break
@@ -423,7 +429,7 @@ class Info(commands.Cog):
         updated = None
         if logs:
             for log in logs:
-                if log.action == discord.AuditLogAction.role_update and (datetime.datetime.utcnow() - log.created_at).seconds > 600:
+                if log.action == discord.AuditLogAction.role_update and (discord.utils.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == r.id:
                         updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
                         break
@@ -464,7 +470,7 @@ class Info(commands.Cog):
             if onlineTimes[i] != 0: onlineDisplay.append('{}{}'.format(onlineTimes[i], units[i][0]))
         if len(activeDisplay) == 0: activeDisplay = ['0s']
         activities = {discord.Status.online: self.emojis['online'], discord.Status.idle: self.emojis['idle'], discord.Status.dnd: self.emojis['dnd'], discord.Status.offline: self.emojis['offline']}
-        lastOnlineString = f'''\nLast online {f"{utility.DisguardRelativeTimestamp(onlineTimestamp)}{f'{newline}•This member is likely {offline} invisible' if mA['timestamp'] > await Cyberlog.lastOnline(m) and m.status == discord.Status.offline else ''}" if await cyber.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if await cyber.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
+        lastOnlineString = f'''\nLast online {f"{utility.DisguardRelativeTimestamp(onlineTimestamp)}{f'{NEWLINE}•This member is likely {offline} invisible' if mA['timestamp'] > await Cyberlog.lastOnline(m) and m.status == discord.Status.offline else ''}" if await cyber.privacyEnabledChecker(m, 'profile', 'lastOnline') else '<Feature disabled by user>' if await cyber.privacyVisibilityChecker(m, 'profile', 'lastOnline') else '<Feature set to private by user>'}'''
         embed.description = f'''{activities[m.status]} {m.name} ({m.mention})\n\nLast active {f"{utility.DisguardRelativeTimestamp(activeTimestamp)} ({mA['reason']})" if await cyber.privacyEnabledChecker(m, 'profile', 'lastActive') else '<Feature disabled by user>' if await cyber.privacyVisibilityChecker(m, 'profile', 'lastActive') else '<Feature set to private by user>'}{lastOnlineString if m.status == discord.Status.offline else ""}'''
         if len(m.activities) > 0:
             current=[]
@@ -520,7 +526,7 @@ class Info(commands.Cog):
     async def InviteInfo(self, i: discord.Invite, s): #s: server
         embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.set_thumbnail(url=i.guild.icon.url)
-        #expires=datetime.datetime.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
+        #expires=discord.utils.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
         expires=datetime.datetime.now() + datetime.timedelta(seconds=i.max_age)
         created = i.created_at - datetime.timedelta(hours=utility.daylightSavings())
         embed.add_field(name='📆Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
