@@ -1311,7 +1311,7 @@ class WarmupActionView(discord.ui.View):
         self.bot = bot
     
     @discord.ui.button(label='Apply to existing members')
-    async def apply(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         button.disabled = True
         await interaction.response.edit_message(view=self)
         antispam = (await utility.get_server(interaction.guild)).get('antispam')

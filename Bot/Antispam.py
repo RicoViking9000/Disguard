@@ -373,7 +373,7 @@ class Antispam(commands.Cog):
             if spam.get("action") == 0:
                 successful = True
         theme = await utility.color_theme(message.guild)
-        shorter=discord.Embed(title=message.author.name+" got busted",description="Hey " + message.author.mention + ", looks like you got flagged for spam for **" + str(len(short)) + "** reason(s). The reason(s) is/are below, but to see these reasons in detail, please contact a moderator of " + message.guild.name + ".\n\n",timestamp=datetime.datetime.utcnow(),color=orange[theme])
+        shorter=discord.Embed(title=message.author.name+" got busted",description="Hey " + message.author.mention + ", looks like you got flagged for spam for **" + str(len(short)) + "** reason(s). The reason(s) is/are below, but to see these reasons in detail, please contact a moderator of " + message.guild.name + ".\n\n",timestamp=discord.utils.utcnow(),color=orange[theme])
         for a in short:
             shorter.description += "• " + a + "\n"
         if person.get("warnings") >= 0 and warned:
@@ -404,7 +404,7 @@ class Antispam(commands.Cog):
             await message.channel.send(embed=shorter)
         if person.get('warnings') != warningsAtStart: asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, warningsAtStart - 1))
         if None not in spam.get("log"):
-            longer = discord.Embed(title=message.author.name + " was flagged for spam",description=message.author.mention + " was flagged for **" + str(len(short)) + " reasons**, details below",timestamp=datetime.datetime.utcnow(),color=orange[theme])
+            longer = discord.Embed(title=message.author.name + " was flagged for spam",description=message.author.mention + " was flagged for **" + str(len(short)) + " reasons**, details below",timestamp=discord.utils.utcnow(),color=orange[theme])
             for a in range(len(reason)):
                 longer.add_field(name="Reason " + str(a + 1),value=reason[a],inline=False)
             if warned:
@@ -439,9 +439,9 @@ class Antispam(commands.Cog):
             except discord.Forbidden: pass
         try:
             await self.bot.get_cog('Moderation').unmuteMembers([message.author], message.guild.me, {})
-            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Successfully removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])
+            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Successfully removed role **" + role.name + "** from __" + message.author.mention + "__",timestamp=discord.utils.utcnow(),color=orange[theme])
         except discord.Forbidden:
-            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Unable to remove role **" + role.name + "** from __" + message.author.mention + "__",timestamp=datetime.datetime.utcnow(),color=orange[theme])
+            lcEmbed = discord.Embed(title="Mute time is up for " + message.author.name,description="Unable to remove role **" + role.name + "** from __" + message.author.mention + "__",timestamp=discord.utils.utcnow(),color=orange[theme])
         if spam.get("log"):
             try:
                 await message.guild.get_channel(spam.get("log")[1]).send(embed=lcEmbed)
@@ -458,7 +458,7 @@ class Antispam(commands.Cog):
         config = (await utility.get_server(ctx.guild)).get('antispam')
         wl = config.get('ageKickWhitelist')
         theme = await utility.color_theme(ctx.guild)
-        e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^70}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^70}**\n{config.get("ageKickDM")}''', color=orange[theme], timestamp=datetime.datetime.utcnow())
+        e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^50}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^50}**\n{config.get("ageKickDM")}''', color=orange[theme], timestamp=discord.utils.utcnow())
         e.add_field(name='Kick Accounts', value=f'Under {config.get("ageKick") / 86400} days old')
         await ctx.send(embed=e)
         
