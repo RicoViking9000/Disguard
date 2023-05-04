@@ -67,53 +67,43 @@ class Reddit(commands.Cog):
             await asyncio.sleep(60)
             asyncio.create_task(self.createRedditStream(server, data, attempt + 1))
 
-    @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         await asyncio.gather(*[self.redditAutocomplete(message), self.redditEnhance(message)])
 
     async def redditAutocomplete(self, message: discord.Message):
-        if 'r/' not in message.content: return
         try: config = (await utility.get_server(message.guild))['redditComplete']
         except KeyError: return
-        if config == 0: return #Feature is disabled
-        if message.author.id == self.bot.user.id: return
-        for w in message.content.split(' '):
-            if w.lower().startswith('r/') and 'https://' not in w:
-                try:
-                    subSearch = w[w.find('r/') + 2:]
-                    result = await self.subredditEmbed(subSearch, config == 1)
-                    if config == 1: await message.channel.send(result)
-                    else: await message.channel.send(embed=result)
-                except: pass
+        if not config: return #Feature is disabled
+        matches = re.findall(r'^r\/([A-Za-z0-9_]+)$', message.content)
+        for match in matches:
+            result = await self.subredditEmbed(match, config == 1)
+            if config == 1: await message.channel.send(result)
+            else: await message.channel.send(embed=result)
 
     async def redditEnhance(self, message: discord.Message):
         try: config = (await utility.get_server(message.guild))['redditEnhance']
         except KeyError: return
-        if ('https://www.reddit.com/r/' not in message.content and 'https://old.reddit.com/r/' not in message.content) or config == (False, False): return
-        if message.author.id == self.bot.user.id: return
-        for w in message.content.split(' '):
-            if ('https://www.reddit.com/r/' in w or 'https://old.reddit.com/r/' in w) and '/comments/' in w and config[0]:
-                try:
-                    embed = await self.redditSubmissionEmbed(message.guild, w, False, channel=message.channel)
-                    await message.channel.send(embed=embed)
-                except: pass
-            elif ('https://www.reddit.com/r/' in w or 'https://old.reddit.com/r/' in w) and '/comments/' not in w and config[1]:
-                try:
-                    subSearch = w[w.find('r/') + 2:]
-                    embed = await self.subredditEmbed(subSearch, False)
-                    await message.channel.send(embed=embed)
-                    message = await message.channel.fetch_message(message.id)
-                except: pass
-            else: continue
-            message = await message.channel.fetch_message(message.id)
-            if len(message.embeds) < 1:
-                def check(b, a): return b.id == message.id and len(a.embeds) > len(b.embeds)
-                result = (await self.bot.wait_for('message_edit', check=check))[1]
-            else: result = message
-            await result.edit(suppress=True)
-            def reactionCheck(r, u): return r.emoji == self.emojis['expand'] and u.id == self.bot.user.id and r.message.id == message.id
-            reaction, user = await self.bot.wait_for('reaction_add', check=reactionCheck)
-            await message.remove_reaction(reaction, user)
+        if not any(config): return #Feature is disabled
+        matches_submission = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/\w+\/comments\/([A-Za-z0-9]+\w+)', message.content)
+        matches_subreddit = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/([A-Za-z0-9_]+)$', message.content)
+        if not any([matches_subreddit, matches_submission]): return
+        for match in matches_subreddit:
+            try:
+                embed = await self.subredditEmbed(match, False)
+                await message.channel.send(embed=embed)
+            except: pass #TODO: Add error handling
+        for match in matches_submission:
+            try:
+                embed = await self.redditSubmissionEmbed(message.guild, match, False, channel=message.channel)
+                await message.channel.send(embed=embed)
+            except: pass
+        message = await message.channel.fetch_message(message.id)
+        # Suppress the Discord embed for the user's link
+        if not message.embeds:
+            def check(b: discord.Message, a: discord.Message): return b.id == message.id and len(a.embeds) > len(b.embeds)
+            result = (await self.bot.wait_for('message_edit', check=check))[1]
+        else: result = message
+        await result.edit(suppress=True)
 
     async def subredditEmbed(self, search, plainText = False):
         subreddit = await self.reddit.subreddit(search, fetch=True)
@@ -299,16 +289,21 @@ class Reddit(commands.Cog):
         class AutocompleteButton(discord.ui.Button):
             def __init__(self, bot: commands.Bot, emojis: dict, server_data: dict):
                 colored = True if server_data['redditComplete'] else False
-                super().__init__(emoji=emojis[TOGGLES[server_data["redditComplete"]]], label='Reddit autocomplete', style=discord.ButtonStyle.blurple if colored else discord.ButtonStyle.gray, custom_id='autocomplete')
+                flavor = {0: 'disabled', 1: 'link only', 2: 'link + embed'}
+                super().__init__(emoji=emojis[TOGGLES[colored]], label=f'Autolink: {flavor[server_data["redditComplete"]]}', style=discord.ButtonStyle.blurple if colored else discord.ButtonStyle.gray, custom_id='autocomplete')
                 self.reddit: Reddit = bot.get_cog('Reddit')
                 self.emojis = emojis
                 self.server_data = server_data
             
             async def callback(self, interaction: discord.Interaction):
-                await database.edit_server_data(interaction.guild, 'redditComplete', not self.style == discord.ButtonStyle.blurple)
-                self.server_data['redditComplete'] = not self.style == discord.ButtonStyle.blurple
-                self.style = discord.ButtonStyle.blurple if self.server_data['redditComplete'] else discord.ButtonStyle.gray
-                self.emoji = self.emojis[TOGGLES[self.server_data["redditComplete"]]]
+                reverse_flavor = {'disabled': 0, 'link only': 1, 'link + embed': 2}
+                current_value = reverse_flavor[self.label.split(': ')[1]]
+                new_value = (current_value + 1) % 3
+                self.label = f'Autolink: {list(reverse_flavor.keys())[new_value]}'
+                await database.edit_server_data(interaction.guild, 'redditComplete', new_value)
+                self.server_data['redditComplete'] = new_value
+                self.style = discord.ButtonStyle.blurple if new_value else discord.ButtonStyle.gray
+                self.emoji = self.emojis[TOGGLES[bool(new_value)]]
                 new_embed = self.reddit.reddit_settings_embed(interaction.guild, self.server_data)
                 await interaction.response.edit_message(embed=new_embed, view=self.view)
         
@@ -357,7 +352,7 @@ class Reddit(commands.Cog):
         embed = discord.Embed(title='Reddit features', description='', color=REDDIT_COLOR)
         server_feeds = self.redditThreads.get(server.id, {})
         embed.description += f'\n\nReddit feeds [{len(server_feeds)}]: {" • ".join(subreddit for subreddit in server_feeds.keys()) if self.redditThreads.get(server.id, {}) else "None"}\nUse `/create_feed` to create a feed, `/edit_feed` to edit a feed, and `/delete_feed` to delete a feed\n\n'
-        embed.description += f'{self.emojis[TOGGLES[server_data["redditComplete"]]]}**r/subreddit autocomplete**\nType `r/` followed by a subreddit name to get a URL to the subreddit\n\n'
+        embed.description += f'{self.emojis[TOGGLES[bool(server_data["redditComplete"])]]}**r/subreddit autolink**\nType `r/` followed by a subreddit name to get a URL to the subreddit\n\n'
         embed.description += f'{self.emojis[TOGGLES[server_data["redditEnhance"][1]]]}**Enhanced Reddit embeds - subreddits**\nReplace the default Discord embeds from subreddit URLs typed in chat with a more informational one\n\n'
         embed.description += f'{self.emojis[TOGGLES[server_data["redditEnhance"][0]]]}**Enhanced Reddit embeds - submissions**\nSame as above, but for posts submitted to a subreddit\n\n'
         return embed

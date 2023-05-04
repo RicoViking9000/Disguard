@@ -19,6 +19,7 @@ import textwrap
 import utility
 import Cyberlog
 import copy
+import re
 
 yellow = (0xffff00, 0xffff66)
 placeholderURL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
@@ -33,40 +34,36 @@ class Misc(commands.Cog):
         self.emojis: typing.Dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
         self.loading = self.emojis['loading']
 
-    @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.content == f'<@!{self.bot.user.id}>': await self.sendGuideMessage(message) #See if this will work in Disguard.py
-        asyncio.create_task(self.jumpLinkQuoteContext(message))
+        try:
+            if (await utility.get_server(message.guild)).get('jumpContext') and message.content: await self.jump_link_quote_context(message)
+        except AttributeError: pass
 
-    async def jumpLinkQuoteContext(self, message: discord.Message):
-        try: enabled = (await utility.get_server(message.guild)).get('jumpContext')
-        except AttributeError: return
-        if message.author.id == self.bot.user.id: return
-        if enabled:
-            words = message.content.split(' ')
-            for w in words:
-                if 'https://discord.com/channels/' in w or 'https://canary.discord.com/channels' in w or 'https://discordapp.com/channels' in w: #This word is a hyperlink to a message
-                    context = await self.bot.get_context(message)
-                    messageConverter = commands.MessageConverter()
-                    result = await messageConverter.convert(context, w)
-                    if result is None: return
-                    if result.channel.is_nsfw() and not message.channel.is_nsfw():
-                        return await message.channel.send(f'{self.emojis["alert"]} | This message links to a NSFW channel, so its content can\'t be shared')
-                    if len(result.embeds) == 0:
-                        embed=discord.Embed(description=result.content)
-                        embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y • %I:%M %p} {await utility.name_zone(message.guild)}')
-                        embed.set_author(name=result.author.name, icon_url=result.author.avatar.url)
-                        if len(result.attachments) > 0 and result.attachments[0].height is not None:
-                            try: embed.set_image(url=result.attachments[0].url)
-                            except: pass
-                        return await message.channel.send(embed=embed)
-                    else:
-                        if not result.embeds[0].footer.text: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y - %I:%M %p} {await utility.name_zone(message.guild)}')
-                        if not result.embeds[0].author.name: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar.url)
-                        return await message.channel.send(content=result.content, embed=result.embeds[0])
-
+    async def jump_link_quote_context(self, message: discord.Message):
+        matches = re.findall(r'^https:\/\/(?:canary\.)?discord(?:app)?\.com\/channels\/\d+\/\d+\/\d+$', message.content)
+        for match in matches:
+            context = await self.bot.get_context(message)
+            messageConverter = commands.MessageConverter()
+            result = await messageConverter.convert(context, match)
+            if not result: return
+            if result.channel.is_nsfw() and not message.channel.is_nsfw():
+                return await message.channel.send(f'[Jump Context] {self.emojis["alert"]} | This message links to a NSFW channel, so I can\'t reshare the message')
+            if result.embeds and not message.author.bot:
+                if not result.embeds[0].footer.text: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y - %I:%M %p} {await utility.name_zone(message.guild)}')
+                if not result.embeds[0].author.name: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar.url)
+                return await message.channel.send(content=result.content, embed=result.embeds[0])
+            else:
+                embed=discord.Embed(description=result.content)
+                embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y • %I:%M %p} {await utility.name_zone(message.guild)}')
+                embed.set_author(name=result.author.name, icon_url=result.author.avatar.url)
+                if len(result.attachments) > 0 and result.attachments[0].height is not None:
+                    try: embed.set_image(url=result.attachments[0].url)
+                    except: pass
+                return await message.channel.send(embed=embed)
+                
     async def sendGuideMessage(self, message: discord.Message):
-        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
+        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `/ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
     
     @commands.hybrid_command()
     async def privacy(self, ctx: commands.Context):
@@ -205,7 +202,7 @@ class Misc(commands.Cog):
             for i in range(0, len(iterable), resultsPerPage): yield iterable[i : i + resultsPerPage]
         async def populateEmbed(pages, index, sortDescription):
             embed.clear_fields()
-            embed.description = f'''{f'NAVIGATION':-^70}\n{trashcan}: Delete this embed\n{self.emojis['details']}: Adjust sort\n◀: Previous page\n🇦 - {alphabet[len(pages[index]) - 1]}: View ticket\n▶: Next page\n{f'Tickets for {ctx.author.name}':-^70}\nPage {index + 1} of {len(pages)}\nViewing {len(pages[index])} of {len(filtered)} results\nSort: {sortDescription}'''
+            embed.description = f'''{f'NAVIGATION':-^50}\n{trashcan}: Delete this embed\n{self.emojis['details']}: Adjust sort\n◀: Previous page\n🇦 - {alphabet[len(pages[index]) - 1]}: View ticket\n▶: Next page\n{f'Tickets for {ctx.author.name}':-^50}\nPage {index + 1} of {len(pages)}\nViewing {len(pages[index])} of {len(filtered)} results\nSort: {sortDescription}'''
             for i, ticket in enumerate(pages[index]):
                 tg = g #probably stands for 'ticketGuild'
                 if not tg and ticket['server']: tg = self.bot.get_guild(ticket['server'])
@@ -214,7 +211,7 @@ class Misc(commands.Cog):
                     value=f'''> Members: {", ".join([self.bot.get_user(u['id']).name for i, u in enumerate(ticket['members']) if i not in (1, 2)])}\n> Status: {statusDict[ticket['status']]}\n> Latest reply: {self.bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -5))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}\n> {qlf}{ticket['conversation'][-1]['message']}''',
                     inline=False)
         async def notifyMembers(ticket):
-            e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^70}", color=yellow[ticketcolor_theme])
+            e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^50}", color=yellow[ticketcolor_theme])
             entry = ticket['conversation'][-1]
             messageAuthor = self.bot.get_user(entry['author'])
             e.set_author(name=messageAuthor, icon_url=messageAuthor.avatar.with_static_format('png').url)
@@ -333,7 +330,7 @@ class Misc(commands.Cog):
                     if member['permissions'] == 0: reactions.remove(self.emojis['reply'])
                     if ctx.author.id == 247412852925661185: reactions.append(self.emojis['hiddenVoiceChannel'])
                     embed.title = f'🎟 Disguard Ticket System / Ticket {ticket_number}'
-                    embed.description = f'''{'TICKET DATA':-^70}\n{self.emojis['member']}Author: {self.bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{self.emojis['members']}Other members involved: {', '.join([self.bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, self.bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {self.emojis["members"]} to add'}\n⛓Server: {self.bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{self.emojis['bell'] if member['notifications'] else self.emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {self.emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^70}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{NEWLINE}{self.emojis["arrowBackward"]} and {self.emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
+                    embed.description = f'''{'TICKET DATA':-^50}\n{self.emojis['member']}Author: {self.bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{self.emojis['members']}Other members involved: {', '.join([self.bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, self.bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {self.emojis["members"]} to add'}\n⛓Server: {self.bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{self.emojis['bell'] if member['notifications'] else self.emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {self.emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^50}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{NEWLINE}{self.emojis["arrowBackward"]} and {self.emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
                     for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}", value=f'> {entry["message"]}', inline=False)
                     if ctx.guild: 
                         if clearReactions: await message.clear_reactions()
@@ -365,7 +362,7 @@ class Misc(commands.Cog):
                                 return '(No description)' if type(m) is not discord.Member else "Server Owner" if server.owner.id == m.id else "Server Administrator" if m.guild_permissions.administrator else "Server Moderator" if m.guild_permissions.manage_guild else "Junior Server Moderator" if m.guild_permissions.manage_roles or m.guild_permissions.manage_channels else '(No description)'
                             if len(memberResults) == 0: staffMemberResults = [m for m in server.members if any([m.guild_permissions.administrator, m.guild_permissions.manage_guild, m.guild_permissions.manage_channels, m.guild_permissions.manage_roles, m.id == server.owner.id]) and not m.bot and m.id not in [mb['id'] for mb in ticket['members']]][:15]
                             memberFillerText = [f'{self.bot.get_user(u["id"])}{NEWLINE}> {u["bio"]}{NEWLINE}> Permissions: {permissionsDict[u["permissions"]]}' for u in ticket['members']]
-                            embed.description = f'''**__{'TICKET SHARING SETTINGS':-^85}__\n\n{'Permanently included':-^40}**\n{NEWLINE.join([f'👤{f}' for f in memberFillerText[:3]])}'''
+                            embed.description = f'''**__{'TICKET SHARING SETTINGS':-^50}__\n\n{'Permanently included':-^40}**\n{NEWLINE.join([f'👤{f}' for f in memberFillerText[:3]])}'''
                             embed.description += f'''\n\n**{'Additional members':-^40}**\n{NEWLINE.join([f'{self.emojis["member"]}{f}{f"{NEWLINE}> {alphabet[i]} to manage" if ctx.author.id == ticket["author"] else ""}' for i, f in enumerate(memberFillerText[3:])]) if len(memberFillerText) > 2 else 'None yet'}'''
                             if ctx.author.id == ticket['author']: embed.description += f'''\n\n**{'Add a member':-^40}**\nSend a message to search for a member to add, then react with the corresponding letter to add them{f'{NEWLINE}{NEWLINE}Moderators of {self.bot.get_guild(ticket["server"])} are listed below as suggestions. You may react with the letter next to their name to quickly add them, otherwise send a message to search for someone else' if ticket['server'] and len(staffMemberResults) > 0 else ''}'''
                             reactions = [self.emojis['arrowLeft']]
@@ -408,7 +405,7 @@ class Misc(commands.Cog):
                                         while not self.bot.is_closed():
                                             if ctx.author.id != ticket['author']: break #If someone other than the ticket owner gets here, deny them
                                             ticketUser = [mb for mb in ticket['members'] if mb['id'] == user.id][0]
-                                            embed.description=f'''**{f'Manage {user.name}':-^70}**\n{'🔒' if not ctx.guild or ticketUser['permissions'] == 0 else '🔓'}Permissions: {permissionsDict[ticketUser['permissions']]}\n\n{self.emojis['details']}Responses: {len([r for r in ticket['conversation'] if r['author'] == user.id])}\n\n{f'{self.emojis["bell"]}Notifications: True' if ticketUser['notifications'] else f'{self.emojis["bellMute"]}Notifications: False'}\n\n❌: Remove this member'''
+                                            embed.description=f'''**{f'Manage {user.name}':-^50}**\n{'🔒' if not ctx.guild or ticketUser['permissions'] == 0 else '🔓'}Permissions: {permissionsDict[ticketUser['permissions']]}\n\n{self.emojis['details']}Responses: {len([r for r in ticket['conversation'] if r['author'] == user.id])}\n\n{f'{self.emojis["bell"]}Notifications: True' if ticketUser['notifications'] else f'{self.emojis["bellMute"]}Notifications: False'}\n\n❌: Remove this member'''
                                             reactions = [self.emojis['arrowLeft'], '🔓' if ctx.guild and ticketUser['permissions'] == 0 else '🔒', '❌'] #The reason we don't use the unlock if the command is used in DMs is because we can't remove user reactions ther
                                             if ctx.guild: 
                                                 if clearReactions: await message.clear_reactions()
