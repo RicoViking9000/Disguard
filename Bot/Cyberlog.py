@@ -316,6 +316,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         '''[DISCORD API METHOD] Called when message is sent'''
+        return
         await self.bot.wait_until_ready()
         if not serverIsGimped(message.guild): await updateLastActive(message.author, datetime.datetime.now(), 'sent a message')
         if type(message.channel) is discord.DMChannel: return
