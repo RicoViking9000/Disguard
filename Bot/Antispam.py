@@ -47,7 +47,7 @@ class Antispam(commands.Cog):
             for g in self.bot.guilds:
                 events = (await utility.get_server(g, {})).get('antispam', {}).get('timedEvents', [])
                 for e in events:
-                    if discord.utils.utcnow() > e.get('expires'):
+                    if datetime.datetime.utcnow() > e.get('expires'):
                         try:
                             if e.get('type') == 'ban':
                                 try: await g.unban(await self.bot.fetch_user(e.get('target')), reason=f'{e.get("flavor")} Ban duration expired')
