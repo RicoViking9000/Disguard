@@ -148,6 +148,7 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
 @bot.listen()
 async def on_message(message: discord.Message):
     '''Calls the various functions in other cogs'''
+    return
     if not isinstance(message.channel, discord.TextChannel): return
     if message.author.id == bot.user.id: return
     # cyberlog: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
