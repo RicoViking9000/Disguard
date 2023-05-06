@@ -140,7 +140,7 @@ def absTime(x, y, distance):
 
 def daylightSavings():
     '''Returns True if the USA is in daylight savings time'''
-    return 4 if datetime.datetime.now() < datetime.datetime(2022, 11, 6, 2) else 5
+    return 4 if datetime.datetime.now() < datetime.datetime(2023, 11, 5, 2) else 5
 
 def embedToPlaintext(e: discord.Embed):
     '''Returns a string composed of fields/values in the embed. Cleans up the content too.'''

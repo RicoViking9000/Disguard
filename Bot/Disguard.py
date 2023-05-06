@@ -51,6 +51,7 @@ qlfc = ' '
 yellow = (0xffff00, 0xffff66)
 blue = (0x0000FF, 0x6666ff)
 
+os.remove('discord.log')
 logger = logging.getLogger('discord')
 logger.setLevel(logging.INFO)
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')

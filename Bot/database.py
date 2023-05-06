@@ -149,7 +149,9 @@ async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full
     async for server in yield_servers():
         s = b.get_guild(server['server_id'])
         try: await lightningdb.post_server(server)
-        except (AttributeError, KeyError, TypeError, errors.DuplicateKeyError): pass
+        except errors.DuplicateKeyError:
+            if full: await lightningdb.patch_server(s.id, server)
+        except (AttributeError, KeyError, TypeError): pass
         await asyncio.wait_for(VerifyServer(s, b, server, full, True, mode='update', includeMembers=yield_members()), timeout=None)
     await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
 
@@ -323,7 +325,9 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
     async for user in yield_users():
         u = b.get_user(user['user_id'])
         try: await lightningdb.post_user(user)
-        except (AttributeError, KeyError, TypeError, errors.DuplicateKeyError): pass
+        except errors.DuplicateKeyError:
+            if full: await lightningdb.patch_user(u.id, user)
+        except (AttributeError, KeyError, TypeError): pass
         await asyncio.wait_for(VerifyUser(u, b, user, full, True, mode='update'), timeout=None)
         # asyncio.create_task(VerifyUser(u, b, user, full, True, mode='update'))
     await users.delete_many({'user_id': {'$nin': user_id_list}})
