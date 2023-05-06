@@ -34,13 +34,13 @@ bot = None
 serverPurge = {}
 summarizeOn=False
 secondsInADay = 3600 * 24
-DST = 4 if datetime.datetime.now() < datetime.datetime(2021, 11, 7, 2) else 5
+DST = 4 if datetime.datetime.now() < datetime.datetime(2023, 11, 5, 2) else 5
 units = ['second', 'minute', 'hour', 'day']
 logUnits = ['message', 'doorguard', 'channel', 'member', 'role', 'emoji', 'server', 'voice', 'misc']
 indexes = 'Indexes'
-tempDir = 'Attachments/Temp' #Path to save images for profile picture changes and other images in logs
+temp_dir = 'Attachments/Temp' #Path to save images for profile picture changes and other images in logs
 gimpedServers = [403698615446536203, 460611346837405696, 366019576661671937]
-try: os.makedirs(tempDir)
+try: os.makedirs(temp_dir)
 except FileExistsError: pass
 stockImage = 'https://www.femalefirst.co.uk/image-library/land/500/r/rick-astley-whenever-you-need-somebody-album-cover.jpg'
 
@@ -90,17 +90,16 @@ class Cyberlog(commands.Cog):
         self.resumeToken = None
         self.channelCacheHelper = {}
         self.syncData.start()
-        self.DeleteAttachments.start()
+        self.delete_message_attachments.start()
         self.trackChanges.start()
 
     def cog_unload(self):
         self.syncData.cancel()
-        self.DeleteAttachments.cancel()
+        self.delete_message_attachments.cancel()
         self.trackChanges.cancel()
 
     @tasks.loop()
     async def trackChanges(self):
-        #The global variables exist for the rare instances the cache data needs to be accessed outside of the Cyberlog class instance, in a read-only mode.
         await asyncio.sleep(3)
         reddit: Reddit.Reddit = self.bot.get_cog('Reddit')
         try:
@@ -124,7 +123,9 @@ class Cyberlog(commands.Cog):
                     if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys(): asyncio.create_task(reddit.redditFeedHandler(self.bot.get_guild(objectID)))
                     if change['operationType'] == 'update' and any([word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]): continue #Add attribute history probably
                     print(f'''{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}''')
-        except Exception as e: print(f'Tracking error: {e}')
+        except Exception as e: 
+            print(f'Tracking error: {e}')
+            traceback.print_exc()
     
     @tasks.loop(hours=24) #V1.0: This now only runs once per day
     async def syncData(self):
@@ -266,41 +267,57 @@ class Cyberlog(commands.Cog):
     #     print(f'Database Synchronization done in {(datetime.datetime.now() - started).seconds}s')
 
     @tasks.loop(hours=24)
-    async def DeleteAttachments(self):
+    async def delete_message_attachments(self):
         #This becomes less relevant with attachments stored in the image log channels
         print('Deleting attachments that are old')
-        time = datetime.datetime.now()
+        time = discord.utils.utcnow()
+        def get_dir_size(path='.'): # https://note.nkmk.me/en/python-os-path-getsize/#:~:text=Use%20os.,in%20a%20directory%20(folder).
+            total = 0
+            with os.scandir(path) as it:
+                for entry in it:
+                    if entry.is_file():
+                        total += entry.stat().st_size
+                    elif entry.is_dir():
+                        total += get_dir_size(entry.path)
+            return total
         try:
             removal=[]
-            outstandingTempFiles = os.listdir(tempDir)
+            temporary_files = os.listdir(temp_dir)
             # gather old attachments to delete
-            for server in self.bot.guilds:
-                for channel in server.text_channels:
-                    try:
-                        messages = await lightningdb.get_channel_messages(channel.id)
-                        path = f'Attachments/{server.id}/{channel.id}'
-                        for folder in os.listdir(path):
-                            timestamp = datetime.datetime.fromisoformat(messages[folder]['timestamp0'])
-                            if (datetime.datetime.utcnow() - timestamp).days > 365:
-                                removal.append(os.path.join(path, folder)) #Mark year-old attachments for deletion
-                            elif not os.listdir(folder):
-                                removal.append(os.path.join(path, folder)) #Mark empty folders for deletion
-                    except: pass
+            path = 'Attachments'
+            for server_folder in os.listdir(path):
+                if f'{path}/{server_folder}' == temp_dir: continue
+                if not self.bot.get_guild(int(server_folder)): #if the bot's no longer in the server
+                    removal.append(os.path.join(path, folder))
+                    continue
+                server_path = f'Attachments/{server_folder}'
+                space_taken = get_dir_size(server_path)
+                for channel_folder in os.listdir(server_path):
+                    #messages = await lightningdb.get_channel_messages(int(channel_folder))
+                    messsage_folders = [folder for folder in os.listdir(os.path.join(server_path, channel_folder)) if channel_folder != 'LogArchive']
+                    messsage_folders.sort(key=lambda x: os.path.getmtime(os.path.join(server_path, channel_folder, x)))
+                    for message_folder in messsage_folders:
+                        if os.listdir(os.path.join(server_path, channel_folder, message_folder)):
+                            over_capacity = space_taken > 3e+10 #30GB
+                            # delete year-old folders or start deleting old folders if over capacity
+                            if datetime.datetime.fromtimestamp(os.path.getmtime(os.path.join(server_path, channel_folder, message_folder)), datetime.timezone.utc) < time - datetime.timedelta(days=365) or over_capacity:
+                                removal.append(os.path.join(path, server_folder, channel_folder, message_folder))
+                                space_taken -= get_dir_size(os.path.join(server_path, channel_folder, message_folder))
+                        else: #delete empty folders
+                            removal.append(os.path.join(path, server_folder, channel_folder, message_folder))
             # gather attachments for servers the bot is no longer a member of
-            attachments_path = f'Attachments'
-            for folder in os.listdir(attachments_path):
-                if folder.lower() not in ['temp'] and not self.bot.get_guild(int(folder)):
-                    removal.append(os.path.join(attachments_path, folder))
             for folder in removal: 
                 try: shutil.rmtree(folder)
                 except Exception as e: print(f'Attachment folder deletion fail: {e}')
-            for fl in outstandingTempFiles:
-                try: shutil.rmtree((os.path.join(tempDir, fl)))
+            for temp_file in temporary_files:
+                try: shutil.rmtree((os.path.join(temp_dir, temp_file)))
                 except:
-                    try: os.remove(os.path.join(tempDir, fl))
+                    try: os.remove(os.path.join(temp_dir, temp_file))
                     except Exception as e: print(f'Temp Attachment Deletion fail: {e}')
-            print('Removed {} items in {} seconds'.format(len(removal) + len(outstandingTempFiles), (datetime.datetime.now() - time).seconds))
-        except Exception as e: print('Attachment deletion fail: {}'.format(e))
+            print(f'Removed {len(removal)} items in {(discord.utils.utcnow() - time).seconds} seconds')
+        except Exception as e: 
+            print(f'Attachment deletion fail: {e}')
+            traceback.print_exc()
     
     async def grab_pins(self):
         '''Fetches pinned messages to be stored locally'''
@@ -947,7 +964,7 @@ class Cyberlog(commands.Cog):
             f = attachments[a]
             if os.stat(f).st_size / 1000000 > 8:
                 fileError += f"\n{self.emojis['alert']} | This message's attachment ({os.path.basename(f)}) is too large to be sent ({round(os.stat(f).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-                savePath = f'{tempDir}/{payload.message_id}/{os.path.basename(f)}'
+                savePath = f'{temp_dir}/{payload.message_id}/{os.path.basename(f)}'
                 shutil.copy2(f.fp, savePath)
                 attachments.pop(a)
             else: a += 1
@@ -2850,7 +2867,7 @@ class Cyberlog(commands.Cog):
     #Compare with uploadFiles
     async def imageToURL(self, asset: discord.Asset):
         '''Given an image asset, retrieve a new Discord CDN URL from it for permanent use'''
-        savePath = f'{tempDir}/{datetime.datetime.utcnow():%m%d%Y%H%M%S%f}.{"gif" if asset.is_animated() else "png"}'
+        savePath = f'{temp_dir}/{datetime.datetime.utcnow():%m%d%Y%H%M%S%f}.{"gif" if asset.is_animated() else "png"}'
         await asset.replace(size=1024, static_format='png').save(savePath)
         f = discord.File(savePath)
         message = await self.imageLogChannel.send(file=f)
@@ -3125,8 +3142,8 @@ class ErrorView(discord.ui.View):
     async def writeError(self):
         consoleLogChannel: discord.TextChannel = self.cyberlog.bot.get_channel(873069122458615849)
         self.filename = self.occurrence.strftime('%m%d%Y%H%M%S%f')
-        self.path = f'{tempDir}/Tracebacks/{self.filename}.txt'
-        try: os.makedirs(f'{tempDir}/Tracebacks')
+        self.path = f'{temp_dir}/Tracebacks/{self.filename}.txt'
+        try: os.makedirs(f'{temp_dir}/Tracebacks')
         except FileExistsError: pass
         with codecs.open(self.path, 'w+', encoding='utf-8-sig') as f:
             f.write(''.join(traceback.format_exception(type(self.error), self.error, self.error.__traceback__)))
@@ -3210,8 +3227,8 @@ class ErrorDiagnosticConfirmationView(discord.ui.View):
             #TODO: advanced traceback
             view.errorDetailsView.buttonSend.disabled = True
             filename = view.errorDetailsView.errorView.occurrence.strftime('%m%d%Y%H%M%S%f')
-            path = f'{tempDir}/Tracebacks/{filename}-detailed.txt'
-            if not os.path.exists(f'{tempDir}/Tracebacks'): os.makedirs(f'{tempDir}/Tracebacks')
+            path = f'{temp_dir}/Tracebacks/{filename}-detailed.txt'
+            if not os.path.exists(f'{temp_dir}/Tracebacks'): os.makedirs(f'{temp_dir}/Tracebacks')
             header = f'Occurrence: {utility.DisguardStandardTimestamp(view.errorDetailsView.errorView.occurrence)} UTC\nServer: {view.errorDetailsView.ctx.guild.name} ({view.errorDetailsView.ctx.guild.id}) • {view.errorDetailsView.ctx.guild.member_count} members\n'
             header+= f'Channel: {view.errorDetailsView.ctx.channel.name} ({view.errorDetailsView.ctx.channel.id})\nMember: {view.errorDetailsView.ctx.author.name} ({view.errorDetailsView.ctx.author.id})\nMember permissions: {utility.outputPermissions(view.errorDetailsView.ctx.author.guild_permissions)}\n'
             header+= f'Bot permissions: {utility.outputPermissions(view.errorDetailsView.ctx.guild.me.guild_permissions)}\nMessage: {view.errorDetailsView.ctx.message.content}'
