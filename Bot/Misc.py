@@ -35,7 +35,7 @@ class Misc(commands.Cog):
         self.loading = self.emojis['loading']
 
     async def on_message(self, message: discord.Message):
-        if message.content == f'<@!{self.bot.user.id}>': await self.sendGuideMessage(message) #See if this will work in Disguard.py
+        if message.content == f'<@{self.bot.user.id}>': await self.sendGuideMessage(message) #See if this will work in Disguard.py
         try:
             if (await utility.get_server(message.guild)).get('jumpContext') and message.content: await self.jump_link_quote_context(message)
         except AttributeError: pass
@@ -63,7 +63,10 @@ class Misc(commands.Cog):
                 return await message.channel.send(embed=embed)
                 
     async def sendGuideMessage(self, message: discord.Message):
-        await message.channel.send(embed=discord.Embed(title=f'Quick Guide - {message.guild}', description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Prefix:** `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `/ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)', color=yellow[1]))
+        await message.channel.send(embed=discord.Embed(
+            title=f'Quick Guide - {message.guild}',
+            description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Commands:** Slash commands preferred, but this server\'s prefix is `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `/ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)',
+            color=yellow[1]))
     
     @commands.hybrid_command()
     async def privacy(self, ctx: commands.Context):

@@ -2065,7 +2065,8 @@ class Cyberlog(commands.Cog):
         f = []
         try: thumbnailURL = (await utility.get_user(after))['avatarHistory'][-1]['imageURL']
         except (TypeError, AttributeError, KeyError): 
-            thumbnailURL = await self.imageToURL(before.display_avatar)
+            try: thumbnailURL = await self.imageToURL(before.display_avatar)
+            except discord.NotFound: thumbnailURL = ''
         embed.set_thumbnail(url=thumbnailURL)
         if before.display_avatar != after.display_avatar:
             titles.append('Profile Picture')

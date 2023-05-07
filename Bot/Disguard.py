@@ -149,19 +149,18 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
 @bot.listen()
 async def on_message(message: discord.Message):
     '''Calls the various functions in other cogs'''
-    return
     if not isinstance(message.channel, discord.TextChannel): return
     if message.author.id == bot.user.id: return
     # cyberlog: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
     # await cyberlog.on_message(message)
     # antispam: Antispam.Antispam = bot.get_cog('Antispam')
     # await antispam.on_message(message)
-    if not message.content: return
-    if message.author.bot: return
-    reddit: Reddit.Reddit = bot.get_cog('Reddit')
-    await reddit.on_message(message)
-    birthdays: Birthdays.Birthdays = bot.get_cog('Birthdays')
-    await birthdays.on_message(message)
+    # if not message.content: return
+    # if message.author.bot: return
+    # reddit: Reddit.Reddit = bot.get_cog('Reddit')
+    # await reddit.on_message(message)
+    # birthdays: Birthdays.Birthdays = bot.get_cog('Birthdays')
+    # await birthdays.on_message(message)
     misc: Misc.Misc = bot.get_cog('Misc')
     await misc.on_message(message)
 
