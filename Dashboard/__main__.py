@@ -166,7 +166,7 @@ def logout():
 def EnsureVerification(id):
     '''Check if the user is authorized to proceed to editing a server'''
     credentials = oauth.Oauth('discord')
-    oAuth = authentication.OAuth2Handler('discord', credentials.client_id, credentials.client_secret)
+    oAuth = authentication.OAuth2Handler('discord', credentials.client_id, credentials.client_secret, API_BASE_URL='https://discordapp.com/api')
     discord = oAuth.make_session(token=session.get('oauth2_token'))
     if 'user_id' not in session: return False
     return id in [server.get('server_id') for server in iter(users.find_one({"user_id": int(session['user_id'])}).get('servers'))] and discord.get(oAuth.API_BASE_URL + '/users/@me').json().get('id') is not None or int(session['user_id']) == 247412852925661185
@@ -338,7 +338,7 @@ def cyberlog(id):
         moduleDict = {}
         for w in ['message', 'doorguard', 'server', 'channel', 'member', 'role', 'emoji', 'voice', 'misc']:
             moduleDict[w] = {
-                'name': c[w]['name'], 'description': c[w]['description'], 'enabled': r.get(w) == 'True', 'channel': r.get(f'{w}Channel', type=int),
+                'name': c[w]['name'], 'description': c[w]['description'], 'enabled': r.get(w), 'channel': r.get(f'{w}Channel', type=int),
                 'read': boolConverter(r.get(f'{w}read', None, type=int)),'library': r.get(f'{w}Library', None, type=int),
                 'thumbnail': r.get(f'{w}Thumbnail', None, type=int), 'author': r.get(f'{w}Author', None, type=int),
                 'context': (r.get(f'{w}TitleContext', None, type=int), r.get(f'{w}DescContext', None, type=int)), 'hoverLinks': None,
@@ -347,7 +347,7 @@ def cyberlog(id):
                 'plainText': boolConverter(r.get(f'{w}PlainText', None, type=int)), 'flashText': boolConverter(r.get(f'{w}FlashText', None, type=int)),
                 'tts': boolConverter(r.get(f'{w}TTS', None, type=int))}
         servers.update_one({"server_id": id}, {"$set": {"cyberlog": {
-        "enabled": r.get('enabled').lower() == 'true',
+        "enabled": r.get('enabled'),
         'ghostReactionEnabled': r.get('ghostReactionEnabled') == '1',
         'disguardLogRecursion': r.get('disguardLogRecursion') == '1',
         "image": r.get('imageLogging') == '1',

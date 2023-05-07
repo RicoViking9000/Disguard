@@ -40,7 +40,7 @@
                 <fieldset class='selected' id="defaultSettings">
                     <div class="switchPod">
                         <label class="switch">
-                            <input type="checkbox" {%if cyberlog.enabled%} checked {%endif%}>
+                            <input name="enabled" type="checkbox" {%if cyberlog.enabled%} checked {%endif%}>
                             <span class="slider"></span>
                         </label>
                         <legend>Logging Module</legend>
@@ -212,7 +212,7 @@
                 <fieldset id="messageSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.message.enabled%} checked {%endif%}>
+                          <input name="message" type="checkbox" {%if cyberlog.message.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Message Logging</legend>
@@ -408,7 +408,7 @@
                 <fieldset id="doorguardSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.doorguard.enabled%} checked {%endif%}>
+                          <input name="doorguard" type="checkbox" {%if cyberlog.doorguard.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Doorguard Logging</legend>
@@ -590,7 +590,7 @@
                 <fieldset id="serverSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.server.enabled%} checked {%endif%}>
+                          <input name="server" type="checkbox" {%if cyberlog.server.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Server Update Logging</legend>
@@ -772,7 +772,7 @@
                 <fieldset id="channelSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.channel.enabled%} checked {%endif%}>
+                          <input name="channel" type="checkbox" {%if cyberlog.channel.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Channel Logging</legend>
@@ -954,7 +954,7 @@
                 <fieldset id="memberSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.member.enabled%} checked {%endif%}>
+                          <input name="member" type="checkbox" {%if cyberlog.member.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Member Logging</legend>
@@ -1146,7 +1146,7 @@
                 <fieldset id="roleSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.role.enabled%} checked {%endif%}>
+                          <input name="role" type="checkbox" {%if cyberlog.role.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Role Logging</legend>
@@ -1328,7 +1328,7 @@
                 <fieldset id="emojiSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.emoji.enabled%} checked {%endif%}>
+                          <input name="emoji" type="checkbox" {%if cyberlog.emoji.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Emoji Logging</legend>
@@ -1510,7 +1510,7 @@
                 <fieldset id="voiceSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.voice.enabled%} checked {%endif%}>
+                          <input name="voice" type="checkbox" {%if cyberlog.voice.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Voice Logging</legend>
@@ -1711,7 +1711,7 @@
                 <fieldset id="miscSettings">
                     <div class="switchPod">
                         <label class="switch">
-                          <input type="checkbox" {%if cyberlog.misc.enabled%} checked {%endif%}>
+                          <input name="misc" type="checkbox" {%if cyberlog.misc.enabled%} checked {%endif%}>
                           <span class="slider"></span>
                         </label>
                         <legend>Misc Logging</legend>
