@@ -143,6 +143,7 @@ async def get_messages_by_timestamp(after: datetime.datetime = None, before: dat
 async def patch_message(message: Message):
     if message.channel.id in (534439214289256478, 910598159963652126): return
     existing_message = await get_message(message.channel.id, message.id)
+    if not existing_message: return
     index = int(list(existing_message.keys())[-1][-1]) + 1
     data = message_data(message, index=index)
     data.pop('_id')

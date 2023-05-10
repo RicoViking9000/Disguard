@@ -258,7 +258,7 @@ def server(id):
             } for i in range(len(r.getlist('subName'))) if not r.getlist('delete')[i] == '1' and i != 0]
             }})
         return redirect(url_for('server', id=id))
-    feeds = [{'template': True, 'subreddit': 'placeholder', 'channel': serv['channels'][1]['id'], 'truncateTitle': 100, 'truncateText': 400, 'media': 3, 'creditAuthor': 3, 'color': 'colorCode', 'timestamp': True}] + serv.get('redditFeeds', [])
+    feeds = [{'template': True, 'subreddit': 'placeholder', 'channel': serv['channels'][1]['id'], 'truncateTitle': 100, 'truncateText': 400, 'media': 3, 'creditAuthor': 3, 'color': 'colorCode', 'timestamp': True}] + [feed for feed in serv.get('redditFeeds', {}).values()]
     return render_template('general.html', server=serv, redditFeeds=feeds, date=d, date2=d2, id=id, redesign=True)
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
