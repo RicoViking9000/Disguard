@@ -191,7 +191,7 @@ class Info(commands.Cog):
             for c in channels: every.append(InfoResult(c.get('channel'), '{}{} - {} ({}% match)'.format(types.get(type(c.get('channel'))), c.get('channel').name, c.get('check')[0], c.get('check')[1]), c.get('check')[1]))
             for i in inv: every.append(InfoResult(i.get('invite'), '💌discord.gg/{} - {} ({}% match)'.format(i.get('invite').code.replace(arg, '**{}**'.format(arg)), i.get('check')[0], i.get('check')[1]), i.get('check')[1]))
             for e in emojis: every.append(InfoResult(e.get('emoji'), '{}{} - {} ({}% match)'.format(e.get('emoji'), e.get('emoji').name, e.get('check')[0], e.get('check')[1]), e.get('check')[1]))
-            if arg not in emoji.UNICODE_EMOJI and arg not in [str(emoji.get('emoji')) for emoji in emojis]:
+            if not emoji.distinct_emoji_list(arg) and arg not in [str(emoji.get('emoji')) for emoji in emojis]:
                 try:
                     partial = await PartialEmojiConverter.convert(ctx, arg)
                     every.append(InfoResult(partial, f'{partial}{partial.name}', 100))
