@@ -83,20 +83,24 @@ class Reddit(commands.Cog):
     async def redditEnhance(self, message: discord.Message):
         try: config = (await utility.get_server(message.guild))['redditEnhance']
         except KeyError: return
-        if not any(config): return #Feature is disabled
-        matches_submission = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/\w+\/comments\/([A-Za-z0-9]+\w+)', message.content)
-        matches_subreddit = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/([A-Za-z0-9_]+)$', message.content)
+        if not config: return #Feature is disabled
+        if config[0]: matches_submission = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/\w+\/comments\/([A-Za-z0-9]+\w+)', message.content)
+        else: matches_submission = []
+        if config[1]: matches_subreddit = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/([A-Za-z0-9_]+)$', message.content)
+        else: matches_subreddit = []
         if not any([matches_subreddit, matches_submission]): return
         for match in matches_subreddit:
             try:
                 embed = await self.subredditEmbed(match, False)
                 await message.channel.send(embed=embed)
-            except: pass #TODO: Add error handling
+            except Exception as e:
+                await message.channel.send(f'Error retrieving subreddit info: {e}')
         for match in matches_submission:
             try:
                 embed = await self.redditSubmissionEmbed(message.guild, match, False, channel=message.channel)
                 await message.channel.send(embed=embed)
-            except: pass
+            except Exception as e:
+                await message.channel.send(f'Error retrieving submission info: {e}')
         message = await message.channel.fetch_message(message.id)
         # Suppress the Discord embed for the user's link
         if not message.embeds:
@@ -180,10 +184,11 @@ class Reddit(commands.Cog):
         ----------------------
         Parameters:
         subreddit: str
-            The subreddit to create a feed for
+            The name or URL of the subreddit to create a feed for
         channel: discord.TextChannel
             The channel to send the feed to, defaults to the current channel
         '''
+        subreddit = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/([A-Za-z0-9_]+)$', subreddit)[0]
         if subreddit in self.redditThreads.get(ctx.guild.id, {}).keys():
             return await ctx.send(f'There is already a feed in this server for r/{subreddit}. Use `/reddit edit_feed {subreddit}` to edit the settings for this feed or `/reddit delete_feed {subreddit}` to delete it.')
         feed = {
