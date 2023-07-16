@@ -344,11 +344,12 @@ async def data(ctx: commands.Context):
     basePath = f'Attachments/Temp/{ctx.message.id}'
     os.makedirs(basePath)
     userData = (await database.GetUser(ctx.author))
-    userData.pop('_id')
-    dataToWrite = json.dumps(userData, indent=4, default=serializeJson)
-    attachmentCount = 0
-    with open(f'{basePath}/{f"{convertToFilename(str(ctx.author))} - UserData"}.json', 'w+') as f:
-        f.write(dataToWrite)
+    if userData:
+        userData.pop('_id')
+        dataToWrite = json.dumps(userData, indent=4, default=serializeJson)
+        attachmentCount = 0
+        with open(f'{basePath}/{f"{convertToFilename(str(ctx.author))} - UserData"}.json', 'w+') as f:
+            f.write(dataToWrite)
     for server in [g for g in bot.guilds if ctx.author in g.members]:
         member = [m for m in server.members if m.id == ctx.author.id][0]
         serverPath = f'{basePath}/{convertToFilename(server.name)}'
@@ -357,10 +358,11 @@ async def data(ctx: commands.Context):
             try: os.makedirs(serverPath)
             except FileExistsError: pass
             serverData = (await database.GetServer(server))
-            serverData.pop('_id')
-            dataToWrite = json.dumps(serverData, indent=4, default=serializeJson)
-            with open(f'{serverPath}/ServerDatabaseEntry.json', 'w+') as f:
-                f.write(dataToWrite)
+            if serverData:
+                serverData.pop('_id')
+                dataToWrite = json.dumps(serverData, indent=4, default=serializeJson)
+                with open(f'{serverPath}/ServerDatabaseEntry.json', 'w+') as f:
+                    f.write(dataToWrite)
         dataToWrite = json.dumps(await lightningdb.get_member(server.id, member.id), indent=4, default=serializeJson)
         with open(f'{serverPath}/Server-MemberInfo.json', 'w+') as f:
             f.write(dataToWrite)

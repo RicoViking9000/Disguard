@@ -189,7 +189,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
         'jumpContext': serv.get('jumpContext', False), #Whether to display content for posted message jump URL links
         'undoSuppression': serv.get('undoSuppression', False), #Whether to enable the undo functionality after a message's embed was collapsed
         'redditComplete': serv.get('redditComplete', 0), #Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
-        'redditEnhance': 0 if serv.get('redditEnhance') == (False, False) else 1 if serv.get('redditEnhance') == (True, False) else 2 if serv.get('redditEnhance') == (False, True) else 3 if serv.get('redditEnhance') == (True, True) else serv.get('redditEnhance', 3), #0: all off, 1: subreddits only, 2: submissions only, 3: all on
+        'redditEnhance': (False, False) if serv.get('redditEnhance') == 0 else (True, False) if serv.get('redditEnhance') == 1 else (False, True) if serv.get('redditEnhance') == 2 else (True, True) if serv.get('redditEnhance') == 3 else serv.get('redditEnhance', (True, True)), # index 0: submission, index 1: subreddit
         'birthdayChannel': serv.get('birthdayChannel') or serv.get('birthday', 0), #Channel to send birthday announcements to
         'birthdate': serv.get('birthdate', datetime.datetime(started.year, 1, 1, 12 - utility.daylightSavings())), #When to send bday announcements
         'birthdayMode': serv.get('birthdayMode', 1), #How to respond to automatic messages. 0 = disabled, 1 = react, 2 = message
@@ -1005,3 +1005,4 @@ async def convert_reddit_feeds(s: discord.Guild):
         for feed in feeds:
             newFeeds[feed['subreddit']] = feed
         await servers.update_one({'server_id': s.id}, {'$set': {'redditFeeds': newFeeds}})
+        await lightningdb.patch_server(s, {'redditFeeds': newFeeds})
