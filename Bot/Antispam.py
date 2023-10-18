@@ -67,6 +67,11 @@ class Antispam(commands.Cog):
                             elif e.get('type') == 'pause':
                                 g = self.bot.get_guild(e['server'])
                                 await database.ResumeMod(g, e['key'])
+                            elif e.get('type') == 'lock_ticket':
+                                tickets = await database.GetSupportTickets()
+                                ticket = [t for t in tickets if t['id'] == e['target']][0]
+                                ticket['status'] = 4
+                                await database.UpdateSupportTicket(e['target'], ticket)
                         except discord.NotFound: await database.RemoveTimedEvent(g, e)
                         await database.RemoveTimedEvent(g, e)
         except: traceback.print_exc()
@@ -459,7 +464,7 @@ class Antispam(commands.Cog):
         wl = config.get('ageKickWhitelist')
         theme = await utility.color_theme(ctx.guild)
         e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^50}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^50}**\n{config.get("ageKickDM")}''', color=orange[theme], timestamp=discord.utils.utcnow())
-        e.add_field(name='Kick Accounts', value=f'Under {config.get("ageKick") / 86400} days old')
+        e.add_field(name='Kick Accounts', value=f'Under {config.get("ageKick") / 86400} days old' if config.get('ageKick') is not None else 'Not enabled')
         await ctx.send(embed=e)
         
     @age_kick.command()

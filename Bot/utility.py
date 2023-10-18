@@ -8,6 +8,14 @@ import lightningdb
 import re
 
 rv9k = 247412852925661185
+GREEN = (0x008000, 0x66ff66)
+BLUE = (0x0000FF, 0x6666ff)
+RED = (0xff0000, 0xff6666)
+ORANGE = (0xD2691E, 0xffc966)
+YELLOW = (0xffff00, 0xffff66)
+INDENT = '  '
+NEWLINE = '\n'
+TOGGLES = {True: 'slideToggleOn', False: 'slideToggleOff'}
 
 permissionKeys = {'create_instant_invite': 'Create Invite', 'kick_members': 'Kick Members', 'ban_members': 'Ban Members', 'administrator': 'Administrator',
 'manage_channels': 'Manage Channels', 'manage_guild': 'Manage Server', 'add_reactions': 'Add Reactions', 'view_audit_log': 'View Audit Log',
@@ -392,3 +400,8 @@ async def get_user(u: discord.User):
 async def getServerMember(m: discord.Member):
     '''Gets the member data given a member object'''
     return (await get_server(m.guild))['members'].get(str(m.id))
+
+class BasicView(discord.ui.View):
+    '''For when you just need somewhere to stick some components'''
+    def __init__(self, timeout=300):
+        super().__init__(timeout=timeout)

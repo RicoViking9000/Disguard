@@ -37,7 +37,7 @@ tracemalloc.start()
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
-cogs = ['Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Help']
 
 print("Connecting...")
 
@@ -96,7 +96,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name='my boss (Syncing data...)', type=discord.ActivityType.listening)
         await UpdatePresence()
-        await bot.load_extension('Cyberlog')
+        #await bot.load_extension('Cyberlog')
         #await asyncio.sleep(2)
         for cog in cogs:
             try:
@@ -195,11 +195,6 @@ async def index(ctx, t: int = 0):
         for t in target: await asyncio.gather(*[indexMessages(t, c, full) for c in t.text_channels])
     else: await asyncio.wait([asyncio.create_task(indexMessages(ctx.guild, target, full))], return_when=asyncio.FIRST_COMPLETED)
     await status.delete()
-
-@bot.hybrid_command(help='Disguard\'s quick start guide')
-async def help(ctx: commands.Context):
-    e=discord.Embed(title='Help', description=f"[Click to view help on my website](https://disguard.netlify.com/commands 'https://disguard.netlify.com/commands')\n\nNeed help with the bot?\n• [Join Disguard support server](https://discord.gg/xSGujjz)\n• Open a support ticket with the `{await utility.prefix(ctx.guild) if ctx.guild else '.'}ticket` command", color=yellow[await utility.color_theme(ctx.guild) if ctx.guild else 1])
-    await ctx.send(embed=e)
 
 @bot.hybrid_command(help='Get Disguard\'s invite link')
 async def invite(ctx: commands.Context):

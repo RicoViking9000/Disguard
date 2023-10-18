@@ -233,7 +233,7 @@ class Birthdays(commands.Cog):
         message: discord.Message = await ctx.send(embed=embed) #Consider removing this if load times are quick
         homeView.message = message
         embed = await homeView.finishEmbed(embed)
-        await message.edit(embed=embed, view=homeView)
+        await ctx.interaction.edit_original_response(embed=embed, view=homeView)
     
     @birthday.command()
     async def view_profile(self, ctx: commands.Context, member: discord.Member):

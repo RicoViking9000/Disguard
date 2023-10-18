@@ -542,7 +542,7 @@ class Info(commands.Cog):
     async def BotInfo(self, app: discord.AppInfo, s: discord.Guild):
         bpg = 1073741824 #Bytes per gig
         embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(self.bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
-        embed.description+=f'\n\nDISGUARD HOST SYSTEM INFORMATION\nCPU: {cpuinfo.get_cpu_info().get("brand")}\n•   Usage: {psutil.cpu_percent()}%\n​•   Core count: {psutil.cpu_count(logical=False)} cores, {psutil.cpu_count()} threads\n​​​​​​‍‍‍​​​•   {(psutil.cpu_freq().current / 1000):.2f} GHz current clock speed; {(psutil.cpu_freq().max / 1000):.2f} GHz max clock speed'
+        embed.description+=f'\n\nDISGUARD HOST SYSTEM INFORMATION\nCPU: {cpuinfo.get_cpu_info().get("brand_raw")}\n•   Usage: {psutil.cpu_percent()}%\n​•   Core count: {psutil.cpu_count(logical=False)} cores, {psutil.cpu_count()} threads\n​​​​​​‍‍‍​​​•   {(psutil.cpu_freq().current / 1000):.2f} GHz current clock speed; {(psutil.cpu_freq().max / 1000):.2f} GHz max clock speed'
         embed.description+=f'\n​RAM: {(psutil.virtual_memory().total / bpg):.1f}GB total ({(psutil.virtual_memory().used / bpg):.1f}GB used, {(psutil.virtual_memory().free / bpg):.1f}GB free)'
         embed.description+=f'\nSTORAGE: {psutil.disk_usage("/").total // bpg}GB total ({psutil.disk_usage("/").used // bpg}GB used, {psutil.disk_usage("/").free // bpg}GB free)'
         embed.set_footer(text='My ID: {}'.format(app.id))
@@ -550,7 +550,7 @@ class Info(commands.Cog):
         embed.add_field(name='Developer',value=app.owner)
         embed.add_field(name='Public Bot',value=app.bot_public)
         embed.add_field(name='In development since',value='March 20, 2019')
-        embed.add_field(name='Website with information',value=f'[Disguard Website](https://disguard.netlify.com/ \'https://disguard.netlify.com/\')')
+        embed.add_field(name='Website with information',value=f'[Disguard Website](https://disguard.netlify.com/)')
         embed.add_field(name='Servers',value=len(self.bot.guilds))
         embed.add_field(name='Emojis',value=len(self.bot.emojis))
         embed.add_field(name='Users',value=len(self.bot.users))
