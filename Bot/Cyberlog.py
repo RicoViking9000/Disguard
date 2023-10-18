@@ -118,7 +118,7 @@ class Cyberlog(commands.Cog):
                         objectID = fullDocument['server_id']
                         await lightningdb.patch_server(objectID, fullDocument)
                     elif collection == 'users': 
-                        name = 'username'
+                        name = 'user_id'
                         objectID = fullDocument['user_id']
                         await lightningdb.patch_user(objectID, fullDocument)
                     if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys(): asyncio.create_task(reddit.redditFeedHandler(self.bot.get_guild(objectID)))

@@ -1,7 +1,9 @@
 '''Contains Disguard's support ticket system'''
 
+from typing import Optional
 import discord
 from discord.ext import commands
+import Cyberlog
 import traceback
 import re
 import datetime
@@ -9,9 +11,28 @@ import database
 import utility
 import textwrap
 import asyncio
+import copy
 
-STATUS_DICT = {0: 'Unopened', 1: 'Viewed', 2: 'In progress', 3: 'Closed', 4: 'Locked'}
-SORT_FLAVOR = {0: 'Recently active first', 1: 'Recently active last', 2: 'Ticket number (descending)', 3: 'Ticket number (ascending)'}
+STATUS_DICT = {
+    0: 'Unopened',
+    1: 'Viewed',
+    2: 'In progress',
+    3: 'Closed',
+    4: 'Locked'
+}
+SORT_FLAVOR = {
+    0: 'Recently active first',
+    1: 'Recently active last',
+    2: 'Ticket number (descending)',
+    3: 'Ticket number (ascending)'
+}
+PERMISSIONS = {
+    0: 'Invited to ticket',
+    1: 'View ticket',
+    2: 'View and reply to ticket',
+    3: 'View, reply, manage ticket members',
+    4: 'Ticket Owner (all permissions)',
+}
 
 class Support(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -53,11 +74,13 @@ class Support(commands.Cog):
                     'Server Moderator' if permissions.manage_guild else \
                     'Junior Server Moderator' if any((permissions.kick_members, permissions.ban_members, permissions.manage_channels, permissions.manage_roles, permissions.moderate_members)) else \
                     'Server Member',
-                'status': 0, 'conversation': []}
+                'status': 0, 'conversation': [], 'created': datetime.datetime.utcnow()}
         if system: firstEntry = {'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{message}*'}
         else: firstEntry = {'author': ctx.author.id, 'timestamp': datetime.datetime.utcnow(), 'message': message}
         ticket['conversation'].append(firstEntry)
-        authorMember, devMember, botMember = {'id': ctx.author.id, 'bio': 'Created this ticket', 'permissions': 2, 'notifications': True}, {'id': 247412852925661185, 'bio': 'Bot developer', 'permissions': 1, 'notifications': True}, {'id': self.bot.user.id, 'bio': 'System messages', 'permissions': 1, 'notifications': False} #2: Owner, 1: r/w, 0: r 
+        authorMember = {'id': ctx.author.id, 'bio': 'Created this ticket', 'permissions': 4, 'notifications': True},
+        devMember = {'id': 247412852925661185, 'bio': 'Bot developer team', 'permissions': 2, 'notifications': True},
+        botMember = {'id': self.bot.user.id, 'bio': 'System messages', 'permissions': 2, 'notifications': False}
         ticket['members'] = [authorMember, devMember, botMember]
         try: ticketList = await database.GetSupportTickets()
         except AttributeError: ticketList = []
@@ -77,11 +100,11 @@ class Support(commands.Cog):
         trashcan = self.emojis['delete']
         # message = await ctx.send(embed=discord.Embed(description=f'{self.loading}Downloading ticket data'))
         tickets = await database.GetSupportTickets()
+        color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
         embed = discord.Embed(title=f'🎟 Disguard Ticket System', color=utility.YELLOW[color_theme])
         basic_view = discord.ui.View(timeout=300)
         basic_view.add_item(CreateTicketButton(self.bot, ctx))
         if not tickets: 
-            color_theme = await utility.color_theme(ctx.guild) if ctx.guild else 1
             embed.description = 'There are no tickets currently in the system'
             return await ctx.interaction.response.send_message(embed=embed, view=basic_view)
         filtered_tickets = [t for t in tickets if ctx.author.id in [m['id'] for m in t['members']]] #only tickets involving the user
@@ -89,28 +112,36 @@ class Support(commands.Cog):
             embed.description = 'There are currently no tickets in the system created by or involving you, and you have no pending invites.'
             return await ctx.interaction.response.send_message(embed=embed, view=basic_view)
         if ticket_number == -1:
-            return await ctx.interaction.response.send_message(embed=embed, view=TicketBrowseView(ctx, self.bot, filtered_tickets))
+            browse_view = TicketBrowseView(ctx, self.bot, filtered_tickets)
+            await browse_view.setup()
+            return await ctx.interaction.response.send_message(embed=embed, view=browse_view)
         try: ticket = tickets[ticket_number]
         except IndexError: 
-            return await ctx.interaction.response.send_message(embed=embed, view=TicketBrowseView(ctx, self.bot, filtered_tickets, f'Ticket {ticket_number} doesn\'t exist in the system.'))
-        if check_member_access(ctx.author, ticket): await ctx.interaction.response.send_message(embed=embed, view=SingleTicketView(self.bot, ticket))
+            browse_view = TicketBrowseView(ctx, self.bot, filtered_tickets, f'Ticket {ticket_number} doesn\'t exist in the system.')
+            await browse_view.setup()
+            return await ctx.interaction.response.send_message(embed=embed, view=browse_view)
+        if check_member_access(ctx.author, ticket):
+            ticket_view = SingleTicketView(ctx, self.bot, tickets, ticket)
+            await ticket_view.setup()
+            await ctx.interaction.response.send_message(embed=ticket_view.embed, view=ticket_view)
         else: await ctx.interaction.response.send_message(embed=embed, view=TicketBrowseView(ctx, self.bot, filtered_tickets, f'You don\'t have access to ticket {ticket_number}.'))
 
-    async def notify_members(ticket: dict[str, str | int]):
-        ''' Notify ticket members of a new reply '''
-        e = discord.Embed(title=f"New activity in ticket {ticket['number']}", description=f"To view the ticket, use the tickets command (`.tickets {ticket['number']}`)\n\n{'Highlighted message':-^50}", color=yellow[ticketcolor_theme])
+    async def notify_members(self, ctx: commands.Context, ticket: dict[str, str | int], **kwargs):
+        '''Notify ticket members of an action'''
         entry = ticket['conversation'][-1]
-        messageAuthor = self.bot.get_user(entry['author'])
-        e.set_author(name=messageAuthor, icon_url=messageAuthor.avatar.with_static_format('png').url)
-        e.add_field(
-            name=f"{messageAuthor.name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -5))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}",
-            value=f'> {entry["message"]}',
-            inline=False)
-        e.set_footer(text=f"You are receiving this DM because you have notifications enabled for ticket {ticket['number']}. View the ticket to disable notifications.")
-        for m in ticket['members']:
-            if m['notifications'] and m['id'] != entry['author']:
-                try: await self.bot.get_user(m['id']).send(embed=e)
-                except: pass
+        author = self.bot.get_user(entry['author'])
+        embed = discord.Embed(
+            title=kwargs.get('title') or f"New activity in ticket {ticket['number']}",
+            description=kwargs.get('description') or f'{author.display_name} replied: {entry["message"]}\n\nTo view the full ticket, use the button below or `/tickets {ticket["number"]}`',
+            color=utility.YELLOW[1]
+        )
+        embed.set_author(name=author.display_name, icon_url=author.avatar.with_static_format('png').url)
+        embed.set_footer(text=f"You're receiving this DM because you have notifications enabled for ticket {ticket['number']}")
+        for member in ticket['members']:
+            if member['notifications'] and member['id'] != entry['author']:
+                await self.bot.get_channel(1092291378396024882).send(embed=embed, view=DMNotificationView(ctx, self.bot, ticket, self.bot.get_user(member['id'])))
+                # try: await self.bot.get_user(member['id']).send(embed=embed)
+                # except: pass
 
 def paginate(iterable: list, per_page=10):
     '''Splits a list into pages of a given size'''
@@ -137,6 +168,16 @@ def check_member_access(member: discord.Member, ticket: dict) -> int:
         if m['id'] == member.id: return m['permissions']
     return 0
 
+def member_server_prestige(member: discord.Member) -> str:
+    '''Returns a string describing a member's prestige in the server'''
+    match member:
+        case member.guild.owner: return 'Server Owner'
+        case member.guild_permissions.administrator: return 'Server Administrator'
+        case member.guild_permissions.manage_guild: return 'Server Moderator'
+        case member.guild_permissions.manage_roles | member.guild_permissions.manage_channels: return 'Junior Server Moderator'
+        case member.guild_permissions.kick_members | member.guild_permissions.ban_members | member.guild_permissions.moderate_members | member.guild_permissions.manage_messages: return 'Chat Moderator'
+        case _: return 'Server Member'
+
 class TicketBrowseView(discord.ui.View):
     def __init__(self, ctx: commands.Context, bot: commands.Bot, tickets: list[dict], special_message: str = '') -> None:
         super().__init__(timeout=600)
@@ -153,9 +194,7 @@ class TicketBrowseView(discord.ui.View):
         if len(self.pages) > 1: 
             self.add_item(self.PreviousPageButton(bot))
             self.add_item(self.NextPageButton(bot))
-        self.add_item(self.AdjustSortButton(bot))
-        asyncio.create_task(self.create_embed())
-        asyncio.create_task(self.build_viewer())
+        self.add_item(self.AdjustSortButton(bot, self.sort_mode))
     
     def sort_tickets(self, mode: int):
         '''Sorts the tickets by the given mode'''
@@ -189,6 +228,11 @@ class TicketBrowseView(discord.ui.View):
                 '''),
                 inline=False)
     
+    async def setup(self):
+        '''Sets up the view'''
+        await self.create_embed()
+        await self.populate_embed()
+    
     async def build_viewer(self):
         self.sort_tickets(self.sort_mode)
         await self.populate_embed()
@@ -207,62 +251,89 @@ class TicketBrowseView(discord.ui.View):
         
         async def callback(self, interaction: discord.Interaction):
             # switch to single ticket view
-            pass
+            try:
+                view: TicketBrowseView = self.view
+                new_view = SingleTicketView(view.ctx, self.bot, self.tickets, self.tickets[int(self.values[0])])
+                await new_view.setup()
+                await interaction.response.edit_message(embed=new_view.embed, view=new_view)
+            except: traceback.print_exc()
     
     class CloseViewerButton(discord.ui.Button):
         def __init__(self, bot: commands.Bot) -> None:
             support: Support = bot.get_cog('Support')
-            super().__init__(style=discord.ButtonStyle.red, emoji=bot.get_emoji(support.emojis['close']), label='Close viewer')
+            super().__init__(style=discord.ButtonStyle.red, emoji=support.emojis['delete'], label='Close viewer')
             
         async def callback(self, interaction: discord.Interaction):
             await interaction.message.delete()
     
     class PreviousPageButton(discord.ui.Button):
         def __init__(self, bot: commands.Bot) -> None:
-            self.view: TicketBrowseView = self.view
             support: Support = bot.get_cog('Support')
-            super().__init__(style=discord.ButtonStyle.gray, emoji=bot.get_emoji(support.emojis['previous']), label='Previous page')
+            super().__init__(style=discord.ButtonStyle.gray, emoji=support.emojis['arrowBackward'], label='Previous page')
         
         async def callback(self, interaction: discord.Interaction):
-            self.view.current_page -= 1
-            if self.view.current_page == 0: self.disabled = True
-            elif self.view.current_page != 0 and self.disabled: self.disabled = False
-            await self.view.populate_embed()
-            await interaction.response.edit_message(embed=self.view.embed, view=self.view)
+            view: TicketBrowseView = self.view
+            view.current_page -= 1
+            if view.current_page == 0: self.disabled = True
+            elif view.current_page != 0 and self.disabled: self.disabled = False
+            await view.populate_embed()
+            await interaction.response.edit_message(embed=view.embed, view=view)
     
     class NextPageButton(discord.ui.Button):
         def __init__(self, bot: commands.Bot) -> None:
-            self.view: TicketBrowseView = self.view
             support: Support = bot.get_cog('Support')
-            super().__init__(style=discord.ButtonStyle.gray, emoji=bot.get_emoji(support.emojis['next']), label='Next page')
+            super().__init__(style=discord.ButtonStyle.gray, emoji=support.emojis['arrowForward'], label='Next page')
         
         async def callback(self, interaction: discord.Interaction):
-            self.view.current_page += 1
-            if self.view.current_page == len(self.view.pages) - 1: self.disabled = True
-            elif self.view.current_page != len(self.view.pages) - 1 and self.disabled: self.disabled = False
-            await self.view.populate_embed()
-            await interaction.response.edit_message(embed=self.view.embed, view=self.view)
+            view: TicketBrowseView = self.view
+            view.current_page += 1
+            if view.current_page == len(view.pages) - 1: self.disabled = True
+            elif view.current_page != len(view.pages) - 1 and self.disabled: self.disabled = False
+            await view.populate_embed()
+            await interaction.response.edit_message(embed=view.embed, view=view)
     
     class AdjustSortButton(discord.ui.Button):
-        def __init__(self, bot: commands.Bot) -> None:
-            self.view: TicketBrowseView = self.view
+        def __init__(self, bot: commands.Bot, sort_mode: int) -> None:
             support: Support = bot.get_cog('Support')
-            super().__init__(style=discord.ButtonStyle.gray, emoji=bot.get_emoji(support.emojis['details']), label=f'Sort: {SORT_FLAVOR[self.view.sort_mode]}')
+            super().__init__(style=discord.ButtonStyle.gray, emoji=support.emojis['details'], label=f'Sort: {SORT_FLAVOR[sort_mode]}')
         
         async def callback(self, interaction: discord.Interaction):
-            self.view.sort_mode = (self.view.sort_mode + 1) % len(SORT_FLAVOR)
-            self.view.sort_tickets(self.view.sort_mode)
-            await self.view.populate_embed()
-            await interaction.response.edit_message(embed=self.view.embed, view=self.view)
+            view: TicketBrowseView = self.view
+            view.sort_mode = (view.sort_mode + 1) % len(SORT_FLAVOR)
+            view.sort_tickets(view.sort_mode)
+            await view.populate_embed()
+            await interaction.response.edit_message(embed=view.embed, view=view)
 
 
 class SingleTicketView(discord.ui.View):
-    def __init__(self, ctx: commands.Context, bot: commands.Bot, ticket: dict) -> None:
+    def __init__(self, ctx: commands.Context, bot: commands.Bot, tickets: list[dict], ticket: dict) -> None:
         super().__init__(timeout=600)
         self.ctx = ctx
         self.bot = bot
+        self.tickets = tickets
         self.ticket = ticket
+        self.ticket_member = [m for m in ticket['members'] if m['id'] == self.ctx.author.id][0]
+        self.show_details = len(self.ticket['conversation']) < 4
+        self.current_page = 0
+        self.paginate_pages()
         self.support: Support = self.bot.get_cog('Support')
+        self.prev_button = self.PreviousConversationPageButton(bot, self.current_page)
+        self.next_button = self.NextConversationPageButton(bot, self.current_page, len(self.conversation_pages))
+        self.add_item(self.BackButton(bot))
+        self.add_item(self.prev_button)
+        self.add_item(self.ReplyButton(bot))
+        self.add_item(self.next_button)
+        self.add_item(self.TicketDetailsToggle(bot, self.show_details))
+        self.add_item(self.NotificationsToggleButton(bot, self.ticket_member['notifications']))
+        self.add_item(self.MembersButton(bot, self.ticket_member['permissions'], len(self.ticket['members'])))
+        if self.ctx.author.id == utility.rv9k:
+            if self.ticket['status'] == 0: self.ticket['status'] = 1
+            self.add_item(self.CloseTicketButton(bot, self.ticket['status']))
+
+    def paginate_pages(self):
+        '''Paginates the ticket's conversation'''
+        self.conversation_pages = list(paginate(list(reversed(self.ticket['conversation'])), 7 if self.show_details else 10))
+        return self.conversation_pages
 
     async def create_embed(self):
         color_theme = await utility.color_theme(self.ctx.guild) if self.ctx.guild else 1
@@ -270,189 +341,684 @@ class SingleTicketView(discord.ui.View):
         self.embed.set_author(name=self.ctx.author, icon_url=self.ctx.author.avatar.with_static_format('png').url)
     
     async def populate_embed(self):
+        self.embed.description = ''
         self.embed.clear_fields()
+        ticket = self.ticket
+        # member_index = ticket['members'].index(ticket_member)
+        ticket_server = self.bot.get_guild(ticket['server'])
+        # current_conversation_page = len(conversation_pages) - 1
+        # color_theme = await utility.color_theme(ticket_server) if ticket_server else 1
+        other_ticket_members = [self.bot.get_user(m['id']).display_name for m in ticket['members'] if m['id'] not in (self.bot.user.id, utility.rv9k, self.ctx.author.id)]
+        reply_emoji = self.support.emojis['reply']
+        conversation_header = f'CONVERSATION - {reply_emoji} to reply' if self.ticket_member['permissions'] >= 2 else 'CONVERSATION'
+        conversation_header = f'{conversation_header:-^85}' if self.ticket_member['permissions'] >= 2 else f'{conversation_header:-^50}'
+        if self.show_details: self.embed.description = textwrap.dedent(f'''
+            {'TICKET INFO':-^50}
+            {self.support.emojis['member']}Author: {self.bot.get_user(ticket['author'])}
+            ⭐Author prestige: {ticket['prestige']}
+            {self.support.emojis['members']}Other ticket members: {', '.join(other_ticket_members) if other_ticket_members else 'None'}
+            🏠Server: {self.bot.get_guild(ticket['server'])}
+            {self.presence_icon(ticket['status'])}Ticket status: {STATUS_DICT.get(ticket['status'], 'Unknown')}
+            {self.support.emojis['bell'] if self.ticket_member['notifications'] else self.support.emojis['bellMute']}DM Notifications: {self.ticket_member['notifications']}
+            ''')
+        self.embed.description += textwrap.dedent(f'''
+            \n{conversation_header}
+            Page {self.current_page + 1} of {len(self.conversation_pages)}\n
+            ''')
+        for entry in self.conversation_pages[self.current_page]:
+            self.embed.add_field(
+                name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(ticket_server) if ticket_server else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(ticket_server) if ticket_server else 'EST'}",
+                value=f'> {entry["message"]}',
+                inline=False)
+
+    def update_page_buttons(self):
+        '''Updates the next/previous page buttons'''
+        if self.current_page == 0: self.prev_button.disabled = True
+        elif self.current_page != 0 and self.prev_button.disabled: self.prev_button.disabled = False
+        if self.current_page == len(self.conversation_pages) - 1: self.next_button.disabled = True
+        elif self.current_page != len(self.conversation_pages) - 1 and self.next_button.disabled: self.next_button.disabled = False
+    
+    def presence_icon(self, status: int) -> discord.Emoji:
+        '''Returns the emoji corresponding to the ticket's status integer'''
+        match status:
+            case 0: return self.support.emojis['dnd']
+            case 1 | 2: return self.support.emojis['idle']
+            case 3: return self.support.emojis['online']
+            case 4: return self.support.emojis['hiddenVoiceChannel']
+            case _: return self.support.emojis['offline']
     
     async def setup(self):
-        def messageCheck(m: discord.Message): return m.channel.id == self.ctx.channel.id and m.author.id == self.ctx.author.id
-        # if self.ctx.author.id == utility.rv9k and self.ticket['status'] == 0: self.ticket['status'] = 1 #If I view the ticket and it's marked as not viewed yet, mark it as viewed
-        ticket_member = [m for m in self.ticket['members'] if m['id'] == self.ctx.author.id][0]
-        conversation_pages = list(paginate(self.ticket['conversation'], 7))
-        current_conversation_page = len(conversationPages) - 1
-        
-        server = self.bot.get_guild(self.ticket['server'])
-        member = [m for m in ticket['members'] if m['id'] == ctx.author.id][0]
-        memberIndex = ticket['members'].index(member)
-        tg = g
-        if not tg and ticket['server']: tg = self.bot.get_guild(ticket['server'])
-        ticketcolor_theme = self.bot.get_cog('Cyberlog').color_theme(tg) if tg else 1
-        def returnPresence(status): return self.emojis['hiddenVoiceChannel'] if status == 4 else self.emojis['online'] if status == 3 else self.emojis['idle'] if status in (1, 2) else self.emojis['dnd']
-        reactions = [self.emojis['arrowLeft'], self.emojis['members'], self.emojis['reply']]
-        reactions.insert(2, self.emojis['bell'] if not ctx.guild or not member['notifications'] else self.emojis['bellMute'])
-        conversationPages = list(paginate(ticket['conversation'], 7))
-        if len(conversationPages) > 0 and currentConversationPage != 0: reactions.insert(reactions.index(self.emojis['members']) + 2, self.emojis['arrowBackward'])
-        if len(conversationPages) > 0 and currentConversationPage != len(conversationPages) - 1: reactions.insert(reactions.index(self.emojis['reply']) + 1, self.emojis['arrowForward'])
-        if member['permissions'] == 0: reactions.remove(self.emojis['reply'])
-        if ctx.author.id == 247412852925661185: reactions.append(self.emojis['hiddenVoiceChannel'])
-        embed.title = f'🎟 Disguard Ticket System / Ticket {ticket_number}'
-        embed.description = f'''{'TICKET DATA':-^50}\n{self.emojis['member']}Author: {self.bot.get_user(ticket['author'])}\n⭐Prestige: {ticket['prestige']}\n{self.emojis['members']}Other members involved: {', '.join([self.bot.get_user(u["id"]).name for u in ticket['members'] if u["id"] not in (247412852925661185, self.bot.user.id, ctx.author.id)]) if len(ticket['members']) > 3 else f'None - react {self.emojis["members"]} to add'}\n⛓Server: {self.bot.get_guild(ticket['server'])}\n{returnPresence(ticket['status'])}Dev visibility status: {statusDict.get(ticket['status'])}\n{self.emojis['bell'] if member['notifications'] else self.emojis['bellMute']}Notifications: {member['notifications']}\n\n{f'CONVERSATION - {self.emojis["reply"]} to reply' if member['permissions'] > 0 else 'CONVERSATION':-^50}\nPage {currentConversationPage + 1} of {len(conversationPages)}{f'{NEWLINE}{self.emojis["arrowBackward"]} and {self.emojis["arrowForward"]} to navigate' if len(conversationPages) > 1 else ''}\n\n'''
-        for entry in conversationPages[currentConversationPage]: embed.add_field(name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(tg) if tg else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(tg) if tg else 'EST'}", value=f'> {entry["message"]}', inline=False)
-        if ctx.guild: 
-            if clearReactions: await message.clear_reactions()
-            else: clearReactions = True
-            await message.edit(content=None, embed=embed)
-        else:
-            await message.delete()
-            message = await ctx.send(embed=embed)
-        for r in reactions: await message.add_reaction(r)
-        result: typing.Tuple[discord.Reaction, discord.User] = await self.bot.wait_for('reaction_add', check=optionNavigation)
+        await self.create_embed()
+        await self.populate_embed()
+    
+    class BackButton(discord.ui.Button):
+        '''Returns to the ticket browser'''
+        def __init__(self, bot: commands.Bot) -> None:
+            #can't do self.view emojis here, need to use support.emojis
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.gray,
+                emoji=support.emojis['arrowLeft'],
+                label='All tickets',
+                row=0
+            )
+            self.bot: commands.Bot = bot
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Multi-ticket view
+            view: SingleTicketView = self.view
+            await view.populate_embed()
+            await interaction.response.edit_message(embed=view.embed, view=TicketBrowseView(view.ctx, self.bot, view.tickets))
+    
+    class PreviousConversationPageButton(discord.ui.Button):
+        '''View the previous page of the ticket's conversation'''
+        def __init__(self, bot: commands.Bot, current_page: int) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.gray,
+                emoji=support.emojis['arrowBackward'],
+                label='Previous page',
+                disabled=current_page == 0,
+                row=0
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Previous page of ticket conversation
+            view: SingleTicketView = self.view
+            view.current_page -= 1
+            await view.populate_embed()
+            view.update_page_buttons()
+            await interaction.response.edit_message(embed=view.embed, view=view)
 
+    class ReplyButton(discord.ui.Button):
+        '''Reply to the ticket'''
+        # only add this button if the member's permissions value is > 0
+        def __init__(self, bot: commands.Bot) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.blurple,
+                emoji=support.emojis['reply'],
+                label='Reply',
+                row=0
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Reply to the ticket
+            view: SingleTicketView = self.view
+            await interaction.response.send_modal(ReplyModal(view, view.ticket))
+            # re-paginate conversation pages
+            await view.populate_embed()
 
-        if result[0].emoji == self.emojis['arrowLeft']:
-            ticket_number = None #deselect the ticket
-            break
-        elif result[0].emoji == self.emojis['hiddenVoiceChannel']:
-            ticket['status'] = 3
-            ticket['conversation'].append({'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*My developer has closed this support ticket. If you still need assistance on this matter, you may reopen it by responding to it. Otherwise, it will silently lock in 7 days.*'})
-            await notifyMembers(ticket)
-        elif result[0].emoji in (self.emojis['arrowBackward'], self.emojis['arrowForward']):
-            if result[0].emoji == self.emojis['arrowBackward']: currentConversationPage -= 1
-            else: currentConversationPage += 1
-            if currentConversationPage < 0: currentConversationPage = 0
-            if currentConversationPage == len(conversationPages): currentConversationPage = len(conversationPages) - 1
-        elif result[0].emoji == self.emojis['members']:
-            embed.clear_fields()
-            permissionsDict = {0: 'View ticket', 1: 'View and respond to ticket', 2: 'Ticket Owner (View, Respond, Manage Sharing)', 3: 'Invite sent'}
-            memberResults = []
-            while not self.bot.is_closed():
-                def calculateBio(m): 
-                    return '(No description)' if type(m) is not discord.Member else "Server Owner" if server.owner.id == m.id else "Server Administrator" if m.guild_permissions.administrator else "Server Moderator" if m.guild_permissions.manage_guild else "Junior Server Moderator" if m.guild_permissions.manage_roles or m.guild_permissions.manage_channels else '(No description)'
-                if len(memberResults) == 0: staffMemberResults = [m for m in server.members if any([m.guild_permissions.administrator, m.guild_permissions.manage_guild, m.guild_permissions.manage_channels, m.guild_permissions.manage_roles, m.id == server.owner.id]) and not m.bot and m.id not in [mb['id'] for mb in ticket['members']]][:15]
-                memberFillerText = [f'{self.bot.get_user(u["id"])}{NEWLINE}> {u["bio"]}{NEWLINE}> Permissions: {permissionsDict[u["permissions"]]}' for u in ticket['members']]
-                embed.description = f'''**__{'TICKET SHARING SETTINGS':-^50}__\n\n{'Permanently included':-^40}**\n{NEWLINE.join([f'👤{f}' for f in memberFillerText[:3]])}'''
-                embed.description += f'''\n\n**{'Additional members':-^40}**\n{NEWLINE.join([f'{self.emojis["member"]}{f}{f"{NEWLINE}> {alphabet[i]} to manage" if ctx.author.id == ticket["author"] else ""}' for i, f in enumerate(memberFillerText[3:])]) if len(memberFillerText) > 2 else 'None yet'}'''
-                if ctx.author.id == ticket['author']: embed.description += f'''\n\n**{'Add a member':-^40}**\nSend a message to search for a member to add, then react with the corresponding letter to add them{f'{NEWLINE}{NEWLINE}Moderators of {self.bot.get_guild(ticket["server"])} are listed below as suggestions. You may react with the letter next to their name to quickly add them, otherwise send a message to search for someone else' if ticket['server'] and len(staffMemberResults) > 0 else ''}'''
-                reactions = [self.emojis['arrowLeft']]
-                if memberIndex > 2: 
-                    embed.description += '\n\nIf you would like to leave the ticket, react 🚪'
-                    reactions.append('🚪')
-                offset = len([a for a in alphabet if a in embed.description])
-                if server and len(memberResults) == 0: memberResults = staffMemberResults
-                embed.description += f'''\n\n{NEWLINE.join([f'{alphabet[i + offset]}{m.name} - {calculateBio(m)}' for i, m in enumerate(memberResults)])}'''
-                reactions += [l for l in alphabet if l in embed.description]
-                if ctx.guild: 
-                    if clearReactions: await message.clear_reactions()
-                    else: clearReactions = True
-                    await message.edit(content=None, embed=embed)
+    class NextConversationPageButton(discord.ui.Button):
+        '''View the next page of the ticket's conversation'''
+        def __init__(self, bot: commands.Bot, current_page: int, total_pages: int) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.gray,
+                emoji=support.emojis['arrowForward'],
+                label='Next page',
+                disabled=current_page == total_pages - 1,
+                row=0
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Next page of ticket conversation
+            view: SingleTicketView = self.view
+            view.current_page += 1
+            await view.populate_embed()
+            view.update_page_buttons()
+            await interaction.response.edit_message(embed=view.embed, view=view)
+
+    class NotificationsToggleButton(discord.ui.Button):
+        '''Toggle notifications for the ticket'''
+        # need to retrieve ticket data for this one
+        def __init__(self, bot: commands.Bot, notifications: bool) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.blurple if notifications else discord.ButtonStyle.gray,
+                emoji=support.emojis[utility.TOGGLES[notifications]],
+                label='Notifications',
+                row=1
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Toggle notifications
+            view: SingleTicketView = self.view
+            view.ticket_member['notifications'] = not view.ticket_member['notifications']
+            self.style = discord.ButtonStyle.blurple if view.ticket_member['notifications'] else discord.ButtonStyle.gray
+            self.emoji = view.support.emojis[utility.TOGGLES[view.ticket_member['notifications']]]
+            view.ticket['members'] = [view.ticket_member if member['id'] == view.ticket_member['id'] else member for member in view.ticket['members']]
+            await database.UpdateSupportTicket(view.ticket['number'], view.ticket)
+            await view.populate_embed()
+            view.update_page_buttons()
+            await interaction.response.edit_message(embed=view.embed, view=view)
+
+    class MembersButton(discord.ui.Button):
+        '''View and manage members in the ticket'''
+        def __init__(self, bot: commands.Bot, permissions: int, member_count: list) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.gray,
+                emoji=support.emojis['members'],
+                label='Add Members' if member_count < 4 else 'Add/Manage Members',
+                disabled=permissions < 3,
+                row=1
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Ticket member management
+            try:
+                view: SingleTicketView = self.view
+                new_view = ManageTicketMembersView(view.tickets, view)
+                await new_view.populate_embed()
+                await interaction.response.edit_message(embed=view.embed, view=new_view)
+            except: traceback.print_exc()
+    
+    class TicketDetailsToggle(discord.ui.Button):
+        '''Toggle the ticket details'''
+        def __init__(self, bot: commands.Bot, show_details: bool) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.blurple if show_details else discord.ButtonStyle.gray,
+                emoji=support.emojis[utility.TOGGLES[show_details]],
+                label='Show ticket info',
+                row=1
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Toggle the ticket details
+            view: SingleTicketView = self.view
+            view.show_details = not view.show_details
+            self.style = discord.ButtonStyle.blurple if view.show_details else discord.ButtonStyle.gray
+            self.emoji = view.support.emojis[utility.TOGGLES[view.show_details]]
+            view.paginate_pages()
+            await view.populate_embed()
+            await interaction.response.edit_message(embed=view.embed, view=view)
+            # if the ticket pagination changes, update the next/previous buttons
+    
+    class CloseTicketButton(discord.ui.Button):
+        '''Close the ticket'''
+        # only add this button if a bot dev is viewing the ticket
+        def __init__(self, bot: commands.Bot, ticket_status: int) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.red,
+                emoji=bot.get_emoji(support.emojis['hiddenVoiceChannel']),
+                label='Close ticket',
+                disabled=ticket_status == 3,
+                row=1
+            )
+            self.bot = bot
+            self.support = support
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Close the ticket
+            view: SingleTicketView = self.view
+            view.ticket['status'] = 3
+            view.ticket['conversation'].append({
+                'author': self.bot.user.id,
+                'timestamp': datetime.datetime.utcnow(),
+                'message': f'*My developer has closed this support ticket. If you need further help, you may reopen this ticket by replying. Otherwise, it will automatically lock in 7 days.*'
+            })
+            await database.UpdateSupportTicket(view.ticket['number'], view.ticket)
+            await (self.support.notify_members(view.ctx, view.ticket))
+            # add an event to the antispam timed events queue to lock the ticket in 7 days
+            lock_at = datetime.datetime.utcnow() + datetime.timedelta(days=7)
+            event = {
+                'type': 'lock_ticket',
+                'flavor': 'Automatically lock ticket',
+                'target': view.ticket['number'],
+                'expires': lock_at
+            }
+            if view.ticket['server']: await database.AppendTimedEvent(event) #need to update this at some point
+            await interaction.response.edit_message(embed=view.embed, view=view)
+    
+class ManageTicketMembersView(discord.ui.View):
+    def __init__(self, tickets: list[dict], prev_view: SingleTicketView) -> None:
+        super().__init__(timeout=600)
+        self.tickets = tickets
+        self.prev_view = prev_view
+        self.embed = prev_view.embed
+        self.support: Support = self.prev_view.bot.get_cog('Support')
+        self.add_item(self.BackButton(self.prev_view.bot))
+        if len(self.prev_view.ticket['members']) > 3 and self.prev_view.ctx.author.id in [m['id'] for m in self.prev_view.ticket['members'][3:]]: self.add_item(self.LeaveTicketButton(self.prev_view.bot))
+        if len(self.prev_view.ticket['members']) > 3 and self.prev_view.ticket_member['permissions'] >= 3: self.add_item(self.ManageMembersDropdown(self.prev_view.ctx, self.prev_view.bot, self.tickets, self.prev_view.ticket, self.prev_view.ticket['members'], self.prev_view, this_view=self))
+        if self.prev_view.ticket_member['permissions'] >= 3: self.add_item(self.AddMembersDropdown(self.prev_view.bot))
+
+    async def populate_embed(self, **kwargs):
+        self.embed.clear_fields()
+        ticket_server = self.prev_view.bot.get_guild(self.prev_view.ticket['server'])
+        def messageCheck(message: discord.Message): return message.channel.id == self.prev_view.ctx.channel.id and message.author.id == self.prev_view.ctx.author.id
+        def is_staff_member(member: discord.Member):
+            return any((
+                member.guild_permissions.administrator,
+                member.guild_permissions.manage_guild,
+                member.guild_permissions.manage_channels,
+                member.guild_permissions.manage_roles,
+                member.id == ticket_server.owner.id))
+        staff_members = [member for member in ticket_server.members if is_staff_member(member)][:15]
+        member_flavor = [f'{self.prev_view.bot.get_user(u["id"])}{utility.NEWLINE}> {u["bio"]}{utility.NEWLINE}> Permissions: {PERMISSIONS[u["permissions"]]}' for u in self.prev_view.ticket['members']]
+        self.embed.description = f'''{kwargs.get("description", "")}\n\n**__{'TICKET MEMBERS': ^50}__\n\n{'Permanently included':-^40}**\n{utility.NEWLINE.join([f'👤{f}' for f in member_flavor[:3]])}'''
+        if len(self.prev_view.ticket['members']) > 3:
+            self.embed.description += textwrap.dedent(f'''
+                \n**{'Added members':-^40}**
+                *Manage an added member using the select menu*
+                {utility.NEWLINE.join(
+                    [f'{self.prev_view.support.emojis["member"]}{flavor}' for flavor in member_flavor[3:]]
+                    ) if len(member_flavor) > 2 else 'None yet'
+                }''')
+        if self.prev_view.ctx.author.id == self.prev_view.ticket['author']:
+            # self.embed.description += f'''\n\n**{'Add a member':-^40}**\nSend a message to search for a member to add, then react with the corresponding letter to add them{f'{NEWLINE}{NEWLINE}Moderators of {self.bot.get_guild(ticket["server"])} are listed below as suggestions. You may react with the letter next to their name to quickly add them, otherwise send a message to search for someone else' if ticket['server'] and len(staffMemberResults) > 0 else ''}'''
+            self.embed.description += textwrap.dedent(f'''
+                \n**{'Add a member':-^40}**
+                *Use the dropdown menu to invite a member to this support ticket*
+            ''')
+
+    class BackButton(discord.ui.Button):
+        '''Returns to the ticket viewer'''
+        def __init__(self, bot: commands.Bot) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.gray,
+                emoji=support.emojis['arrowLeft'],
+                label='Back to conversation'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Single ticket view
+            view: ManageTicketMembersView = self.view
+            prev_view: SingleTicketView = view.prev_view
+            await prev_view.populate_embed()
+            await interaction.response.edit_message(embed=prev_view.embed, view=prev_view)
+    
+    class LeaveTicketButton(discord.ui.Button):
+        '''Only visible to added members'''
+        def __init__(self, bot: commands.Bot) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.red,
+                emoji='🚪',
+                label='Leave ticket'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Leave the ticket
+            view: ManageTicketMembersView = self.view
+            ticket = view.prev_view.ticket
+            ticket['members'] = [member for member in ticket['members'] if member['id'] != interaction.user.id]
+            ticket['conversation'].append({
+                'author': view.prev_view.bot.user.id,
+                'timestamp': datetime.datetime.utcnow(),
+                'message': f'*{interaction.user.display_name} ({interaction.user.name}) left the ticket*'
+            })
+            asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
+            await view.prev_view.populate_embed()
+            await interaction.response.edit_message(embed=view.prev_view.embed, view=view.prev_view)
+
+    class AddMembersDropdown(discord.ui.MentionableSelect):
+        '''Only visible to members with permissions >= 2'''
+        def __init__(self, bot: commands.Bot) -> None:
+            super().__init__(placeholder='Add members...', custom_id='add_members', max_values=25)
+            support: Support = bot.get_cog('Support')
+            self.members: list[discord.Member] = []
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Update members
+            self.members = []
+            view: ManageTicketMembersView = self.view
+            for mentionable in self.values:
+                if isinstance(mentionable, discord.Member):
+                    self.members.append(mentionable)
                 else:
-                    await message.delete()
-                    message = await ctx.send(embed=embed)
-                for r in reactions: await message.add_reaction(r)
-                d, p = await asyncio.wait([
-                    asyncio.create_task(self.bot.wait_for('reaction_add', check=optionNavigation)),
-                    asyncio.create_task(self.bot.wait_for('message', check=messageCheck))
-                    ], return_when=asyncio.FIRST_COMPLETED)
-                try: result = d.pop().result()
-                except: pass
-                for f in p: f.cancel()
-                if type(result) is tuple: #Meaning a reaction, rather than a message search
-                    if str(result[0]) in alphabet:
-                        if not embed.description[embed.description.find(str(result[0])) + 2:].startswith('to manage'):
-                            addMember = memberResults[alphabet.index(str(result[0]))]
-                            invite = discord.Embed(title='🎟 Invited to ticket', description=f"Hey {addMember.name},\n{ctx.author.name} has invited you to **support ticket {ticket['number']}** with [{', '.join([self.bot.get_user(m['id']).name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}].\n\nThe Disguard support ticket system is a tool for server members to easily get in touch with my developer for issues, help, and questions regarding the bot\n\nTo join the support ticket, type `.tickets {ticket['number']}`", color=yellow[ticketcolor_theme])
-                            invite.set_footer(text=f'You are receiving this DM because {ctx.author} invited you to a Disguard support ticket')
-                            try: 
-                                await addMember.send(embed=invite)
-                                ticket['members'].append({'id': addMember.id, 'bio': calculateBio(addMember), 'permissions': 3, 'notifications': False})
-                                ticket['conversation'].append({'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} invited {addMember} to the ticket*'})
-                                memberResults.remove(addMember)
-                            except Exception as e: await ctx.send(f'Error inviting {addMember} to ticket: {e}.\n\nBTW, error code 50007 means that the recipient disabled DMs from server members - they will need to temporarily allow this in the `Server Options > Privacy Settings` or `User Settings > Privacy & Safety` in order to be invited')
-                        else:
-                            user = self.bot.get_user([mb['id'] for mb in ticket['members']][2 + len([l for l in alphabet if l in embed.description])]) #Offset - the first three members in the ticket are permanent
-                            while not self.bot.is_closed():
-                                if ctx.author.id != ticket['author']: break #If someone other than the ticket owner gets here, deny them
-                                ticketUser = [mb for mb in ticket['members'] if mb['id'] == user.id][0]
-                                embed.description=f'''**{f'Manage {user.name}':-^50}**\n{'🔒' if not ctx.guild or ticketUser['permissions'] == 0 else '🔓'}Permissions: {permissionsDict[ticketUser['permissions']]}\n\n{self.emojis['details']}Responses: {len([r for r in ticket['conversation'] if r['author'] == user.id])}\n\n{f'{self.emojis["bell"]}Notifications: True' if ticketUser['notifications'] else f'{self.emojis["bellMute"]}Notifications: False'}\n\n❌: Remove this member'''
-                                reactions = [self.emojis['arrowLeft'], '🔓' if ctx.guild and ticketUser['permissions'] == 0 else '🔒', '❌'] #The reason we don't use the unlock if the command is used in DMs is because we can't remove user reactions ther
-                                if ctx.guild: 
-                                    if clearReactions: await message.clear_reactions()
-                                    else: clearReactions = True
-                                    await message.edit(content=None, embed=embed)
-                                else:
-                                    await message.delete()
-                                    message = await ctx.send(embed=embed)
-                                for r in reactions: await message.add_reaction(r)
-                                result = await self.bot.wait_for('reaction_add', check=optionNavigation)
-                                if result[0].emoji == self.emojis['arrowLeft']: break
-                                elif str(result[0]) == '❌':
-                                    ticket['members'] = [mbr for mbr in ticket['members'] if mbr['id'] != user.id]
-                                    ticket['conversation'].append({'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} removed {user} from the ticket*'})
-                                    break
-                                else:
-                                    if str(result[0]) == '🔒':
-                                        if ctx.guild: reactions = [self.emojis['arrowLeft'], '🔓', '❌']
-                                        else: clearReactions = False
-                                        ticketUser['permissions'] = 0
-                                    else:
-                                        if ctx.guild: reactions = [self.emojis['arrowLeft'], '🔒', '❌']
-                                        else: clearReactions = False
-                                        ticketUser['permissions'] = 1
-                                    ticket['conversation'].append({'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} updated {ticketUser}\'s permissions to `{permissionsDict[ticketUser["permissions"]]}`*'})
-                                    ticket['members'] = [m if m['id'] != user.id else ticketUser for m in ticket['members']]
-                                asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-                    elif str(result[0]) == '🚪':
-                        ticket['members'] = [mbr for mbr in ticket['members'] if mbr['id'] != ctx.author.id]
-                        ticket['conversation'].append({'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{ctx.author.name} left the ticket*'})
-                        await message.delete()
-                        asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-                        return await self.ticketsCommand(ctx)
-                    else: break
-                else:
-                    try: 
-                        cyber.AvoidDeletionLogging(result)
-                        await result.delete()
-                    except: pass
-                    memberResults = (await self.bot.get_cog('Cyberlog').FindMoreMembers([u for u in self.bot.users if any([u.id in [m.id for m in s.members] for s in self.bot.guilds])], result.content))[:15]
-                    memberResults.sort(key = lambda x: x.get('check')[1], reverse=True)
-                    memberResults = [r['member'] for r in memberResults if r['member'].id not in [m['id'] for m in ticket['members']]]
-                    staffMemberResults = []
+                    self.members += mentionable.members
+            new_view = AddMembersConfirmationView(view.prev_view.ctx, view.prev_view.bot, view.prev_view.ticket, self.members, view)
+            await new_view.populate_embed()
+            await interaction.response.edit_message(embed=new_view.embed, view=new_view)
+    
+    class ManageMembersDropdown(discord.ui.Select):
+        '''Used to manage added members. Visible only to members with permissions >= 2, and if the ticket has an added member'''
+        def __init__(self, ctx: commands.Context, bot: commands.Bot, tickets: list[dict], ticket: dict, members: list, prev_view: SingleTicketView, this_view, default: discord.Member = None) -> None:
+            super().__init__(placeholder='Manage an added member...', min_values=1, max_values=1, custom_id='manage_members')
+            support: Support = bot.get_cog('Support')
+            self.ctx = ctx
+            self.bot = bot
+            self.tickets = tickets
+            self.ticket = ticket
+            self.members = members
+            self.prev_view = prev_view
+            self.this_view: ManageTicketMembersView = this_view
+            for member in members[3:]:
+                user = bot.get_user(member['id'])
+                self.add_option(
+                    label=f"{user.display_name} ({user.name})",
+                    value=member['id'],
+                    default=member['id'] == default.id if default else False
+                )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Bring up individual member management view
+            try:
+                view: ManageTicketMembersView = self.view
+                new_view = ManageMemberView(
+                    self.ctx,
+                    self.bot,
+                    self.bot.get_user(int(self.values[0])),
+                    [m for m in self.members if m['id'] == int(self.values[0])][0],
+                    self.tickets,
+                    self.ticket,
+                    view.embed,
+                    self.this_view,
+                    self.prev_view
+                )
+                await interaction.response.edit_message(view=new_view)
+            except: traceback.print_exc()
+
+class AddMembersConfirmationView(discord.ui.View):
+    def __init__(self, ctx: commands.Context, bot: commands.Bot, ticket: dict, members: list[discord.Member], prev_view: ManageTicketMembersView) -> None:
+        super().__init__(timeout=600)
+        self.ctx = ctx
+        self.bot = bot
+        self.ticket = ticket
+        self.members = members
+        self.prev_view = prev_view
+        self.support: Support = self.bot.get_cog('Support')
+        self.notify = False
+        self.read_only = False
+        self.add_item(self.CancelButton(self.bot))
+        self.add_item(self.NotifyMembersToggle(self.bot, self.notify))
+        self.add_item(self.ReadOnlyPermissionsToggle(self.bot, self.read_only))
+        self.add_item(self.ConfirmButton(self.bot))
+    
+    async def populate_embed(self):
+        self.embed = copy.deepcopy(self.prev_view.embed)
+        self.embed.description += f'\n\n**__{"CONFIRM ADDING MEMBERS": ^50}__**\nCurrently adding {", ".join([m.display_name for m in self.members])}\nMembers with DMs disabled will need to use the `tickets` command to view their invite if you choose to notify them'
+    
+    class CancelButton(discord.ui.Button):
+        '''Cancel adding members'''
+        def __init__(self, bot: commands.Bot) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.red,
+                emoji=support.emojis['arrowLeft'],
+                label='Cancel'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Cancel adding members
+            view: AddMembersConfirmationView = self.view
+            await interaction.response.edit_message(embed=view.prev_view.embed, view=view.prev_view)
+    
+    class NotifyMembersToggle(discord.ui.Button):
+        '''Toggle whether to notify members'''
+        def __init__(self, bot: commands.Bot, notify: bool) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.blurple if notify else discord.ButtonStyle.gray,
+                emoji=support.emojis[utility.TOGGLES[notify]],
+                label='Notify members via DM'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Toggle whether to notify members
+            view: AddMembersConfirmationView = self.view
+            view.notify = not view.notify
+            self.emoji = view.support.emojis[utility.TOGGLES[view.notify]]
+            self.style = discord.ButtonStyle.blurple if view.notify else discord.ButtonStyle.gray
+            await interaction.response.edit_message(view=view)
+    
+    class ReadOnlyPermissionsToggle(discord.ui.Button):
+        '''Toggle whether to give members read-only permissions'''
+        def __init__(self, bot: commands.Bot, read_only: bool) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.blurple if read_only else discord.ButtonStyle.gray,
+                emoji=support.emojis[utility.TOGGLES[read_only]],
+                label='Add members as read-only'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Toggle whether to give members read-only permissions
+            view: AddMembersConfirmationView = self.view
+            view.read_only = not view.read_only
+            self.emoji = view.support.emojis[utility.TOGGLES[view.read_only]]
+            self.style = discord.ButtonStyle.blurple if view.read_only else discord.ButtonStyle.gray
+            await interaction.response.edit_message(view=view)
+    
+    class ConfirmButton(discord.ui.Button):
+        '''Confirm adding members'''
+        def __init__(self, bot: commands.Bot) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.green,
+                emoji=support.emojis['whiteCheck'],
+                label='Confirm'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Confirm adding members
+            try:
+                view: AddMembersConfirmationView = self.view
+                ticket = view.ticket
+                for member in view.members:
+                    ticket['members'].append({
+                        'id': member.id,
+                        'bio': member_server_prestige(member),
+                        'permissions': 1 if view.read_only else 2,
+                        'notifications': True
+                    })
+                    ticket['conversation'].append({
+                        'author': view.bot.user.id,
+                        'timestamp': datetime.datetime.utcnow(),
+                        'message': f'*{interaction.user.display_name} ({interaction.user.name}) added {member.display_name} ({member.name}) to the ticket*'
+                    })
+                kwargs = {'notify': view.notify, 'read_only': view.read_only, 'description': ''}
+                if view.notify:
+                    for member in view.members:
+                        try:
+                            embed = discord.Embed(
+                                title='🎟 Added to ticket',
+                                description=f"{member.display_name},\n{interaction.user.display_name} ({interaction.user.name}) added you to *Disguard support ticket {ticket['number']}* with [{', '.join([view.bot.get_user(m['id']).name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}].\n\nThe Disguard support ticket system is a tool for server members to easily contact my developer team for issues, help, and questions regarding Disguard",
+                                color=utility.YELLOW[1]
+                            )
+                            embed.set_footer(text=f'You are receiving this DM because {interaction.user.display_name} ({interaction.user.name}) added you to a Disguard support ticket')
+                            await interaction.channel.send(embed=embed, view=AddedToTicketView(view.ctx, view.bot, ticket, embed))
+                            #await member.send(embed=embed, view=AddedToTicketView(view.ctx, view.bot, ticket, embed))
+                            kwargs['description'] += f'{member.display_name} successfully notified\n'
+                        except Exception as e:
+                            kwargs['description'] += f'Error notifying {member}: {e}\n'
+                            # BTW, error code 50007 means that the recipient disabled DMs from server members - they will need to temporarily allow this in the `Server Options > Privacy Settings` or `User Settings > Privacy & Safety` in order to be invited')
+                else: kwargs['description'] = f'Successfully added {", ".join([m.display_name for m in view.members])} to the ticket'
+                single_ticket_view = SingleTicketView(view.ctx, view.bot, view.prev_view.prev_view.tickets, ticket)
+                await single_ticket_view.setup()
+                new_view = ManageTicketMembersView(view.prev_view.prev_view.tickets, single_ticket_view)
+                await new_view.populate_embed(**kwargs)
+                await interaction.response.edit_message(embed=new_view.embed, view=new_view)
                 asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-        elif result[0].emoji == self.emojis['reply']:
-            embed.description = f'**__Please type your response (under 1024 characters) to the conversation, or react {self.emojis["arrowLeft"]} to cancel__**'
-            reactions = [self.emojis['arrowLeft']]
-            if ctx.guild: 
-                if clearReactions: await message.clear_reactions()
-                else: clearReactions = True
-                await message.edit(content=None, embed=embed)
-            else:
-                await message.delete()
-                message = await ctx.send(embed=embed)
-            for r in reactions: await message.add_reaction(r)
-            d, p = await asyncio.wait([
-                asyncio.create_task(self.bot.wait_for('reaction_add', check=optionNavigation)),
-                asyncio.create_task(self.bot.wait_for('message', check=messageCheck))
-                ], return_when=asyncio.FIRST_COMPLETED)
-            try: result = d.pop().result()
-            except: pass
-            for f in p: f.cancel()
-            if type(result) is discord.Message:
-                try: 
-                    cyber.AvoidDeletionLogging(result)
-                    await result.delete()
-                except: pass
-                ticket['conversation'].append({'author': ctx.author.id, 'timestamp': datetime.datetime.utcnow(), 'message': result.content})
-                if ticket['status'] != 2: ticket['status'] = 2
-                conversationPages = list(paginate(ticket['conversation'], 7))
-                if len(ticket['conversation']) % 7 == 1 and len(ticket['conversation']) > 7 and currentConversationPage + 1 < len(conversationPages): currentConversationPage += 1 #Jump to the next page if the new response is on a new page
-                await notifyMembers(ticket)
-        elif result[0].emoji in (self.emojis['bell'], self.emojis['bellMute']): member['notifications'] = not member['notifications']
-        ticket['members'] = [member if i == memberIndex else m for i, m in enumerate(ticket['members'])]
-        asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
-        else: ticket_number = None #Triggers browse mode
-        try:
-            if clearAt and datetime.datetime.now() > clearAt: await message.edit(content=None)
-        except UnboundLocalError: await message.edit(content=None)
+            except: traceback.print_exc()
+
+class AddedToTicketView(discord.ui.View):
+    def __init__(self, ctx: commands.Context, bot: commands.Bot, ticket: dict, embed: discord.Embed) -> None:
+        super().__init__(timeout=600)
+        self.ctx = ctx
+        self.bot = bot
+        self.ticket = ticket
+        self.embed = embed
+        self.support: Support = self.bot.get_cog('Support')
+        self.add_item(self.LeaveButton(self.bot))
+        self.add_item(OpenTicketButton(self.ctx, self.bot, self.ticket['number'], label='View ticket'))
     
+    class LeaveButton(discord.ui.Button):
+        '''Leave the ticket'''
+        def __init__(self, bot: commands.Bot) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.red,
+                emoji='🚪',
+                label='Leave ticket'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Leave the ticket
+            view: AddedToTicketView = self.view
+            ticket = view.ticket
+            ticket['members'] = [member for member in ticket['members'] if member['id'] != interaction.user.id]
+            ticket['conversation'].append({
+                'author': view.bot.user.id,
+                'timestamp': datetime.datetime.utcnow(),
+                'message': f'*{interaction.user.display_name} ({interaction.user.name}) left the ticket*'
+            })
+            asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
+            view.embed.description = 'You have left this ticket'
+            await interaction.response.edit_message(embed=view.embed, view=None)    
+
+class ManageMemberView(discord.ui.View):
+    def __init__(self, ctx: commands.Context, bot: commands.Bot, member: discord.User, ticket_member: dict, tickets: list[dict], ticket: dict, embed: discord.Embed, prev_view: ManageTicketMembersView, ticket_view: SingleTicketView) -> None:
+        super().__init__(timeout=600)
+        self.ctx = ctx
+        self.bot = bot
+        self.member = member
+        self.ticket_member = ticket_member
+        self.tickets = tickets
+        self.ticket = ticket
+        self.embed = embed
+        self.prev_view = prev_view
+        self.ticket_view = ticket_view
+        self.support: Support = self.bot.get_cog('Support')
+        self.add_item(prev_view.ManageMembersDropdown(self.ctx, self.bot, self.tickets, self.ticket, self.ticket['members'], self.ticket_view, self.prev_view, self.member))
+        self.add_item(self.AdjustPermissionsDropdown(self.bot, self.ticket_member))
+        self.add_item(self.BackButton(self.bot))
+        self.add_item(self.RemoveMemberButton(self.bot, self.member))
     
+    class BackButton(discord.ui.Button):
+        '''Returns to the ticket viewer'''
+        def __init__(self, bot: commands.Bot) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.gray,
+                emoji=support.emojis['arrowLeft'],
+                label='Back to members'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Manage members view
+            view: ManageMemberView = self.view
+            new_view = ManageTicketMembersView(view.tickets, view.ticket_view)
+            await new_view.populate_embed()
+            await interaction.response.edit_message(embed=new_view.embed, view=new_view)
+    
+    class AdjustPermissionsDropdown(discord.ui.Select):
+        '''Used to adjust permissions for an added member'''
+        def __init__(self, bot: commands.Bot, ticket_member: dict) -> None:
+            super().__init__(
+                placeholder=f'Permissions: {PERMISSIONS[ticket_member["permissions"]]}',
+                min_values=1,
+                max_values=1,
+                custom_id='adjust_permissions'
+            )
+            self.fill_options(ticket_member)
+            
+        def fill_options(self, ticket_member: dict):
+            self.options = []
+            for index, permission in PERMISSIONS.items():
+                if 1 <= index <= 3: self.add_option(
+                    label=f'Permissions: {permission}',
+                    value=index,
+                    default=index == ticket_member['permissions']
+                )
+        
+        async def callback(self, interaction: discord.Interaction):
+            # Adjust permissions
+            try:
+                view: ManageMemberView = self.view
+                view.ticket_member['permissions'] = int(self.values[0])
+                self.fill_options(view.ticket_member)
+                view.ticket['members'] = [m if m['id'] != view.ticket_member['id'] else view.ticket_member for m in view.ticket['members']]
+                view.ticket['conversation'].append({
+                    'author': view.bot.user.id,
+                    'timestamp': datetime.datetime.utcnow(),
+                    'message': f'*{interaction.user.display_name} ({interaction.user.name}) updated {view.member.display_name}\'s permissions to `{PERMISSIONS[view.ticket_member["permissions"]]}`*'
+                })
+                asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
+                await interaction.response.edit_message(view=view)
+            except: traceback.print_exc()
+    
+    class RemoveMemberButton(discord.ui.Button):
+        '''Remove an added member'''
+        def __init__(self, bot: commands.Bot, member: discord.User) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.red,
+                emoji='🥾',
+                label=f'Remove {member.display_name} from ticket'
+            )
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Remove an added member
+            try:
+                view: ManageMemberView = self.view
+                view.ticket['members'] = [m for m in view.ticket['members'] if m['id'] != view.ticket_member['id']]
+                view.ticket['conversation'].append({
+                    'author': view.bot.user.id,
+                    'timestamp': datetime.datetime.utcnow(),
+                    'message': f'*{interaction.user.display_name} ({interaction.user.name}) removed {view.member.display_name} ({view.member.name}) from the ticket*'
+                })
+                asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
+                kwargs = {'description': f'Successfully removed {view.member.display_name} from the ticket'}
+                await view.prev_view.populate_embed(**kwargs)
+                await interaction.response.edit_message(embed=view.prev_view.embed, view=view.prev_view)
+            except: traceback.print_exc()
+
+class DMNotificationView(discord.ui.View):
+    def __init__(self, ctx: commands.Context, bot: commands.Bot, ticket: dict, user: discord.User) -> None:
+        super().__init__(timeout=None)
+        self.ctx = ctx
+        self.bot = bot
+        self.ticket = ticket
+        self.user = user
+        self.support: Support = self.bot.get_cog('Support')
+        self.add_item(self.NotificationsButton(self.bot, [m for m in self.ticket['members'] if m['id'] == self.user.id][0]['notifications']))
+        self.add_item(OpenTicketButton(self.ctx, self.bot, self.ticket['number'], label='View ticket'))
+    
+    class NotificationsButton(discord.ui.Button):
+        '''Toggle whether to receive notifications for this ticket'''
+        def __init__(self, bot: commands.Bot, notifications: bool) -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.blurple if notifications else discord.ButtonStyle.gray,
+                emoji=support.emojis[utility.TOGGLES[notifications]],
+                label='Notifications'
+            )
+            self.notifications = notifications
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Toggle whether to receive notifications for this ticket
+            view: DMNotificationView = self.view
+            self.notifications = not self.notifications
+            self.style = discord.ButtonStyle.blurple if self.notifications else discord.ButtonStyle.gray
+            self.emoji = view.support.emojis[utility.TOGGLES[self.notifications]]
+            view.ticket['members'] = [m if m['id'] != view.user.id else {'id': m['id'], 'bio': m['bio'], 'permissions': m['permissions'], 'notifications': not m['notifications']} for m in view.ticket['members']]
+            asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
+            await interaction.response.edit_message(view=view)
+    
+    class OpenTicketButton(discord.ui.Button):
+        '''Open the ticket'''
+        def __init__(self, bot: commands.Bot, ticket_number: int, label: str = 'View ticket') -> None:
+            support: Support = bot.get_cog('Support')
+            super().__init__(
+                style=discord.ButtonStyle.blurple,
+                emoji=support.emojis['reply'],
+                label=label
+            )
+            self.ticket_number = ticket_number
+            
+        async def callback(self, interaction: discord.Interaction):
+            # Open the ticket
+            view: DMNotificationView = self.view
+            tickets = await database.GetSupportTickets()
+            single_ticket_view = SingleTicketView(view.ctx, view.bot, tickets, tickets[self.ticket_number])
+            await single_ticket_view.setup()
+            await interaction.response.edit_message(embed=single_ticket_view.embed, view=single_ticket_view)
+
 class SelectASupportServerView(discord.ui.View):
     def __init__(self, bot: commands.Bot, servers: list[discord.Guild], dropdown: discord.ui.Select, custom_id) -> None:
         super().__init__(timeout=600)
@@ -464,7 +1030,7 @@ class SelectASupportServerView(discord.ui.View):
 
 class SelectASupportServer(discord.ui.Select):
     def __init__(self, servers: list[discord.Guild], custom_id) -> None:
-        super().__init__(placeholder='Select a server', min_values=1, max_values=1, custom_id=custom_id)
+        super().__init__(placeholder='Select a server...', min_values=1, max_values=1, custom_id=custom_id)
         self.servers = servers
         for server in servers:
             self.add_option(label=server.name, value=server.id)
@@ -477,6 +1043,7 @@ class SelectASupportServer(discord.ui.Select):
 class SupportModal(discord.ui.Modal):
     def __init__(self, ctx: commands.Context, bot: commands.Bot):
         super().__init__(title="Create a support ticket")
+        self.support: Support = bot.get_cog('Support')
         self.ctx = ctx
         self.bot = bot
 
@@ -486,15 +1053,13 @@ class SupportModal(discord.ui.Modal):
         traceback.print_exc()
     
     async def on_submit(self, interaction: discord.Interaction):
-        cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        misc: Misc = self.bot.get_cog('Misc')
         color_theme = await utility.color_theme(interaction.guild) if interaction.guild else 1
         #If the user didn't provide a message with the command, prompt them with one here
         if not interaction.guild:
             serverList = [g for g in self.bot.guilds if g.get_member(self.ctx.author.id)]
             if len(serverList) > 2: #If the member is in more than one server with the bot, prompt for which server they're in
-                dropdown = misc.SelectASupportServer(serverList, str(self.ctx.message.id))
-                view = misc.SelectASupportServerView(self.bot, serverList, dropdown, str(self.ctx.message.id))
+                dropdown = SelectASupportServer(serverList, str(self.ctx.message.id))
+                view = SelectASupportServerView(self.bot, serverList, dropdown, str(self.ctx.message.id))
                 await interaction.channel.send('If this issue relates to a specific server, select it from the dropdown menu below', view=view)
                 def interaction_check(i: discord.Interaction): return i.data['custom_id'] == str(self.ctx.message.id) and i.user.id == self.ctx.author.id
                 try: response = await self.bot.wait_for('interaction', check=interaction_check, timeout=600)
@@ -503,14 +1068,44 @@ class SupportModal(discord.ui.Modal):
                 else: server = self.bot.get_guild(int(response.data['values'][0]))
             else: server = serverList[0]
         else: server = interaction.guild
-        embed=discord.Embed(title='🎟 Disguard Ticket System', description=f'{misc.loading} Creating Ticket...', color=yellow[color_theme])
+        embed=discord.Embed(title='🎟 Disguard Ticket System', description=f'{self.support.loading} Creating Ticket...', color=utility.YELLOW[color_theme])
         await interaction.response.send_message(embed=embed)
-        ticket = await misc.create_support_ticket(self.ctx, server, self.body.value)
+        ticket = await self.support.create_support_ticket(self.ctx, server, self.body.value)
         embed.description = f'''Your support ticket has successfully been created.\n\nTicket number: {ticket['number']}\nAuthor: {self.ctx.author.name}\nMessage: `{self.body.value}`\n\nTo view or manage this ticket, use the button below or the `/tickets` command.'''
         new_view = SupportTicketFollowUp(self.ctx, self.bot, ticket['number'])
         await interaction.edit_original_response(embed=embed, view=new_view)
         devManagement = self.bot.get_channel(681949259192336406)
         await devManagement.send(embed=embed)
+
+class ReplyModal(discord.ui.Modal):
+    '''Popup modal to respond to a ticket'''
+    def __init__(self, view: SingleTicketView, ticket: dict) -> None:
+        super().__init__(title=f'Reply to ticket {ticket["number"]}')
+        self.view = view
+        self.ticket = ticket
+        self.last_message = ticket['conversation'][-1]
+    
+    body = discord.ui.TextInput(
+        style=discord.TextStyle.long,
+        label='Reply to the ticket...',
+        placeholder='Reply to the ticket...',
+        max_length=1024
+    )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        traceback.print_exc()
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        self.view.ticket['conversation'].append({
+            'author': interaction.user.id,
+            'timestamp': datetime.datetime.utcnow(),
+            'message': self.body.value
+        })
+        if self.view.ticket['status'] != 2: self.view.ticket['status'] = 2
+        asyncio.create_task(database.UpdateSupportTicket(self.view.ticket['number'], self.view.ticket))
+        await self.view.populate_embed()
+        await self.view.support.notify_members(self.view.ctx, self.view.ticket)
+        await interaction.response.edit_message(embed=self.view.embed, view=self.view)
     
 class SupportTicketFollowUp(discord.ui.View):
     def __init__(self, ctx: commands.Context, bot: commands.Bot, ticket_number: int):
@@ -523,14 +1118,18 @@ class SupportTicketFollowUp(discord.ui.View):
 class OpenTicketButton(discord.ui.Button):
     '''A customizable button to open a support ticket with the given number'''
     def __init__(self, ctx: commands.Context, bot: commands.Bot, ticket_number: int, label: str = 'Open ticket', emoji: str = '🎟', custom_id: str = 'openTicket'):
-        super().__init__(style=discord.ButtonStyle.gray, label=label, emoji=emoji, custom_id=custom_id)
+        super().__init__(style=discord.ButtonStyle.blurple, label=label, emoji=emoji, custom_id=custom_id)
         self.ctx = ctx
         self.bot = bot
         self.ticket_number = ticket_number
     
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        await self.ctx.invoke(self.bot.get_command('tickets'), number=self.ticket_number)
+        try:
+            tickets = await database.GetSupportTickets()
+            single_ticket_view = SingleTicketView(self.view.ctx, self.view.bot, tickets, tickets[self.ticket_number])
+            await single_ticket_view.setup()
+            await interaction.response.edit_message(embed=single_ticket_view.embed, view=single_ticket_view)
+        except: traceback.print_exc()
 
 class CreateTicketButton(discord.ui.Button):
     '''A customizable button to open the interactive modal to create a new support ticket'''
@@ -540,8 +1139,7 @@ class CreateTicketButton(discord.ui.Button):
         self.bot = bot
     
     async def callback(self, interaction: discord.Interaction):
-        misc: Misc = self.bot.get_cog('Misc')
-        await interaction.response.send_modal(misc.Support(self.ctx, self.bot))
+        await interaction.response.send_modal(SupportModal(self.ctx, self.bot))
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Support(bot))

@@ -233,7 +233,7 @@ class Birthdays(commands.Cog):
         message: discord.Message = await ctx.send(embed=embed) #Consider removing this if load times are quick
         homeView.message = message
         embed = await homeView.finishEmbed(embed)
-        await message.edit(embed=embed, view=homeView)
+        await ctx.interaction.edit_original_response(embed=embed, view=homeView)
     
     @birthday.command()
     async def view_profile(self, ctx: commands.Context, member: discord.Member):
@@ -1455,7 +1455,7 @@ class UpcomingBirthdaysView(discord.ui.View):
 
     class selectMemberDropdown(discord.ui.Select):
         def __init__(self, population=[], custom_id = None):
-            if custom_id: super().__init__(placeholder=f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})', custom_id=custom_id)
+            if custom_id: super().__init__(placeholder=f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})', custom_id=custom_id, min_values=1, max_values=1)
             else: super().__init__(placeholder=f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})')
             view: UpcomingBirthdaysView = self.view
             self.userDict: typing.Dict[int, discord.User] = {}
