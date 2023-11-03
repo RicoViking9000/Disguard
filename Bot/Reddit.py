@@ -86,7 +86,7 @@ class Reddit(commands.Cog):
         if not config: return #Feature is disabled
         if config[0]: matches_submission = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/\w+\/comments\/([A-Za-z0-9]+\w+)', message.content)
         else: matches_submission = []
-        if config[1]: matches_subreddit = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/([A-Za-z0-9_]+)$', message.content)
+        if config[1]: matches_subreddit = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/([A-Za-z0-9_]+)\/$', message.content)
         else: matches_subreddit = []
         if not any([matches_subreddit, matches_submission]): return
         for match in matches_subreddit:
@@ -101,13 +101,15 @@ class Reddit(commands.Cog):
                 await message.channel.send(embed=embed)
             except Exception as e:
                 await message.channel.send(f'Error retrieving submission info: {e}')
-        message = await message.channel.fetch_message(message.id)
-        # Suppress the Discord embed for the user's link
-        if not message.embeds:
-            def check(b: discord.Message, a: discord.Message): return b.id == message.id and len(a.embeds) > len(b.embeds)
-            result = (await self.bot.wait_for('message_edit', check=check))[1]
-        else: result = message
-        await result.edit(suppress=True)
+                traceback.print_exc()
+        if message.channel.permissions_for(message.guild.me).manage_messages:
+            message = await message.channel.fetch_message(message.id)
+            # Suppress the Discord embed for the user's link
+            if not message.embeds:
+                def check(b: discord.Message, a: discord.Message): return b.id == message.id and len(a.embeds) > len(b.embeds)
+                result = (await self.bot.wait_for('message_edit', check=check))[1]
+            else: result = message
+            await result.edit(suppress=True)
 
     async def subredditEmbed(self, search, plainText = False):
         subreddit = await self.reddit.subreddit(search, fetch=True)

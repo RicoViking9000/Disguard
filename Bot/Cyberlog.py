@@ -197,14 +197,14 @@ class Cyberlog(commands.Cog):
                     #     m = g.get_member(u.id)
                     #     if m: break
                     cache = await utility.get_user(m)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'customStatusHistory'):
+                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'statusHistory'):
                         try:
                             if m.status != discord.Status.offline:
                                 if m.activity == discord.ActivityType.custom or not m.activity:
-                                    prev = cache.get('customStatusHistory', [{}])[-1]
+                                    prev = cache.get('statusHistory', [{}])[-1]
                                     proposed = {'e': None if not m.activity else m.activity.emoji.url if m.activity.emoji.is_custom_emoji() else str(m.activity.emoji) if m.activity.emoji else None, 'n': m.activity.name if m.activity else None}
                                     if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}:
-                                        updateOperations[m.id].update({'customStatusHistory': {'emoji': proposed['e'], 'name': proposed['n'], 'timestamp': discord.utils.utcnow()}})
+                                        updateOperations[m.id].update({'statusHistory': {'emoji': proposed['e'], 'name': proposed['n'], 'timestamp': discord.utils.utcnow()}})
                         except Exception as e: print(f'Custom status error for {m.name}: {e}')
                     if await self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
                         try:
@@ -2014,13 +2014,13 @@ class Cyberlog(commands.Cog):
             # if after.guild.id == targetServer.id:
             #     for a in after.activities:
             #         if a.type == discord.ActivityType.custom:
-            if await self.privacyEnabledChecker(after, 'attributeHistory', 'customStatusHistory') and after.activity and after.activity.type == discord.ActivityType.custom and datetime.datetime.utcnow().strftime('%m/%d/%Y') != '09/06/2022':
+            if await self.privacyEnabledChecker(after, 'attributeHistory', 'statusHistory') and after.activity and after.activity.type == discord.ActivityType.custom:
                 try:
                     try: user = await utility.get_user(after)
                     except KeyError: return
                     a = after.activity
                     if not a: return
-                    prev = user.get('customStatusHistory', [{}])[-1]
+                    prev = user.get('statusHistory', [{}])[-1]
                     proposed = {'e': None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name if a else None}
                     if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}: 
                         #if not (await database.GetUser(after)).get('customStatusHistory'):
@@ -2830,14 +2830,14 @@ class Cyberlog(commands.Cog):
         try: p = (await utility.get_user(u))['privacy']
         except (KeyError, TypeError): 
             return False
-        if p[child][0] == 2: return await self.privacyEnabledChecker(u, 'default', parent)
-        return p[child][0] == 1
+        if p.get(child, [0, 0])[0] == 2: return await self.privacyEnabledChecker(u, 'default', parent)
+        return p.get(child, [0, 0])[0] == 1
 
     async def privacyVisibilityChecker(self, u: discord.User, parent, child):
         try: p = (await utility.get_user(u))['privacy']
         except (KeyError, TypeError): return False
-        if p[child][1] == 2: return await self.privacyEnabledChecker(u, 'default', parent)
-        return p[child][1] == 1
+        if p.get(child, [0, 0])[1] == 2: return await self.privacyEnabledChecker(u, 'default', parent)
+        return p.get(child, [0, 0])[1] == 1
     
     async def uploadFiles(self, f):
         #if type(f) is not list: f = [f]

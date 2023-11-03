@@ -49,7 +49,7 @@ async def get_server(server_id: int, return_value=None):
 
 async def patch_server(server_id: int, data: dict):
     '''updates a server in the database'''
-    data.pop('_id')
+    data.pop('_id', None)
     return await servers.update_one({'_id': server_id}, {'$set': data}, upsert=True)
 
 async def get_member(server_id: int, member_id: int):
@@ -76,7 +76,7 @@ async def get_user(user_id: int):
 
 async def patch_user(user_id: int, data: dict):
     '''updates a user in the database'''
-    data.pop('_id')
+    data.pop('_id', None)
     return await users.update_one({'_id': user_id}, {'$set': data}, upsert=True)
 
 def message_data(message: Message, index: int = 0):

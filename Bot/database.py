@@ -335,6 +335,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
     #if b.get_user(m.id) is None: return await users.delete_one({'user_id': m.id})
     updateOperations = []
     if full or not current:
+        await lightningdb.patch_user(u.id, current)
         updateOperations.append(pymongo.UpdateOne({'user_id': u.id}, {'$set': {
         'user_id': u.id,
         'lastActive': current.get('lastActive', {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'}),
@@ -350,9 +351,9 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
             'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
             'birthdayMessages': current.get('privacy', {}).get('birthdayMessages', (2, 2)), #Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
             'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
-            'customStatusHistory': current.get('privacy', {}).get('customStatusHistory', (0, 2)),
-            'usernameHistory': (0, 2) if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/10/2022' else current.get('privacy', {}).get('usernameHistory', (0, 2)),
-            'avatarHistory': (0, 2) if datetime.datetime.utcnow().strftime('%m/%d/%Y') == '09/10/2022' else current.get('privacy', {}).get('avatarHistory', (0, 2)),
+            'statusHistory': current.get('privacy', {}).get('statusHistory', current.get('privacy').get('customStatusHistory', (0, 2))),
+            'usernameHistory': current.get('privacy', {}).get('usernameHistory', (0, 2)),
+            'avatarHistory': current.get('privacy', {}).get('avatarHistory', (0, 2)),
             'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
             'lastActive': current.get('privacy', {}).get('lastActive', (2, 2)),
             'profile': current.get('privacy', {}).get('profile', (2, 2))
@@ -697,12 +698,12 @@ async def RemoveTimedEvent(s: discord.Guild, event):
 
 async def AppendCustomStatusHistory(m: discord.Member, emoji, status):
     '''Appends a custom status event to a user listing of them. Member object because only they have custom status attributes, not just user objects.'''
-    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'customStatusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}})
-    else: await users.update_one({'user_id': m.id}, {'$push': {'customStatusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'statusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'statusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}}})
 
 async def SetCustomStatusHistory(m: discord.Member, entries):
     '''Overwrites the member's custom status history list'''
-    await users.update_one({'user_id': m.id}, {'$set': {'customStatusHistory': entries}})
+    await users.update_one({'user_id': m.id}, {'$set': {'statusHistory': entries}})
 
 async def AppendUsernameHistory(m: discord.User):
     '''Appends a username update to a user's listing of them'''
@@ -759,6 +760,7 @@ async def UnduplicateHistory(u: discord.User, userEntry=None, *, mode='update'):
     cache = None
     try:
         for entry in userEntry.get('customStatusHistory'):
+        for entry in userEntry.get('statusHistory'):
             current = {'emoji': entry.get('emoji'), 'name': entry.get('name')}
             if cache != current:
                 cache = current
@@ -1006,3 +1008,12 @@ async def convert_reddit_feeds(s: discord.Guild):
             newFeeds[feed['subreddit']] = feed
         await servers.update_one({'server_id': s.id}, {'$set': {'redditFeeds': newFeeds}})
         await lightningdb.patch_server(s, {'redditFeeds': newFeeds})
+
+async def convert_status_history():
+    '''Renames the customStatusHistory key to statusHistory'''
+    await users.update_many({}, {'$rename': {'customStatusHistory': 'statusHistory'}})
+
+async def patch_privacy(u: discord.User, module: str, enabled: int = 2, visibility: int = 2):
+    '''Updates a user's privacy settings'''
+    await users.update_one({'user_id': u.id}, {'$set': {f'privacy.{module}': (enabled, visibility)}})
+

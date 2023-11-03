@@ -139,9 +139,8 @@ class Support(commands.Cog):
         embed.set_footer(text=f"You're receiving this DM because you have notifications enabled for ticket {ticket['number']}")
         for member in ticket['members']:
             if member['notifications'] and member['id'] != entry['author']:
-                await self.bot.get_channel(1092291378396024882).send(embed=embed, view=DMNotificationView(ctx, self.bot, ticket, self.bot.get_user(member['id'])))
-                # try: await self.bot.get_user(member['id']).send(embed=embed)
-                # except: pass
+                try: await self.bot.get_user(member['id']).send(embed=embed, view=DMNotificationView(ctx, self.bot, ticket, self.bot.get_user(member['id'])))
+                except: pass
 
 def paginate(iterable: list, per_page=10):
     '''Splits a list into pages of a given size'''
@@ -821,8 +820,7 @@ class AddMembersConfirmationView(discord.ui.View):
                                 color=utility.YELLOW[1]
                             )
                             embed.set_footer(text=f'You are receiving this DM because {interaction.user.display_name} ({interaction.user.name}) added you to a Disguard support ticket')
-                            await interaction.channel.send(embed=embed, view=AddedToTicketView(view.ctx, view.bot, ticket, embed))
-                            #await member.send(embed=embed, view=AddedToTicketView(view.ctx, view.bot, ticket, embed))
+                            await member.send(embed=embed, view=AddedToTicketView(view.ctx, view.bot, ticket, embed))
                             kwargs['description'] += f'{member.display_name} successfully notified\n'
                         except Exception as e:
                             kwargs['description'] += f'Error notifying {member}: {e}\n'
