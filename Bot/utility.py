@@ -401,6 +401,10 @@ async def getServerMember(m: discord.Member):
     '''Gets the member data given a member object'''
     return (await get_server(m.guild))['members'].get(str(m.id))
 
+def paginate(iterable: list, per_page=10):
+    '''Splits a list into pages of a given size'''
+    for i in range(0, len(iterable), per_page): yield iterable[i : i + per_page]
+
 class BasicView(discord.ui.View):
     '''For when you just need somewhere to stick some components'''
     def __init__(self, timeout=300):
