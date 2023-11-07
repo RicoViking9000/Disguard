@@ -759,7 +759,6 @@ async def UnduplicateHistory(u: discord.User, userEntry=None, *, mode='update'):
     csh, uh, ah = [], [], []
     cache = None
     try:
-        for entry in userEntry.get('customStatusHistory'):
         for entry in userEntry.get('statusHistory'):
             current = {'emoji': entry.get('emoji'), 'name': entry.get('name')}
             if cache != current:
