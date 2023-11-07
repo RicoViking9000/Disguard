@@ -96,7 +96,8 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name='my boss (Syncing data...)', type=discord.ActivityType.listening)
         await UpdatePresence()
-        asyncio.wait_for(await database.convert_status_history())
+        convert = database.convert_status_history()
+        await asyncio.wait_for(convert, timeout=300)
         #await bot.load_extension('Cyberlog')
         #await asyncio.sleep(2)
         for cog in cogs:
