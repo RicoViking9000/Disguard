@@ -357,6 +357,7 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
             'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
             'statusHistory': current.get('privacy', {}).get('statusHistory', current.get('privacy').get('customStatusHistory', (0, 2))),
             'usernameHistory': current.get('privacy', {}).get('usernameHistory', (0, 2)),
+            'displaynameHistory': current.get('privacy', {}).get('displaynameHistory', (0, 2)),
             'avatarHistory': current.get('privacy', {}).get('avatarHistory', (0, 2)),
             'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
             'lastActive': current.get('privacy', {}).get('lastActive', (2, 2)),

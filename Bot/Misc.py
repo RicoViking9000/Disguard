@@ -184,7 +184,7 @@ class Misc(commands.Cog):
         return await ctx.send(embed=view.embed, view=view, ephemeral=view.private)
     @history.autocomplete('attribute')
     async def history_autocomplete(self, interaction: discord.Interaction, argument: str):
-        options = ['avatar', 'username', 'status']
+        options = ['avatar', 'username', 'display name', 'status']
         return [app_commands.Choice(name=attr, value=attr) for attr in options if argument.lower() in attr]
     
     class AttributeHistoryView(discord.ui.View):
@@ -200,7 +200,7 @@ class Misc(commands.Cog):
             self.data = None
             self.private = False
             self.misc: Misc = bot.get_cog('Misc')
-            self.attributes = ['avatar', 'username', 'status']
+            self.attributes = ['avatar', 'username', 'displayname', 'status']
             self.module = f'{self.attribute}History'
             self.member_select = self.SelectAMemberDropdown()
             self.attr_select = self.SelectAnAttributeDropdown()
@@ -230,6 +230,7 @@ class Misc(commands.Cog):
                 options = [
                     discord.SelectOption(label='Avatar History', value='avatar', emoji='🖼'),
                     discord.SelectOption(label='Username History', value='username', emoji='📝'),
+                    discord.SelectOption(label='Display Name History', value='displayname', emoji='📝'),
                     discord.SelectOption(label='Custom Status History', value='status', emoji='💭')
                 ]
                 super().__init__(placeholder='Select an attribute to view...', options=options)
@@ -388,7 +389,7 @@ class Misc(commands.Cog):
             self.embed.clear_fields()
             while len(self.children) > 2:
                 self.remove_item(self.children[-1])
-            if self.attribute == 'username': self.embed.set_thumbnail(url=self.member.display_avatar.url)
+            if self.attribute in ('username', 'displayname'): self.embed.set_thumbnail(url=self.member.display_avatar.url)
             tail_mappings = {'avatar': 'imageURL', 'username': 'name', 'status': 'name'}
             data = self.data[self.current_page] if self.data else []
             self.embed.description = f'{len(data) if len(data) < 15 else 15} / {len(data)} entries shown; oldest on top'
