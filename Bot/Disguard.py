@@ -175,14 +175,14 @@ async def on_message(message: discord.Message):
     await misc.on_message(message)
 
 
-@bot.hybrid_command()
+@bot.command()
 @commands.is_owner()
 async def verify(ctx):
     status = await ctx.send("Verifying...")
     await database.Verification(bot)
     await status.delete()
 
-@bot.hybrid_command(description='Index a server or channel')
+@bot.command(description='Index a server or channel')
 @commands.is_owner()
 async def index(ctx, t: int = 0):
     if not t: target = bot.guilds
@@ -214,7 +214,7 @@ async def invite(ctx: commands.Context):
 # async def privacy(ctx):
 #     await ctx.send("https://disguard.netlify.app/privacybasic")
 
-@bot.hybrid_command()
+@bot.command()
 async def delete(ctx: commands.Context, message_id: str):
     '''Delete one of Disguard\'s messages from the user\'s DMs
     Parameters
@@ -252,7 +252,7 @@ async def server(ctx: commands.Context):
 async def ping(ctx):
     await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms')
 
-@bot.hybrid_command(name='eval')
+@bot.command(name='eval')
 @commands.is_owner()
 async def evaluate(ctx, func: str):
     # global variables
@@ -267,20 +267,20 @@ async def log_file(ctx: commands.Context):
     '''Uploads discord.log'''
     await ctx.send(file=discord.File('discord.log'))
 
-@bot.hybrid_command(name='clear_commands')
+@bot.command(name='clear_commands')
 @commands.is_owner()
 async def clear_sync_tree(ctx: commands.Context):
     await bot.tree.clear_commands()
     await bot.tree.sync()
     await ctx.send('Cleared tree')
 
-@bot.hybrid_command(name='sync')
+@bot.command(name='sync')
 @commands.is_owner()
 async def sync_tree(ctx: commands.Context):
     await bot.tree.sync()
     await ctx.send('Synced tree')
 
-@bot.hybrid_command()
+@bot.command()
 @commands.is_owner()
 async def broadcast(ctx: commands.Context):
     await ctx.send('Please type broadcast message')
@@ -409,7 +409,7 @@ async def data(ctx: commands.Context):
     await statusMessage.delete()
     await ctx.send(content=f'```{readMe}```', file=fl)
 
-@bot.hybrid_command()
+@bot.command()
 @commands.is_owner()
 async def retrieve_attachments(ctx: commands.Context, user: discord.User):
     statusMessage = await ctx.send(f'{loading}Retrieving attachments for {user.display_name}')
@@ -443,7 +443,7 @@ async def retrieve_attachments(ctx: commands.Context, user: discord.User):
     shutil.make_archive(fileName, 'zip', basePath)
     await statusMessage.edit(content=f'{os.path.abspath(fileName)}.zip')
 
-@bot.hybrid_command(help='Remove duplicate entries from a user\'s status/username/avatar history')
+@bot.command(help='Remove duplicate entries from a user\'s status/username/avatar history')
 @commands.is_owner()
 async def unduplicate(ctx):
     '''Removes duplicate entries from a user's status/username/avatar history'''
@@ -477,7 +477,7 @@ async def nameVerify(ctx):
 #     logging.error(exc_info=True)
 #     traceback.print_exc()
 
-@bot.hybrid_command(name='status', help='set Disguard\'s status')
+@bot.command(name='status', help='set Disguard\'s status')
 @commands.is_owner()
 async def _status(ctx):
     '''Owner-only command to manually set Disguard's status'''
@@ -517,7 +517,7 @@ async def _status(ctx):
 async def rickroll(ctx: commands.Context):
     await ctx.send('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
 
-@bot.hybrid_command()
+@bot.command()
 @commands.is_owner()
 async def test(ctx: commands.Context):
     await ctx.interaction.response.defer()
