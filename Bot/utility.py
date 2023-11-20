@@ -40,6 +40,19 @@ permissionDescriptions = {'create_instant_invite': '', 'kick_members': '', 'ban_
 'manage_roles': 'Members with this permission can create new roles and edit/delete roles below their highest role granting this permission', 'manage_webhooks': 'Members with this permission can create, edit, and delete webhooks',
 'manage_emojis': 'Members with this permission can create, edit, and delete custom emojis and stickers', 'use_slash_commands': '', 'request_to_speak': '', 'manage_events': '', 'manage_threads': '', 'use_private_threads': ''}
 
+CHANNEL_KEYS = {
+    'category': 'Category',
+    'private': 'Private',
+    'group': 'Group',
+    'news': 'News',
+    'stage_voice': 'Stage',
+    'public_thread': 'Thread',
+    'private_thread': 'Private thread',
+    'news_thread': 'News thread',
+    'text': 'Text',
+    'voice': 'Voice',
+}
+
 def rickroll(): return 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 
 def ManageServer(member: discord.Member):
@@ -96,6 +109,14 @@ def outputPermissions(p: discord.Permissions):
 def getPermission(p: str):
     '''Given a String in the form of a raw permission string value (aka the keys in <permissionKeys>), return its Discord-UI friendly form if possible'''
     return permissionKeys.get(p, p)
+
+def pretty_permissions(p: discord.Permissions):
+    '''Converts a permissions object into a string by replacing underscores with spaces and capitalizing the first letter of each word'''
+    return ', '.join([a[0].replace('_', ' ').title() for a in iter(p) if a[1]])
+
+def pretty_permission(p: str):
+    '''Converts a permission string into a string by replacing underscores with spaces and capitalizing the first letter of each word'''
+    return p.replace('_', ' ').title()
 
 def ParseDuration(string: str) -> typing.Tuple[int, int, str]:
     '''Parses a string into a duration in seconds, the integer value, and the unit of time'''
@@ -172,23 +193,29 @@ def empty(value):
     return value == None
 
 def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChannel]):
-    '''Gives us the proper new emoji for the channel - good for varying channels in a single list'''
+    '''Returns an emoji corresponding to the type of channel'''
     # Emojis need to be updated
-    if c.type == discord.ChannelType.category: return self.emojis['folder']
-    elif c.type == discord.ChannelType.private: return self.emojis['member']
-    elif c.type == discord.ChannelType.group: return self.emojis['members']
-    elif c.type == discord.ChannelType.news: return self.emojis['announcementsChannel']
-    else:
-        private = c.overwrites_for(c.guild.default_role).read_messages == False
-        if c.type == discord.ChannelType.text:
+    match c.type:
+        case discord.ChannelType.category: return self.emojis['folder']
+        case discord.ChannelType.private: return self.emojis['member']
+        case discord.ChannelType.group: return self.emojis['members']
+        case discord.ChannelType.news: return self.emojis['announcementsChannel']
+        case discord.ChannelType.stage_voice: return self.emojis['stageChannel']
+        case discord.ChannelType.public_thread: return self.emojis['threadChannel']
+        case discord.ChannelType.private_thread: return self.emojis['privateThreadChannel']
+        case discord.ChannelType.news_thread: return self.emojis['newsThreadChannel']
+        case discord.ChannelType.text:
+            private = c.overwrites_for(c.guild.default_role).read_messages == False
             if c.is_nsfw(): return self.emojis['nsfwChannel']
             elif c.guild.rules_channel and c.id == c.guild.rules_channel.id: return self.emojis['rulesChannel']
             elif private: return self.emojis['privateTextChannel']
             else: return self.emojis['textChannel']
-        elif c.type == discord.ChannelType.voice:
+        case discord.ChannelType.voice:
+            private = c.overwrites_for(c.guild.default_role).read_messages == False
             if private: return self.emojis['privateVoiceChannel']
             else: return self.emojis['voiceChannel']
-    return '❔'
+        case _:
+            return '❔'
 
 def channelIsHidden(self, c: discord.abc.GuildChannel, member: discord.Member):
     '''Returns a boolean representing whether a channel is visible to the given member'''
@@ -257,6 +284,7 @@ async def FindMembers(g: discord.Guild, arg):
     def check(m):
         if m.nick is not None and m.nick.lower() == arg: return compareMatch(arg, m.nick)
         if arg in m.name.lower(): return compareMatch(arg, m.name)
+        if arg in m.display_name.lower(): return compareMatch(arg, m.display_name)
         if arg in m.discriminator: return compareMatch(arg, m.discriminator)
         if arg in str(m.id): return compareMatch(arg, str(m.id))
         return None
@@ -293,6 +321,7 @@ async def FindMoreMembers(members: list[discord.User], arg) -> list[dict[str, ty
     def check(m):
         if type(m) is discord.Member and m.nick is not None and m.nick.lower() == arg.lower(): return 'Nickname is \'{}\''.format(m.nick.replace(arg, '**{}**'.format(arg))), compareMatch(arg, m.nick)
         if arg in m.name.lower(): return 'Username is \'{}\''.format(m.name).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.name)
+        if arg in m.display_name.lower(): return 'Display name is \'{}\''.format(m.display_name).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.display_name)
         if arg in m.discriminator: return 'Discriminator is \'{}\''.format(m.discriminator).replace(arg, '**{}**'.format(arg)), compareMatch(arg, m.discriminator)
         if arg in str(m.id): return 'ID matches: \'{}\''.format(m.id).replace(arg, '**{}**'.format(arg)), compareMatch(arg, str(m.id))
         if arg in '<@!{}>'.format(m.id): return 'Mentioned', 100

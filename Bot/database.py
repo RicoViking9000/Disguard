@@ -17,6 +17,7 @@ import queue
 import typing
 import lightningdb
 from pymongo import errors
+from bson.codec_options import CodecOptions
 
 mongo: motor.motor_asyncio.AsyncIOMotorClient = None
 db: motor.motor_asyncio.AsyncIOMotorDatabase = None
@@ -59,11 +60,10 @@ class LogModule(object):
         self.botLogging = 0 if name == 'message' else 1 if name == 'channel' else botLogging #To avoid spam | 0: Disabled, 1: Plaintext, 2: Embeds
         self.flashText = flashText
         self.tts = tts
-        self.lastUpdate = datetime.datetime.utcnow()
+        self.lastUpdate = discord.utils.utcnow()
 
     def update(self, entry): #Needs to be updated before releasing customization update due to naming differences
         result = vars(self)
-        n = datetime.datetime.now()
         if entry:
             try:
                 for k, v in dict(entry).items():
@@ -96,7 +96,7 @@ class NewLogModule(object):
         self.customEmbed = customEmbed #The embed for custom logging, if enabled
         self.children = [] #Children NewLogModule objects. Settings for this are applied to the children unless overwritten in the children. Children are displayed in a subcategory online.
         self.customSettings = [] #A dict of custom settings. These are formatted online as appropriate. Format is HTML form style.
-        self.lastUpdate = datetime.datetime.utcnow()
+        self.lastUpdate = discord.utils.utcnow()
     def update(self, entry): #Shorten database code line - input data from database, return updated object, updated object goes into database
         self.read = entry.get('read')
         self.enabled = entry.get('enabled')
@@ -118,9 +118,9 @@ def initialize(token):
     global disguard
     mongo = motor.motor_asyncio.AsyncIOMotorClient(secure.mongo())
     if token == secure.token():
-        db = mongo.disguard
+        db = mongo.disguard.with_options(codec_options=CodecOptions(tz_aware=True))
     elif token == secure.beta():
-        db = mongo.disguard_beta
+        db = mongo.disguard_beta.with_options(codec_options=CodecOptions(tz_aware=True))
     servers = db.servers
     users = db.users
     disguard = db.disguard
@@ -267,7 +267,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
             'roleExclusions': log.get('roleExclusions', []),
             'memberExclusions': log.get('memberExclusions', []),
             #'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
-            'lastUpdate': serv.get('lastUpdate', datetime.datetime.utcnow()),
+            'lastUpdate': serv.get('lastUpdate', discord.utils.utcnow()),
             'message': LogModule('message', 'Send logs when a message is edited or deleted').update(log.get('message', {})),
             'doorguard': LogModule('doorguard', 'Send logs when a member joins or leaves server').update(log.get('doorguard', {})),
             'channel': LogModule('channel', 'Send logs when channel is created, edited, or deleted').update(log.get('channel', {})),
@@ -615,8 +615,8 @@ async def SetBirthdayMessage(m: discord.Member, msg, auth, servers):
     await users.update_one({'user_id': m.id}, {'$push': {'birthdayMessages': {
         'message': msg.clean_content,
         'author': auth.id,
-        'authName': auth.name,
-        'created': datetime.datetime.utcnow(),
+        'authName': auth.display_name,
+        'created': discord.utils.utcnow(),
         'servers': [s.id for s in servers]}}}) 
 
 async def ResetBirthdayMessages(u: discord.User):
@@ -702,8 +702,8 @@ async def RemoveTimedEvent(s: discord.Guild, event):
 
 async def AppendCustomStatusHistory(m: discord.Member, emoji, status):
     '''Appends a custom status event to a user listing of them. Member object because only they have custom status attributes, not just user objects.'''
-    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'statusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}})
-    else: await users.update_one({'user_id': m.id}, {'$push': {'statusHistory': {'emoji': emoji, 'name': status, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'statusHistory': {'emoji': emoji, 'name': status, 'timestamp': discord.utils.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'statusHistory': {'emoji': emoji, 'name': status, 'timestamp': discord.utils.utcnow()}}})
 
 async def SetCustomStatusHistory(m: discord.Member, entries):
     '''Overwrites the member's custom status history list'''
@@ -711,17 +711,26 @@ async def SetCustomStatusHistory(m: discord.Member, entries):
 
 async def AppendUsernameHistory(m: discord.User):
     '''Appends a username update to a user's listing of them'''
-    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'usernameHistory': {'name': m.name, 'timestamp': datetime.datetime.utcnow()}})
-    else: await users.update_one({'user_id': m.id}, {'$push': {'usernameHistory': {'name': m.name, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}}})
 
 async def SetUsernameHistory(m: discord.User, entries):
     '''Overwrites the user's username history list'''
     await users.update_one({'user_id': m.id}, {'$set': {'usernameHistory': entries}})
 
+async def AppendDisplaynameHistory(u: discord.User):
+    '''Appends a display name update to a user's listing of them'''
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[u.id].update({'displaynameHistory': {'name': u.display_name, 'timestamp': discord.utils.utcnow()}})
+    else: await users.update_one({'user_id': u.id}, {'$push': {'displaynameHistory': {'name': u.display_name, 'timestamp': discord.utils.utcnow()}}})
+
+async def SetDisplaynameHistory(u: discord.User, entries):
+    '''Overwrites the user's display name history list'''
+    await users.update_one({'user_id': u.id}, {'$set': {'displaynameHistory': entries}})
+
 async def AppendAvatarHistory(m: discord.User, url):
     '''Appends an avatar update to a user's listing of them. Old is the discord CDN avatar link used for comparisons, new is the permanent link from the image log channel (copy attachment)'''
-    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}})
-    else: await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': url, 'timestamp': datetime.datetime.utcnow()}}})
+    if bot.useAttributeQueue: bot.attributeHistoryQueue[m.id].update({'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': url, 'timestamp': discord.utils.utcnow()}})
+    else: await users.update_one({'user_id': m.id}, {'$push': {'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': url, 'timestamp': discord.utils.utcnow()}}})
 
 async def SetAvatarHistory(m: discord.User, entries):
     '''Overwrites the user's avatar history list'''
@@ -806,7 +815,7 @@ async def ZeroRepeatedJoins(s: discord.Guild):
 async def AppendMemberJoinEvent(s: discord.Guild, m: discord.Member):
     '''Appends a member join event to a server's log, uses for member join logs'''
     #Was this one of the many features I want to do but can't implement in full for the time being?
-    await servers.update_one({'server_id': s.id}, {'$push': {'cyberlog.joinLogHistory': {'id': m.id, 'timestamp': datetime.datetime.utcnow()}}})
+    await servers.update_one({'server_id': s.id}, {'$push': {'cyberlog.joinLogHistory': {'id': m.id, 'timestamp': discord.utils.utcnow()}}})
 
 # async def GetNamezone(s: discord.Guild):
 #     '''Return the custom timezone name for a given server'''
@@ -833,14 +842,14 @@ async def SetLastUpdate(s: discord.Guild, d: datetime.datetime, mod: None):
 # async def UpdateChannel(channel: discord.abc.GuildChannel):
 #     '''Updates the channel.updated and channel.name attributes of the given channel. .updated is used for stats on channel edit'''
 #     servers.update_one({'server_id': channel.guild.id, 'allChannels.id': channel.id}, {'$set': {
-#         'allChannels.$.updated': datetime.datetime.utcnow(),
+#         'allChannels.$.updated': discord.utils.utcnow(),
 #         'allChannels.$.name': channel.name,
 #         'allChannels.$.oldUpdate': await GetChannelUpdate(channel)}})
 
 # async def UpdateRole(role: discord.Role):
 #     '''Updates the role.updated and role.name attributes of the given role. .updated is used for stats on role edit'''
 #     servers.update_one({'server_id': role.guild.id, 'roles.id': role.id}, {'$set': {
-#         'roles.$.updated': datetime.datetime.utcnow(),
+#         'roles.$.updated': discord.utils.utcnow(),
 #         'roles.$.name': role.name,
 #         'roles.$.oldUpdate': await GetRoleUpdate(role)}})
 
@@ -916,8 +925,8 @@ async def CalculateModeratorChannel(g: discord.Guild, bot: commands.Bot, update=
     if not currentModeratorChannel or type(currentModeratorChannel) != list or False in currentModeratorChannel:
         relevanceKeys: typing.Dict[discord.TextChannel, int] = {}
         for c in g.text_channels:
-            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c.id: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
-        for k in relevanceKeys:
+            if not c.overwrites_for(g.default_role).read_messages and c.id != logChannelID: relevanceKeys.update({c: round(len([m for m in g.members if c.permissions_for(m).read_messages and c.permissions_for(m).send_messages]) * 100 / len([m for m in g.members if c.permissions_for(m).read_messages]))})
+        for k in relevanceKeys.keys():
             if any(word in k.name.lower() for word in ['mod', 'manager', 'staff', 'admin']): relevanceKeys[k] += 50
             if any(word in k.name.lower() for word in ['chat', 'discussion', 'talk']): relevanceKeys[k] += 10
             if 'announce' in k.name.lower(): relevanceKeys[k] = 1

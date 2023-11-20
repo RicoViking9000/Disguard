@@ -105,8 +105,8 @@ class Moderation(commands.Cog):
             except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error editing channel permission overwrites for {c.name}: {e.text}')
         if len(reason) > 0:
             try: await member.send(f'[Moderation: lockout] A moderator has restricted you from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}.')
-            except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error DMing {member.name}: {e.text}')
-        await ctx.send(content=f'{member.name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {NEWLINE.join(messages)}' if messages else ''))
+            except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error DMing {member.display_name}: {e.text}')
+        await ctx.send(content=f'{member.display_name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {NEWLINE.join(messages)}' if messages else ''))
 
     @bulk.command(name='lock')
     @commands.guild_only()
@@ -136,7 +136,7 @@ class Moderation(commands.Cog):
                 except (discord.Forbidden, discord.HTTPException) as e: messages.append(f'Error editing channel permission overwrites for {c.name}: {e.text}')
             if len(reason) > 0:
                 try: await member.send(f'You have been restricted from accessing channels in {ctx.guild.name}{f" because {reason}" if len(reason) > 0 else ""}')
-                except (discord.Forbidden, discord.HTTPException, AttributeError) as e: messages.append(f'Error DMing {member.name}: {e.text}')
+                except (discord.Forbidden, discord.HTTPException, AttributeError) as e: messages.append(f'Error DMing {member.display_name}: {e.text}')
         await ctx.send(content=f'{len(successful)} members [{[f", ".join([str(member) for member in successful])]}] are now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (f'Notes: {NEWLINE.join(messages)}' if messages else ''))
 
     @commands.hybrid_command(description='Unlocks the specified member: allows them to access all channels again')
@@ -155,8 +155,8 @@ class Moderation(commands.Cog):
         for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
         errorMessage = None
         try: await member.send(f'You may now access channels again in {ctx.guild.name}')
-        except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
-        await ctx.send(content=f'{member.name} is now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}')
+        except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.display_name} by DM because {e.text}'
+        await ctx.send(content=f'{member.display_name} is now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}')
 
     @bulk.command(name='unlock')
     @commands.guild_only()
@@ -179,7 +179,7 @@ class Moderation(commands.Cog):
             for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
             errorMessage = None
             try: await member.send(f'You may now access channels again in {ctx.guild.name}')
-            except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.name} by DM because {e.text}'
+            except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.display_name} by DM because {e.text}'
         await ctx.send(content=f'{len(members)} members [{[", ".join(str(member) for member in members)]}] are now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}')
 
     @commands.hybrid_command(description='Mutes the specified member(s) for a specified amount of time, if given')
@@ -358,7 +358,7 @@ class Moderation(commands.Cog):
             await ctx.guild.ban(member, delete_message_days=delete_message_days, reason=reason)
             if duration:
                 duration = utility.ParseDuration(duration)
-                event = {'type': 'ban', 'flavor': reason, 'target': member.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                event = {'type': 'ban', 'flavor': reason, 'target': member.id, 'expires': discord.utils.utcnow() + datetime.timedelta(seconds=duration)}
                 await database.AppendTimedEvent(ctx.guild, event)
             embed.description += f'{self.emojis["greenCheck"]} | Succesfully banned {member}\n'
         except Exception as e: embed.description += f'{self.emojis["alert"]} | Error banning {member}: {e}\n'
@@ -394,7 +394,7 @@ class Moderation(commands.Cog):
                 await ctx.guild.ban(member, delete_message_days=delete_message_days, reason=reason)
                 if duration:
                     duration = utility.ParseDuration(duration)
-                    event = {'type': 'ban', 'flavor': reason, 'target': member.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                    event = {'type': 'ban', 'flavor': reason, 'target': member.id, 'expires': discord.utils.utcnow() + datetime.timedelta(seconds=duration)}
                     await database.AppendTimedEvent(ctx.guild, event)
                 embed.description += f'{self.emojis["greenCheck"]} | Succesfully banned {member}\n'
             except Exception as e: embed.description += f'{self.emojis["alert"]} | Error banning {member}: {e}\n'
@@ -424,9 +424,9 @@ class Moderation(commands.Cog):
             await ctx.guild.ban(user, delete_message_days=0, reason=reason)
             if duration:
                 duration = utility.ParseDuration(duration)
-                event = {'type': 'ban', 'flavor': reason, 'target': user.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                event = {'type': 'ban', 'flavor': reason, 'target': user.id, 'expires': discord.utils.utcnow() + datetime.timedelta(seconds=duration)}
                 await database.AppendTimedEvent(ctx.guild, event)
-            embed.description += f'{self.emojis["greenCheck"]} | Succesfully shadowbanned {user.name}\n`{reason}`'
+            embed.description += f'{self.emojis["greenCheck"]} | Succesfully shadowbanned {user.display_name}\n`{reason}`'
         except Exception as e: embed.description += f'{self.emojis["alert"]} | Error shadowbanning {member}: {e}\n'
         await ctx.send(embed=embed)
 
@@ -458,9 +458,9 @@ class Moderation(commands.Cog):
                 await ctx.guild.ban(user, delete_message_days=0, reason=reason)
                 if duration:
                     duration = utility.ParseDuration(duration)
-                    event = {'type': 'ban', 'flavor': reason, 'target': user.id, 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                    event = {'type': 'ban', 'flavor': reason, 'target': user.id, 'expires': discord.utils.utcnow() + datetime.timedelta(seconds=duration)}
                     await database.AppendTimedEvent(ctx.guild, event)
-                embed.description += f'{self.emojis["greenCheck"]} | Succesfully shadowbanned {user.name}\n`{reason}`'
+                embed.description += f'{self.emojis["greenCheck"]} | Succesfully shadowbanned {user.display_name}\n`{reason}`'
             except Exception as e: embed.description += f'{self.emojis["alert"]} | Error shadowbanning {member}: {e}\n'
         await ctx.send(embed=embed)
 
@@ -600,7 +600,7 @@ class Moderation(commands.Cog):
             def index(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
             try: post = await self.bot.wait_for('message',check=index,timeout=120)
             except asyncio.TimeoutError: return await message.edit(embed=timeout)
-            now = datetime.datetime.utcnow()
+            now = discord.utils.utcnow()
             embed.set_author(name='Please wait',icon_url=url)
             if 'y' in post.content:
                 embed.set_author(name='Indexing messages',icon_url=url)
@@ -628,7 +628,7 @@ class Moderation(commands.Cog):
                 self.bot.get_cog('Cyberlog').AvoidDeletionLogging(post) 
                 await post.delete()
             except: pass
-            if (datetime.datetime.utcnow() - now).seconds / 60 > 5: await ctx.channel.send('{}, I\'m done indexing'.format(ctx.author.mention),delete_after=10)
+            if (discord.utils.utcnow() - now).seconds / 60 > 5: await ctx.channel.send('{}, I\'m done indexing'.format(ctx.author.mention),delete_after=10)
             embed.description='Next up, are you interested in purging messages containing certain text? Type `yes` to be taken to setup for those options or `no` to move on and skip this part.'
             await message.edit(embed=embed)
             def textCondition(m): return m.channel == ctx.channel and m.author==ctx.author and any(s in m.content.lower() for s in ['y', 'n', 'cancel'])
@@ -1049,7 +1049,7 @@ class Moderation(commands.Cog):
             count = 0
             async for message in current.channel[0].history(limit=current.limit, before=current.endDate, after=current.startDate):
                 if PurgeFilter(message): count += 1
-            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=blue[await utility.color_theme(ctx.guild)], timestamp=datetime.datetime.utcnow())
+            embed=discord.Embed(title="Purge pre-scan",description="__Filters:__\nLimit: "+str(current.limit)+" messages\n{}".format(PreDesc(ctx.guild)),color=blue[await utility.color_theme(ctx.guild)], timestamp=discord.utils.utcnow())
             embed.set_footer(text="To actually purge, copy & paste your command message, but add 'purge:true' to the filters")
             embed.description+="\n**"+str(count)+" messages matched the filters**"
             await current.botMessage.edit(content=None,embed=embed)
@@ -1146,7 +1146,7 @@ class Moderation(commands.Cog):
                     results[m]['Add Mute Role'].append(f'{self.emojis["greenCheck"]}')
                 except Exception as e: results[m]['Add Mute Role'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')
                 if duration:
-                    muteTimedEvents[m.id] = {'type': 'mute', 'target': m.id, 'flavor': reason, 'role': muteRole.id, 'roleList': [r.id for r in memberRolesTaken[m.id]], 'permissionsTaken': permissionsTaken[str(m.id)], 'timestamp': datetime.datetime.utcnow(), 'expires': datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)}
+                    muteTimedEvents[m.id] = {'type': 'mute', 'target': m.id, 'flavor': reason, 'role': muteRole.id, 'roleList': [r.id for r in memberRolesTaken[m.id]], 'permissionsTaken': permissionsTaken[str(m.id)], 'timestamp': discord.utils.utcnow(), 'expires': discord.utils.utcnow() + datetime.timedelta(seconds=duration)}
                     asyncio.create_task(database.AppendTimedEvent(g, muteTimedEvents[m.id]))
                 results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
             except Exception as e: results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')

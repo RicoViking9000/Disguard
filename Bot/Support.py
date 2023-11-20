@@ -74,9 +74,9 @@ class Support(commands.Cog):
                     'Server Moderator' if permissions.manage_guild else \
                     'Junior Server Moderator' if any((permissions.kick_members, permissions.ban_members, permissions.manage_channels, permissions.manage_roles, permissions.moderate_members)) else \
                     'Server Member',
-                'status': 0, 'conversation': [], 'created': datetime.datetime.utcnow()}
-        if system: firstEntry = {'author': self.bot.user.id, 'timestamp': datetime.datetime.utcnow(), 'message': f'*{message}*'}
-        else: firstEntry = {'author': ctx.author.id, 'timestamp': datetime.datetime.utcnow(), 'message': message}
+                'status': 0, 'conversation': [], 'created': discord.utils.utcnow()}
+        if system: firstEntry = {'author': self.bot.user.id, 'timestamp': discord.utils.utcnow(), 'message': f'*{message}*'}
+        else: firstEntry = {'author': ctx.author.id, 'timestamp': discord.utils.utcnow(), 'message': message}
         ticket['conversation'].append(firstEntry)
         authorMember = {'id': ctx.author.id, 'bio': 'Created this ticket', 'permissions': 4, 'notifications': True},
         devMember = {'id': 247412852925661185, 'bio': 'Bot developer team', 'permissions': 2, 'notifications': True},
@@ -135,7 +135,7 @@ class Support(commands.Cog):
             description=kwargs.get('description') or f'{author.display_name} replied: {entry["message"]}\n\nTo view the full ticket, use the button below or `/tickets {ticket["number"]}`',
             color=utility.YELLOW[1]
         )
-        embed.set_author(name=author.display_name, icon_url=author.avatar.with_static_format('png').url)
+        embed.set_author(name=author.display_name, icon_url=author.display_avatar.with_static_format('png').url)
         embed.set_footer(text=f"You're receiving this DM because you have notifications enabled for ticket {ticket['number']}")
         for member in ticket['members']:
             if member['notifications'] and member['id'] != entry['author']:
@@ -203,14 +203,14 @@ class TicketBrowseView(discord.ui.View):
     async def create_embed(self):
         color_theme = await utility.color_theme(self.ctx.guild) if self.ctx.guild else 1
         self.embed = discord.Embed(title=f"🎟 {self.support.emojis['details']} Browse Tickets", color=utility.YELLOW[color_theme])
-        self.embed.set_author(name=self.ctx.author, icon_url=self.ctx.author.avatar.with_static_format('png').url)
+        self.embed.set_author(name=self.ctx.author, icon_url=self.ctx.author.display_avatar.with_static_format('png').url)
     
     async def populate_embed(self):
         '''Builds the browse tickets embed'''
         self.embed.clear_fields()
         self.embed.description = textwrap.dedent(f'''
             {f"⚠ | {self.special_message}{utility.NEWLINE}{utility.NEWLINE}" if self.special_message else ''}
-            {f"{self.ctx.author.name}'s Tickets":-^50}
+            {f"{self.ctx.author.display_name}'s Tickets":-^50}
             Page {self.current_page + 1} of {len(self.pages)}
             Viewing {len(self.pages[self.current_page])} of {len(self.tickets)} tickets
             Sort: {SORT_FLAVOR[self.sort_mode]}''')
@@ -220,9 +220,9 @@ class TicketBrowseView(discord.ui.View):
             self.embed.add_field(
                 name=f'Ticket {ticket["number"]}',
                 value=textwrap.dedent(f'''
-                > Members: {', '.join([self.bot.get_user(user['id']).name for user in ticket['members'] if user['id'] not in (self.bot.user.id, utility.rv9k)])}
+                > Members: {', '.join([self.bot.get_user(user['id']).display_name for user in ticket['members'] if user['id'] not in (self.bot.user.id, utility.rv9k)])}
                 > Status: {STATUS_DICT[ticket['status']]}
-                > Latest reply: {self.bot.get_user(ticket['conversation'][-1]['author']).name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(ticket_server) if ticket_server else 0))):%b %d, %Y • %I:%M %p} {await utility.name_zone(ticket_server) if ticket_server else 'UTC'}
+                > Latest reply: {self.bot.get_user(ticket['conversation'][-1]['author']).display_name} • {(ticket['conversation'][-1]['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(ticket_server) if ticket_server else 0))):%b %d, %Y • %I:%M %p} {await utility.name_zone(ticket_server) if ticket_server else 'UTC'}
                 > {utility.INDENT}{ticket['conversation'][-1]['message']}
                 '''),
                 inline=False)
@@ -337,7 +337,7 @@ class SingleTicketView(discord.ui.View):
     async def create_embed(self):
         color_theme = await utility.color_theme(self.ctx.guild) if self.ctx.guild else 1
         self.embed = discord.Embed(title=f"🎟 Ticket {self.ticket['number']}", color=utility.YELLOW[color_theme])
-        self.embed.set_author(name=self.ctx.author, icon_url=self.ctx.author.avatar.with_static_format('png').url)
+        self.embed.set_author(name=self.ctx.author, icon_url=self.ctx.author.display_avatar.with_static_format('png').url)
     
     async def populate_embed(self):
         self.embed.description = ''
@@ -366,7 +366,7 @@ class SingleTicketView(discord.ui.View):
             ''')
         for entry in self.conversation_pages[self.current_page]:
             self.embed.add_field(
-                name=f"{self.bot.get_user(entry['author']).name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(ticket_server) if ticket_server else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(ticket_server) if ticket_server else 'EST'}",
+                name=f"{self.bot.get_user(entry['author']).display_name} • {(entry['timestamp'] + datetime.timedelta(hours=(await utility.time_zone(ticket_server) if ticket_server else -4))):%b %d, %Y • %I:%M %p} {await utility.name_zone(ticket_server) if ticket_server else 'EST'}",
                 value=f'> {entry["message"]}',
                 inline=False)
 
@@ -556,13 +556,13 @@ class SingleTicketView(discord.ui.View):
             view.ticket['status'] = 3
             view.ticket['conversation'].append({
                 'author': self.bot.user.id,
-                'timestamp': datetime.datetime.utcnow(),
+                'timestamp': discord.utils.utcnow(),
                 'message': f'*My developer has closed this support ticket. If you need further help, you may reopen this ticket by replying. Otherwise, it will automatically lock in 7 days.*'
             })
             await database.UpdateSupportTicket(view.ticket['number'], view.ticket)
             await (self.support.notify_members(view.ctx, view.ticket))
             # add an event to the antispam timed events queue to lock the ticket in 7 days
-            lock_at = datetime.datetime.utcnow() + datetime.timedelta(days=7)
+            lock_at = discord.utils.utcnow() + datetime.timedelta(days=7)
             event = {
                 'type': 'lock_ticket',
                 'flavor': 'Automatically lock ticket',
@@ -647,7 +647,7 @@ class ManageTicketMembersView(discord.ui.View):
             ticket['members'] = [member for member in ticket['members'] if member['id'] != interaction.user.id]
             ticket['conversation'].append({
                 'author': view.prev_view.bot.user.id,
-                'timestamp': datetime.datetime.utcnow(),
+                'timestamp': discord.utils.utcnow(),
                 'message': f'*{interaction.user.display_name} ({interaction.user.name}) left the ticket*'
             })
             asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
@@ -807,8 +807,8 @@ class AddMembersConfirmationView(discord.ui.View):
                     })
                     ticket['conversation'].append({
                         'author': view.bot.user.id,
-                        'timestamp': datetime.datetime.utcnow(),
-                        'message': f'*{interaction.user.display_name} ({interaction.user.name}) added {member.display_name} ({member.name}) to the ticket*'
+                        'timestamp': discord.utils.utcnow(),
+                        'message': f'*{interaction.user.display_name} added {member.display_name} ({member.name}) to the ticket*'
                     })
                 kwargs = {'notify': view.notify, 'read_only': view.read_only, 'description': ''}
                 if view.notify:
@@ -816,10 +816,10 @@ class AddMembersConfirmationView(discord.ui.View):
                         try:
                             embed = discord.Embed(
                                 title='🎟 Added to ticket',
-                                description=f"{member.display_name},\n{interaction.user.display_name} ({interaction.user.name}) added you to *Disguard support ticket {ticket['number']}* with [{', '.join([view.bot.get_user(m['id']).name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}].\n\nThe Disguard support ticket system is a tool for server members to easily contact my developer team for issues, help, and questions regarding Disguard",
+                                description=f"{member.display_name},\n{interaction.user.display_name} ({interaction.user.name}) added you to *Disguard support ticket {ticket['number']}* with [{', '.join([view.bot.get_user(m['id']).display_name for i, m in enumerate(ticket['members']) if i not in (1, 2)])}].\n\nThe Disguard support ticket system is a tool for server members to easily contact my developer team for issues, help, and questions regarding Disguard",
                                 color=utility.YELLOW[1]
                             )
-                            embed.set_footer(text=f'You are receiving this DM because {interaction.user.display_name} ({interaction.user.name}) added you to a Disguard support ticket')
+                            embed.set_footer(text=f'You are receiving this DM because {interaction.user.display_name} added you to a Disguard support ticket')
                             await member.send(embed=embed, view=AddedToTicketView(view.ctx, view.bot, ticket, embed))
                             kwargs['description'] += f'{member.display_name} successfully notified\n'
                         except Exception as e:
@@ -862,7 +862,7 @@ class AddedToTicketView(discord.ui.View):
             ticket['members'] = [member for member in ticket['members'] if member['id'] != interaction.user.id]
             ticket['conversation'].append({
                 'author': view.bot.user.id,
-                'timestamp': datetime.datetime.utcnow(),
+                'timestamp': discord.utils.utcnow(),
                 'message': f'*{interaction.user.display_name} ({interaction.user.name}) left the ticket*'
             })
             asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
@@ -933,8 +933,8 @@ class ManageMemberView(discord.ui.View):
                 view.ticket['members'] = [m if m['id'] != view.ticket_member['id'] else view.ticket_member for m in view.ticket['members']]
                 view.ticket['conversation'].append({
                     'author': view.bot.user.id,
-                    'timestamp': datetime.datetime.utcnow(),
-                    'message': f'*{interaction.user.display_name} ({interaction.user.name}) updated {view.member.display_name}\'s permissions to `{PERMISSIONS[view.ticket_member["permissions"]]}`*'
+                    'timestamp': discord.utils.utcnow(),
+                    'message': f'*{interaction.user.display_name} updated {view.member.display_name}\'s permissions to `{PERMISSIONS[view.ticket_member["permissions"]]}`*'
                 })
                 asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
                 await interaction.response.edit_message(view=view)
@@ -957,8 +957,8 @@ class ManageMemberView(discord.ui.View):
                 view.ticket['members'] = [m for m in view.ticket['members'] if m['id'] != view.ticket_member['id']]
                 view.ticket['conversation'].append({
                     'author': view.bot.user.id,
-                    'timestamp': datetime.datetime.utcnow(),
-                    'message': f'*{interaction.user.display_name} ({interaction.user.name}) removed {view.member.display_name} ({view.member.name}) from the ticket*'
+                    'timestamp': discord.utils.utcnow(),
+                    'message': f'*{interaction.user.display_name} removed {view.member.display_name} ({view.member.name}) from the ticket*'
                 })
                 asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
                 kwargs = {'description': f'Successfully removed {view.member.display_name} from the ticket'}
@@ -1096,7 +1096,7 @@ class ReplyModal(discord.ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         self.view.ticket['conversation'].append({
             'author': interaction.user.id,
-            'timestamp': datetime.datetime.utcnow(),
+            'timestamp': discord.utils.utcnow(),
             'message': self.body.value
         })
         if self.view.ticket['status'] != 2: self.view.ticket['status'] = 2

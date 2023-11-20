@@ -66,8 +66,8 @@ class Birthdays(commands.Cog):
             messages = user_data.get('birthdayMessages', []) if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
             filteredMessages = [m for m in messages if user.dm_channel.id in m['servers']]
             # Construct the happy birthday embed
-            embed = discord.Embed(title=f'🍰 Happy {f"{age - 1}{utility.suffix(age - 1)}" if age > 1 else ""}Birthday, {user.name}! 🍰', color=yellow[1])
-            embed.description = f'Enjoy this special day just for you, {user.name}! In addition to the people you know who will hopefully send birthday wishes your way, my developer also wants to wish you only the best on your birthday. Take it easy today, and try to treat yourself in some fashion.\n\n~~RicoViking9000, developer of Disguard'
+            embed = discord.Embed(title=f'🍰 Happy {f"{age - 1}{utility.suffix(age - 1)}" if age > 1 else ""}Birthday, {user.display_name}! 🍰', color=yellow[1])
+            embed.description = f'Enjoy this special day just for you, {user.display_name}! In addition to the people you know who will hopefully send birthday wishes your way, my developer also wants to wish you only the best on your birthday. Take it easy today, and try to treat yourself in some fashion.\n\n~~RicoViking9000, developer of Disguard'
             if filteredMessages: embed.description += f'\n\n🍰 | Friends in your servers have also composed {len(filteredMessages)} messages for your birthday! They will be displayed below this message.'
             messageEmbeds = [embed] + [discord.Embed(title=f'✉ Birthday Message from {m["authName"]}', description=m['message'], color=yellow[1]) for m in filteredMessages]
             # Add a disclaimer footer to the last embed sent
@@ -95,13 +95,13 @@ class Birthdays(commands.Cog):
             servers = mutualServersMemberToMember(self, user, self.bot.user)
             for server in servers:
                 timezone = await utility.time_zone(server)
-                started = datetime.datetime.utcnow() + datetime.timedelta(hours=timezone)
+                started = discord.utils.utcnow() + datetime.timedelta(hours=timezone)
                 server_data = await utility.get_server(server)
                 channel = self.bot.get_channel(server_data.get('birthday')) #Doing this instead of try/except since birthday channels usually default to 0 if not set
                 if started.strftime('%H:%M') == server_data.get('birthdate', datetime.datetime.min).strftime('%H:%M') or not channel: continue
-                # print(f'Announcing birthday for {member.name} to {server.name}')
+                # print(f'Announcing birthday for {member.display_name} to {server.name}')
                 messages = [a for a in user_data.get('birthdayMessages', []) if server.id in a['servers']] if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
-                messageString = f'Members from this server also wrote {len(messages)} birthday messages to be delivered here on {user.name}\'s birthday:' if messages else ''
+                messageString = f'Members from this server also wrote {len(messages)} birthday messages to be delivered here on {user.display_name}\'s birthday:' if messages else ''
                 if userID == 247412852925661185: toSend = f'🍰🎊🍨🎈 Greetings {server.name}! It\'s my developer {user.mention}\'s birthday!! Let\'s wish him a very special day! 🍰🎊🍨🎈'
                 else: 
                     if await cyber.privacyVisibilityChecker(user, 'birthdayModule', 'birthdayDay'): toSend = f"🍰 Greetings {server.name}, it\'s {user.mention}\'s birthday! Let\'s all wish them a very special day! 🍰"
@@ -122,23 +122,23 @@ class Birthdays(commands.Cog):
             try: bday: datetime.datetime = (await utility.get_user(user)).get('birthday')
             except KeyError: continue #if user not found in the cache
             if bday:
-                if bday.strftime('%m%d%y') == datetime.datetime.now().strftime('%m%d%y'): await database.ResetBirthdayMessages(user)
+                if bday.strftime('%m%d%y') == discord.utils.utcnow().strftime('%m%d%y'): await database.ResetBirthdayMessages(user)
 
     @tasks.loop(minutes=1)
     async def configureDailyBirthdayAnnouncements(self):
-        if datetime.datetime.utcnow().strftime('%H:%M') == '11:45': 
+        if discord.utils.utcnow().strftime('%H:%M') == '11:45': 
             self.dailyBirthdayAnnouncements.start()
             self.configureDailyBirthdayAnnouncements.cancel()
 
     @tasks.loop(minutes=1)
     async def configureServerBirthdayAnnouncements(self):
-        if int(datetime.datetime.utcnow().strftime('%M')) % 5 == 0 and self.configureServerBirthdayAnnouncements.current_loop > 0:
+        if int(discord.utils.utcnow().strftime('%M')) % 5 == 0 and self.configureServerBirthdayAnnouncements.current_loop > 0:
             self.serverBirthdayAnnouncements.start()
             self.configureServerBirthdayAnnouncements.cancel()
 
     @tasks.loop(minutes=1)
     async def configureDeleteBirthdayMessages(self):
-        if datetime.datetime.now().strftime('%H:%M') == '23:50':
+        if discord.utils.utcnow().strftime('%H:%M') == '23:50':
             self.deleteBirthdayMessages.start()
             self.configureDeleteBirthdayMessages.cancel()
 
@@ -171,7 +171,7 @@ class Birthdays(commands.Cog):
     async def birthdayMessagehandler(self, message: discord.Message, server_data: dict):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         if not await cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'birthdayDay'): return #User disabled the birthday features
-        adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=await utility.time_zone(message.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(message.guild))
         birthday = calculateDate(message.content, adjusted)
         #Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
         #First we make sure the user is talking about themself
@@ -205,7 +205,7 @@ class Birthdays(commands.Cog):
         embed = await view.createEmbed()
         await view.confirmation()
         if len(ages) > 1:
-            embed.description=f'{message.author.name} | If you wish to update your age, select the desired value from the dropdown'
+            embed.description=f'{message.author.display_name} | If you wish to update your age, select the desired value from the dropdown'
             ageView = AgeSelectView(ages)
             tempMessage = await message.channel.send(embed=embed, view=ageView)
             def interactionCheck(i: discord.Interaction): return i.data['custom_id'] == ageView.select.custom_id and i.user == message.author and i.channel == message.channel
@@ -342,7 +342,7 @@ async def wishlistHandler(self: Birthdays, ctx: commands.Context, message: disco
         await view.wishlistEditPreview(ctx.interaction, mode == 'add')
 
 async def upcomingBirthdaysPrep(self: Birthdays, ctx: commands.Context, message: discord.Message, currentServer, disguardSuggest, weekBirthday):
-    namesOnly = [m['data'].name for m in currentServer + disguardSuggest + weekBirthday]
+    namesOnly = [m['data'].display_name for m in currentServer + disguardSuggest + weekBirthday]
     view = UpcomingBirthdaysView(self, message, ctx, currentServer, disguardSuggest, weekBirthday, namesOnly, None, self.bot)
     await view.createEmbed()
     await view.loadHomepage()
@@ -628,7 +628,7 @@ class DateInputInterface(discord.ui.View):
     '''Uses a lower-level implementation to save space given how many similar buttons we're using'''
     def __init__(self, bot, message, author, finale=None):
         super().__init__()
-        self.result: datetime.datetime = datetime.datetime(datetime.datetime.now().year, 1, 1)
+        self.result: datetime.datetime = datetime.datetime(discord.utils.utcnow().year, 1, 1)
         self.bot: commands.Bot = bot
         self.message: discord.Message = message
         self.author: discord.User = author
@@ -709,7 +709,7 @@ class DateInputInterface(discord.ui.View):
         if result.data['custom_id'] == 'back':
             self.setupMonths()
         else:
-            if self.result < datetime.datetime.now(): self.result.replace(year = self.result.year + 1)
+            if self.result < discord.utils.utcnow(): self.result.replace(year = self.result.year + 1)
             if self.finale: await self.finale(self.result)
             await result.edit_original_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
         
@@ -727,7 +727,7 @@ class BirthdayHomepageView(discord.ui.View):
         user = await utility.get_user(self.ctx.author)
         bday, age, wishlist = user.get('birthday'), user.get('age'), user.get('wishlist', [])
         embed = discord.Embed(title = '🍰 Birthday Overview', color=yellow[theme])
-        embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
+        embed.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
         if not await cyber.privacyEnabledChecker(self.ctx.author, 'default', 'birthdayModule'):
             embed.description = 'Birthday module disabled due to your privacy settings'
             self.add_item(discord.ui.Button(label='Edit privacy settings', url='http://disguard.herokuapp.com/manage/profile'))
@@ -762,15 +762,15 @@ class BirthdayHomepageView(discord.ui.View):
                 if not userBirthday: continue
                 if u.id in memberIDs: currentServer.append({'data': u, 'bday': userBirthday})
                 elif mutualServerMemberToMember(self.birthdays, self.ctx.author, u):
-                    if (userBirthday - datetime.datetime.now()).days < 8: weekBirthday.append({'data': u, 'bday': userBirthday})
+                    if (userBirthday - discord.utils.utcnow()).days < 8: weekBirthday.append({'data': u, 'bday': userBirthday})
                     else: disguardSuggest.append({'data': u, 'bday': userBirthday})
             except (AttributeError, TypeError, KeyError): pass
         currentServer.sort(key = lambda m: m.get('bday'))
         weekBirthday.sort(key = lambda m: m.get('bday'))
         disguardSuggest.sort(key = lambda m: len(mutualServersMemberToMember(self.birthdays, self.ctx.author, m['data'])), reverse=True) #Servers the author and target share
-        firstNine = [m['data'].name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
+        firstNine = [m['data'].display_name for m in currentServer[:3] + disguardSuggest[:3] + weekBirthday[:3]]
         def fillBirthdayList(list, maxEntries):
-            return [f"{qlfc}\\▪️ **{m['data'].name if firstNine.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
+            return [f"{qlfc}\\▪️ **{m['data'].display_name if firstNine.count(m['data'].display_name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in list[:maxEntries]]
         finalSeparator = f'{"UPCOMING BIRTHDAYS":–^50}' if currentServer or weekBirthday or disguardSuggest else f'{"":–^50}'
         embed.description = f'''**{finalSeparator}\n**{("__THIS SERVER__" + NEWLINE) if len(currentServer) > 0 else ""}'''
         embed.description+= f'''{NEWLINE.join(fillBirthdayList(currentServer, 3))}{(NEWLINE + NEWLINE) if len(currentServer) > 0 else ""}{("__DISGUARD SUGGESTIONS__" + NEWLINE) if len(disguardSuggest) > 0 else ""}{NEWLINE.join(fillBirthdayList(disguardSuggest, 3))}{(NEWLINE + NEWLINE) if len(disguardSuggest) > 0 else ""}{("__WITHIN A WEEK__" + NEWLINE) if len(weekBirthday) > 0 else ""}'''
@@ -845,8 +845,8 @@ class GuestBirthdayView(discord.ui.View):
         wishlist = user.get('wishList', [])
         wishlistHidden = not await cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'wishlist')
         description = f'**{"WISH LIST":–^50}**\n{NEWLINE.join([f"• {wish}" for wish in wishlist]) if wishlist and not wishlistHidden else "Set to private by user" if wishlistHidden else ""}'
-        embed = discord.Embed(title = f'🍰 {self.target.name}\'s Birthday Page', description=description, color=yellow[await utility.color_theme(self.ctx.guild)])
-        embed.set_author(name=self.target.name, icon_url=self.target.avatar.url)
+        embed = discord.Embed(title = f'🍰 {self.target.display_name}\'s Birthday Page', description=description, color=yellow[await utility.color_theme(self.ctx.guild)])
+        embed.set_author(name=self.target.display_name, icon_url=self.target.display_avatar.url)
         embed.add_field(name='Birthday', value='Not configured' if bday is None else 'Hidden' if not await cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else f'{bday:%a %b %d}\n(<t:{round(bday.timestamp())}:R>)')
         embed.add_field(name='Age', value='Not configured' if age is None else 'Hidden' if not await cyber.privacyVisibilityChecker(self.target, 'birthdayModule', 'birthdayDay') else age)
         return embed
@@ -901,9 +901,9 @@ class AgeView(discord.ui.View):
         self.ageHidden = self.interaction.guild and not await cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'age')
         self.currentAge = (await utility.get_user(self.author)).get('age')
         ageModuleDescription = 'Entering your age is a fun but optional feature of the birthday module and has no relation to Discord. It will only be used to personalize the message DMd to you on your birthday. If you set your age, others can view it on your birthday profile by default. If you wish to set your age but don\'t want others to view it, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
-        instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if self.ageHidden else 'Type your desired age' if not self.newAge else f'{self.author.name} | Update your age to **{self.newAge}**?' if 13 <= self.newAge <= 105 else f'⚠ | **{self.newAge}** falls outside the age range of 13 to 105, inclusive. Please type a new age.'
+        instructions = 'Since your age visibility is set to private, use the virtual keyboard (edit privately button) to enter your age' if self.ageHidden else 'Type your desired age' if not self.newAge else f'{self.author.display_name} | Update your age to **{self.newAge}**?' if 13 <= self.newAge <= 105 else f'⚠ | **{self.newAge}** falls outside the age range of 13 to 105, inclusive. Please type a new age.'
         embed=discord.Embed(title='🕯 Birthday age setup', description=f'{ageModuleDescription if not self.currentAge else ""}{instructions}\n\nCurrent value: {"🔒 Hidden" if self.ageHidden else self.currentAge}', color=yellow[await utility.color_theme(self.interaction.guild)], timestamp=discord.utils.utcnow())
-        embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
+        embed.set_author(name=self.author.display_name, icon_url=self.author.display_avatar.url)
         self.embed = embed
         return embed
     
@@ -1020,10 +1020,10 @@ class BirthdayView(discord.ui.View):
         self.bdayHidden = self.interaction.guild and not await cyber.privacyVisibilityChecker(self.author, 'birthdayModule', 'birthdayDay')
         self.currentBday = (await utility.get_user(self.author)).get('birthday')
         birthdayModuleDescription = 'The Disguard birthday module provides fun, voluntary features for those wanting to use it. Setting your birthday will allow Disguard to make an announcement on your birthday in servers with this feature enabled, and Disguard will DM you a message on your birthday. By default, others can view your birthday on your profile. If you wish to change this, [update your privacy settings](http://disguard.herokuapp.com/manage/profile).\n\n'
-        instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if self.bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Disguard does not process your birth year, so just enter a month and a day.' if not self.newBday else f'{self.author.name} | Update your birthday to **{self.newBday}**?'
+        instructions = 'Since your birthday visibility is set to private, please use the virtual keyboard (edit privately button) to enter your birthday' if self.bdayHidden else 'Type your birthday or use the virtual keyboard for your input. Disguard does not process your birth year, so just enter a month and a day.' if not self.newBday else f'{self.author.display_name} | Update your birthday to **{self.newBday}**?'
         acceptableFormats = 'Inputs are not case sensitive. Examples of acceptable birthday formats:\nFebruary 28\nFeb 28\nFeb 28th\n2/28\n2-28\n02 28\nin two weeks\nin 5 days\nnext monday\ntomorrow'
         embed=discord.Embed(title='📆 Birthday date setup', description=f'{birthdayModuleDescription if not self.currentBday else ""}{instructions}{f"{NEWLINE}{NEWLINE}{acceptableFormats}" if not self.newBday else ""}\n\nCurrent value:  {"🔒 Hidden" if self.bdayHidden else self.currentBday.strftime("%B %d") if self.currentBday else "Not set"}', color=yellow[await utility.color_theme(self.interaction.guild)], timestamp=discord.utils.utcnow())
-        embed.set_author(name=self.author.name, icon_url=self.author.avatar.url)
+        embed.set_author(name=self.author.display_name, icon_url=self.author.display_avatar.url)
         self.embed = embed
         return embed
     
@@ -1078,7 +1078,7 @@ class BirthdayView(discord.ui.View):
                 for f in pending: f.cancel()
                 if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'): break #If the user cancels or finishes setup, close the loop
                 if not self.usedPrivateInterface:
-                    adjusted = datetime.datetime.utcnow() + datetime.timedelta(hours=(await utility.get_server(self.message.guild)).get('offset', -5))
+                    adjusted = discord.utils.utcnow() + datetime.timedelta(hours=(await utility.get_server(self.message.guild)).get('offset', -5))
                     self.newBday = calculateDate(result, adjusted) #If private interface was used, submitValue will store the value
                 try:
                     self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
@@ -1140,7 +1140,7 @@ class WishlistView(discord.ui.View):
         self.wishlist = (await utility.get_user(self.ctx.author)).get('wishlist', []) if not self.wishlistHidden and not self.cameFromSaved else self.cameFromSaved if self.cameFromSaved else []
         wishlistDisplay = ['You have set your wishlist to private'] if self.wishlistHidden else self.wishlist
         embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^50}**\n{NEWLINE.join([f"• {w}" for w in wishlistDisplay]) if wishlistDisplay else "Empty"}', color=yellow[await utility.color_theme(self.ctx.guild)])
-        embed.set_author(name=self.ctx.author.name, icon_url=self.ctx.author.avatar.url)
+        embed.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
         if self.cameFromSaved: embed.set_footer(text='Wishlist changes successfully saved')
         return embed
     
@@ -1324,7 +1324,7 @@ class UpcomingBirthdaysView(discord.ui.View):
         return embed
 
     def fillBirthdayList(self, list, page = 0, entries = 25):
-        return [f"{qlfc}\\▪️ **{m['data'].name if self.namesOnly.count(m['data'].name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in (list[page][:entries] if list else [])]
+        return [f"{qlfc}\\▪️ **{m['data'].display_name if self.namesOnly.count(m['data'].display_name) == 1 else m['data']}** • {m['bday']:%a %b %d} • <t:{round(m['bday'].timestamp())}:R>" for m in (list[page][:entries] if list else [])]
 
     def paginate(self, data):
         for i in range(0, len(data), 25): yield data[i:i+25] #25 entries per page
@@ -1462,7 +1462,7 @@ class UpcomingBirthdaysView(discord.ui.View):
             for d in population:
                 u: discord.User = d['data']
                 b: datetime.datetime = d['bday']
-                self.add_option(label=u.name[:100], value=u.id, description=f'{b.strftime("%B %d") if b else "⚠ No birthday set"}')
+                self.add_option(label=u.display_name[:100], value=u.id, description=f'{b.strftime("%B %d") if b else "⚠ No birthday set"}')
                 self.userDict[u.id] = u
         async def callback(self, interaction: discord.Interaction):
             view: UpcomingBirthdaysView = self.view
@@ -1477,7 +1477,7 @@ class UpcomingBirthdaysView(discord.ui.View):
             for d in population:
                 u: discord.User = d['data']
                 b: datetime.datetime = d['bday']
-                self.add_option(label=u.name[:100], value=u.id, description=f'{b.strftime("%B %d") if b else "⚠ No birthday set"}')
+                self.add_option(label=u.display_name[:100], value=u.id, description=f'{b.strftime("%B %d") if b else "⚠ No birthday set"}')
                 self.userDict[u.id] = u
             self.placeholder = f'Select a member ({len(population)} result{"" if len(population) == 1 else "s"})'
 
@@ -1594,12 +1594,12 @@ class ComposeMessageView(discord.ui.View):
             self.add_item(self.buttonDM)
         else:
             user_data = await utility.get_user(self.target)
-            intro = f'Type your message for {self.target.name}. Note that you cannot send server invites or hyperlinks in birthday messages.'
+            intro = f'Type your message for {self.target.display_name}. Note that you cannot send server invites or hyperlinks in birthday messages.'
             existingMessages = user_data.get('birthdayMessages')
             filtered = [m for m in existingMessages if self.target.id == m['author']]
             if filtered:
-                intro += f'\n\nℹ | You already have {len(filtered)} messages queued for {self.target.name}. If you wish to add another, you may continue by sending your desired message.'
-            if not user_data.get('birthday'): intro += f'\n\nℹ | {self.target.name} hasn\'t set their birthday yet. You may still write a message, but it will only be delivered if they set their birthday.'
+                intro += f'\n\nℹ | You already have {len(filtered)} messages queued for {self.target.display_name}. If you wish to add another, you may continue by sending your desired message.'
+            if not user_data.get('birthday'): intro += f'\n\nℹ | {self.target.display_name} hasn\'t set their birthday yet. You may still write a message, but it will only be delivered if they set their birthday.'
         self.embed = discord.Embed(title=f'Compose birthday message', description=intro)
         return self.embed
 
@@ -1631,10 +1631,10 @@ class ComposeMessageView(discord.ui.View):
                 await self.target.create_dm()
                 dmChannel = self.target.dm_channel
             except: dmChannel = None
-        dropdown.add_option(label=f'{self.target.name}\'s DMs', value=self.target.dm_channel.id, description='Recommended' if dmChannel else 'Unable to DM')
+        dropdown.add_option(label=f'{self.target.display_name}\'s DMs', value=self.target.dm_channel.id, description='Recommended' if dmChannel else 'Unable to DM')
         for server in mutualServers:
             birthdayChannel = server.get_channel((await utility.get_server(server)).get('birthday'))
-            dropdown.add_option(label=server.name, value=server.id, description=f'#{birthdayChannel.name}' if birthdayChannel else 'No announcement channel configured')
+            dropdown.add_option(label=server.name, value=server.id, description=f'#{birthdayChannel.display_name}' if birthdayChannel else 'No announcement channel configured')
         dropdown.max_values = len(mutualServers) + 1
         next = discord.ui.Button(label='Next', style=discord.ButtonStyle.green, custom_id='next')
         self.add_item(dropdown)
@@ -1654,7 +1654,7 @@ class ComposeMessageView(discord.ui.View):
         birthday = (await utility.get_user(self.target)).get('birthday')
         destinations = [f'• {self.birthdays.bot.get_channel(int(dropdown.values[0]))}'] + [f'• {self.birthdays.bot.get_guild(int(v))}' for v in (dropdown.values[1:] if len(dropdown.values) > 1 else [])]
         serverDestinations = [self.birthdays.bot.get_guild(int(v)) for v in dropdown.values[1:]]
-        self.embed.description = f'Your message to {self.target.name} says `{self.msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{NEWLINE.join(destinations)}\n\nBy composing this message, you affirm the message conforms with Discord\'s [community guidelines](https://discord.com/guidelines).'
+        self.embed.description = f'Your message to {self.target.display_name} says `{self.msgInBottle.content}`. It will be delivered on their birthday ({birthday:%B %d}) to the following destinations:\n{NEWLINE.join(destinations)}\n\nBy composing this message, you affirm the message conforms with Discord\'s [community guidelines](https://discord.com/guidelines).'
         self.embed.description+= f'If this message is not appropriate for Discord, the recipient(s) may flag it for further action by server moderators or the developer of Disguard.\n\nIf this all looks good, press the green button.'
         self.clear_items()
         self.add_item(self.buttonBack)
@@ -1675,7 +1675,7 @@ class ComposeMessageView(discord.ui.View):
             await msg.edit(embed=embed, view=self)
             return await self.writeMessagePrompt()
         await database.SetBirthdayMessage(self.target, self.msgInBottle, self.author, serverDestinations) #TODO: figure out how this relates to members receiving DMs, maybe enable by default and the dropdown can be to select additional servers
-        await self.message.channel.send(f'Successfully queued the message for {self.target.name}')
+        await self.message.channel.send(f'Successfully queued the message for {self.target.display_name}')
 
 class AgeSelectView(discord.ui.View):
     def __init__(self, ages):

@@ -19,6 +19,7 @@ import asyncio
 import traceback
 import random
 import logging
+import logging.handlers
 import inspect
 import typing
 import json
@@ -53,9 +54,17 @@ blue = (0x0000FF, 0x6666ff)
 
 os.remove('discord.log')
 logger = logging.getLogger('discord')
-logger.setLevel(logging.INFO)
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.setLevel(logging.DEBUG)
+logging.getLogger('discord.http').setLevel(logging.INFO)
+handler = logging.handlers.RotatingFileHandler(
+    filename='discord.log',
+    encoding='utf-8',
+    maxBytes=256 * 1024 * 1024,  # 256 MiB
+    backupCount=5,  # Rotate through 5 files
+)
+dt_fmt = '%Y-%m-%d %H:%M:%S'
+formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', dt_fmt, style='{')
+handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 async def prefix(bot: commands.Bot, message: discord.Message):
@@ -96,8 +105,6 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         loading = discord.utils.get(bot.get_guild(560457796206985216).emojis, name='loading')
         presence['activity'] = discord.Activity(name='my boss (Syncing data...)', type=discord.ActivityType.listening)
         await UpdatePresence()
-        convert = database.convert_status_history()
-        await asyncio.wait_for(convert, timeout=300)
         #await bot.load_extension('Cyberlog')
         #await asyncio.sleep(2)
         for cog in cogs:
@@ -236,7 +243,7 @@ async def server(ctx: commands.Context):
     green = emojis['online']
     red = emojis['dnd']
     embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[await utility.color_theme(ctx.guild)])
-    embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({datetime.datetime.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
+    embed.description=f'''**Prefix:** `{config.get("prefix")}`\n\n⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)\n> Time zone: {config.get("tzname")} ({discord.utils.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})\n> {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}\n> {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}'''
     embed.description+=f'''\n🔨Antispam [(Edit full settings)]({baseURL}/antispam)\n> {f"{green}Antispam: Enabled" if antispam.get("enabled") else f"{red}Antispam: Disabled"}\n> ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}'''
     embed.description+=f'''\n📜 Logging [(Edit full settings)]({baseURL}/cyberlog)\n> {f"{green}Logging: Enabled" if cyberlog.get("enabled") else f"{red}Logging: Disabled"}\n> ℹDefault log channel: {bot.get_channel(cyberlog.get("defaultChannel")).mention if bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}\n'''
     await ctx.send(embed=embed)
@@ -253,6 +260,12 @@ async def evaluate(ctx, func: str):
     result = eval(func)
     if inspect.iscoroutine(result): await ctx.send(await eval(func))
     else: await ctx.send(result)
+
+@bot.command(name='log_file')
+@commands.is_owner()
+async def log_file(ctx: commands.Context):
+    '''Uploads discord.log'''
+    await ctx.send(file=discord.File('discord.log'))
 
 @bot.hybrid_command(name='clear_commands')
 @commands.is_owner()
@@ -388,7 +401,7 @@ async def data(ctx: commands.Context):
     readMe += '\n\nThis readME is also saved just inside of the zipped folder. If you do not have a code editor to open .json files and make them look nice, web browsers can open them (drag into new tab area or use ctrl + o in your web browser), along with Notepad or Notepad++ (or any text editor)\n\nA guide on how to interpret the data fields will be available soon on my website. In the meantime, if you have a question about any of the data, contact my developer through the `ticket` command or ask in my support server (`invite` command)'
     with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
         f.write(readMe)
-    fileName = f'Attachments/Temp/DisguardUserDataRequest_{(datetime.datetime.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    fileName = f'Attachments/Temp/DisguardUserDataRequest_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
     await statusMessage.edit(content=statusMessage.content[:statusMessage.content.find(str(loading))] + f'{loading}Zipping data...')
     shutil.register_archive_format('7zip', py7zr.pack_7zarchive, description='7zip archive')
     shutil.make_archive(fileName, '7zip' if ext == '7z' else 'zip', basePath)
@@ -399,7 +412,7 @@ async def data(ctx: commands.Context):
 @bot.hybrid_command()
 @commands.is_owner()
 async def retrieve_attachments(ctx: commands.Context, user: discord.User):
-    statusMessage = await ctx.send(f'{loading}Retrieving attachments for {user.name}')
+    statusMessage = await ctx.send(f'{loading}Retrieving attachments for {user.display_name}')
     basePath = f'Attachments/Temp/{ctx.message.id}'
     def convertToFilename(string):
         export = ''
@@ -426,7 +439,7 @@ async def retrieve_attachments(ctx: commands.Context, user: discord.User):
                     except FileNotFoundError: pass
     with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
         f.write(f"📁MessageAttachments --> Master Folder\n|-- 📁[Server Name] --> Folder of channel names in this server\n|-- |-- 📁[Channel Name] --> Folder of message attachments sent by you in this channel in the following format: MessageID_AttachmentName.xxx\n\nWhy are message attachments stored? Solely for the purposes of message deletion logging. Additionally, attachment storing is a per-server basis, and will only be done if the moderators of the server choose to tick 'Log images and attachments that are deleted' on the web dashboard. If a message containing an attachment is sent in a channel, I attempt to save the attachment, and if a message containing an attachment is deleted, I attempt to retrieve the attachment - which is then permanently deleted from my records.")
-    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(datetime.datetime.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
     shutil.make_archive(fileName, 'zip', basePath)
     await statusMessage.edit(content=f'{os.path.abspath(fileName)}.zip')
 

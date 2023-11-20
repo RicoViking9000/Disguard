@@ -6,6 +6,7 @@ from discord import Message
 from discord.utils import utcnow
 from typing import List
 import datetime
+from bson.codec_options import CodecOptions
 
 # mongo = motor.motor_asyncio.AsyncIOMotorClient()
 
@@ -19,7 +20,7 @@ def initialize():
     global servers
     global users
     mongo = motor.motor_asyncio.AsyncIOMotorClient()
-    database = mongo.database
+    database = mongo.database.with_options(codec_options=CodecOptions(tz_aware=True))
     servers = database.servers
     users = database.users
 
