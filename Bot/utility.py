@@ -204,6 +204,7 @@ def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChann
         case discord.ChannelType.public_thread: return self.emojis['threadChannel']
         case discord.ChannelType.private_thread: return self.emojis['privateThreadChannel']
         case discord.ChannelType.news_thread: return self.emojis['newsThreadChannel']
+        case discord.ChannelType.forum: return self.emojis['forumChannel']
         case discord.ChannelType.text:
             private = c.overwrites_for(c.guild.default_role).read_messages == False
             if c.is_nsfw(): return self.emojis['nsfwChannel']
