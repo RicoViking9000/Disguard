@@ -123,8 +123,8 @@ class Misc(commands.Cog):
             title=f'The {module[0].upper()}{module[1:]} module was paused',
             description=textwrap.dedent(f'''
                 👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.display_name})
-                {utility.clockEmoji(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(datetime.datetime.now())}
-                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{utility.DisguardIntermediateTimestamp(until)} ({utility.DisguardRelativeTimestamp(until)})"}
+                {utility.clockEmoji(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(discord.utils.utcnow())}
+                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{utility.DisguardIntermediateTimestamp(rawUntil)} ({utility.DisguardRelativeTimestamp(rawUntil)})"}
                 '''),
             color=yellow[await utility.color_theme(ctx.guild)])
         url = cyber.imageToURL(ctx.author.display_avatar)
@@ -411,7 +411,7 @@ class Misc(commands.Cog):
                         if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
                     if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
                 prior = entry
-                timestampString = f'{utility.DisguardIntermediateTimestamp(entry["timestamp"] - datetime.timedelta(hours=utility.daylightSavings()))}'
+                timestampString = f'{utility.DisguardIntermediateTimestamp(entry["timestamp"])}'
                 if self.attribute in ('avatar', 'status'):
                     timestampString += f' {"• Avatar " + str(i + 1) if self.attribute == "avatar" or (self.attribute == "status" and entry["emoji"] and len(entry.get("emoji", "")) > 1) else ""}'
                 self.embed.add_field(
