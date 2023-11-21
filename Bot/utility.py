@@ -199,21 +199,31 @@ def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChann
         case discord.ChannelType.category: return self.emojis['folder']
         case discord.ChannelType.private: return self.emojis['member']
         case discord.ChannelType.group: return self.emojis['members']
-        case discord.ChannelType.news: return self.emojis['announcementsChannel']
-        case discord.ChannelType.stage_voice: return self.emojis['stageChannel']
+        case discord.ChannelType.news:
+            if c.threads: return self.emojis['announcementsThreads']
+            return self.emojis['announcementsChannel']
+        case discord.ChannelType.stage_voice:
+            if not c.overwrites_for(c.guild.default_role).read_messages: return self.emojis['privateStage']
+            return self.emojis['stageChannel']
         case discord.ChannelType.public_thread: return self.emojis['threadChannel']
         case discord.ChannelType.private_thread: return self.emojis['privateThreadChannel']
-        case discord.ChannelType.news_thread: return self.emojis['newsThreadChannel']
-        case discord.ChannelType.forum: return self.emojis['forumChannel']
+        case discord.ChannelType.news_thread: return self.emojis['textThreads']
+        case discord.ChannelType.forum:
+            if not c.overwrites_for(c.guild.default_role).read_messages: return self.emojis['privateForum']
+            return self.emojis['forumChannel']
         case discord.ChannelType.text:
             private = c.overwrites_for(c.guild.default_role).read_messages == False
+            if c.threads and not private: return self.emojis['textThreads']
             if c.is_nsfw(): return self.emojis['nsfwChannel']
             elif c.guild.rules_channel and c.id == c.guild.rules_channel.id: return self.emojis['rulesChannel']
-            elif private: return self.emojis['privateTextChannel']
+            elif private:
+                if c.threads: return self.emojis['privateTextThreads']
+                return self.emojis['privateTextChannel']
             else: return self.emojis['textChannel']
         case discord.ChannelType.voice:
             private = c.overwrites_for(c.guild.default_role).read_messages == False
             if private: return self.emojis['privateVoiceChannel']
+            elif c.is_nsfw(): return self.emojis['nsfwVoice']
             else: return self.emojis['voiceChannel']
         case _:
             return '❔'
