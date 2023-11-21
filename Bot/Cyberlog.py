@@ -68,7 +68,7 @@ class Cyberlog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.emojis: typing.Dict[int, discord.Emoji] = {}
         #Emoji consortium: https://drive.google.com/drive/folders/14ttnIp6MkHdooCgMP167KNbgO-eeD3e8?usp=sharing
-        for server in [560457796206985216, 403327720714665994, 495263898002522144]: #Disguard & RicoBot servers are currently being used for emoji hosting - with Pen Wars server being available for overflow reserves
+        for server in [560457796206985216, 403327720714665994, 495263898002522144, 1176517654287224894]:
             for e in bot.get_guild(server).emojis: self.emojis[e.name] = e
         self.bot = bot
         self.bot.attributeHistoryQueue = collections.defaultdict(dict)
