@@ -357,7 +357,7 @@ class Cyberlog(commands.Cog):
                     except discord.HTTPException: pass
     
     async def pinAddLogging(self, message: discord.Message):
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(message.guild))
         destination = await logChannel(message.guild, 'message')
         if not destination: return
@@ -508,7 +508,7 @@ class Cyberlog(commands.Cog):
         seconds = (discord.utils.utcnow() - layerObject['timestamp']).seconds
         if seconds < (await utility.get_server(g))['cyberlog']['ghostReactionTime']:
             settings = await getCyberAttributes(g, 'misc')
-            received = datetime.datetime.now()
+            received = discord.utils.utcnow()
             adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(g))
             color = blue[await utility.color_theme(g)] if settings['color'][1] == 'auto' else settings['color'][1]
             result = await c.fetch_message(m)
@@ -636,7 +636,7 @@ class Cyberlog(commands.Cog):
         botIgnore = False
         c = await logChannel(guild, 'message')
         settings = await getCyberAttributes(guild, 'message')
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
         utcTimestamp = timestamp - datetime.timedelta(hours=await utility.time_zone(guild))
         color = blue[await utility.color_theme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
@@ -730,7 +730,7 @@ class Cyberlog(commands.Cog):
                                 for i in range(0, len(enum), 3): yield enum[i:i+3]
                             entries = list(makeHistory()) #This will always have a length of 2 or more
                             for i, entry in enumerate(entries): 
-                                embed.add_field(name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry[1][1]) + datetime.timedelta(hours=await utility.time_zone(guild)))}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',value=entry[-1][1], inline=False)
+                                embed.add_field(name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry[1][1]))}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',value=entry[-1][1], inline=False)
                             await msg.edit(embed=embed)
                             for r in ['⬅', 'ℹ', '🗒']: await msg.add_reaction(r)
                         except (discord.Forbidden, discord.HTTPException) as e:
@@ -821,7 +821,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when message is deleted (RAW CONTENT)'''
         g = self.bot.get_guild(payload.guild_id)
         if not g: return #We don't deal with DM message deletions
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         if serverPurge.get(payload.guild_id): return
         if not await logEnabled(g, 'message'): return
         try: 
@@ -1000,7 +1000,7 @@ class Cyberlog(commands.Cog):
         '''[DISCORD API METHOD] Called when server channel is created'''
         content=''
         savePath = None
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(channel.guild))
         msg = None
         if await logEnabled(channel.guild, "channel"):
@@ -1100,7 +1100,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when server channel is updated'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after.guild))
         f = None
         msg = None
@@ -1318,7 +1318,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
         '''[DISCORD API METHOD] Called when channel is deleted'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(channel.guild))
         msg = None
         if await logEnabled(channel.guild, 'channel'):
@@ -1380,7 +1380,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member joins a server'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
         self.members[member.guild.id].append(member)
         asyncio.create_task(self.doorguardHandler(member))
@@ -1451,7 +1451,7 @@ class Cyberlog(commands.Cog):
                         {self.emojis['member'] if settings['context'][1] > 0 else ''}{"Member" if settings['context'][1] < 2 else ''}: {f"{member.mention} ({member.display_name})"}
                         {self.emojis["details"] if settings['context'][1] > 0 else ''}{"Placement" if settings['context'][1] < 2 else ''}: {count}{utility.suffix(count)} member
                         {f"{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}
-                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {utility.DisguardIntermediateTimestamp(member.created_at - datetime.timedelta(hours=DST))}
+                        {"📅" if settings['context'][1] > 0 else ''}{"Account created" if settings['context'][1] < 2 else ''}: {utility.DisguardIntermediateTimestamp(member.created_at)}
                         {"🕯" if settings['context'][1] > 0 else ''}{"Account age" if settings['context'][1] < 2 else ''}: {f"{', '.join(ageDisplay[:-1])} and {ageDisplay[-1]}" if len(ageDisplay) > 1 else ageDisplay[0]} old
                         {self.emojis["share"] if settings['context'][1] > 0 else ""}{"Mutual Servers" if settings['context'][1] < 2 else ''}: {len([g for g in self.bot.guilds if member in g.members])}\n
                         QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.display_name}\n🔒: Quarantine {member.display_name}\n👢: Kick {member.display_name}\n🔨: Ban {member.display_name}'''), 
@@ -1478,7 +1478,7 @@ class Cyberlog(commands.Cog):
                             {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.display_name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
                             {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
                             {self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
-                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {utility.DisguardIntermediateTimestamp(targetInvite.created_at - datetime.timedelta(hours=DST))}
+                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {utility.DisguardIntermediateTimestamp(targetInvite.created_at)}
                             {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {utility.DisguardRelativeTimestamp(discord.utils.utcnow() + datetime.timedelta(seconds=targetInvite.max_age))}"}
                             {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times'''),
                         textwrap.dedent(f'''
@@ -1710,7 +1710,7 @@ class Cyberlog(commands.Cog):
                 if joinSpan.seconds < rj[1]:
                     unbanAt = discord.utils.utcnow() + datetime.timedelta(seconds=rj[2])
                     timezoneUnbanAt = unbanAt + datetime.timedelta(hours=await utility.time_zone(member.guild))
-                    try: await member.send(f'You have been banned from `{member.guild.name}` for {utility.DisguardRelativeTimestamp(timezoneUnbanAt)} for repeatedly joining and leaving the server.')
+                    try: await member.send(f'You have been banned from `{member.guild.name}` for {utility.DisguardRelativeTimestamp(unbanAt)} for repeatedly joining and leaving the server.')
                     except: pass
                     try: await member.ban(reason=f'''[Antispam: repeatedJoins] {member.display_name} joined the server {len(joinLogs)} times in {joinSpanDisplay}, and will remain banned until {f"{timezoneUnbanAt:%b %d, %Y • %I:%M %p} {await utility.name_zone(member.guild)}" if rj[2] > 0 else "the ban is manually revoked"}.''') #If I find out that the unix timestamps work in audit logs, I will update this line too
                     except discord.Forbidden: 
@@ -1761,7 +1761,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         '''[DISCORD API METHOD] Called when member leaves a server'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
         if member.guild.id not in gimpedServers: asyncio.create_task(updateLastActive(member, discord.utils.utcnow(), 'left a server'))
         message = None
@@ -1838,7 +1838,7 @@ class Cyberlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User):
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         msg = None
         if await logEnabled(guild, 'doorguard'):
             settings = await getCyberAttributes(guild, 'doorguard')
@@ -1908,7 +1908,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         '''[DISCORD API METHOD] Called when member changes roles or nickname'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after.guild))
         msg = None
         if await logEnabled(after.guild, 'member') and any([before.nick != after.nick, before.roles != after.roles]):
@@ -2060,7 +2060,7 @@ class Cyberlog(commands.Cog):
     async def on_user_update(self, before: discord.User, after: discord.User):
         '''[DISCORD API METHOD] Called when a user changes their global username, avatar, or discriminator'''
         rawReceived = discord.utils.utcnow()
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         servers: typing.List[discord.Guild] = after.mutual_guilds
         membObj = servers[0].get_member(after.id) #Getting the discord.Member object for later use
         embed = discord.Embed(description='')
@@ -2126,7 +2126,7 @@ class Cyberlog(commands.Cog):
                     if len(titles) == 3 and settings['context'][0] < 2: newEmbed.title = f"{titleBase}User's {', '.join(titles)} updated"
                     elif len(titles) != 3: newEmbed.title = f"{titleBase}User's {' & '.join(titles)} updated"
                     if before.name == after.name: newEmbed.description = f'''{f"{self.emojis['member'] if settings['library'] > 0 else '👤'}" if settings['context'][1] > 0 else ''}{'Member' if settings['context'][1] < 2 else ''}: {after.mention} ({after.display_name})'''
-                    if settings['embedTimestamp'] > 1: newEmbed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
+                    if settings['embedTimestamp'] > 1: newEmbed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(rawReceived)}"
                     #Next, color and timestamp
                     newEmbed.color = color
                     if settings['embedTimestamp']: newEmbed.timestamp = rawReceived
@@ -2145,7 +2145,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_join(self, guild: discord.Guild):
         '''[DISCORD API METHOD] Called when the bot joins a server'''
         await self.bot.change_presence(status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching))
-        embed = discord.Embed(title=f'{self.emojis["darkGreenPlus"]}Joined server', description=f'{guild.name}\n{guild.member_count} Members\nCreated {utility.DisguardRelativeTimestamp(guild.created_at - datetime.timedelta(hours=DST))}', color=green[1])
+        embed = discord.Embed(title=f'{self.emojis["darkGreenPlus"]}Joined server', description=f'{guild.name}\n{guild.member_count} Members\nCreated {utility.DisguardRelativeTimestamp(guild.created_at)}', color=green[1])
         embed.set_footer(text=guild.id)
         await self.globalLogChannel.send(embed=embed)
         asyncio.create_task(database.VerifyServer(guild, self.bot, new=True, includeMembers=guild.members))
@@ -2181,7 +2181,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
         '''[DISCORD API METHOD] Called when a server's attributes are updated'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after))
         if await logEnabled(before, 'server'):
             content = 'Server settings were updated'
@@ -2303,7 +2303,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is created'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(role.guild))
         msg = None
         if await logEnabled(role.guild, "role"):
@@ -2353,7 +2353,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is deleted'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(role.guild))
         message = None
         roleMembers = []
@@ -2435,7 +2435,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
         '''[DISCORD API METHOD] Called when a server role is updated'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after.guild))
         message = None
         if await logEnabled(before.guild, 'role'):
@@ -2547,7 +2547,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild: discord.Guild, before: typing.List[discord.Emoji], after: typing.List[discord.Emoji]):
         '''[DISCORD API METHOD] Called when emoji list is updated (creation, update, deletion)'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(guild))
         msg = None
         if await logEnabled(guild, 'emoji'):
@@ -2624,7 +2624,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         '''[DISCORD API METHOD] Called whenever a voice channel event is triggered - join/leave, mute/deafen, etc'''
-        received = datetime.datetime.now()
+        received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
         msg = None
         serverData = await utility.get_server(member.guild)

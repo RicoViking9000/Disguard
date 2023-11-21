@@ -389,13 +389,13 @@ class Info(commands.Cog):
             string='\n'.join(['     {}: {:>{diff}}'.format(kk.name, english.get(vv), diff=25 - len(kk.name)) for kk,vv in iter(v.items())])
             temp.append(string)
             permString = '```Channel permission overwrites\n{}```'.format('\n'.join(temp))
-        created=channel.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        created=channel.created_at
         updated = None
         if logs:
             for log in logs:
                 if log.action == discord.AuditLogAction.channel_update and (discord.utils.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == channel.id:
-                        updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
+                        updated = log.created_at
                         break
         if updated is None: updated = created
         details.add_field(name='Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
@@ -423,13 +423,13 @@ class Info(commands.Cog):
         #sortedRoles = sorted(r.guild.roles, key = lambda x: x.position, reverse=True)
         #start = r.position - 3
         #if start < 0: start = 0
-        created = r.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        created = r.created_at
         updated = None
         if logs:
             for log in logs:
                 if log.action == discord.AuditLogAction.role_update and (discord.utils.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == r.id:
-                        updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
+                        updated = log.created_at
                         break
         if updated is None: updated = created
         embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([utility.permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(r.permissions) if p[1]])),timestamp=discord.utils.utcnow(),color=r.color)
@@ -486,14 +486,14 @@ class Info(commands.Cog):
             embed.description+='\n\n • {}'.format('\n • '.join(current))
         embed.description+='\n\n**Roles ({}):** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(len(m.roles) - 1, ' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([utility.permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(m.guild_permissions) if p[1]]))
         boosting = m.premium_since
-        joined = m.joined_at - datetime.timedelta(hours=utility.daylightSavings())
-        created = m.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        joined = m.joined_at
+        created = m.created_at
         if m.voice is None: voice = 'None'
         else:
             voice = '{}{} in {}{}'.format('🔇' if m.voice.mute or m.voice.self_mute else '', '🤐' if m.voice.deaf or m.voice.self_deaf else '','N/A' if m.voice.channel is None else m.voice.channel.name, ', AFK' if m.voice.afk else '')
         if boosting is None: embed.add_field(name='Boosting server',value='Nope')
         else:
-            embed.add_field(name='Boosting server',value=f'Since {utility.DisguardRelativeTimestamp(boosting - datetime.timedelta(hours=utility.daylightSavings()))}')
+            embed.add_field(name='Boosting server',value=f'Since {utility.DisguardRelativeTimestamp(boosting)}')
         embed.add_field(name='📆Account created',value=f'{utility.DisguardRelativeTimestamp(created)}') #V1.5
         #embed.add_field(name='📆Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nz, (datetime.datetime.now(datetime.timezone.utc)-created).days)) #v2.0
         embed.add_field(name='📆Joined server',value=f'{utility.DisguardRelativeTimestamp(joined)}')
@@ -504,7 +504,7 @@ class Info(commands.Cog):
         return embed
         
     async def EmojiInfo(self, e: discord.Emoji, owner):
-        created = e.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        created = e.created_at
         embed = discord.Embed(title=e.name,description=str(e),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(e.guild)])
         embed.set_image(url=e.url)
         embed.set_footer(text='Emoji ID: {}'.format(e.id))
@@ -525,7 +525,7 @@ class Info(commands.Cog):
         embed.set_thumbnail(url=i.guild.icon.url)
         #expires=discord.utils.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
         expires=discord.utils.utcnow() + datetime.timedelta(seconds=i.max_age)
-        created = i.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        created = i.created_at
         embed.add_field(name='📆Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
         embed.add_field(name='⏰Expires',value=f'{utility.DisguardRelativeTimestamp(expires)}' if i.max_age > 0 else 'Never')
         embed.add_field(name='Server',value=i.guild.name)
