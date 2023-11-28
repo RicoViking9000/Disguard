@@ -211,7 +211,6 @@ class Info(commands.Cog):
             main.description=used
             for result in range(len(every)): md2.append('\n{}: {}'.format(result + 1, every[result].mainKey))
             main.description+=''.join(md2[:20])
-            #main.set_author(name='{}: {}'.format(ctx.author.name, ctx.author.id),icon_url=ctx.author.avatar_url)
             if len(main.description) > 2048: main.description = main.description[:2048]
             if len(every) == 0 and indiv is None: return await message.edit(embed=main)
             elif len(every) == 1 and counter == 0 and type(every[0].obj) is not discord.Member: 
@@ -236,7 +235,7 @@ class Info(commands.Cog):
                 except: logs = False #signify failure to the end user
                 try: invites = await ctx.guild.invites()
                 except: invites = False
-                try: bans = await ctx.guild.bans()
+                try: bans = [ban async for ban in ctx.guild.bans()]
                 except: bans = False
                 try: webhooks = await ctx.guild.webhooks()
                 except: webhooks = False
@@ -315,7 +314,7 @@ class Info(commands.Cog):
 
     async def ServerInfo(self, s: discord.Guild, logs, bans, hooks, invites):
         '''Formats an embed, displaying stats about a server. Used for ℹ navigation or `info` command'''
-        embed=discord.Embed(title=s.name, description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description), timestamp=datetime.datetime.utcnow(), color=yellow[await utility.color_theme(s)])
+        embed=discord.Embed(title=s.name, description='' if s.description is None else '**Server description:** {}\n\n'.format(s.description), timestamp=discord.utils.utcnow(), color=yellow[await utility.color_theme(s)])
         mfa = {0: 'No', 1: 'Yes'}
         veri = {'none': 'None', 'low': 'Email', 'medium': 'Email, account age > 5 mins', 'high': 'Email, account 5 mins old, server member for 10 mins', 'extreme': 'Phone number'}
         perks0=['None yet']
@@ -346,7 +345,6 @@ class Info(commands.Cog):
         embed.description+='\n\n**Nitro boosters:** {}/{}, **perks:** {}'.format(s.premium_subscription_count,perkDict.get(s.premium_tier),', '.join(perks))
         #embed.set_thumbnail(url=s.icon_url)
         embed.add_field(name='Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})',inline=False)
-        embed.add_field(name='Region',value=str(s.region))
         embed.add_field(name='AFK Timeout',value='{}s --> {}'.format(s.afk_timeout, s.afk_channel))
         if s.max_presences is not None: embed.add_field(name='Max Presences',value='{}'.format(s.max_presences))
         embed.add_field(name='Mods need 2FA',value=mfa.get(s.mfa_level))
@@ -369,7 +367,7 @@ class Info(commands.Cog):
 
     async def ChannelInfo(self, channel: discord.abc.GuildChannel, invites, pins, logs):
         permString = None
-        details = discord.Embed(title=f'{utility.channelEmoji(self, channel)}{channel.name}', description='',color=yellow[await utility.color_theme(channel.guild)], timestamp=datetime.datetime.utcnow())
+        details = discord.Embed(title=f'{utility.channelEmoji(self, channel)}{channel.name}', description='',color=yellow[await utility.color_theme(channel.guild)], timestamp=discord.utils.utcnow())
         details.set_footer(text='Channel ID: {}'.format(channel.id))
         if type(channel) is discord.TextChannel: details.description+=channel.mention
         if type(channel) is not discord.CategoryChannel:
@@ -391,13 +389,13 @@ class Info(commands.Cog):
             string='\n'.join(['     {}: {:>{diff}}'.format(kk.name, english.get(vv), diff=25 - len(kk.name)) for kk,vv in iter(v.items())])
             temp.append(string)
             permString = '```Channel permission overwrites\n{}```'.format('\n'.join(temp))
-        created=channel.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        created=channel.created_at
         updated = None
         if logs:
             for log in logs:
                 if log.action == discord.AuditLogAction.channel_update and (discord.utils.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == channel.id:
-                        updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
+                        updated = log.created_at
                         break
         if updated is None: updated = created
         details.add_field(name='Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
@@ -425,16 +423,16 @@ class Info(commands.Cog):
         #sortedRoles = sorted(r.guild.roles, key = lambda x: x.position, reverse=True)
         #start = r.position - 3
         #if start < 0: start = 0
-        created = r.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        created = r.created_at
         updated = None
         if logs:
             for log in logs:
                 if log.action == discord.AuditLogAction.role_update and (discord.utils.utcnow() - log.created_at).seconds > 600:
                     if log.target.id == r.id:
-                        updated = log.created_at - datetime.timedelta(hours=utility.daylightSavings())
+                        updated = log.created_at
                         break
         if updated is None: updated = created
-        embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([utility.permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(r.permissions) if p[1]])),timestamp=datetime.datetime.utcnow(),color=r.color)
+        embed=discord.Embed(title='🚩Role: {}'.format(r.name),description='**Permissions:** {}'.format('Administrator' if r.permissions.administrator else ' • '.join([utility.permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(r.permissions) if p[1]])),timestamp=discord.utils.utcnow(),color=r.color)
         #embed.description+='\n**Position**:\n{}'.format('\n'.join(['{0}{1}{0}'.format('**' if sortedRoles[role] == r else '', sortedRoles[role].name) for role in range(start, start+6)]))
         embed.add_field(name='Displayed separately',value=r.hoist)
         embed.add_field(name='Externally managed',value=r.managed)
@@ -451,12 +449,12 @@ class Info(commands.Cog):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         #tz = timeZone(m.guild)
         #nz = nameZone(m.guild)
-        embed=discord.Embed(title='Member details',timestamp=datetime.datetime.utcnow(),color=m.color)
+        embed=discord.Embed(title='Member details',timestamp=discord.utils.utcnow(),color=m.color)
         mA = await Cyberlog.lastActive(m) #The dict (timestamp and reason) when a member was last active
-        activeTimestamp = mA.get('timestamp')# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
-        onlineTimestamp = await Cyberlog.lastOnline(m)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
-        onlineDelta = (datetime.datetime.now() - onlineTimestamp) #the timedelta between now and member's last online appearance
-        activeDelta = (datetime.datetime.now() - activeTimestamp) #The timedelta between now and when a member was last active
+        activeTimestamp = mA.get('timestamp')#.replace(tzinfo=datetime.timezone.utc)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last active, with adjustments for timezones
+        onlineTimestamp = (await Cyberlog.lastOnline(m))#.replace(tzinfo=datetime.timezone.utc)# + datetime.timedelta(hours=timeZone(m.guild) + 4) #The timestamp value when a member was last online, with adjustments for timezones
+        onlineDelta = (discord.utils.utcnow() - onlineTimestamp) #the timedelta between now and member's last online appearance
+        activeDelta = (discord.utils.utcnow() - activeTimestamp) #The timedelta between now and when a member was last active
         units = ['second', 'minute', 'hour', 'day'] #Used in the embed description
         hours, minutes, seconds = activeDelta.seconds // 3600, (activeDelta.seconds // 60) % 60, activeDelta.seconds - (activeDelta.seconds // 3600) * 3600 - ((activeDelta.seconds // 60) % 60)*60
         activeTimes = [seconds, minutes, hours, activeDelta.days] #List of self explanatory values
@@ -488,27 +486,26 @@ class Info(commands.Cog):
             embed.description+='\n\n • {}'.format('\n • '.join(current))
         embed.description+='\n\n**Roles ({}):** {}\n\n**Permissions:** {}\n\nReact 🍰 to switch to Birthday Information view'.format(len(m.roles) - 1, ' • '.join([r.name for r in reversed(m.roles)]), 'Administrator' if m.guild_permissions.administrator else ' • '.join([utility.permissionKeys.get(p[0], f'Unknown Permission ({p[0]})') for p in iter(m.guild_permissions) if p[1]]))
         boosting = m.premium_since
-        joined = m.joined_at - datetime.timedelta(hours=utility.daylightSavings())
-        created = m.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        joined = m.joined_at
+        created = m.created_at
         if m.voice is None: voice = 'None'
         else:
             voice = '{}{} in {}{}'.format('🔇' if m.voice.mute or m.voice.self_mute else '', '🤐' if m.voice.deaf or m.voice.self_deaf else '','N/A' if m.voice.channel is None else m.voice.channel.name, ', AFK' if m.voice.afk else '')
         if boosting is None: embed.add_field(name='Boosting server',value='Nope')
         else:
-            embed.add_field(name='Boosting server',value=f'Since {utility.DisguardRelativeTimestamp(boosting - datetime.timedelta(hours=utility.daylightSavings()))}')
+            embed.add_field(name='Boosting server',value=f'Since {utility.DisguardRelativeTimestamp(boosting)}')
         embed.add_field(name='📆Account created',value=f'{utility.DisguardRelativeTimestamp(created)}') #V1.5
         #embed.add_field(name='📆Account created',value='{} {} ({} days ago)'.format(created.strftime("%b %d, %Y • %I:%M %p"), nz, (datetime.datetime.now(datetime.timezone.utc)-created).days)) #v2.0
         embed.add_field(name='📆Joined server',value=f'{utility.DisguardRelativeTimestamp(joined)}')
         embed.add_field(name='📜Messages',value=postCount)
         embed.add_field(name='🎙Voice Chat',value=voice)
-        # if addThumbnail: embed.set_thumbnail(url=m.avatar_url) #V1.5
-        if addThumbnail: embed.set_thumbnail(url=m.avatar.url) #V2.0
+        if addThumbnail: embed.set_thumbnail(url=m.display_avatar.url) #V2.0
         embed.set_footer(text='Member ID: {}'.format(m.id))
         return embed
         
     async def EmojiInfo(self, e: discord.Emoji, owner):
-        created = e.created_at - datetime.timedelta(hours=utility.daylightSavings())
-        embed = discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(e.guild)])
+        created = e.created_at
+        embed = discord.Embed(title=e.name,description=str(e),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(e.guild)])
         embed.set_image(url=e.url)
         embed.set_footer(text='Emoji ID: {}'.format(e.id))
         embed.add_field(name='Twitch emoji',value=e.managed)
@@ -518,17 +515,17 @@ class Info(commands.Cog):
         return embed
 
     async def PartialEmojiInfo(self, e: discord.PartialEmoji, s: discord.Guild):
-        embed=discord.Embed(title=e.name,description=str(e),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
+        embed=discord.Embed(title=e.name,description=str(e),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.set_image(url=e.url)
         embed.set_footer(text='Emoji ID: {}'.format(e.id))
         return embed
 
     async def InviteInfo(self, i: discord.Invite, s): #s: server
-        embed=discord.Embed(title='Invite details',description=str(i),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
+        embed=discord.Embed(title='Invite details',description=str(i),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.set_thumbnail(url=i.guild.icon.url)
         #expires=discord.utils.utcnow() + datetime.timedelta(seconds=i.max_age) + datetime.timedelta(hours=timeZone(s))
-        expires=datetime.datetime.now() + datetime.timedelta(seconds=i.max_age)
-        created = i.created_at - datetime.timedelta(hours=utility.daylightSavings())
+        expires=discord.utils.utcnow() + datetime.timedelta(seconds=i.max_age)
+        created = i.created_at
         embed.add_field(name='📆Created',value=f'{utility.DisguardIntermediateTimestamp(created)} ({utility.DisguardRelativeTimestamp(created)})')
         embed.add_field(name='⏰Expires',value=f'{utility.DisguardRelativeTimestamp(expires)}' if i.max_age > 0 else 'Never')
         embed.add_field(name='Server',value=i.guild.name)
@@ -541,7 +538,7 @@ class Info(commands.Cog):
 
     async def BotInfo(self, app: discord.AppInfo, s: discord.Guild):
         bpg = 1073741824 #Bytes per gig
-        embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(self.bot.get_emoji(569191704523964437), app.description),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
+        embed=discord.Embed(title='About Disguard',description='{0}{1}{0}'.format(self.bot.get_emoji(569191704523964437), app.description),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.description+=f'\n\nDISGUARD HOST SYSTEM INFORMATION\nCPU: {cpuinfo.get_cpu_info().get("brand_raw")}\n•   Usage: {psutil.cpu_percent()}%\n​•   Core count: {psutil.cpu_count(logical=False)} cores, {psutil.cpu_count()} threads\n​​​​​​‍‍‍​​​•   {(psutil.cpu_freq().current / 1000):.2f} GHz current clock speed; {(psutil.cpu_freq().max / 1000):.2f} GHz max clock speed'
         embed.description+=f'\n​RAM: {(psutil.virtual_memory().total / bpg):.1f}GB total ({(psutil.virtual_memory().used / bpg):.1f}GB used, {(psutil.virtual_memory().free / bpg):.1f}GB free)'
         embed.description+=f'\nSTORAGE: {psutil.disk_usage("/").total // bpg}GB total ({psutil.disk_usage("/").used // bpg}GB used, {psutil.disk_usage("/").free // bpg}GB free)'
@@ -558,7 +555,7 @@ class Info(commands.Cog):
 
     async def EmojiListInfo(self, emojis, logs):
         '''Prereq: len(emojis) > 0'''
-        embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(emojis[0].guild)])
+        embed=discord.Embed(title='{}\'s emojis'.format(emojis[0].guild.name),description='Total emojis: {}'.format(len(emojis)),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(emojis[0].guild)])
         static = [str(e) for e in emojis if not e.animated]
         animated = [str(e) for e in emojis if e.animated]
         if len(static) > 0: embed.add_field(name='Static emojis: {}/{}'.format(len(static), emojis[0].guild.emoji_limit),value=''.join(static)[:1023],inline=False)
@@ -570,7 +567,7 @@ class Info(commands.Cog):
 
     async def ChannelListInfo(self, channels, logs):
         '''Prereq: len(channels) > 0'''
-        embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(channels[0].guild)])
+        embed=discord.Embed(title='{}\'s channels'.format(channels[0].guild.name),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(channels[0].guild)])
         none=['(No category)'] if len([c for c in channels if type(c) is not discord.CategoryChannel and c.category is None]) else []
         none += ['|{}{}'.format(utility.channelEmoji(self, c), c.name) for c in channels if type(c) is not discord.CategoryChannel and c.category is None]
         for chan in channels[0].guild.categories:
@@ -584,7 +581,7 @@ class Info(commands.Cog):
 
     async def RoleListInfo(self, roles, logs):
         '''Prereq: len(roles) > 0'''
-        embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(roles[0].guild)])
+        embed=discord.Embed(title='{}\'s roles'.format(roles[0].guild.name),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(roles[0].guild)])
         embed.description='Total roles: {}\n\n • {}'.format(len(roles), '\n • '.join([r.name for r in roles]))
         embed.add_field(name='Roles displayed separately',value=len([r for r in roles if r.hoist]))
         embed.add_field(name='Mentionable roles',value=len([r for r in roles if r.mentionable]))
@@ -597,10 +594,10 @@ class Info(commands.Cog):
         return embed
 
     async def MemberListInfo(self, members):
-        embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(members[0].guild)])
+        embed=discord.Embed(title='{}\'s members'.format(members[0].guild.name),description='',timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(members[0].guild)])
         posts=[]
         for channel in members[0].guild.text_channels:
-            posts += [message['author0'] for message in (await lightningdb.get_channel_messages(channel.id)).values()]
+            posts += [message['author0'] for message in (await lightningdb.get_channel_messages(channel.id))]
         most = ['{} with {}'.format(self.bot.get_user(a[0]).name, a[1]) for a in iter(collections.Counter(posts).most_common(1))][0]
         online=self.emojis['online']
         idle=self.emojis['idle']
@@ -625,7 +622,7 @@ class Info(commands.Cog):
         return embed
 
     async def InvitesListInfo(self, invites, logs, s: discord.Guild):
-        embed=discord.Embed(title=f'{invites[0].guild.name if invites else "This server"}\'s invites', timestamp=datetime.datetime.utcnow(), color=yellow[await utility.color_theme(s)])
+        embed=discord.Embed(title=f'{invites[0].guild.name if invites else "This server"}\'s invites', timestamp=discord.utils.utcnow(), color=yellow[await utility.color_theme(s)])
         if invites: embed.description='Total invites: {}\n\n • {}'.format(len(invites), '\n • '.join(['discord.gg/**{}**: Goes to {}, created by {}'.format(i.code, i.channel.name, i.inviter.name) for i in invites]))[:2047]
         else: embed.description=f'Total invites: {self.loading if invites is None else "🔒Unable to obtain invites"}'
         if logs: embed.add_field(name='Total invites ever created',value='At least {}'.format(len([l for l in logs if l.action == discord.AuditLogAction.invite_create])))
@@ -634,7 +631,7 @@ class Info(commands.Cog):
         return embed
 
     async def BansListInfo(self, bans, logs, s): #s=server
-        embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=datetime.datetime.utcnow(),color=yellow[await utility.color_theme(s)])
+        embed=discord.Embed(title='{}\'s bans'.format(s.name),timestamp=discord.utils.utcnow(),color=yellow[await utility.color_theme(s)])
         embed.description=f'Users currently banned: {len(bans) if bans else self.loading if bans is None else "🔒Missing ban retrieval permissions"}'
         if not logs:
             if logs is None: embed.add_field(name='Banned previously', value=self.loading)

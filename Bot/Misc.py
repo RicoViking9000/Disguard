@@ -52,12 +52,12 @@ class Misc(commands.Cog):
                 return await message.channel.send(f'[Jump Context] {self.emojis["alert"]} | This message links to a NSFW channel, so I can\'t reshare the message')
             if result.embeds and not message.author.bot:
                 if not result.embeds[0].footer.text: result.embeds[0].set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y - %I:%M %p} {await utility.name_zone(message.guild)}')
-                if not result.embeds[0].author.name: result.embeds[0].set_author(name=result.author.name, icon_url=result.author.avatar.url)
+                if not result.embeds[0].author.name: result.embeds[0].set_author(name=result.author.display_name, icon_url=result.author.display_avatar.url)
                 return await message.channel.send(content=result.content, embed=result.embeds[0])
             else:
                 embed=discord.Embed(description=result.content)
                 embed.set_footer(text=f'{(result.created_at + datetime.timedelta(hours=await utility.time_zone(message.guild))):%b %d, %Y • %I:%M %p} {await utility.name_zone(message.guild)}')
-                embed.set_author(name=result.author.name, icon_url=result.author.avatar.url)
+                embed.set_author(name=result.author.display_name, icon_url=result.author.display_avatar.url)
                 if len(result.attachments) > 0 and result.attachments[0].height is not None:
                     try: embed.set_image(url=result.attachments[0].url)
                     except: pass
@@ -80,7 +80,7 @@ class Misc(commands.Cog):
         def viewerEmoji(i): return '🔒' if i == 0 else '🔓' if i == 1 else viewerEmoji(privacy['default'][1]) if i == 2 else self.emojis['members']
         def viewerText(i): return 'only you' if i == 0 else 'everyone you share a server with' if i == 1 else viewerText(privacy['default'][1]) if i == 2 else f'{len(i)} users'
         def enabled(i): return False if i == 0 else True if i == 1 else enabled(privacy['default'][0])
-        embed = discord.Embed(title=f'Privacy Settings » {ctx.author.name} » Overview', color=yellow[1])
+        embed = discord.Embed(title=f'Privacy Settings » {ctx.author.display_name} » Overview', color=yellow[1])
         embed.description = f'''To view Disguard's privacy policy, [click here](https://disguard.netlify.app/privacybasic)\nTo view and edit all settings, visit your profile on my [web dashboard](http://disguard.herokuapp.com/manage/profile)'''
         embed.add_field(name='Default Settings', value=f'''{slideToggle(privacy['default'][0])}Allow Disguard to use your customization settings for its features: {"Enabled" if enabled(privacy['default'][0]) else "Disabled"}\n{viewerEmoji(privacy['default'][1])}Default visibility of your customization settings: {viewerText(privacy['default'][1])}''', inline=False)
         embed.add_field(name='Personal Profile Features', value=f'''{slideToggle(privacy['profile'][0])}{"Enabled" if enabled(privacy['profile'][0]) else "Disabled"}\n{f"{viewerEmoji(privacy['profile'][1])}Personal profile features: Visible to {viewerText(privacy['profile'][1])}" if enabled(privacy['profile'][0]) else ""}''', inline=False)
@@ -114,7 +114,7 @@ class Misc(commands.Cog):
         seconds = self.ParsePauseDuration(seconds)
         duration = datetime.timedelta(seconds = seconds)
         if seconds > 0: 
-            rawUntil = datetime.datetime.utcnow() + duration
+            rawUntil = discord.utils.utcnow() + duration
             until = rawUntil + await utility.time_zone(ctx.guild)
         else: 
             rawUntil = datetime.datetime.max
@@ -122,14 +122,14 @@ class Misc(commands.Cog):
         embed = discord.Embed(
             title=f'The {module[0].upper()}{module[1:]} module was paused',
             description=textwrap.dedent(f'''
-                👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.name})
-                {utility.clockEmoji(datetime.datetime.now() + datetime.timedelta(hours=await utility.time_zone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(datetime.datetime.now())}
-                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{utility.DisguardIntermediateTimestamp(until)} ({utility.DisguardRelativeTimestamp(until)})"}
+                👮‍♂️Moderator: {ctx.author.mention} ({ctx.author.display_name})
+                {utility.clockEmoji(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild)))}Paused at: {utility.DisguardIntermediateTimestamp(discord.utils.utcnow())}
+                ⏰Paused until: {'Manually resumed' if seconds == 0 else f"{utility.DisguardIntermediateTimestamp(rawUntil)} ({utility.DisguardRelativeTimestamp(rawUntil)})"}
                 '''),
             color=yellow[await utility.color_theme(ctx.guild)])
-        url = cyber.imageToURL(ctx.author.avatar)
+        url = cyber.imageToURL(ctx.author.display_avatar)
         embed.set_thumbnail(url=url)
-        embed.set_author(name=ctx.author.name, icon_url=url)
+        embed.set_author(name=ctx.author.display_name, icon_url=url)
         await status.edit(content=None, embed=embed)
         await database.PauseMod(ctx.guild, key)
         # self.bot.lightningLogging[ctx.guild.id][key]['enabled'] = False
@@ -184,7 +184,7 @@ class Misc(commands.Cog):
         return await ctx.send(embed=view.embed, view=view, ephemeral=view.private)
     @history.autocomplete('attribute')
     async def history_autocomplete(self, interaction: discord.Interaction, argument: str):
-        options = ['avatar', 'username', 'status']
+        options = ['avatar', 'username', 'display name', 'status']
         return [app_commands.Choice(name=attr, value=attr) for attr in options if argument.lower() in attr]
     
     class AttributeHistoryView(discord.ui.View):
@@ -200,7 +200,7 @@ class Misc(commands.Cog):
             self.data = None
             self.private = False
             self.misc: Misc = bot.get_cog('Misc')
-            self.attributes = ['avatar', 'username', 'status']
+            self.attributes = ['avatar', 'username', 'displayname', 'status']
             self.module = f'{self.attribute}History'
             self.member_select = self.SelectAMemberDropdown()
             self.attr_select = self.SelectAnAttributeDropdown()
@@ -230,6 +230,7 @@ class Misc(commands.Cog):
                 options = [
                     discord.SelectOption(label='Avatar History', value='avatar', emoji='🖼'),
                     discord.SelectOption(label='Username History', value='username', emoji='📝'),
+                    discord.SelectOption(label='Display Name History', value='displayname', emoji='📝'),
                     discord.SelectOption(label='Custom Status History', value='status', emoji='💭')
                 ]
                 super().__init__(placeholder='Select an attribute to view...', options=options)
@@ -388,7 +389,7 @@ class Misc(commands.Cog):
             self.embed.clear_fields()
             while len(self.children) > 2:
                 self.remove_item(self.children[-1])
-            if self.attribute == 'username': self.embed.set_thumbnail(url=self.member.avatar.url)
+            if self.attribute in ('username', 'displayname'): self.embed.set_thumbnail(url=self.member.display_avatar.url)
             tail_mappings = {'avatar': 'imageURL', 'username': 'name', 'status': 'name'}
             data = self.data[self.current_page] if self.data else []
             self.embed.description = f'{len(data) if len(data) < 15 else 15} / {len(data)} entries shown; oldest on top'
@@ -410,7 +411,7 @@ class Misc(commands.Cog):
                         if times[j] != 0: distanceDisplay.append(f'{times[j]} {units[j]}{"s" if times[j] != 1 else ""}')
                     if len(distanceDisplay) == 0: distanceDisplay = ['0 seconds']
                 prior = entry
-                timestampString = f'{utility.DisguardIntermediateTimestamp(entry["timestamp"] - datetime.timedelta(hours=utility.daylightSavings()))}'
+                timestampString = f'{utility.DisguardIntermediateTimestamp(entry["timestamp"])}'
                 if self.attribute in ('avatar', 'status'):
                     timestampString += f' {"• Avatar " + str(i + 1) if self.attribute == "avatar" or (self.attribute == "status" and entry["emoji"] and len(entry.get("emoji", "")) > 1) else ""}'
                 self.embed.add_field(
@@ -424,7 +425,7 @@ class Misc(commands.Cog):
                 self.add_item(self.prev_button)
                 self.add_item(self.next_button)
             self.embed.title = f'{self.member.global_name}\'s {self.attribute} history'
-            self.embed.set_author(name=self.member.name, icon_url=self.member.avatar.url)
+            self.embed.set_author(name=self.member.display_name, icon_url=self.member.display_avatar.url)
             return self.embed
     
     @commands.hybrid_command()
@@ -444,8 +445,8 @@ class Misc(commands.Cog):
         '''
         if not channel: channel = ctx.channel
         if not member: member = ctx.author
-        webhook = await channel.create_webhook(name='automationSayCommand', avatar=await member.avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.name} to imitate {member.name} by saying "{message}"')
-        await webhook.send(message, username=member.name)
+        webhook = await channel.create_webhook(name='automationSayCommand', avatar=await member.display_avatar.with_static_format('png').read(), reason=f'Initiated by {ctx.author.display_name} to imitate {member.display_name} by saying "{message}"')
+        await webhook.send(message, username=member.display_name)
         await ctx.interaction.response.pong()
         await webhook.delete()
     

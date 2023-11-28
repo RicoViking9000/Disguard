@@ -47,7 +47,7 @@ class Antispam(commands.Cog):
             for g in self.bot.guilds:
                 events = (await utility.get_server(g, {})).get('antispam', {}).get('timedEvents', [])
                 for e in events:
-                    if datetime.datetime.utcnow() > e.get('expires'):
+                    if discord.utils.utcnow() > e.get('expires'):
                         try:
                             if e.get('type') == 'ban':
                                 try: await g.unban(await self.bot.fetch_user(e.get('target')), reason=f'{e.get("flavor")} Ban duration expired')
@@ -199,7 +199,7 @@ class Antispam(commands.Cog):
             messages = [message async for message in message.channel.history(limit=spam.get('consecutiveMessages')[0])]
             if len(messages) >= spam.get('consecutiveMessages')[0] and all([m.author.id == message.author.id for m in messages]) and (messages[0].created_at - messages[-1].created_at).seconds < spam.get('consecutiveMessages')[1]:
                 flag = True
-                reason.append(f'Sending too many messages in a row\n\n{message.author.name} sent {len(messages)} messages consecutively in under {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages over {spam.get("consecutiveMessages")[1]} seconds)')
+                reason.append(f'Sending too many messages in a row\n\n{message.author.display_name} sent {len(messages)} messages consecutively in under {(messages[0].created_at - messages[-1].created_at).seconds} seconds (Server flag threshold: {spam.get("consecutiveMessages")[0]} messages over {spam.get("consecutiveMessages")[1]} seconds)')
                 short.append('Sending too many consecutive messages')
         if spam.get("emoji") != 0:
             #Work on emoji so more features are available
