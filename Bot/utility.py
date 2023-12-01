@@ -190,7 +190,7 @@ def contentParser(message: discord.Message):
     
 def empty(value):
     '''Compares an embed field to its delegated empty value (in d.py 2.0, changed from Embed.Empty to None'''
-    return value == None
+    return value is None
 
 def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChannel]):
     '''Returns an emoji corresponding to the type of channel'''
@@ -212,7 +212,7 @@ def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChann
             if not c.overwrites_for(c.guild.default_role).read_messages: return self.emojis['privateForum']
             return self.emojis['forumChannel']
         case discord.ChannelType.text:
-            private = c.overwrites_for(c.guild.default_role).read_messages == False
+            private = c.overwrites_for(c.guild.default_role).read_messages is False
             if c.threads and not private: return self.emojis['textThreads']
             if c.is_nsfw(): return self.emojis['nsfwChannel']
             elif c.guild.rules_channel and c.id == c.guild.rules_channel.id: return self.emojis['rulesChannel']
@@ -221,7 +221,7 @@ def channelEmoji(self, c: typing.Union[discord.DMChannel, discord.abc.GuildChann
                 return self.emojis['privateTextChannel']
             else: return self.emojis['textChannel']
         case discord.ChannelType.voice:
-            private = c.overwrites_for(c.guild.default_role).read_messages == False
+            private = c.overwrites_for(c.guild.default_role).read_messages is False
             if private: return self.emojis['privateVoiceChannel']
             elif c.is_nsfw(): return self.emojis['nsfwVoice']
             else: return self.emojis['voiceChannel']

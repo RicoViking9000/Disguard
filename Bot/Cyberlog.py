@@ -485,7 +485,7 @@ class Cyberlog(commands.Cog):
         if self.reactions: layerObject = self.reactions
         else: layerObject = collections.defaultdict(lambda: collections.defaultdict(dict))
         layerObject[m][u.id][p.emoji.name] = {'timestamp': discord.utils.utcnow(), 'guild': g.id}
-        self.reactions = layerObject 
+        self.reactions = layerObject
         sleepTime = (await utility.get_server(g))['cyberlog']['ghostReactionTime']
         await asyncio.sleep(sleepTime)
         try: layerObject[m][u.id].remove(p.emoji.name)
@@ -1029,7 +1029,7 @@ class Cyberlog(commands.Cog):
             embed.set_footer(text=f'Channel ID: {channel.id}')
             msg: discord.Message = await (await logChannel(channel.guild, 'channel')).send(content=content if 'audit log' in content or any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
             defaultRead = channel.overwrites_for(channel.guild.default_role).read_messages
-            if defaultRead == False: 
+            if defaultRead is False: 
                 accessible = [o[0] for o in list(iter(channel.overwrites.items())) if o[1].read_messages]
                 unaccessible = [r for r in channel.guild.roles if r not in accessible]
                 unaccessibleRoles = [o for o in unaccessible if type(o) is discord.Role]
@@ -1817,7 +1817,7 @@ class Cyberlog(commands.Cog):
             if 'Finalizing' in embed.title: embed.title = f'''{(f"{self.emojis['member'] if not member.bot else '🤖'}❌" if settings['library'] < 2 else self.emojis['memberLeave']) if settings['context'][0] > 0 else ''}{f'{"Member left" if not member.bot else "Bot removed"}' if settings['context'][0] < 2 else ''}'''
             await message.edit(content = content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
             info: Info.Info = self.bot.get_cog('Info')
-            embed.set_field_at(-1, name='**Post count**', value=await asyncio.create_task(info.MemberPosts(member)))
+            embed.set_field_at(-1, name='**Post count**', value=await info.MemberPosts(member))
             await message.edit(embed=embed if not settings['plainText'] else None)
             self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             #if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
@@ -2642,8 +2642,8 @@ class Cyberlog(commands.Cog):
         content = None
         error = False
         log = None
-        if before.channel: beforePrivate = before.channel.overwrites_for(member.guild.default_role).read_messages == False
-        if after.channel: afterPrivate = after.channel.overwrites_for(member.guild.default_role).read_messages == False
+        if before.channel: beforePrivate = before.channel.overwrites_for(member.guild.default_role).read_messages is False
+        if after.channel: afterPrivate = after.channel.overwrites_for(member.guild.default_role).read_messages is False
         onlyModActions = serverData['cyberlog']['onlyVCForceActions']
         onlyJoinLeave = serverData['cyberlog']['onlyVCJoinLeave'] #Make sure to do a full server verification every day to make sure this key exists
         try: eventHistory = self.memberVoiceLogs[member.id]
@@ -2767,6 +2767,7 @@ class Cyberlog(commands.Cog):
                     if not onlyModActions and not onlyJoinLeave:
                         embed.add_field(name=f"{(self.emojis['deafened'] if settings['library'] > 0 else '🔇') if settings['context'][1] > 0 else ''}Deafened",value='_ _')
             if before.channel != after.channel:
+                # read audit log for member_move to get the moderator
                 if not before.channel:
                     content = f'{member} connected to voice chat in {after.channel.name}'
                     eventHistory = []
@@ -3037,7 +3038,7 @@ async def verifyLogChannel(bot, s: discord.Guild):
     server_data = await utility.get_server(s)
     try: default = server_data.get('cyberlog').get('defaultChannel')
     except: return
-    if default == None: return
+    if default is None: return
     final = s.get_channel(default)
     for mod in ['message', 'doorguard', 'server', 'channel', 'member', 'role', 'emoji', 'voice']:
         modular = server_data.get('cyberlog').get(mod).get('channel')

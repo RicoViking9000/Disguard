@@ -36,6 +36,7 @@ class Reddit(commands.Cog):
         '''Handles starting/stopping of reddit feeds for servers, along with ensuring there are no duplicates, etc.'''
         runningFeeds = [feed for feed in self.redditThreads.get(server.id, {}).keys()]
         server_data = await utility.get_server(server)
+        if not server_data: return
         proposedFeeds = [subreddit for subreddit, data in server_data.get('redditFeeds', {}).items() if self.bot.get_channel(data['channel'])]
         feedsToCreate = [entry for subreddit, entry in server_data.get('redditFeeds', {}).items() if subreddit not in runningFeeds and self.bot.get_channel(entry['channel'])]
         feedsToDelete = [entry for entry in runningFeeds if entry not in proposedFeeds]
