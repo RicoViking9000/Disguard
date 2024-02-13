@@ -2622,6 +2622,179 @@ class Cyberlog(commands.Cog):
                         if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
     
     @commands.Cog.listener()
+    async def on_raw_app_command_permissions_update(self, payload: discord.RawAppCommandPermissionsUpdateEvent):
+        '''[DISCORD API METHOD] Called when application command permissions are updated'''
+        received = discord.utils.utcnow()
+        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(payload.guild_id))
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild: return
+        if await logEnabled(guild, 'command'):
+            content = f'Application command permissions updated'
+            settings = await getCyberAttributes(guild, 'command')
+            color = blue[await utility.color_theme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+            embed = discord.Embed(
+                title=f'''{(f'{self.emojis["command"]}{self.emojis["darkGreenPlus"]}' if settings['library'] == 1 else f"{self.emojis['minion']}{self.emojis['darkGreenPlus']}") if settings['context'][0] > 0 else ""}{'Application command permissions updated' if settings['context'][0] < 2 else ''}''',
+                description=f'''{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Command' if settings['context'][1] < 2 else ''}: {payload.command_name}''',
+                color=color)
+            if settings['embedTimestamp'] in (1, 3): embed.timestamp = discord.utils.utcnow()
+            if await readPerms(guild, "command"):
+                try:
+                    log = await guild.audit_logs(limit=1, action=discord.AuditLogAction.application_command_permission_update).next()
+                    if settings['botLogging'] == 0 and log.user.bot: return
+                    elif settings['botLogging'] == 1 and log.user.bot: settings['plainText'] = True
+                    embed.description += f'''\n{"👮‍♂️" if settings["context"][1] > 0 else ""}{"Updated by" if settings["context"][1] < 2 else ""}: {log.user.mention} ({log.user.display_name}){f"{NEWLINE}{self.emojis['details'] if settings['context'][1] > 0 else ''}{'Reason' if settings['context'][1] < 2 else ''}: {log.reason}" if log.reason else ""}'''
+                    if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (settings['author'] > 2 or(settings['author'] == 2 and utility.empty(embed.author.name))):
+                        url = await self.imageToURL(log.user.display_avatar)
+                        if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)): embed.set_thumbnail(url=url)
+                        if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)): embed.set_author(name=log.user.display_name, icon_url=url)
+                    content = f'{log.user} updated the application command permissions'
+                    if guild.id not in gimpedServers: await updateLastActive(log.user, discord.utils.utcnow(), 'updated application command permissions somewhere')
+                except Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
+            content += utility.embedToPlaintext(embed)
+            msg: discord.Message = await (await logChannel(guild, 'command')).send(content = content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None, embed=embed if not settings['plainText'] else None, tts=settings['tts'])
+            if any((settings['plainText'], settings['flashText'])) and not settings['plainText']: await msg.edit(content=None)
+            self.archiveLogEmbed(guild, msg.id, embed, 'Application Command Update')
+            #cutoff
+
+    @commands.Cog.listener()
+    async def on_guild_stickers_update(self, guild, before, after):
+        pass
+
+    @commands.Cog.listener()
+    async def on_raw_app_command_permissions_update(self, payload):
+        pass
+    
+    @commands.Cog.listener()
+    async def on_app_command_completion(self, interaction, command):
+        pass
+
+    @commands.Cog.listener()
+    async def on_automod_rule_create(self, rule):
+        pass
+
+    @commands.Cog.listener()
+    async def on_automod_rule_update(self, rule):
+        pass
+    
+    @commands.Cog.listener()
+    async def on_automod_rule_delete(self, rule):
+        pass
+
+    @commands.Cog.listener()
+    async def on_automod_action(self, execution):
+        pass
+
+    # @commands.Cog.listener()
+    # async def on_entitlement_create(self, entitlement):
+    #     pass
+
+    # @commands.Cog.listener()
+    # async def on_entitlement_update(self, entitlement):
+    #     pass
+
+    # @commands.Cog.listener()
+    # async def on_entitlement_delete(self, entitlement):
+    #     pass
+    
+    @commands.Cog.listener()
+    async def on_invite_create(self, invite: discord.Invite):
+        try:
+            self.invites[str(invite.guild.id)] = await invite.guild.invites()
+        except discord.HTTPException: pass
+
+    @commands.Cog.listener()
+    async def on_invite_delete(self, invite: discord.Invite):
+        try:
+            self.invites[str(invite.guild.id)] = await invite.guild.invites()
+        except discord.HTTPException: pass
+
+    @commands.Cog.listener()
+    async def on_integration_create(self, integration):
+        pass
+
+    @commands.Cog.listener()
+    async def on_integration_update(self, integration):
+        pass
+
+    @commands.Cog.listener()
+    async def on_integration_delete(self, integration):
+        pass
+
+    @commands.Cog.listener()
+    async def on_webhooks_update(self, channel: discord.TextChannel):
+        logs = [log async for log in channel.guild.audit_logs(limit=3)]
+        await updateLastActive(
+            await discord.utils.find(
+                lambda x: x.action in (
+                    discord.AuditLogAction.webhook_create,
+                    discord.AuditLogAction.webhook_update,
+                    discord.AuditLogAction.webhook_delete),
+                logs,
+                ).user, 'updated webhooks')
+        
+    @commands.Cog.listener()
+    async def on_scheduled_event_create(self, event: discord.ScheduledEvent):
+        pass
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_update(self, before: discord.ScheduledEvent, after: discord.ScheduledEvent):
+        pass
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_delete(self, event: discord.ScheduledEvent):
+        pass
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_user_add(self, event: discord.ScheduledEvent, user: discord.User):
+        pass
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_user_remove(self, event: discord.ScheduledEvent, user: discord.User):
+        pass
+
+    @commands.Cog.listener()
+    async def on_stage_instance_create(self, stage: discord.StageInstance):
+        pass
+
+    @commands.Cog.listener()
+    async def on_stage_instance_update(self, before: discord.StageInstance, after: discord.StageInstance):
+        pass
+
+    @commands.Cog.listener()
+    async def on_stage_instance_delete(self, stage: discord.StageInstance):
+        pass
+
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread):
+        pass
+
+    @commands.Cog.listener()
+    async def on_raw_thread_update(self, before: discord.Thread, after: discord.Thread):
+        pass
+
+    @commands.Cog.listener()
+    async def on_raw_thread_delete(self, thread: discord.Thread):
+        pass
+
+    @commands.Cog.listener()
+    async def on_thread_join(self, thread: discord.Thread):
+        pass
+
+    @commands.Cog.listener()
+    async def on_thread_remove(self, thread: discord.Thread):
+        pass
+
+    @commands.Cog.listener()
+    async def on_thread_member_join(self, member: discord.Member):
+        pass
+
+    @commands.Cog.listener()
+    async def on_raw_thread_member_remove(self, member: discord.Member):
+        pass
+
+
+    
+    @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         '''[DISCORD API METHOD] Called whenever a voice channel event is triggered - join/leave, mute/deafen, etc'''
         received = discord.utils.utcnow()
@@ -2828,29 +3001,10 @@ class Cyberlog(commands.Cog):
                     await msg.edit(content=None, embed=embed)
                     await msg.clear_reactions()
                     if settings['plainText']: await msg.add_reaction(self.emojis['collapse'])
-
-    '''The following listener methods are used for lastActive tracking; not logging right now'''
-    # As of update 0.2.25, on_raw_reaction_add and on_raw_reaction_remove are in use, at the top, for ghost reaction logging, the latter of which used to be here.
-
-    @commands.Cog.listener()
-    async def on_invite_create(self, invite: discord.Invite):
-        try:
-            self.invites[str(invite.guild.id)] = await invite.guild.invites()
-        except discord.HTTPException: pass
-
-    @commands.Cog.listener()
-    async def on_invite_delete(self, invite: discord.Invite):
-        try:
-            self.invites[str(invite.guild.id)] = await invite.guild.invites()
-        except discord.HTTPException: pass
     
     @commands.Cog.listener()
     async def on_typing(self, c: discord.abc.Messageable, u: discord.User, w: datetime.datetime):
         if c.guild and not serverIsGimped(c.guild): await updateLastActive(u, discord.utils.utcnow(), 'started typing somewhere') #9/29/21: Changed behavior to not work in DMs
-
-    @commands.Cog.listener()
-    async def on_webhooks_update(self, c: discord.TextChannel):
-        await updateLastActive(await c.guild.audit_logs(limit=3).find(lambda x: x.action in (discord.AuditLogAction.webhook_create, discord.AuditLogAction.webhook_update, discord.AuditLogAction.webhook_delete)), 'updated webhooks')
 
     #TODO: Implement views
     @commands.Cog.listener()
