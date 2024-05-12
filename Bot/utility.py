@@ -53,6 +53,8 @@ CHANNEL_KEYS = {
     'voice': 'Voice',
 }
 
+DISGUARD_SERVER_ID = 560457796206985216
+
 def rickroll(): return 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 
 def ManageServer(member: discord.Member):

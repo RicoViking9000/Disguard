@@ -38,7 +38,7 @@ tracemalloc.start()
 booted = False
 loading = None
 presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Help']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help']
 
 print("Connecting...")
 
@@ -112,6 +112,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
             except Exception as e: 
                 print(f'Cog load error: {e}')
                 traceback.print_exc()
+        print('Cogs loaded', bot.cogs)
         cyber: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
         emojis = cyber.emojis
         def initializeCheck(m: discord.Message): return m.author.id == bot.user.id and m.channel.id == cyber.imageLogChannel.id and m.content == 'Completed'
@@ -251,32 +252,33 @@ async def server(ctx: commands.Context):
 async def ping(ctx):
     await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms')
 
-@bot.command(name='eval')
-@commands.is_owner()
-async def evaluate(ctx, func: str):
-    # global variables
-    # args = ' '.join(args)
-    result = eval(func)
-    if inspect.iscoroutine(result): await ctx.send(await eval(func))
-    else: await ctx.send(result)
+# @bot.command(name='eval')
+# @commands.is_owner()
+# async def evaluate(ctx, func: str):
+#     # global variables
+#     # args = ' '.join(args)
+#     result = eval(func)
+#     if inspect.iscoroutine(result): await ctx.send(await eval(func))
+#     else: await ctx.send(result)
 
-@bot.command(name='log_file')
-@commands.is_owner()
-async def log_file(ctx: commands.Context):
-    '''Uploads discord.log'''
-    await ctx.send(file=discord.File('discord.log'))
+# @bot.command(name='log_file')
+# @commands.is_owner()
+# async def log_file(ctx: commands.Context):
+#     '''Uploads discord.log'''
+#     await ctx.send(file=discord.File('discord.log'))
 
-@bot.command(name='clear_commands')
-@commands.is_owner()
-async def clear_sync_tree(ctx: commands.Context):
-    await bot.tree.clear_commands()
-    await bot.tree.sync()
-    await ctx.send('Cleared tree')
+# @bot.command(name='clear_commands')
+# @commands.is_owner()
+# async def clear_sync_tree(ctx: commands.Context):
+#     await bot.tree.clear_commands()
+#     await bot.tree.sync()
+#     await ctx.send('Cleared tree')
 
-@bot.command(name='sync')
+@bot.command(name='synctree')
 @commands.is_owner()
 async def sync_tree(ctx: commands.Context):
     await bot.tree.sync()
+    await bot.tree.sync(guild=discord.Object(utility.DISGUARD_SERVER_ID))
     await ctx.send('Synced tree')
 
 @bot.command()
