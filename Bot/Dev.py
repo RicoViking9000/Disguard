@@ -59,8 +59,14 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
 
     @index_channel.autocomplete('channel_arg')
     async def index_channel_autocomplete(self, interaction: discord.Interaction, argument: str):
-        text_channels = [channel for channel in self.bot.get_all_channels() if isinstance(channel, discord.TextChannel)]
-        if argument: return [app_commands.Choice(name=channel[0].name, value=str(channel[0].id)) for channel in utility.FindChannels(text_channels, argument)][:25]
+        def filter_list(results: list[list[tuple[discord.TextChannel, int]]]) -> list[discord.TextChannel]:
+            result = []
+            for list_entry in results:
+                result += [entry[0] for entry in list_entry if isinstance(entry[0], discord.TextChannel)]
+            return result
+        text_channel_results = [utility.FindChannels(server, argument) for server in self.bot.guilds]
+        filtered_results = filter_list(text_channel_results)
+        if argument: return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in filtered_results][:25]
         return [app_commands.Choice(name=str(channel), value=str(channel.id)) for channel in self.bot.get_all_channels() if isinstance(channel, discord.TextChannel)][:25]
     
     @app_commands.command(name='eval')
@@ -95,11 +101,9 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='sync')
     async def sync_tree(self, interaction: discord.Interaction):
         '''Sync the tree'''
-        print('syncing...')
         await self.bot.tree.sync()
         await self.bot.tree.sync(guild=discord.Object(utility.DISGUARD_SERVER_ID))
         await interaction.response.send_message('Synced tree')
-        print('synced')
 
     @app_commands.command(name='clear_commands')
     async def clear_commands(self, interaction: discord.Interaction):
