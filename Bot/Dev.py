@@ -110,6 +110,21 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await self.bot.tree.sync()
         await interaction.response.send_message('Cleared tree')
 
+    @app_commands.command(name='reload_cog')
+    async def reload_cog(self, interaction: discord.Interaction, cog_name: str):
+        '''Reload a cog'''
+        cog = self.bot.get_cog(cog_name)
+        if cog is None:
+            await interaction.response.send_message(f'Cog {cog_name} not found')
+            return
+        await self.bot.reload_extension(cog_name)
+        await interaction.response.send_message(f'Reloaded cog {cog_name}')
+    
+    @reload_cog.autocomplete('cog_name')
+    async def reload_cog_autocomplete(self, interaction: discord.Interaction, argument: str):
+        if argument: return [app_commands.Choice(name=cog_name, value=cog_name) for cog_name in self.bot.cogs.keys() if argument.lower() in cog_name.lower()][:25]
+        return [app_commands.Choice(name=cog_name, value=cog_name) for cog_name in self.bot.cogs.keys()][:25]
+
 
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
     if channel.id in (534439214289256478, 910598159963652126): return

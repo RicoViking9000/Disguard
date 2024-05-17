@@ -52,7 +52,9 @@ qlfc = ' '
 yellow = (0xffff00, 0xffff66)
 blue = (0x0000FF, 0x6666ff)
 
-os.remove('discord.log')
+if os.path.exists('discord.log'):
+    os.remove('discord.log')
+
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 logging.getLogger('discord.http').setLevel(logging.INFO)
@@ -174,36 +176,6 @@ async def on_message(message: discord.Message):
     misc: Misc.Misc = bot.get_cog('Misc')
     await misc.on_message(message)
 
-
-@bot.command()
-@commands.is_owner()
-async def verify(ctx):
-    status = await ctx.send("Verifying...")
-    await database.Verification(bot)
-    await status.delete()
-
-@bot.command(description='Index a server or channel')
-@commands.is_owner()
-async def index(ctx, t: int = 0):
-    if not t: target = bot.guilds
-    else:
-        target = bot.get_channel(t)
-        if target is None:
-            target = bot.get_guild(t)
-            if target is None: return await ctx.send('No target found for <{}>'.format(t))
-    def rCheck(r, u): return str(r) in ('✅', '❌') and u.id == ctx.author.id and r.message.id == m.id
-    m = await ctx.send('Index fully?')
-    for r in ('✅', '❌'): await m.add_reaction(r)
-    try: result = await bot.wait_for('reaction_add', check=rCheck, timeout=300)
-    except asyncio.TimeoutError: return
-    if str(result[0]) == '✅': full = True
-    else: full = False
-    status = await ctx.send(f'Indexing {"fully" if full else "partially"}...')
-    if type(target) is discord.Guild: await asyncio.gather(*[indexMessages(target, c, full) for c in target.text_channels])
-    elif type(target) is list:
-        for t in target: await asyncio.gather(*[indexMessages(t, c, full) for c in t.text_channels])
-    else: await asyncio.wait([asyncio.create_task(indexMessages(ctx.guild, target, full))], return_when=asyncio.FIRST_COMPLETED)
-    await status.delete()
 
 @bot.hybrid_command(help='Get Disguard\'s invite link')
 async def invite(ctx: commands.Context):
