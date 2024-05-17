@@ -1,25 +1,23 @@
 '''Cog that contains Disguard's dev-only commands'''
 
 import asyncio
+import datetime
 import inspect
+import os
 import typing
 import discord
 from discord import app_commands
 from discord.ext import commands
+import pymongo.errors
 import utility
 import Support
 import textwrap
 import database
+import lightningdb
+import pymongo
 # =============================================================================
 
-def team_check():
-    '''Ensures dev commands are only run by Disguard developers'''
-    print('running team check')
-    async def predicate(ctx: commands.Context) -> bool:
-        return ctx.interaction.user in (await ctx.bot.application_info()).team.members
-    return commands.check(predicate)
 
-@team_check()
 @app_commands.guilds(utility.DISGUARD_SERVER_ID)
 class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     def __init__(self, bot: commands.Bot):
@@ -122,7 +120,7 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
     existing_message_counter = 0
     async for message in channel.history(limit=None, oldest_first=full):
         try: await lightningdb.post_message(message)
-        except mongoErrors.DuplicateKeyError:
+        except pymongo.errors.DuplicateKeyError:
             if not full:
                 existing_message_counter += 1
                 if existing_message_counter >= 15: break
