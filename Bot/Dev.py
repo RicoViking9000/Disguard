@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import inspect
+import json
 import os
 import typing
 import discord
@@ -117,13 +118,66 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         if cog is None:
             await interaction.response.send_message(f'Cog {cog_name} not found')
             return
-        await self.bot.reload_extension(cog_name)
+        try: await self.bot.reload_extension(cog_name)
+        except Exception as e:
+            return await interaction.response.send_message(f'Failed to reload cog {cog_name}: {e}')
         await interaction.response.send_message(f'Reloaded cog {cog_name}')
     
     @reload_cog.autocomplete('cog_name')
     async def reload_cog_autocomplete(self, interaction: discord.Interaction, argument: str):
         if argument: return [app_commands.Choice(name=cog_name, value=cog_name) for cog_name in self.bot.cogs.keys() if argument.lower() in cog_name.lower()][:25]
         return [app_commands.Choice(name=cog_name, value=cog_name) for cog_name in self.bot.cogs.keys()][:25]
+    
+    @app_commands.command(name='broadcast')
+    async def broadcast(self,
+                        interaction: discord.Interaction,
+                        *,
+                        message: str,
+                        server_bucket: typing.Literal['all', 'none', 'eval'],
+                        server_arg: typing.Optional[str] = '',
+                        destination_bucket: typing.Literal['logging', 'moderator'],
+                        embed: bool = False
+                        ):
+        '''Broadcast a message'''
+        # Future: Modal for message, and openAI for destination channels
+        match server_bucket:
+            case 'all':
+                servers = [await utility.get_server(server) for server in self.bot.guilds]
+                if server_arg: servers = [server for server in servers if server['server_id'] not in server_arg]
+            case 'none':
+                servers = []
+                if server_arg: servers = [await utility.get_server(server) for server in self.bot.guilds if server['server_id'] in server_arg]
+            case _:
+                all_servers = [await utility.get_server(server) for server in self.bot.guilds]
+                servers = [server for server in all_servers if eval(f'server.{server_arg}')]
+        newline = message.find('\n')
+        payload = {
+            'content': None if embed else message,
+            'embed': discord.Embed(
+                title=message[:newline],
+                description=message[newline + 1:],
+            ) if embed else None
+        }
+        log = {}
+        for server in servers:
+            if not server: continue
+            match destination_bucket:
+                case 'logging':
+                    channel = self.bot.get_channel(server['cyberlog']['defaultChannel'])
+                case _:
+                    channel = self.bot.get_channel(server['moderatorChannel'])
+            if channel is None: continue
+            try: 
+                await channel.send(**payload)
+                log[server['server_id']] = f'{server["name"]} - successfully delivered to {channel.name}'
+            except Exception as e:
+                log[server['server_id']] = f'{server["name"]} - failed to deliver to {channel.name}: {e}'
+        path = f"Attachments/Temp/Broadcast-{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}"
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(log, f, ensure_ascii=False, indent=4)
+        f = discord.File(path)
+        await interaction.response.send_message(file=f)
+        # os.remove(path)
 
 
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
