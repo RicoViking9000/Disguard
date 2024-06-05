@@ -139,20 +139,25 @@ async def Verification(b: commands.Bot):
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
-    async def yield_servers():
+    server_id_list = [s.id for s in servs] #missing servers that the bot is in, but there's no database entry for
+    servers_in_database = servers.find({'server_id': {'$in': server_id_list}})
+    servers_not_in_database = [s for s in servs if not await servers.find_one({'server_id': s.id})]
+    async def database_servers():
         async for server in servers.find({'server_id': {'$in': server_id_list}}):
             yield server
-    def yield_members():
+    def yield_members(s: discord.Guild):
         for member in s.members:
             yield member
-    server_id_list = [s.id for s in servs]
-    async for server in yield_servers():
-        s = b.get_guild(server['server_id'])
+    for server in servers_not_in_database:
+        # add servers the bot is in that aren't in the database
+        await VerifyServer(server, b, mode='update', includeServer=True, includeMembers=yield_members(server))
+    async for server in database_servers():
+        discord_server = b.get_guild(server['server_id'])
         try: await lightningdb.post_server(server)
         except errors.DuplicateKeyError:
-            if full: await lightningdb.patch_server(s.id, server)
-        except (AttributeError, KeyError, TypeError): pass
-        await asyncio.wait_for(VerifyServer(s, b, server, full, True, mode='update', includeMembers=yield_members()), timeout=None)
+            if full: await lightningdb.patch_server(discord_server.id, server)
+        except (AttributeError, KeyError, TypeError) as e: print(e)
+        await asyncio.wait_for(VerifyServer(discord_server, b, server, full, True, mode='update', includeMembers=yield_members(discord_server)), timeout=None)
     await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
 
 async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, new=False, *, mode='update', includeServer=True, includeMembers:typing.Generator[discord.Member, None, None]=[], parallel=True):
