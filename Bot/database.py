@@ -140,7 +140,6 @@ async def Verification(b: commands.Bot):
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     '''Creates, updates, or deletes database entries for Disguard's servers as necessary'''
     server_id_list = [s.id for s in servs] #missing servers that the bot is in, but there's no database entry for
-    servers_in_database = servers.find({'server_id': {'$in': server_id_list}})
     servers_not_in_database = [s for s in servs if not await servers.find_one({'server_id': s.id})]
     async def database_servers():
         async for server in servers.find({'server_id': {'$in': server_id_list}}):
@@ -250,7 +249,7 @@ async def VerifyServer(s: discord.Guild, b: commands.Bot, serv={}, full=False, n
             'ghostReactionEnabled': log.get('ghostReactionEnabled', True),
             'disguardLogRecursion': log.get('disguardLogRecursion', False), #Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
             'image': log.get('enabled', False),
-            'defaultChannel': log.get('defaultChannel', 0),
+            'defaultChannel': log.get('defaultChannel', None),
             'library': log.get('library', 1), #0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
             'thumbnail': log.get('thumbnail', 1), #0: off, 1: target or none, 2: target or moderator, 3: moderator or none, 4: moderator or target
             'author': log.get('author', 3), #0: off, 1: target or none, 2: target or moderator 3: moderator or none, 4: moderator or target
@@ -396,9 +395,9 @@ async def GetLogChannel(s: discord.Guild, mod: str):
     '''Return the log channel associated with <mod> module'''
     return s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get('modules')[await getModElement(s, mod)].get("channel")) if (await servers.find_one({"server_id": s.id})).get("cyberlog")[await getModElement(s, mod)].get("channel") is not None else s.get_channel((await servers.find_one({"server_id": s.id})).get("cyberlog").get("defaultChannel"))
 
-async def SetSubLogChannel(s: discord.Guild, mod: str, channel: int):
+async def SetSubLogChannel(s: discord.Guild, mod: str, value: any):
     '''Sets the log channel associated with <mod> module. Not configured for beta data management revision.'''
-    await servers.update_one({'server_id': s.id}, {'$set': {f'cyberlog.{mod}.channel': channel}})
+    await servers.update_one({'server_id': s.id}, {'$set': {f'cyberlog.{mod}.channel': value}})
 
 async def GetMainLogChannel(s: discord.Guild):
     '''Returns the log channel associated with the server (general one), if one is set'''
@@ -807,9 +806,9 @@ async def SetLastOnline(u: typing.List[discord.User], timestamp):
     '''Updates the last online attribute'''
     await users.update_many({'user_id': {'$in': [user.id for user in u]}}, {'$set': {'lastOnline': timestamp}})
 
-async def SetLogChannel(s: discord.Guild, channel):
-    '''Sets whether the ageKick configuration for the specified server can only be modified by the server owner'''
-    await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.defaultChannel': channel.id}}, True)
+async def SetLogChannel(s: discord.Guild, value: any):
+    '''Setsa server's default log channel'''
+    await servers.update_one({'server_id': s.id}, {'$set': {'cyberlog.defaultChannel': value}}, True)
 
 # async def NameVerify(s: discord.Guild):
 #     '''Verifies a server by name to counter the database code error'''

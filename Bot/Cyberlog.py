@@ -3198,13 +3198,13 @@ async def verifyLogChannel(bot, s: discord.Guild):
         modular = server_data.get('cyberlog').get(mod).get('channel')
         if not modular:
             channel = s.get_channel(modular)
-            if not channel and type(modular) is int:
+            if not channel and type(modular) is int and modular != 0:
                 if final:
                     try: await final.send(embed=discord.Embed(description=f'⚠Your configured log channel (ID `{modular}`) for the `{mod}` module is invalid and has been reset to no value.\n[Edit settings online](http://disguard.herokuapp.com/manage/{s.id}/cyberlog)'))
                     except: pass
                 await database.SetSubLogChannel(s, mod, None)
     if not default:
-        if not final and type(default) is int:
+        if not final and type(default) is int and default != 0:
             try: await (await database.CalculateModeratorChannel(s, bot, False)).send(embed=discord.Embed(description=f'⚠Your configured default log channel (ID `{default}`) is invalid and has been reset to no value.\n[Edit settings online](http://disguard.herokuapp.com/manage/{s.id}/cyberlog)'))
             except: pass
             await database.SetLogChannel(s, None)

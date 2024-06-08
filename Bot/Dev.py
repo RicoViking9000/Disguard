@@ -172,7 +172,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
                 log[server['server_id']] = f'{server["name"]} - successfully delivered to {channel.name}'
             except Exception as e:
                 log[server['server_id']] = f'{server["name"]} - failed to deliver to {channel.name}: {e}'
-        path = f"Attachments/Temp/Broadcast-{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}"
+        path = f"Attachments/Temp/Broadcast-{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}.json"
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(log, f, ensure_ascii=False, indent=4)
         f = discord.File(path)
