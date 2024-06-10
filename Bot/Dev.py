@@ -5,6 +5,7 @@ import datetime
 import inspect
 import json
 import os
+import traceback
 import typing
 import discord
 from discord import app_commands
@@ -22,9 +23,9 @@ import pymongo
 @app_commands.guilds(utility.DISGUARD_SERVER_ID)
 class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     def __init__(self, bot: commands.Bot):
+        super().__init__()
         self.bot = bot
         self.emojis: dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
-        super().__init__()
     
     @app_commands.command(name='verify_database')
     async def verify_database(self, interaction: discord.Interaction):
@@ -118,10 +119,18 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         if cog is None:
             await interaction.response.send_message(f'Cog {cog_name} not found')
             return
-        try: await self.bot.reload_extension(cog_name)
+        try: await self.bot.reload_extension(cog.qualified_name)
+        except commands.ExtensionNotLoaded:
+            try:
+                await self.bot.unload_extension(utility.first_letter_upper(cog_name))
+                await self.bot.load_extension(utility.first_letter_upper(cog_name))
+            except Exception as e:
+                traceback.print_exc()
+                return await interaction.response.send_message(f'Failed to load cog {cog_name}: {e}')
         except Exception as e:
+            traceback.print_exc()
             return await interaction.response.send_message(f'Failed to reload cog {cog_name}: {e}')
-        await interaction.response.send_message(f'Reloaded cog {cog_name}')
+        await interaction.response.send_message(f'Reloaded `{cog_name}`')
     
     @reload_cog.autocomplete('cog_name')
     async def reload_cog_autocomplete(self, interaction: discord.Interaction, argument: str):

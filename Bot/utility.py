@@ -447,6 +447,10 @@ def paginate(iterable: list, per_page=10):
     '''Splits a list into pages of a given size'''
     for i in range(0, len(iterable), per_page): yield iterable[i : i + per_page]
 
+def first_letter_upper(s: str):
+    '''Capitalizes the first letter of a string'''
+    return s[0].upper() + s[1:]
+
 class BasicView(discord.ui.View):
     '''For when you just need somewhere to stick some components'''
     def __init__(self, timeout=300):
