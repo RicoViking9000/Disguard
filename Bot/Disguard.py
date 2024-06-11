@@ -310,63 +310,6 @@ async def data(ctx: commands.Context):
     await statusMessage.delete()
     await ctx.send(content=f'```{readMe}```', file=fl)
 
-@bot.command()
-@commands.is_owner()
-async def retrieve_attachments(ctx: commands.Context, user: discord.User):
-    statusMessage = await ctx.send(f'{loading}Retrieving attachments for {user.display_name}')
-    basePath = f'Attachments/Temp/{ctx.message.id}'
-    def convertToFilename(string):
-        export = ''
-        illegalCharList = [c for c in '#%&\{\}\\<>*?/$!\'":@+`|=']
-        for char in string:
-            if char not in illegalCharList: 
-                if char != ' ': export += char
-                else: export += '-'
-        return export
-    for server in [g for g in bot.guilds if ctx.author in g.members]:
-        serverPath = f'{basePath}/MessageAttachments/{convertToFilename(server.name)}'
-        for channel in server.text_channels:
-            with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
-            channelPath = f'{serverPath}/{convertToFilename(channel.name)}'
-            for k, v in indexData.items():
-                if v['author0'] == user.id: 
-                    try: 
-                        aPath = f'Attachments/{server.id}/{channel.id}/{k}'
-                        for attachment in os.listdir(aPath):
-                            try: os.makedirs(channelPath)
-                            except FileExistsError: pass
-                            savedFile = shutil.copy2(f'{aPath}/{attachment}', channelPath)
-                            os.replace(savedFile, f'{channelPath}/{k}_{attachment}')
-                    except FileNotFoundError: pass
-    with codecs.open(f'{basePath}/README.txt', 'w+', 'utf-8-sig') as f: 
-        f.write(f"📁MessageAttachments --> Master Folder\n|-- 📁[Server Name] --> Folder of channel names in this server\n|-- |-- 📁[Channel Name] --> Folder of message attachments sent by you in this channel in the following format: MessageID_AttachmentName.xxx\n\nWhy are message attachments stored? Solely for the purposes of message deletion logging. Additionally, attachment storing is a per-server basis, and will only be done if the moderators of the server choose to tick 'Log images and attachments that are deleted' on the web dashboard. If a message containing an attachment is sent in a channel, I attempt to save the attachment, and if a message containing an attachment is deleted, I attempt to retrieve the attachment - which is then permanently deleted from my records.")
-    fileName = f'Attachments/Temp/MessageAttachments_{convertToFilename(user.name)}_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
-    shutil.make_archive(fileName, 'zip', basePath)
-    await statusMessage.edit(content=f'{os.path.abspath(fileName)}.zip')
-
-@bot.command(help='Remove duplicate entries from a user\'s status/username/avatar history')
-@commands.is_owner()
-async def unduplicate(ctx):
-    '''Removes duplicate entries from a user's status/username/avatar history'''
-    #status = await ctx.send('Working on it')
-    bot.useAttributeQueue = True
-    await database.UnduplicateUsers(bot.users, ctx)
-    bot.useAttributeQueue = False
-    await database.BulkUpdateHistory(bot.attributeHistoryQueue)
-    #await database.BulkUpdateHistory()
-    # interval = datetime.datetime.now()
-    # completed = 0
-    # errors = 0
-    # for u in bot.users: 
-    #     if (datetime.datetime.now() - interval).seconds > 1: 
-    #         await status.edit(content=f'Working on it\n{completed} / {len(bot.users)} users completed ({errors} errors)')
-    #         interval = datetime.datetime.now()
-    #     try: 
-    #         await database.UnduplicateHistory(u)
-    #         completed += 1
-    #     except: errors += 1
-    # await status.edit(content=f'Done - {completed} successful, {errors} errors')
-
 @commands.is_owner()
 @bot.command()
 async def nameVerify(ctx):

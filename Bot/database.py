@@ -749,9 +749,9 @@ async def BulkUpdateHistory(entries: dict):
         updateOperations.append(pymongo.UpdateOne({'user_id': k}, {'$push': {kk: vv for kk,vv in v.items()}}))
     if updateOperations: await users.bulk_write(updateOperations, ordered=False)
 
-async def UnduplicateUsers(usrs, ctx=None):
+async def UnduplicateUsers(usrs, interaction: discord.Interaction = None):
     '''Removes duplicate entries from the given users' history lists, making use of bulk operations'''
-    if ctx: message = await ctx.send(f'Unduplicating {len(usrs)} users')
+    if interaction: await interaction.response.send_message(f'Unduplicating {len(usrs)} users')
     gathered = await (users.find({'user_id': {'$in': [u.id for u in usrs]}})).to_list(None)
     gatheredDict = {u['user_id']: u for u in gathered}
     chunkSize = 1000
@@ -766,9 +766,9 @@ async def UnduplicateUsers(usrs, ctx=None):
             await users.bulk_write(updateOperations, ordered=False)
             counter = 0
             updateOperations = []
-            if ctx: await message.edit(content=f'Unduplicating {fullCounter}/{len(usrs)} users')
+            if interaction: await interaction.response.edit_message(content=f'Unduplicating {fullCounter}/{len(usrs)} users')
     await users.bulk_write(updateOperations, ordered=False)
-    if ctx: await message.edit(content=f'Successfully unduplicated {len(usrs)} users')
+    if interaction: await interaction.response.edit_message(content=f'Successfully unduplicated {len(usrs)} users')
 
 async def UnduplicateHistory(u: discord.User, userEntry=None, *, mode='update'):
     '''Removes duplicate entries from a user's history lists'''

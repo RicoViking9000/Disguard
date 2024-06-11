@@ -1,10 +1,12 @@
 '''Cog that contains Disguard's dev-only commands'''
 
 import asyncio
+import codecs
 import datetime
 import inspect
 import json
 import os
+import shutil
 import traceback
 import typing
 import discord
@@ -33,6 +35,14 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await interaction.response.send_message('Verifying database...')
         await database.Verification(self.bot)
         await interaction.edit_original_response(content='Database verified!')
+
+    @app_commands.command(name='unduplicate_history')
+    async def unduplicate_history(self, interaction: discord.Interaction):
+        '''Remove duplicate entries from status, username, avatar history'''
+        self.bot.useAttributeQueue = True
+        await database.UnduplicateUsers(self.bot.users, interaction)
+        self.bot.useAttributeQueue = False
+        await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
         
     @app_commands.command(name='index_server')
     async def index_server(self, interaction: discord.Interaction, *, server_arg: typing.Optional[str]):
@@ -181,7 +191,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
                 log[server['server_id']] = f'{server["name"]} - successfully delivered to {channel.name}'
             except Exception as e:
                 log[server['server_id']] = f'{server["name"]} - failed to deliver to {channel.name}: {e}'
-        path = f"Attachments/Temp/Broadcast-{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}.json"
+        path = f"Attachments/Temp/Broadcast-{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}.json" #TODO - move this datetime into utility
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(log, f, ensure_ascii=False, indent=4)
         f = discord.File(path)
@@ -214,6 +224,37 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
             await interaction.response.send_message('Status updated')
         except Exception as e:
             await interaction.response.send_message(f'Failed to update status: {e}')
+
+    @app_commands.command(name='retrieve_attachments')
+    async def retrieve_attachments(self, interaction: discord.Interaction, user: discord.User):
+        '''Retrieve all attachments a user has sent - part of the data command'''
+        await interaction.response.send_message(f'Retrieving attachments for {user.display_name}...')
+        base_path = f'Attachments/Temp/{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}'
+        def strip_filename(string):
+            illegal_char_list = '#%&\{\}\\<>*?/$!\'":@+`|='
+            export = ''.join(char if char not in illegal_char_list else '-' for char in string if char != ' ')
+            return export
+        filtered_servers = [g for g in self.bot.guilds if user in g.members]
+        for server in filtered_servers:
+            server_path = f'{base_path}/MessageAttachments/{strip_filename(server.name)}'
+            for channel in server.text_channels:
+                with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
+                channel_path = f'{server_path}/{strip_filename(channel.name)}'
+                for message_id, data in indexData.items():
+                    if data['author0'] == user.id: 
+                        try: 
+                            attachments_path = f'Attachments/{server.id}/{channel.id}/{message_id}'
+                            for attachment in os.listdir(attachments_path):
+                                try: os.makedirs(channel_path)
+                                except FileExistsError: pass
+                                savedFile = shutil.copy2(f'{attachments_path}/{attachment}', channel_path)
+                                os.replace(savedFile, f'{channel_path}/{message_id}_{attachment}')
+                        except FileNotFoundError: pass
+        with codecs.open(f'{base_path}/README.txt', 'w+', 'utf-8-sig') as f: 
+            f.write(f"📁MessageAttachments --> Master Folder\n|-- 📁[Server Name] --> Folder of channel names in this server\n|-- |-- 📁[Channel Name] --> Folder of message attachments sent by you in this channel in the following format: MessageID_AttachmentName.xxx\n\nWhy are message attachments stored? Solely for the purposes of message deletion logging. Additionally, attachment storing is a per-server basis, and will only be done if the moderators of the server choose to tick 'Log images and attachments that are deleted' on the web dashboard. If a message containing an attachment is sent in a channel, I attempt to save the attachment, and if a message containing an attachment is deleted, I attempt to retrieve the attachment - which is then permanently deleted from my records.")
+        fileName = f'Attachments/Temp/MessageAttachments_{strip_filename(user.name)}_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+        shutil.make_archive(fileName, 'zip', base_path)
+        await interaction.response.edit_message(content=f'{os.path.abspath(fileName)}.zip')
 
 
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
