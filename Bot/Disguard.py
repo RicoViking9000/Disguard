@@ -111,6 +111,7 @@ async def on_ready(): #Method is called whenever bot is ready after connection/r
         for cog in cogs:
             try:
                 await bot.load_extension(cog)
+                print(f'Loaded cog {cog}')
             except Exception as e: 
                 print(f'Cog load error: {e}')
                 traceback.print_exc()
@@ -224,85 +225,12 @@ async def server(ctx: commands.Context):
 async def ping(ctx):
     await ctx.send(f'Pong! Websocket latency: {round(bot.latency * 1000)}ms')
 
-# @bot.command(name='eval')
-# @commands.is_owner()
-# async def evaluate(ctx, func: str):
-#     # global variables
-#     # args = ' '.join(args)
-#     result = eval(func)
-#     if inspect.iscoroutine(result): await ctx.send(await eval(func))
-#     else: await ctx.send(result)
-
-# @bot.command(name='log_file')
-# @commands.is_owner()
-# async def log_file(ctx: commands.Context):
-#     '''Uploads discord.log'''
-#     await ctx.send(file=discord.File('discord.log'))
-
-# @bot.command(name='clear_commands')
-# @commands.is_owner()
-# async def clear_sync_tree(ctx: commands.Context):
-#     await bot.tree.clear_commands()
-#     await bot.tree.sync()
-#     await ctx.send('Cleared tree')
-
 @bot.command(name='synctree')
 @commands.is_owner()
 async def sync_tree(ctx: commands.Context):
     await bot.tree.sync()
     await bot.tree.sync(guild=discord.Object(utility.DISGUARD_SERVER_ID))
     await ctx.send('Synced tree')
-
-@bot.command()
-@commands.is_owner()
-async def broadcast(ctx: commands.Context):
-    await ctx.send('Please type broadcast message')
-    def patchCheck(m): return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
-    try: message: discord.Message = await bot.wait_for('message', check=patchCheck, timeout=300)
-    except asyncio.TimeoutError: return
-    query = await ctx.send('Embed?')
-    for r in ('❌', '☑'): await query.add_reaction(r)
-    def rCheck(r, u): return str(r) in ('❌', '☑') and r.message.id == query.id and u.id == ctx.author.id
-    try: reaction = await bot.wait_for('reaction_add', check=rCheck, timeout=300)
-    except asyncio.TimeoutError: return
-    if str(reaction[0]) == '☑': embedForm = True
-    else: embedForm = False
-    if embedForm: embed = discord.Embed(title=message.content[:message.content.find('\n')], description=message.content[message.content.find('\n'):], color=yellow[1])
-    else: embed = message.content
-    await ctx.send(content=f'Config - step 1: Servers\n\nType `all` to send to all servers, a comma-separated list of IDs to select specific servers, or an equation (eq: <statement>)\n\n{embed if not embedForm else ""}', embed=embed if embedForm else None)
-    try: message = await bot.wait_for('message', check=patchCheck, timeout=300)
-    except asyncio.TimeoutError: return
-    servers = []
-    if message.content.lower() == 'all': servers = bot.guilds
-    elif message.content.startswith('eq:'):
-        print(message.content[message.content.find('eq')+4:]) #I guess this is here to ensure my eval part works lol
-        servers = [g for g in bot.guilds if eval(f'bot.lightningLogging.get(g.id).{message.content[message.content.find("eq")+4:]}')]
-    else: servers = [bot.get_guild(int(g)) for g in message.content.split(', ')]
-    await ctx.send(f'Broadcast will be sent to {", ".join([g.name for g in servers])} - {len(servers)} / {len(bot.guilds)} servers\n\nWhat specific destination to send the broadcast?\nA: default log channel\nB: moderator channel\nC: announcement channel\nD: general channel\nE: owner DMs')
-    try: message = await bot.wait_for('message', check=patchCheck, timeout=300)
-    except asyncio.TimeoutError: return
-    destinations = []
-    letters = message.content.lower().split(', ')
-    if 'a' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('cyberlog').get('defaultChannel')) for g in servers]
-    if 'b' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('moderatorChannel')[0]) for g in servers]
-    if 'c' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('announcementsChannel')[0]) for g in servers]
-    if 'd' in letters: destinations += [bot.get_channel((await utility.get_server(g)).get('generalChannel')[0]) for g in servers]
-    if 'e' in letters: destinations += [g.owner for g in servers]
-    destinations = list(dict.fromkeys(destinations))
-    waiting = await ctx.send(content='These are the destinations. Ready to send it?', embed=discord.Embed(description='\n'.join(d.name for d in destinations if d)))
-    await waiting.add_reaction('✔')
-    def sendCheck(r, u): return str(r) == '✔' and r.message.id == waiting.id and u.id == ctx.author.id
-    try: await bot.wait_for('reaction_add', check=sendCheck, timeout=300)
-    except asyncio.TimeoutError: return
-    status = await ctx.send(f'{loading}Sending broadcast to servers...')
-    successfulList = []
-    for d in destinations:
-        if d:
-            try:
-                await d.send(content = embed if not embedForm else None, embed=embed if embedForm else None)
-                successfulList.append(d.name)
-            except: await ctx.send(f'Error with destination {d.name}')
-    await status.edit(content=f'Successfully sent broadcast to {len(successfulList)} / {len(destinations)} destinations')
 
 @bot.hybrid_command(help='Retrieve the data Disguard stores about you')
 async def data(ctx: commands.Context):
@@ -449,42 +377,6 @@ async def nameVerify(ctx):
 # async def on_error(event, *args, **kwargs):
 #     logging.error(exc_info=True)
 #     traceback.print_exc()
-
-@bot.command(name='status', help='set Disguard\'s status')
-@commands.is_owner()
-async def _status(ctx):
-    '''Owner-only command to manually set Disguard's status'''
-    global presence
-    m = await ctx.send('React with what you would like my desired status to be')
-    #emojis = [e for e in bot.get_cog('Cyberlog').emojis.values() if e.name in ['online', 'idle', 'dnd', 'offline', 'streaming', 'reload']]
-    cog = bot.get_cog('Cyberlog')
-    reactions = (emojis['online'], emojis['idle'], emojis['dnd'], emojis['offline'], emojis['streaming'], emojis['reload'])
-    for r in reactions: await m.add_reaction(r)
-    def reacCheck(r, m): return r.emoji in emojis and m.id == ctx.author.id
-    r = await bot.wait_for('reaction_add', check=reacCheck)
-    if r[0].emoji.name == 'online': status = discord.Status.online
-    elif r[0].emoji.name == 'idle': status = discord.Status.idle
-    elif r[0].emoji.name == 'dnd': status = discord.Status.dnd
-    elif r[0].emoji.name == 'offline': status = discord.Status.invisible
-    elif r[0].emoji.name == 'streaming': status = discord.Status.online
-    else:
-        presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
-        await UpdatePresence()
-        return await ctx.send('Successfully reset')
-    m = await ctx.send('Type the word: Playing, Watching, Listening, Streaming')
-    def msgCheck1(m): return m.author.id == ctx.author.id
-    r = await bot.wait_for('message', check=msgCheck1)
-    if r.content.lower() == 'playing': mode = discord.ActivityType.playing
-    elif r.content.lower() == 'watching': mode = discord.ActivityType.watching
-    elif r.content.lower() == 'listening': mode = discord.ActivityType.listening
-    elif r.content.lower() == 'streaming': mode = discord.ActivityType.streaming
-    else: return await ctx.send('Invalid type')
-    m = await ctx.send('Type the name of the activity') 
-    r = await bot.wait_for('message', check=msgCheck1)
-    name = r.content
-    presence = {'status': status, 'activity': discord.Activity(name=name, type=mode)}
-    await UpdatePresence()
-    await ctx.send('Successfully set')
 
 @bot.hybrid_command(help='You know the rules, and so do I')
 async def rickroll(ctx: commands.Context):

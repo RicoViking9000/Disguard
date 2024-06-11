@@ -188,6 +188,33 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await interaction.response.send_message(file=f)
         # os.remove(path)
 
+    @app_commands.command(name='bot_status')
+    async def change_bot_status(self,
+                         interaction: discord.Interaction,
+                         status: typing.Literal['online', 'idle', 'dnd', 'invisible'],
+                         activity_type: typing.Literal['playing', 'streaming', 'listening', 'watching', 'competing', 'custom'],
+                         activity_name: str,
+                         reset: bool = False):
+        '''Set Disguard's status'''
+        try:
+            if reset:
+                presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching)}
+                await self.bot.change_presence(**presence)
+                return await interaction.response.send_message('Reset status')
+            if activity_type == 'playing':
+                presence = {'status': eval(f'discord.Status.{status}'), 'activity': discord.Game(name=activity_name)}
+            elif activity_type == 'custom':
+                presence = {'status': eval(f'discord.Status.{status}'), 'activity': discord.CustomActivity(name=activity_name)}
+            else:
+                presence = {
+                    'status': eval(f'discord.Status.{status}'),
+                    'activity': discord.Activity(name=activity_name, type=discord.ActivityType[activity_type])
+                }
+            await self.bot.change_presence(**presence)
+            await interaction.response.send_message('Status updated')
+        except Exception as e:
+            await interaction.response.send_message(f'Failed to update status: {e}')
+
 
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
     if channel.id in (534439214289256478, 910598159963652126): return
