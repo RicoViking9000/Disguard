@@ -451,6 +451,24 @@ def first_letter_upper(s: str):
     '''Capitalizes the first letter of a string'''
     return s[0].upper() + s[1:]
 
+def serialize_json(o):
+    if type(o) is datetime.datetime: return o.isoformat()
+
+def sanitize_filename(string: str):
+    illegal_char_list = '#%&\{\}\\<>*?/$!\'":@+`|='
+    export = ''.join(char if char not in illegal_char_list else '-' for char in string.replace(" ", "_") if char != ' ')
+    return export
+
+def date_to_filename(date: datetime.datetime):
+    return date.strftime('%m%d%Y%H%M%S%f')
+
+async def update_bot_presence(bot: commands.Bot, status: discord.Status = None, activity: discord.BaseActivity = None):
+    '''Updates the bot's presence based on the given dictionary'''
+    current_presence = {'status': bot.status, 'activity': bot.activity}
+    new_presence = {'status': status or bot.status, 'activity': activity or bot.activity}
+    if current_presence != new_presence:
+        await bot.change_presence(**new_presence)
+
 class BasicView(discord.ui.View):
     '''For when you just need somewhere to stick some components'''
     def __init__(self, timeout=300):
