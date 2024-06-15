@@ -68,26 +68,33 @@ class Misc(commands.Cog):
             title=f'Quick Guide - {message.guild}',
             description=f'Yes, I am online! Ping: {round(self.bot.latency * 1000)}ms\n\n**Commands:** Slash commands preferred, but this server\'s prefix is `{await utility.prefix(message.guild)}`\n\nHave a question or a problem? Use the `/ticket` command to open a support ticket with my developer, or [click to join my support server](https://discord.com/invite/xSGujjz)',
             color=yellow[1]))
-    
-    @commands.hybrid_command()
-    async def privacy(self, ctx: commands.Context):
-        '''
-        View and edit your privacy settings
-        '''
-        user = await utility.get_user(ctx.author)
-        privacy = user['privacy']
-        def slideToggle(i): return self.emojis['slideToggleOff'] if i == 0 else self.emojis['slideToggleOn'] if i == 1 else slideToggle(privacy['default'][0]) #Uses recursion to use default value if specific setting says to
-        def viewerEmoji(i): return '🔒' if i == 0 else '🔓' if i == 1 else viewerEmoji(privacy['default'][1]) if i == 2 else self.emojis['members']
-        def viewerText(i): return 'only you' if i == 0 else 'everyone you share a server with' if i == 1 else viewerText(privacy['default'][1]) if i == 2 else f'{len(i)} users'
-        def enabled(i): return False if i == 0 else True if i == 1 else enabled(privacy['default'][0])
-        embed = discord.Embed(title=f'Privacy Settings » {ctx.author.display_name} » Overview', color=yellow[1])
-        embed.description = f'''To view Disguard's privacy policy, [click here](https://disguard.netlify.app/privacybasic)\nTo view and edit all settings, visit your profile on my [web dashboard](http://disguard.herokuapp.com/manage/profile)'''
-        embed.add_field(name='Default Settings', value=f'''{slideToggle(privacy['default'][0])}Allow Disguard to use your customization settings for its features: {"Enabled" if enabled(privacy['default'][0]) else "Disabled"}\n{viewerEmoji(privacy['default'][1])}Default visibility of your customization settings: {viewerText(privacy['default'][1])}''', inline=False)
-        embed.add_field(name='Personal Profile Features', value=f'''{slideToggle(privacy['profile'][0])}{"Enabled" if enabled(privacy['profile'][0]) else "Disabled"}\n{f"{viewerEmoji(privacy['profile'][1])}Personal profile features: Visible to {viewerText(privacy['profile'][1])}" if enabled(privacy['profile'][0]) else ""}''', inline=False)
-        embed.add_field(name='Birthday Module Features', value=f'''{slideToggle(privacy['birthdayModule'][0])}{"Enabled" if enabled(privacy['birthdayModule'][0]) else "Disabled"}\n{f"{viewerEmoji(privacy['birthdayModule'][1])}Birthday profile features: Visible to {viewerText(privacy['birthdayModule'][1])}" if enabled(privacy['birthdayModule'][0]) else ""}''', inline=False)
-        embed.add_field(name='Attribute History', value=f'''{slideToggle(privacy['attributeHistory'][0])}{"Enabled" if enabled(privacy['attributeHistory'][0]) else "Disabled"}\n{f"{viewerEmoji(privacy['attributeHistory'][1])}Attribute History: Visible to {viewerText(privacy['attributeHistory'][1])}" if enabled(privacy['attributeHistory'][0]) else ""}''', inline=False)
-        m = await ctx.send(embed=embed)
 
+    @commands.hybrid_command(aliases=['config', 'configuration'])
+    async def view_configuration(self, ctx: commands.Context):
+        '''View Disguard's setup configuration for your server'''
+        g = ctx.guild
+        config = await utility.get_server(ctx.guild)
+        cyberlog = config.get('cyberlog')
+        antispam = config.get('antispam')
+        baseURL = f'http://disguard.herokuapp.com/manage/{ctx.guild.id}'
+        green = self.emojis['online']
+        red = self.emojis['dnd']
+        embed=discord.Embed(title=f'Server Configuration - {g}', color=yellow[await utility.color_theme(ctx.guild)])
+        embed.description=textwrap.dedent(f'''
+            **Prefix:** `{config.get("prefix")}`\n
+            ⚙ General Server Settings [(Edit full settings on web dashboard)]({baseURL}/server)
+            > Time zone: {config.get("tzname")} ({discord.utils.utcnow() + datetime.timedelta(hours=config.get("offset")):%I:%M %p})
+            > {red if config.get("birthday") == 0 else green}Birthday announcements: {"<Disabled>" if config.get("birthday") == 0 else f"Announce daily to {self.bot.get_channel(config.get('birthday')).mention} at {config.get('birthdate'):%I:%M %p}"}
+            > {red if not config.get("jumpContext") else green}Send embed for posted jump URLs: {"Enabled" if config.get("jumpContext") else "Disabled"}
+            🔨Antispam [(Edit full settings)]({baseURL}/antispam)
+            > {f"{green}Antispam: Enabled" if antispam.get("enabled") else f"{red}Antispam: Disabled"}
+            > ℹMember warnings: {antispam.get("warn")}; after losing warnings: {"Nothing" if antispam.get("action") == 0 else f"Automute for {antispam.get('muteTime') // 60} minute(s)" if antispam.get("action") == 1 else "Kick" if antispam.get("action") == 2 else "Ban" if antispam.get("action") == 3 else f"Give role {g.get_role(antispam.get('customRoleID'))} for {antispam.get('muteTime') // 60} minute(s)"}
+            📜 Logging [(Edit full settings)]({baseURL}/cyberlog)
+            > {f"{green}Logging: Enabled" if cyberlog.get("enabled") else f"{red}Logging: Disabled"}
+            > ℹDefault log channel: {self.bot.get_channel(cyberlog.get("defaultChannel")).mention if self.bot.get_channel(cyberlog.get("defaultChannel")) else "<Not configured>" if not cyberlog.get("defaultChannel") else "<Invalid channel>"}
+        ''')
+        await ctx.send(embed=embed)
+    
     @commands.hybrid_command(description='Pause the logging or antispam module for a specified duration')
     @commands.has_guild_permissions(manage_guild=True)
     async def pause(self, ctx: commands.Context, module: str, seconds: typing.Optional[int] = 0):

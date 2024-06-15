@@ -37,8 +37,7 @@ tracemalloc.start()
 
 booted = False
 loading = None
-presence = {'status': discord.Status.idle, 'activity': discord.Activity(name='My boss', type=discord.ActivityType.listening)}
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help', 'Privacy']
 
 print("Connecting...")
 
