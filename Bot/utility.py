@@ -291,7 +291,16 @@ def FindMember(g: discord.Guild, arg):
         arg in str(m.id)]) 
     return discord.utils.find(check, g.members)
 
-async def FindMembers(g: discord.Guild, arg):
+def FindServers(guilds: list[discord.Guild], arg: str):
+    '''Used for smart info command. Finds anything matching the filter'''
+    arg = arg.lower()
+    def check(s: discord.Guild):
+        if arg in s.name.lower(): return compareMatch(arg, s.name)
+        if arg in str(s.id): return compareMatch(arg, str(s.id))
+        return None
+    return [(server, check(server)) for server in guilds if check(server) is not None]
+
+def FindMembers(g: discord.Guild, arg):
     '''Used for smart info command. Finds anything matching the filter'''
     arg = arg.lower()
     def check(m):
@@ -303,7 +312,7 @@ async def FindMembers(g: discord.Guild, arg):
         return None
     return [(mem, check(mem)) for mem in g.members if check(mem) is not None]
 
-async def FindRoles(g: discord.Guild, arg):
+def FindRoles(g: discord.Guild, arg):
     arg = arg.lower()
     def check(r):
         if arg in r.name.lower(): return compareMatch(arg, r.name)
@@ -311,7 +320,7 @@ async def FindRoles(g: discord.Guild, arg):
         return None
     return [(rol, check(rol)) for rol in g.roles if check(rol) is not None]
 
-async def FindChannels(g: discord.Guild, arg):
+def FindChannels(g: discord.Guild, arg):
     arg=arg.lower()
     def check(c): 
         if arg in c.name.lower(): return compareMatch(arg, c.name)
@@ -319,7 +328,7 @@ async def FindChannels(g: discord.Guild, arg):
         return None
     return [(cha, check(cha)) for cha in g.channels if check(cha) is not None]
 
-async def FindEmojis(g: discord.Guild, arg):
+def FindEmojis(g: discord.Guild, arg):
     arg=arg.lower()
     def check(e): 
         if arg in e.name.lower(): return compareMatch(arg, e.name)
