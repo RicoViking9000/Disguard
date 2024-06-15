@@ -235,17 +235,13 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     async def retrieve_attachments(self, interaction: discord.Interaction, user: discord.User):
         '''Retrieve all attachments a user has sent - part of the data command'''
         await interaction.response.send_message(f'Retrieving attachments for {user.display_name}...')
-        base_path = f'Attachments/Temp/{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}'
-        def strip_filename(string):
-            illegal_char_list = '#%&\{\}\\<>*?/$!\'":@+`|='
-            export = ''.join(char if char not in illegal_char_list else '-' for char in string if char != ' ')
-            return export
+        base_path = f'Attachments/Temp/{datetime.datetime.utcnow().strftime("%m%d%Y%H%M%S%f")}'
         filtered_servers = [g for g in self.bot.guilds if user in g.members]
         for server in filtered_servers:
-            server_path = f'{base_path}/MessageAttachments/{strip_filename(server.name)}'
+            server_path = f'{base_path}/MessageAttachments/{utility.sanitize_filename(server.name)}'
             for channel in server.text_channels:
                 with open(f'Indexes/{server.id}/{channel.id}.json') as f: indexData = json.load(f)
-                channel_path = f'{server_path}/{strip_filename(channel.name)}'
+                channel_path = f'{server_path}/{utility.sanitize_filename(channel.name)}'
                 for message_id, data in indexData.items():
                     if data['author0'] == user.id: 
                         try: 
@@ -258,7 +254,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
                         except FileNotFoundError: pass
         with codecs.open(f'{base_path}/README.txt', 'w+', 'utf-8-sig') as f: 
             f.write(f"📁MessageAttachments --> Master Folder\n|-- 📁[Server Name] --> Folder of channel names in this server\n|-- |-- 📁[Channel Name] --> Folder of message attachments sent by you in this channel in the following format: MessageID_AttachmentName.xxx\n\nWhy are message attachments stored? Solely for the purposes of message deletion logging. Additionally, attachment storing is a per-server basis, and will only be done if the moderators of the server choose to tick 'Log images and attachments that are deleted' on the web dashboard. If a message containing an attachment is sent in a channel, I attempt to save the attachment, and if a message containing an attachment is deleted, I attempt to retrieve the attachment - which is then permanently deleted from my records.")
-        fileName = f'Attachments/Temp/MessageAttachments_{strip_filename(user.name)}_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(ctx.guild) if ctx.guild else -4)):%m-%b-%Y %I %M %p}'
+        fileName = f'Attachments/Temp/MessageAttachments_{utility.sanitize_filename(user.name)}_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(interaction.guild) if interaction.guild else -4)):%m-%b-%Y %I %M %p}'
         shutil.make_archive(fileName, 'zip', base_path)
         await interaction.response.edit_message(content=f'{os.path.abspath(fileName)}.zip')
 
