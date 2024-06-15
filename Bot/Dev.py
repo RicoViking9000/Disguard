@@ -29,6 +29,12 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         self.bot = bot
         self.emojis: dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
     
+    @app_commands.command(name='shutdown')
+    async def shutdown(self, interaction: discord.Interaction):
+        '''Shutdown the bot'''
+        await interaction.response.send_message('Shutting down')
+        await self.bot.close()
+    
     @app_commands.command(name='verify_database')
     async def verify_database(self, interaction: discord.Interaction):
         '''Verify the database'''
