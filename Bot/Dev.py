@@ -197,12 +197,11 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
                 log[server['server_id']] = f'{server["name"]} - successfully delivered to {channel.name}'
             except Exception as e:
                 log[server['server_id']] = f'{server["name"]} - failed to deliver to {channel.name}: {e}'
-        path = f"Attachments/Temp/Broadcast-{datetime.datetime.utcnow().strftime('%m%d%Y%H%M%S%f')}.json" #TODO - move this datetime into utility
+        path = f"Attachments/Temp/Broadcast-{utility.date_to_filename(discord.utils.utcnow())}.json"
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(log, f, ensure_ascii=False, indent=4)
         f = discord.File(path)
         await interaction.response.send_message(file=f)
-        # os.remove(path)
 
     @app_commands.command(name='bot_status')
     async def change_bot_status(self,
@@ -235,7 +234,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     async def retrieve_attachments(self, interaction: discord.Interaction, user: discord.User):
         '''Retrieve all attachments a user has sent - part of the data command'''
         await interaction.response.send_message(f'Retrieving attachments for {user.display_name}...')
-        base_path = f'Attachments/Temp/{datetime.datetime.utcnow().strftime("%m%d%Y%H%M%S%f")}'
+        base_path = f'Attachments/Temp/{discord.utils.utcnow().strftime("%m%d%Y%H%M%S%f")}'
         filtered_servers = [g for g in self.bot.guilds if user in g.members]
         for server in filtered_servers:
             server_path = f'{base_path}/MessageAttachments/{utility.sanitize_filename(server.name)}'
