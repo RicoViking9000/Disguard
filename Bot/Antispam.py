@@ -454,7 +454,7 @@ class Antispam(commands.Cog):
                 pass
     
     @commands.hybrid_group(fallback='view_config')
-    async def age_kick(self, ctx: commands.Context):
+    async def agekick(self, ctx: commands.Context):
         '''
         View this server's configruation for the agekick module
         '''
@@ -463,15 +463,15 @@ class Antispam(commands.Cog):
         config = (await utility.get_server(ctx.guild)).get('antispam')
         wl = config.get('ageKickWhitelist')
         theme = await utility.color_theme(ctx.guild)
-        e=discord.Embed(title=f'Age Kick Information: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^50}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n**{"RECIPIENT DM MESSAGE":–^50}**\n{config.get("ageKickDM")}''', color=orange[theme], timestamp=discord.utils.utcnow())
+        e=discord.Embed(title=f'Age Kick Configuration: {ctx.guild.name}', description=f'''**{"WHITELIST ENTRIES":–^50}**\n{newline.join([f'•{(await self.bot.fetch_user(w)).name} ({w})' for w in wl]) if wl is not None and len(wl) > 0 else '(Whitelist is empty)'}\n\n**{"RECIPIENT DM MESSAGE":–^50}**\n{config.get("ageKickDM")}''', color=orange[theme], timestamp=discord.utils.utcnow())
         e.add_field(name='Kick Accounts', value=f'Under {config.get("ageKick") / 86400} days old' if config.get('ageKick') is not None else 'Not enabled')
         await ctx.send(embed=e)
         
-    @age_kick.command()
+    @agekick.command()
     @commands.guild_only()
     async def whitelist_user(self, ctx: commands.Context, user_id: str):
         '''
-        Prevents a user from being kicked under the agekick module if their account is too young
+        Prevents a user from being kicked by the agekick module if their account is too young
         ----------
         Parameters:
         user_id: str
@@ -481,16 +481,22 @@ class Antispam(commands.Cog):
         user = await self.bot.fetch_user(int(user_id))
         if user.id not in wl:
             await database.AppendWhitelistEntry(ctx.guild, user.id)
-            e = discord.Embed(title=f'Added {user.name} to the age_kick whitelist',
+            e = discord.Embed(title=f'Added {user.display_name} to the age_kick whitelist',
                               description=f'''{self.emojis['member']}: {user}\n{self.emojis['id']}: {user.id}\n\nThis user will automatically be removed from the whitelist once they join the server, but you may use the `/age_kick remove_from_whitelist` command to remove them as well''',
                               color=orange[await utility.color_theme(ctx.guild)])
-        await ctx.send(embed=e)
-
-    @age_kick.command()
+            await ctx.send(embed=e)
+        else:
+            await ctx.send(f'{user.display_name} ({user.name}) is already in the whitelist')
+    @whitelist_user.autocomplete('user_id')
+    async def _whitelist_user_autocomplete(self, interaction: discord.Interaction, argument: str):
+        try: user = await self.bot.fetch_user(int(argument))
+        except: return []
+        return [app_commands.Choice(name=f'{user.display_name} ({user})', value=argument)]
+    @agekick.command()
     @commands.guild_only()
     async def remove_from_whitelist(self, ctx: commands.Context, user_id: str):
         '''
-        Removes a user from the age kick whitelist
+        Removes a user from the agekick whitelist
         ----------
         Parameters:
         user_id: str
@@ -500,13 +506,19 @@ class Antispam(commands.Cog):
         user = await self.bot.fetch_user(int(user_id))
         if user.id in wl:
             await database.RemoveWhitelistEntry(ctx.guild, user.id)
-            e = discord.Embed(title=f'Removed {user.name} from the age_kick whitelist',
+            e = discord.Embed(title=f'Removed {user.display_name} from the age_kick whitelist',
                               description=f'''{self.emojis['member']}: {user}\n{self.emojis['id']}: {user.id}''',
                               color=orange[await utility.color_theme(ctx.guild)])
-        await ctx.send(embed=e)
+            await ctx.send(embed=e)
+        else:
+            await ctx.send(f'{user.name} is not in the whitelist')
+    @remove_from_whitelist.autocomplete('user_id')
+    async def _remove_from_whitelist_autocomplete(self, interaction: discord.Interaction, argument: str):
+        whitelist = (await utility.get_server(interaction.guild)).get('antispam', {}).get('ageKickWhitelist', [])
+        fetched_users = await asyncio.gather(*[self.bot.fetch_user(int(user)) for user in whitelist])
+        return [app_commands.Choice(name=f'{user.display_name} ({user})', value=argument) for user in fetched_users if argument in str(user.id) or argument in user.name]
 
-
-    @age_kick.command()
+    @agekick.command()
     @commands.guild_only()
     async def clear_whitelist(self, ctx: commands.Context):
         # probably temporary until this becomes a button from the homepage
@@ -515,25 +527,36 @@ class Antispam(commands.Cog):
         e=discord.Embed(title='Cleared the agekick whitelist', description=f'{len(wl)} users were removed', color=orange[await utility.color_theme(ctx.guild)])
         await ctx.send(embed=e)
 
-    @age_kick.command()
+    @agekick.command()
     @commands.guild_only()
-    async def set_age_kick(self, ctx: commands.Context, age: str):
+    async def set_agekick(self, ctx: commands.Context, account_age: str):
         '''
-        Users will be kicked from the server upon joining if their account age is under this threshold
+        Users will be kicked from the server upon joining if their account age is under this value
         ----------
         Parameters:
         age: str
-            The threshold age
+            Kick accounts younger than this value
         '''
-        value, int_arg, unit = utility.ParseDuration(age)
+        value_seconds, int_arg, unit = utility.ParseDuration(account_age)
         config = (await utility.get_server(ctx.guild)).get('antispam')
-        await database.SetAgeKick(ctx.guild, value)
+        await database.SetAgeKick(ctx.guild, value_seconds)
         e = discord.Embed(title='Updated agekick configuration', color=orange[await utility.color_theme(ctx.guild)])
         e.description=f'Accounts under {int_arg} {unit} old will be kicked upon joining the server'
         e.add_field(name='Old value', value=f'Under {config.get("ageKick") / 86400} days old')
         await ctx.send(embed=e)
+    @set_agekick.autocomplete('account_age')
+    async def _set_age_kick_autocomplete(self, interaction: discord.Interaction, argument: str):
+        if argument:
+            hasNumber = re.search(r'\d', argument)
+            hasLetter = re.search(r'\D', argument)
+            if hasLetter: index = hasLetter.start()
+            else: index = len(argument)
+            letters = argument[index:].strip(' ')
+            if hasNumber:
+                return [app_commands.Choice(name=f'{argument[:index]} {units[unit] if int(argument[:index]) == 1 else f"{units[unit]}s"}', value=f'{argument[:index]}{unit}') for unit in units.keys() if (units[unit].startswith(letters) if hasLetter else True)]
+        return []
 
-    @age_kick.command()
+    @agekick.command()
     @commands.guild_only()
     async def set_dm_message(self, ctx: commands.Context, message: str):
         '''
@@ -541,7 +564,7 @@ class Antispam(commands.Cog):
         ----------
         Parameters:
         message: str
-            The message to send to users who are kicked for having an account that is too young. Use `/help` for a guide on how to use custom messages
+            The message to send to users who are kicked for having an account that is too young
         '''
         e = discord.Embed(title='Agekick DM message', color=yellow[await utility.color_theme(ctx.guild)])
         await database.SetAgeKickDM(ctx.guild, message)
@@ -600,24 +623,6 @@ class Antispam(commands.Cog):
         mentions = discord.AllowedMentions(users=False)
         if warningCount: await ctx.send(f'{ctx.author.mention}, you have {warningCount} warning{"s" if warningCount != 1 else ""} in my antispam system', allowed_mentions = mentions)
         else: await ctx.send(f'{ctx.author.mention}, I was unable to retrieve your warning count')
-
-    '''Autocompletes'''
-    @set_age_kick.autocomplete('age')
-    async def duration_autocomplete(self, interaction: discord.Interaction, argument: str):
-        if argument:
-            hasNumber = re.search(r'\d', argument)
-            hasLetter = re.search(r'\D', argument)
-            if hasLetter: index = hasLetter.start()
-            else: index = len(argument)
-            letters = argument[index:].strip(' ')
-            if hasNumber:
-                return [app_commands.Choice(name=f'{argument[:index]} {units[unit] if int(argument[:index]) == 1 else f"{units[unit]}s"}', value=f'{argument[:index]}{units[unit]}') for unit in units.keys() if (unit.startswith(letters) if hasLetter else True)]
-        return []
-    
-    @remove_from_whitelist.autocomplete('user_id')
-    async def remove_from_whitelist_autocomplete(self, interaction: discord.Interaction, argument: str):
-        whitelisted = [await self.bot.fetch_user(entry) for entry in (await utility.get_server(interaction.guild)).get('antispam', {}).get('ageKickWhitelist', [])]
-        return [app_commands.Choice(name=f'{user} ({user.id})', value=str(user.id)) for user in whitelisted if str(user.id).startswith(argument) or str(user.name).startswith(argument)]
 
     async def FetchWarnings(self, member: discord.Member):
         return (await utility.get_server(member.guild)).get('members', {}).get(str(member.id), {}).get('warnings', -1)

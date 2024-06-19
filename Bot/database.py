@@ -661,7 +661,7 @@ async def GetAgeKick(s: discord.Guild):
     return (await servers.find_one({'server_id': s.id})).get('antispam').get('ageKick')
 
 async def SetAgeKick(s: discord.Guild, ageKick):
-    '''Sets the ageKick of a server'''
+    '''Sets the ageKick of a server (in seconds)'''
     await servers.update_one({'server_id': s.id}, {'$set': {'antispam.ageKick': ageKick}}, True)
     print(f'Updated ageKick for {s.name} to {ageKick} at {datetime.datetime.now():%B %d %I:%M %p}')
 
