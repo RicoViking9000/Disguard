@@ -708,8 +708,11 @@ class DateInputInterface(discord.ui.View):
         if result.data['custom_id'] == 'back':
             await self.setupMonths()
         else:
-            if self.result < discord.utils.utcnow(): self.result.replace(year = self.result.year + 1)
-            if self.post_function: await self.post_function(self.result)
+            try:
+                if self.result < datetime.datetime.utcnow(): self.result.replace(year = self.result.year + 1)
+            except: traceback.print_exc()
+            if self.post_function: 
+                await self.post_function(self.result)
             await result.response.edit_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press `confirm` on the original embed to complete setup'))
         
 class BirthdayHomepageView(discord.ui.View):
@@ -1039,7 +1042,7 @@ class BirthdayView(discord.ui.View):
         kb = DateInputInterface(self.birthdays.bot, interaction, self.submitValue)
         await interaction.followup.send(embed=embed, view=kb, ephemeral=True)
         def iCheck(i: discord.Interaction):
-            return i.data['custom_id'] in ('submit', 'cancel') and i.user == self.author and i.message.id == self.interaction.message.id
+            return i.data.get('custom_id') in ('submit', 'cancel') and i.user == self.author and i.message.id == self.interaction.message.id
         result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=iCheck)
         for child in self.children: child.disabled = False
         if result.data['custom_id'] == 'cancel': await interaction.message.edit(view=self) #Enable buttons if cancelling virtual keybaord operation
@@ -1055,8 +1058,8 @@ class BirthdayView(discord.ui.View):
         while not self.birthdays.bot.is_closed() and not self.finishedSetup:
             def messageCheck(m: discord.Message): return m.author == self.author and m.channel == self.interaction.channel
             def interactionCheck(i: discord.Interaction): #TODO: needs more verification
-                if i.data['custom_id'] == 'cancel': self.usedPrivateInterface = False
-                return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup') and i.user == self.author and i.channel == self.interaction.channel
+                if i.data.get('custom_id') == 'cancel': self.usedPrivateInterface = False
+                return i.data.get('custom_id') in ('submit', 'cancel', 'confirmSetup', 'cancelSetup') and i.user == self.author and i.channel == self.interaction.channel
             try: self.bdayHidden
             except AttributeError:
                 cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
@@ -1088,9 +1091,8 @@ class BirthdayView(discord.ui.View):
                     self.embed.description=f'Your birthday is already set to **{"the value you entered" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}** 👍\n\nYou may type another date or cancel setup'
                     for child in self.children[:2]: child.disabled = False
             else: self.embed.description=f'{self.birthdays.emojis["alert"]} | Unable to parse a date from **{"the value you entered" if self.usedPrivateInterface else self.newBday}**. You may type a new date or cancel the setup.'
-            print(self.newBday)
             try:
-                if self.interaction.message: await result.response.edit_message(embed=self.embed, view=self)
+                if self.interaction.message: await result.edit_original_response(embed=self.embed, view=self)
                 elif self.autoDetected: break
             except discord.errors.NotFound: break
     
@@ -1109,7 +1111,7 @@ class BirthdayView(discord.ui.View):
         else: await self.interaction.message.delete()
         if not self.autoDetected:
             self.interaction.message.embeds[0].set_field_at(1, name='Your Birthday',value=f'**Birthday Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}')
-            await self.interaction.response.edit_message(embed=self.interaction.message.embeds[0])
+            await self.interaction.edit_original_response(embed=self.interaction.message.embeds[0])
 
     async def submitValue(self, result):
         '''Writes the value from the KB interface to the class variable'''
