@@ -881,6 +881,7 @@ class AgeView(discord.ui.View):
         self.birthdays = birthdays
         self.author = interaction.user
         self.interaction = interaction
+        self.intermediate_message: discord.WebhookMessage = None
         self.previousView = previousView
         self.currentAge = None
         self.newAge = newAge
@@ -908,19 +909,20 @@ class AgeView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.previousView:
             await interaction.response.pong()
-            return await interaction.message.delete()
+            return await (await interaction.original_response()).delete()
         self.previousView.ageButton.disabled = False
-        await self.interaction.response.edit_message(view=self.previousView)
+        await (await self.interaction.original_response()).edit(view=self.previousView)
         self.finishedSetup = True
 
     @discord.ui.button(label='Edit privately', emoji='⌨')
     async def privateInterface(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.usedPrivateInterface = True
+        if self.usedPrivateInterface: asyncio.create_task(self.confirmation())
+        else: self.usedPrivateInterface = True
         for child in self.children: child.disabled = True #Disable all buttons for proper control flow
         await interaction.response.edit_message(view=self)
-        embed = discord.Embed(title='Birthday age setup', description='Use the virtual keyboard to enter your desired age. Note that Disguard is unable to delete this message when you\'re done.')
+        embed = discord.Embed(title='Birthday age setup', description='Use the virtual keyboard to enter your desired age.')
         kb = NumberInputInterface(self.submitValue)
-        await interaction.response.send_message(embed=embed, view=kb, ephemeral=True)
+        self.private_message: discord.WebhookMessage = await interaction.followup.send(embed=embed, view=kb, ephemeral=True)
         def iCheck(i: discord.Interaction):
             return i.data['custom_id'] in ('submit', 'cancel') and i.user == self.author and i.message.id == self.interaction.message.id
         result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=iCheck)
@@ -932,11 +934,13 @@ class AgeView(discord.ui.View):
         button.disabled = True #set this as clicked
         await interaction.response.edit_message(view=self)
         await self.saveChanges()
+        if self.usedPrivateInterface: await self.private_message.delete()
         self.finishedSetup = True
 
     async def confirmation(self):
         while not self.birthdays.bot.is_closed() and not self.finishedSetup:
-            def messageCheck(m: discord.Message): return m.author == self.author and m.channel == self.interaction.channel
+            def messageCheck(m: discord.Message):
+                return m.author == self.author and m.channel == self.interaction.channel
             def interactionCheck(i: discord.Interaction): #TODO: needs more verification
                 if i.data['custom_id'] == 'cancel': self.usedPrivateInterface = False
                 return i.data['custom_id'] in ('submit', 'cancel', 'confirmSetup', 'cancelSetup') and i.user == self.author and i.message.id == self.message.id
@@ -955,7 +959,8 @@ class AgeView(discord.ui.View):
                     except: pass
                     break #Close the loop if we time out
                 for f in pending: f.cancel()
-                if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'): break #If the user cancels or finishes setup, close the loop
+                if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'):
+                    break #If the user cancels or finishes setup, close the loop
                 if not self.usedPrivateInterface: self.newAge = calculateAges(result)[0] #If private interface was used, submitValue will store the value
                 try:
                     self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
@@ -972,21 +977,22 @@ class AgeView(discord.ui.View):
                     for child in self.children[:2]: child.disabled = False
             else: self.embed.description=f'{self.birthdays.emojis["alert"]} | **{"the value you entered" if self.usedPrivateInterface else self.newAge}** isn\'t an age. You may type a new age or cancel the setup.'
             try: 
-                if self.interaction.message: await self.interaction.edit_original_response(embed=self.embed, view=self)
+                if self.interaction.message: await self.intermediate_message.edit(embed=self.embed, view=self)
                 elif self.autoDetected: break
+                if self.usedPrivateInterface: break
             except discord.errors.NotFound: break
     
     async def saveChanges(self):
         #TODO: add age verification
         if self.newAge == self.currentAge: return await self.interaction.message.delete()
         await database.SetAge(self.author, self.newAge)
-        if not self.usedPrivateInterface:
-            self.embed.description = f'✔ | Age successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newAge}'
-            if not (await utility.get_user(self.author)).get('birthday'):
-                self.embed.description += '\n\nYou may add your birthday from the menu on the original embed if desired'
-            await self.interaction.response.edit_message(embed=self.embed, view=SuccessAndDeleteView())
-        else: await self.interaction.message.delete()
+        self.embed.description = f'✔ | Age successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newAge}'
+        if not (await utility.get_user(self.author)).get('birthday'):
+            self.embed.description += '\n\nYou may add your birthday from the menu on the original embed if desired'
+        await self.intermediate_message.edit(embed=self.embed, view=SuccessAndDeleteView())
         if not self.autoDetected:
+            embed = (await self.interaction.original_response()).embeds[0]
+            embed.set_field_at(1, name='Your Age',value=f'**Age Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newAge}')
             self.interaction.message.embeds[0].set_field_at(1, name='Your Age',value=f'**Age Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newAge}')
             await self.interaction.response.edit_message(embed=self.interaction.message.embeds[0])
 
@@ -1037,10 +1043,11 @@ class BirthdayView(discord.ui.View):
 
     @discord.ui.button(label='Edit privately', emoji='⌨')
     async def privateInterface(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.usedPrivateInterface = True
+        if self.usedPrivateInterface: asyncio.create_task(self.confirmation())
+        else: self.usedPrivateInterface = True
         for child in self.children: child.disabled = True #Disable all buttons for proper control flow
         await interaction.response.edit_message(view=self)
-        embed = discord.Embed(title='Birthday date setup', description='Use the virtual keyboard to enter your birthday. Note that Disguard is unable to delete this message when you\'re done.')
+        embed = discord.Embed(title='Birthday date setup', description='Use the virtual keyboard to enter your birthday.')
         kb = DateInputInterface(self.birthdays.bot, interaction, self.submitValue)
         self.private_message: discord.WebhookMessage = await interaction.followup.send(embed=embed, view=kb, ephemeral=True)
         def iCheck(i: discord.Interaction):
@@ -1054,7 +1061,7 @@ class BirthdayView(discord.ui.View):
         button.disabled = True #set this as clicked
         await interaction.response.edit_message(view=self)
         await self.saveChanges()
-        await self.private_message.delete()
+        if self.usedPrivateInterface: await self.private_message.delete()
         self.finishedSetup = True
     
     async def confirmation(self):
@@ -1103,6 +1110,7 @@ class BirthdayView(discord.ui.View):
             except discord.errors.NotFound: break
     
     async def saveChanges(self):
+        if self.newBday == self.currentBday: return await self.interaction.message.delete()
         await database.SetBirthday(self.author, datetime.datetime.combine(self.newBday, datetime.time(0, 0)))
         self.embed.description = f'✔ | Birthday successfully updated to {"(hidden value)" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}'
         bdayAnnounceChannel = (await utility.get_server(self.interaction.guild)).get('birthday', 0)
