@@ -534,7 +534,7 @@ class SuccessAndDeleteView(discord.ui.View):
     def __init__(self):
         super().__init__()
     
-    @discord.ui.button(label='Delete message immediately')
+    @discord.ui.button(label='Delete this message', style=discord.ButtonStyle.red)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.message.delete()
 
@@ -562,7 +562,7 @@ class NumberInputInterface(discord.ui.View):
     @discord.ui.button(label='Submit', emoji='➡', row=3, style=discord.ButtonStyle.green, custom_id='submit')
     async def submit(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.post_func: await self.post_func(self.result)
-        await interaction.response.edit_message(embed=None, view=SuccessView('Press `confirm` on the original embed to complete setup'))
+        await interaction.response.edit_message(embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
 
     @discord.ui.button(label='1', row=2)
     async def one(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -714,7 +714,7 @@ class DateInputInterface(discord.ui.View):
             except: traceback.print_exc()
             if self.post_function: 
                 await self.post_function(self.result)
-            await result.response.edit_message(content = f'{self.result:%B %d}', embed=None, view=SuccessView('Press `confirm` on the original embed to complete setup'))
+            await result.response.edit_message(content = f'`{self.result:%B %d}`', embed=None, view=SuccessView('Press "confirm" on the original embed to complete setup'))
         
 class BirthdayHomepageView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, interaction: discord.Interaction):
@@ -1104,7 +1104,7 @@ class BirthdayView(discord.ui.View):
     
     async def saveChanges(self):
         await database.SetBirthday(self.author, datetime.datetime.combine(self.newBday, datetime.time(0, 0)))
-        self.embed.description = f'✔ | Birthday successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}'
+        self.embed.description = f'✔ | Birthday successfully updated to {"(hidden value)" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}'
         bdayAnnounceChannel = (await utility.get_server(self.interaction.guild)).get('birthday', 0)
         if bdayAnnounceChannel > 0: bdayAnnounceText = f'Since birthday announcements are enabled for this server, your birthday will be announced to {self.birthdays.bot.get_channel(bdayAnnounceChannel).mention}.'
         else: bdayAnnounceText = f'Birthday announcements are not enabled for this server. Moderators may enable this feature [here](http://disguard.herokuapp.com/manage/{self.interaction.guild.id}/server).'
