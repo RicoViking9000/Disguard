@@ -314,16 +314,17 @@ async def guestBirthdayHandler(self: Birthdays, interaction: discord.Interaction
     embed = await view.createEmbed()
     await interaction.response.send_message(embed=embed, view=view)
 
-async def birthdayHandler(self: Birthdays, interaction: discord.Interaction, previousView):
+async def birthdayHandler(self: Birthdays, interaction: discord.Interaction, previousView, autoDetected: bool = True):
     view = BirthdayView(self, interaction, previousView)
-    view.autoDetected = True
+    view.autoDetected = autoDetected
     embed = await view.createEmbed()
-    await interaction.followup.send(embed=embed, view=view)
+    intermediate_message = await interaction.followup.send(embed=embed, view=view)
+    view.intermediate_message = intermediate_message
     await view.confirmation()
 
-async def ageHandler(self: Birthdays, interaction: discord.Interaction, previousView):
+async def ageHandler(self: Birthdays, interaction: discord.Interaction, previousView, autoDetected: bool = True):
     view = AgeView(self, interaction, previousView)
-    view.autoDetected = True
+    view.autoDetected = autoDetected
     embed = await view.createEmbed()
     await interaction.followup.send(embed=embed, view=view)
     await view.confirmation()
@@ -625,7 +626,7 @@ class DateInputInterface(discord.ui.View):
     '''Uses a lower-level implementation to save space given how many similar buttons we're using'''
     def __init__(self, bot: commands.Bot, interaction: discord.Interaction, post_function: callable = None, start_task: bool = True):
         super().__init__()
-        self.result: datetime.datetime = datetime.datetime(discord.utils.utcnow().year, 1, 1)
+        self.result: datetime.datetime = datetime.datetime(discord.utils.utcnow().year, 1, 1, tzinfo=datetime.timezone.utc)
         self.bot= bot
         self.interaction = interaction
         self.post_function = post_function
@@ -709,7 +710,7 @@ class DateInputInterface(discord.ui.View):
             await self.setupMonths()
         else:
             try:
-                if self.result < datetime.datetime.utcnow(): self.result.replace(year = self.result.year + 1)
+                if self.result < datetime.datetime.now(tz=datetime.timezone.utc): self.result.replace(year = self.result.year + 1)
             except: traceback.print_exc()
             if self.post_function: 
                 await self.post_function(self.result)
@@ -797,7 +798,7 @@ class BirthdayHomepageView(discord.ui.View):
             if await view.cyber.privacyEnabledChecker(interaction.user, 'birthdayModule', 'birthdayDay'):
                 self.disabled = True
                 await interaction.response.edit_message(view=view)
-                await birthdayHandler(view.birthdays, interaction, view)
+                await birthdayHandler(view.birthdays, interaction, view, False)
             else:
                 await interaction.response.send_message('You have disabled the birthday feature of the birthday module. Review your settings: http://disguard.herokuapp.com/manage/profile', ephemeral=True)
 
@@ -809,7 +810,7 @@ class BirthdayHomepageView(discord.ui.View):
             if await view.cyber.privacyEnabledChecker(interaction.user, 'birthdayModule', 'age'):
                 self.disabled = True
                 await interaction.response.edit_message(view=view)
-                await ageHandler(view.birthdays, interaction, view)
+                await ageHandler(view.birthdays, interaction, view, False)
             else:
                 await interaction.response.send_message('You have disabled the age feature of the birthday module. Review your settings: http://disguard.herokuapp.com/manage/profile', ephemeral=True)
 
@@ -1001,6 +1002,7 @@ class BirthdayView(discord.ui.View):
         self.birthdays = birthdays
         self.author = interaction.user
         self.interaction = interaction
+        self.intermediate_message: discord.WebhookMessage = None
         self.previousView = previousView
         self.currentBday = None
         self.newBday = newBday
@@ -1028,9 +1030,9 @@ class BirthdayView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.previousView:
             await interaction.response.pong()
-            return await interaction.message.delete()
+            return await (await interaction.original_response()).delete()
         self.previousView.birthdayButton.disabled = False
-        await self.interaction.response.edit_message(view=self.previousView)
+        await (await self.interaction.original_response()).edit(view=self.previousView)
         self.finishedSetup = True
 
     @discord.ui.button(label='Edit privately', emoji='⌨')
@@ -1040,7 +1042,7 @@ class BirthdayView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         embed = discord.Embed(title='Birthday date setup', description='Use the virtual keyboard to enter your birthday. Note that Disguard is unable to delete this message when you\'re done.')
         kb = DateInputInterface(self.birthdays.bot, interaction, self.submitValue)
-        await interaction.followup.send(embed=embed, view=kb, ephemeral=True)
+        self.private_message: discord.WebhookMessage = await interaction.followup.send(embed=embed, view=kb, ephemeral=True)
         def iCheck(i: discord.Interaction):
             return i.data.get('custom_id') in ('submit', 'cancel') and i.user == self.author and i.message.id == self.interaction.message.id
         result: discord.Interaction = await self.birthdays.bot.wait_for('interaction', check=iCheck)
@@ -1052,11 +1054,13 @@ class BirthdayView(discord.ui.View):
         button.disabled = True #set this as clicked
         await interaction.response.edit_message(view=self)
         await self.saveChanges()
+        await self.private_message.delete()
         self.finishedSetup = True
     
     async def confirmation(self):
         while not self.birthdays.bot.is_closed() and not self.finishedSetup:
-            def messageCheck(m: discord.Message): return m.author == self.author and m.channel == self.interaction.channel
+            def messageCheck(m: discord.Message):
+                return m.author == self.author and m.channel == self.interaction.channel
             def interactionCheck(i: discord.Interaction): #TODO: needs more verification
                 if i.data.get('custom_id') == 'cancel': self.usedPrivateInterface = False
                 return i.data.get('custom_id') in ('submit', 'cancel', 'confirmSetup', 'cancelSetup') and i.user == self.author and i.channel == self.interaction.channel
@@ -1075,7 +1079,8 @@ class BirthdayView(discord.ui.View):
                     except: pass
                     break #Close the loop if we time out
                 for f in pending: f.cancel()
-                if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'): break #If the user cancels or finishes setup, close the loop
+                if type(result) is discord.Interaction and result.data['custom_id'] in ('confirmSetup', 'cancelSetup'):
+                    break #If the user cancels or finishes setup, close the loop
                 if not self.usedPrivateInterface:
                     adjusted = discord.utils.utcnow() + datetime.timedelta(hours=(await utility.get_server(self.interaction.guild)).get('offset', -5))
                     self.newBday = calculateDate(result, adjusted) #If private interface was used, submitValue will store the value
@@ -1092,26 +1097,26 @@ class BirthdayView(discord.ui.View):
                     for child in self.children[:2]: child.disabled = False
             else: self.embed.description=f'{self.birthdays.emojis["alert"]} | Unable to parse a date from **{"the value you entered" if self.usedPrivateInterface else self.newBday}**. You may type a new date or cancel the setup.'
             try:
-                if self.interaction.message: await result.edit_original_response(embed=self.embed, view=self)
+                if self.interaction.message: await self.intermediate_message.edit(embed=self.embed, view=self)
                 elif self.autoDetected: break
+                if self.usedPrivateInterface: break
             except discord.errors.NotFound: break
     
     async def saveChanges(self):
-        if self.newBday == self.currentBday: return await self.interaction.message.delete()
         await database.SetBirthday(self.author, datetime.datetime.combine(self.newBday, datetime.time(0, 0)))
-        if not self.usedPrivateInterface:
-            self.embed.description = f'✔ | Birthday successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}'
-            bdayAnnounceChannel = (await utility.get_server(self.interaction.guild)).get('birthday', 0)
-            if bdayAnnounceChannel > 0: bdayAnnounceText = f'Since birthday announcements are enabled for this server, your birthday will be announced to {self.birthdays.bot.get_channel(bdayAnnounceChannel).mention}.'
-            else: bdayAnnounceText = f'Birthday announcements are not enabled for this server. Moderators may enable this feature [here](http://disguard.herokuapp.com/manage/{self.interaction.guild.id}/server).'
-            self.embed.description += f'\n\n{bdayAnnounceText}'
-            if not (await utility.get_user(self.author)).get('age'):
-                self.embed.description += '\n\nYou may add your age from the menu on the original embed if desired'
-            await self.interaction.edit_original_response(embed=self.embed, view=SuccessAndDeleteView())
-        else: await self.interaction.message.delete()
+        self.embed.description = f'✔ | Birthday successfully updated to {"<Value hidden>" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}'
+        bdayAnnounceChannel = (await utility.get_server(self.interaction.guild)).get('birthday', 0)
+        if bdayAnnounceChannel > 0: bdayAnnounceText = f'Since birthday announcements are enabled for this server, your birthday will be announced to {self.birthdays.bot.get_channel(bdayAnnounceChannel).mention}.'
+        else: bdayAnnounceText = f'Birthday announcements are not enabled for this server. Moderators may enable this feature [here](http://disguard.herokuapp.com/manage/{self.interaction.guild.id}/server).'
+        self.embed.description += f'\n\n{bdayAnnounceText}'
+        if not (await utility.get_user(self.author)).get('age'):
+            self.embed.description += '\n\nYou may add your age from the menu on the original embed if desired'
+        await self.intermediate_message.edit(embed=self.embed, view=SuccessAndDeleteView())
         if not self.autoDetected:
-            self.interaction.message.embeds[0].set_field_at(1, name='Your Birthday',value=f'**Birthday Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}')
-            await self.interaction.edit_original_response(embed=self.interaction.message.embeds[0])
+            embed = (await self.interaction.original_response()).embeds[0]
+            embed.set_field_at(1, name='Your Birthday', value=f'**Birthday Successfully Updated**\n{"🔒 Hidden" if self.usedPrivateInterface else self.newBday.strftime("%B %d")}')
+            self.previousView.birthdayButton.disabled = False
+            await self.interaction.edit_original_response(embed=embed, view=self.previousView)
 
     async def submitValue(self, result):
         '''Writes the value from the KB interface to the class variable'''
