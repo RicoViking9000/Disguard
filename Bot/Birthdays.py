@@ -278,14 +278,14 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         '''
         reversed = {value: key for key, value in months.items()}
         date = datetime.date(discord.utils.utcnow().year, reversed[month], day)
-        view = BirthdayView(self, interaction, None, None, date)
+        view = BirthdayView(self, interaction, None, date)
         embed = await view.createEmbed()
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        view.message = await interaction.response.send_message(embed=embed, view=view, ephemeral=ctx.interaction.guild and not await cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'birthdayDay'))
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=interaction.guild and not await cyber.privacyVisibilityChecker(interaction.user, 'birthdayModule', 'birthdayDay'))
         await view.confirmation()
     
     @app_commands.command()
-    async def set_age(self, ctx: commands.Context, new_age: app_commands.Range[int, 13, 105]):
+    async def set_age(self, interaction: discord.Interaction, new_age: app_commands.Range[int, 13, 105]):
         '''Update your age for the birthday module
         ---------------------------
         Parameters:
@@ -293,20 +293,20 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
             Your new age
         '''
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
-        view: AgeView = AgeView(self, ctx.author, ctx.interaction, None, None, new_age)
+        view: AgeView = AgeView(self, interaction, None, new_age)
         embed = await view.createEmbed()
-        view.message = await ctx.send(embed=embed, view=view, ephemeral=ctx.interaction.guild and not await cyber.privacyVisibilityChecker(ctx.author, 'birthdayModule', 'age'))
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=interaction.guild and not await cyber.privacyVisibilityChecker(interaction.user, 'birthdayModule', 'age'))
         await view.confirmation()
     
     @app_commands.command()
-    async def wishlist(self, ctx: commands.Context, action: typing.Literal['view', 'add', 'remove']):
+    async def wishlist(self, interaction: discord.Interaction, action: typing.Literal['view wishlist', 'add items', 'remove items']):
         '''Set your birthday wishlist for the birthday module
         ---------------------------
         Parameters:
         action: str
             Which mode to use: view your wishlist, add items, or remove items
         '''
-        return await wishlistHandler(self, ctx, None, None, action)
+        return await wishlistHandler(self, interaction, None, action)
     
         
 async def guestBirthdayHandler(self: Birthdays, interaction: discord.Interaction, target: discord.User):
@@ -330,15 +330,18 @@ async def ageHandler(self: Birthdays, interaction: discord.Interaction, previous
     await view.confirmation()
 
 async def wishlistHandler(self: Birthdays, interaction: discord.Interaction, previousView, mode: str = 'home'):
-    view = WishlistView(self, interaction, None, previousView, mode if mode in ('add', 'remove', 'home') else 'home')
-    if mode == 'home':
+    cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
+    wishlist_hidden = interaction.guild and not await cyber.privacyVisibilityChecker(interaction.user, 'birthdayModule', 'wishlist')
+    translation = {'view wishlist':'home', 'add items':'add', 'remove items':'remove'}
+    view = WishlistView(self, interaction, previousView, wishlist_hidden, translation[mode] if mode in translation.keys() else 'home')
+    if translation[mode] == 'home':
         embed = await view.createEmbed()
         if interaction.response.is_done():
-            await interaction.followup.send(embed=embed, view=view)
+            await interaction.followup.send(embed=embed, view=view, ephemeral=wishlist_hidden)
         else:
-            await interaction.response.send_message(embed=embed, view=view)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=wishlist_hidden)
     else:
-        await view.wishlistEditPreview(interaction, mode == 'add')
+        await view.wishlistEditPreview(interaction, translation[mode] == 'add')
 
 async def upcomingBirthdaysPrep(self: Birthdays, interaction: discord.Interaction, currentServer, disguardSuggest, weekBirthday):
     namesOnly = [m['data'].display_name for m in currentServer + disguardSuggest + weekBirthday]
@@ -1131,11 +1134,12 @@ class BirthdayView(discord.ui.View):
         self.newBday = result
 
 class WishlistView(discord.ui.View):
-    def __init__(self, birthdays: Birthdays, interaction: discord.Interaction, message: discord.Message, previousView: BirthdayHomepageView, mode: str = 'home', cameFromSaved = []):
+    def __init__(self, birthdays: Birthdays, interaction: discord.Interaction, previousView: BirthdayHomepageView, wishlist_hidden: bool = False, mode: str = 'home', cameFromSaved = []):
         super().__init__()
         self.birthdays = birthdays
         self.interaction = interaction
-        self.message = message
+        self.intermediate_message: discord.WebhookMessage = None
+        self.wishlistHidden = wishlist_hidden
         self.new = None
         self.cameFromSaved = cameFromSaved
         self.wishlist = []
@@ -1146,8 +1150,6 @@ class WishlistView(discord.ui.View):
         self.add_item(self.removeButton(self.birthdays))
 
     async def createEmbed(self):
-        cyber: Cyberlog.Cyberlog = self.birthdays.bot.get_cog('Cyberlog')
-        self.wishlistHidden = self.interaction.guild and not await cyber.privacyVisibilityChecker(self.interaction.user, 'birthdayModule', 'wishlist')
         self.wishlist = (await utility.get_user(self.interaction.user)).get('wishlist', []) if not self.wishlistHidden and not self.cameFromSaved else self.cameFromSaved if self.cameFromSaved else []
         wishlistDisplay = ['You have set your wishlist to private'] if self.wishlistHidden else self.wishlist
         embed=discord.Embed(title=f'📝 Wishlist home', description=f'**{"YOUR WISH LIST":–^50}**\n{NEWLINE.join([f"• {w}" for w in wishlistDisplay]) if wishlistDisplay else "Empty"}', color=yellow[await utility.color_theme(self.interaction.guild)])
@@ -1158,6 +1160,7 @@ class WishlistView(discord.ui.View):
     @discord.ui.button(label='Close Viewer', style=discord.ButtonStyle.red)
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
+            await interaction.response.pong()
             await interaction.message.delete()
             if not self.previousView or isinstance(self.previousView, WishlistView): return
             self.previousView.wishlistButton.disabled = False
@@ -1182,8 +1185,6 @@ class WishlistView(discord.ui.View):
 
     async def wishlistEditPreview(self, interaction: discord.Interaction, add=True):
         '''Adds or removes items from one's wishlist, depending on the variable'''
-        if self.wishlistHidden and interaction.guild:
-            return await interaction.response.send_message('Editing your wishlist in a server is disabled since your wishlist visibility is set to private. You may retry from DMs or review your settings: http://disguard.herokuapp.com/manage/profile', ephemeral=True)
         verb, preposition = 'remove', 'from'
         if add: 
             verb, preposition = 'add', 'to'
@@ -1194,9 +1195,9 @@ class WishlistView(discord.ui.View):
             embed = await self.createEmbed()
         embed.title = f'📝{self.birthdays.emojis["whitePlus"] if add else self.birthdays.emojis["whiteMinus"]} {verb[0].upper()}{verb[1:]} entries {preposition} wishlist'
         embed.description = f'Type{" the number or text of an entry" if not add else ""} to {verb} {"entries" if add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n**{"WISHLIST":–^50}**\n{"(Empty)" if not self.wishlist else NEWLINE.join([f"• {w}" for w in self.wishlist]) if add else NEWLINE.join([f"{i}) {w}" for i, w in enumerate(self.wishlist, 1)])}'
-        new_view = WishlistEditView(self.birthdays, self.interaction, self.new, self, add, self.wishlist)
-        if interaction.message: await interaction.edit_original_response(embed=embed, view=new_view)
-        else: await interaction.response.send_message(embed=embed, view=new_view)
+        new_view = WishlistEditView(self.birthdays, interaction, self.new, self, add, self.wishlist)
+        if interaction.message: await interaction.response.edit_message(embed=embed, view=new_view)
+        else: await interaction.response.send_message(embed=embed, view=new_view, ephemeral=self.wishlistHidden)
 
 class WishlistEditView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, interaction: discord.Interaction, message: discord.Message, previousView: BirthdayHomepageView, add=True, wishlist: typing.List[str]=[]):
@@ -1219,7 +1220,7 @@ class WishlistEditView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             self.tempWishlist = self.wishlist or []
-            view = WishlistView(self.birthdays, self.interaction, None, self.previousView)
+            view = WishlistView(self.birthdays, self.interaction, self.previousView)
             embed = await view.createEmbed()
             await interaction.response.edit_message(embed=embed, view=view)
         except: traceback.print_exc()
@@ -1233,7 +1234,7 @@ class WishlistEditView(discord.ui.View):
         async def callback(self, interaction: discord.Interaction):
             view: WishlistEditView = self.view
             view.tempWishlist = []
-            await view.refreshDisplay()
+            await view.refreshDisplay(interaction)
             self.disabled = True
 
     class saveButton(discord.ui.Button):
@@ -1245,19 +1246,22 @@ class WishlistEditView(discord.ui.View):
             if not view.add: self.tempWishlist = [w for w in self.tempWishlist if not view.toModify.get(w[:16])]
             view.wishlist = view.tempWishlist #Should handle local state
             await database.SetWishlist(view.interaction.user, view.wishlist) #And this will wrap up global state
-            newView = WishlistView(view.birthdays, view.interaction, None, view.previousView, view.wishlist)
+            newView = WishlistView(view.birthdays, view.interaction, view.previousView, cameFromSaved=view.tempWishlist)
             embed = await newView.createEmbed()
             await interaction.response.edit_message(embed=embed, view=newView)
 
     async def regenEmbed(self):
-        return discord.Embed('📝 Edit Wishlist', description=f'**{"YOUR WISH LIST":–^50}**\n{NEWLINE.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}', color=yellow[await utility.color_theme(self.interaction.guild)])
+        return discord.Embed(
+            title='📝 Edit Wishlist',
+            description=f'**{"YOUR WISH LIST":–^50}**\n{NEWLINE.join([f"• {w}" for w in self.wishlist]) if self.wishlist else "Empty"}',
+            color=yellow[await utility.color_theme(self.interaction.guild)])
 
     async def editWishlist(self):
         def addCheck(m: discord.Message): return m.author == self.interaction.user and m.channel == self.interaction.channel
         while not self.birthdays.bot.is_closed():
             try: message: discord.Message = await self.birthdays.bot.wait_for('message', check=addCheck, timeout=300)
             except asyncio.TimeoutError: 
-                view = WishlistView(self.birthdays, self.interaction, None, self.previousView)
+                view = WishlistView(self.birthdays, self.interaction, self.previousView)
                 embed = await view.createEmbed()
                 return await self.message.edit(embed=embed, view=view)
             if message.content:
@@ -1279,17 +1283,19 @@ class WishlistEditView(discord.ui.View):
             except discord.Forbidden: pass
             await self.refreshDisplay()
 
-    async def refreshDisplay(self):
+    async def refreshDisplay(self, respond_to: discord.Interaction | bool = False):
         def formatWishlistEntry(s: str): return f'**+ {s}**' if self.add and self.toModify.get(s[:16]) else f'~~{s}~~' if not self.add and self.toModify.get(s[:16]) else f'• {s}' if self.add else s
         verb, preposition = 'remove', 'from'
         preposition = 'from'
         if self.add:
             verb, preposition = 'add', 'to'
-        self.message.embeds[0].description = f'Type{" the number or text of an entry" if not self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^50}**\n{"(Empty)" if not self.tempWishlist else NEWLINE.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else NEWLINE.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
+        embed = (await self.interaction.original_response()).embeds[0]
+        embed.description = f'Type{" the number or text of an entry" if not self.add else ""} to {verb} {"entries" if self.add else "it"} {preposition} your wish list. To {verb} multiple entries in one message, separate entries with a comma and a space.\n\n**{"WISHLIST":–^50}**\n{"(Empty)" if not self.tempWishlist else NEWLINE.join([formatWishlistEntry(w) for w in self.tempWishlist]) if self.add else NEWLINE.join([f"{i}) {formatWishlistEntry(w)}" for i, w in enumerate(self.tempWishlist, 1)])}'
         #Now set the clear button
-        if self.tempWishlist and not (all([w == self.toModify[w[:16]] for w in self.tempWishlist]) and not self.add): self.buttonClear.disabled = False
+        if self.tempWishlist and not (all([w == self.toModify.get(w[:16]) for w in self.tempWishlist]) and not self.add): self.buttonClear.disabled = False
         else: self.buttonClear.disabled = True
-        await self.interaction.edit_original_response(embed=self.message.embeds[0], view=self)
+        if respond_to: await respond_to.response.edit_message(embed=embed, view=self)
+        else: await self.interaction.edit_original_response(embed=embed, view=self)
 
 class UpcomingBirthdaysView(discord.ui.View):
     def __init__(self, birthdays: Birthdays, interaction: discord.Interaction, currentServer, disguardSuggest, weekBirthday, namesOnly, embed: discord.Embed, bot: commands.Bot, jumpStart=0):
