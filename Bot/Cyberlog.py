@@ -143,7 +143,7 @@ class Cyberlog(commands.Cog):
                     # await self.bot.wait_for('message', check=initializeCheck) #Wait for bot to synchronize database
                 # else: asyncio.create_task(self.synchronizeDatabase())
                 await asyncio.sleep(0.5)
-                await self.bot.get_cog('Birthdays').verifyBirthdaysDict()
+                await self.bot.get_cog('birthdays').verifyBirthdaysDict()
             for g in self.bot.guilds:
                 timeString = f'Processing attributes for {g.name}'
                 print(timeString)

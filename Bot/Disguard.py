@@ -166,7 +166,7 @@ async def on_message(message: discord.Message):
     if message.author.bot: return
     reddit: Reddit.Reddit = bot.get_cog('Reddit')
     await reddit.on_message(message)
-    birthdays: Birthdays.Birthdays = bot.get_cog('Birthdays')
+    birthdays: Birthdays.Birthdays = bot.get_cog('birthdays')
     await birthdays.on_message(message)
     misc: Misc.Misc = bot.get_cog('Misc')
     await misc.on_message(message)

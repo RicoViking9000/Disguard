@@ -221,7 +221,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
             new = await message.channel.send(embed=embed, view=view)
             view.message = new
 
-    @app_commands.command(name='homepage')
+    @app_commands.command(name='homepage', description='View the birthdays homepage')
     async def birthday(self, interaction: discord.Interaction):
         '''
         View the birthdays homepage
@@ -235,7 +235,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         embed = await homeView.finishEmbed(embed)
         await interaction.edit_original_response(embed=embed, view=homeView)
     
-    @app_commands.command()
+    @app_commands.command(description='View a member\'s birthday profile')
     async def view_profile(self, interaction: discord.Interaction, member: discord.Member):
         '''View another member's birthday profile
         ---------------------------
@@ -247,7 +247,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         embed = await view.createEmbed()
         await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command()
+    @app_commands.command(description='Write a message to be delivered on a member\'s birthday')
     async def write_birthday_message(self, interaction: discord.Interaction, member: discord.Member):
         '''Write a message to be delivered on a member's birthday
         ---------------------------
@@ -264,7 +264,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         await newView.writeMessagePrompt()
 
     
-    @app_commands.command()
+    @app_commands.command(description='Set your birthday for the birthday module')
     async def set_birthday(self, interaction: discord.Interaction,
                            month: typing.Literal['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
                            day: app_commands.Range[int, 1, 31]):
@@ -284,7 +284,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         await interaction.response.send_message(embed=embed, view=view, ephemeral=interaction.guild and not await cyber.privacyVisibilityChecker(interaction.user, 'birthdayModule', 'birthdayDay'))
         await view.confirmation()
     
-    @app_commands.command()
+    @app_commands.command(description='Set your age for the birthday module')
     async def set_age(self, interaction: discord.Interaction, new_age: app_commands.Range[int, 13, 105]):
         '''Update your age for the birthday module
         ---------------------------
@@ -298,9 +298,9 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         await interaction.response.send_message(embed=embed, view=view, ephemeral=interaction.guild and not await cyber.privacyVisibilityChecker(interaction.user, 'birthdayModule', 'age'))
         await view.confirmation()
     
-    @app_commands.command()
+    @app_commands.command(description='Set your wishlist for the birthday module')
     async def wishlist(self, interaction: discord.Interaction, action: typing.Literal['view wishlist', 'add items', 'remove items']):
-        '''Set your birthday wishlist for the birthday module
+        '''Set your wishlist for the birthday module
         ---------------------------
         Parameters:
         action: str

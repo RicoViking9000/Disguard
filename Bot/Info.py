@@ -142,7 +142,7 @@ class Info(commands.Cog):
             await self.bot.wait_for('reaction_add',check=birthdayCheck)
             try: await message.delete()
             except: pass
-            return await Birthdays.guestBirthdayHandler(self.bot.get_cog('Birthdays'), ctx, ctx.author)
+            return await Birthdays.guestBirthdayHandler(self.bot.get_cog('birthdays'), ctx, ctx.author)
         if len(embeds) > 1 or indiv is not None: 
             await message.edit(content='{}Still working'.format(self.loading), embed=indiv)
         members, roles, channels, inv, emojis = tuple(await asyncio.gather(*[utility.FindMoreMembers(ctx.guild.members, arg), utility.FindMoreRoles(ctx.guild, arg), utility.FindMoreChannels(ctx.guild, arg), utility.FindMoreInvites(ctx.guild, arg), utility.FindMoreEmojis(ctx.guild, arg)]))
@@ -267,7 +267,7 @@ class Info(commands.Cog):
                     await message.edit(embed=main)
                 else: 
                     await message.delete()
-                    return await Birthdays.guestBirthdayHandler(self.bot.get_cog('Birthdays'), ctx, ctx.author)
+                    return await Birthdays.guestBirthdayHandler(self.bot.get_cog('birthdays'), ctx, ctx.author)
             if len(every) >= 20:
                 for r in ['◀', '▶']: await message.add_reaction(r)
             def check(m):
