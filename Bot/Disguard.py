@@ -60,8 +60,8 @@ logging.getLogger('discord.http').setLevel(logging.INFO)
 handler = logging.handlers.RotatingFileHandler(
     filename='discord.log',
     encoding='utf-8',
-    maxBytes=256 * 1024 * 1024,  # 256 MiB
-    backupCount=5,  # Rotate through 5 files
+    maxBytes=64 * 1024 * 1024,  # 64 MiB
+    backupCount=15,  # Rotate through 5 files
 )
 dt_fmt = '%Y-%m-%d %H:%M:%S'
 formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', dt_fmt, style='{')
@@ -72,6 +72,7 @@ async def prefix(bot: commands.Bot, message: discord.Message):
     return (await utility.prefix(message.guild)) or '.'
 
 intents = discord.Intents.all()
+intents.presences = False
 
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions = discord.AllowedMentions.none())
 bot.remove_command('help')
@@ -166,7 +167,7 @@ async def on_message(message: discord.Message):
     if message.author.bot: return
     reddit: Reddit.Reddit = bot.get_cog('Reddit')
     await reddit.on_message(message)
-    birthdays: Birthdays.Birthdays = bot.get_cog('Birthdays')
+    birthdays: Birthdays.Birthdays = bot.get_cog('birthdays')
     await birthdays.on_message(message)
     misc: Misc.Misc = bot.get_cog('Misc')
     await misc.on_message(message)
