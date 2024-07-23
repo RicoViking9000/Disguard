@@ -50,7 +50,7 @@ class Info(commands.Cog):
         embeds=[]
         PartialEmojiConverter = commands.PartialEmojiConverter()
         if len(arg) > 0:
-            members, roles, channels, emojis = tuple(await asyncio.gather(*[utility.FindMembers(ctx.guild, arg), utility.FindRoles(ctx.guild, arg), utility.FindChannels(ctx.guild, arg), utility.FindEmojis(ctx.guild, arg)]))
+            members, roles, channels, emojis = utility.FindMembers(ctx.guild, arg), utility.FindRoles(ctx.guild, arg), utility.FindChannels(ctx.guild, arg), utility.FindEmojis(ctx.guild, arg)
             logs, invites, bans, webhooks = None, None, None, None
         else:
             await message.edit(content=f'{self.loading}Loading content')
@@ -547,7 +547,7 @@ class Info(commands.Cog):
         embed.add_field(name='Developer',value=app.owner)
         embed.add_field(name='Public Bot',value=app.bot_public)
         embed.add_field(name='In development since',value='March 20, 2019')
-        embed.add_field(name='Website with information',value=f'[Disguard Website](https://disguard.netlify.com/)')
+        embed.add_field(name='Website with information',value=f'[Disguard Website](https://disguard.netlify.app/)')
         embed.add_field(name='Servers',value=len(self.bot.guilds))
         embed.add_field(name='Emojis',value=len(self.bot.emojis))
         embed.add_field(name='Users',value=len(self.bot.users))

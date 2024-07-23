@@ -157,51 +157,74 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     async def broadcast(self,
                         interaction: discord.Interaction,
                         *,
-                        message: str,
                         server_bucket: typing.Literal['all', 'none', 'eval'],
                         server_arg: typing.Optional[str] = '',
                         destination_bucket: typing.Literal['logging', 'moderator'],
                         embed: bool = False
                         ):
         '''Broadcast a message'''
-        # Future: Modal for message, and openAI for destination channels
-        match server_bucket:
-            case 'all':
-                servers = [await utility.get_server(server) for server in self.bot.guilds]
-                if server_arg: servers = [server for server in servers if server['server_id'] not in server_arg]
-            case 'none':
-                servers = []
-                if server_arg: servers = [await utility.get_server(server) for server in self.bot.guilds if server['server_id'] in server_arg]
-            case _:
-                all_servers = [await utility.get_server(server) for server in self.bot.guilds]
-                servers = [server for server in all_servers if eval(f'server.{server_arg}')]
-        newline = message.find('\n')
-        payload = {
-            'content': None if embed else message,
-            'embed': discord.Embed(
-                title=message[:newline],
-                description=message[newline + 1:],
-            ) if embed else None
-        }
-        log = {}
-        for server in servers:
-            if not server: continue
-            match destination_bucket:
-                case 'logging':
-                    channel = self.bot.get_channel(server['cyberlog']['defaultChannel'])
+        # Future: openAI for destination channels
+        await interaction.response.send_modal(self.SupportModal(self.bot, interaction, server_bucket, destination_bucket, embed, server_arg))
+    
+    class SupportModal(discord.ui.Modal):
+        def __init__(self, bot: commands.Bot,
+                    interaction: discord.Interaction,
+                    server_bucket: typing.Literal['all', 'none', 'eval'],
+                    destination_bucket: typing.Literal['logging', 'moderator'],
+                    embed: bool = False,
+                    server_arg: typing.Optional[str] = ''):
+            super().__init__(title="Broadcast Message")
+            self.bot = bot
+            self.interaction = interaction
+            self.server_bucket = server_bucket
+            self.destination_bucket = destination_bucket
+            self.embed = embed
+            self.server_arg = server_arg
+
+        message = discord.ui.TextInput(style=discord.TextStyle.long, label="Message to broadcast", placeholder="never gonna give you up", max_length=4000)
+
+        async def on_error(self, interaction: discord.Interaction, error: Exception):
+            traceback.print_exc()
+        
+        async def on_submit(self, interaction: discord.Interaction):
+            message = self.message.value
+            match self.server_bucket:
+                case 'all':
+                    servers = [await utility.get_server(server) for server in self.bot.guilds]
+                    if self.server_arg: servers = [server for server in servers if server['server_id'] not in self.server_arg]
+                case 'none':
+                    servers = []
+                    if self.server_arg: servers = [await utility.get_server(server) for server in self.bot.guilds if server['server_id'] in self.server_arg]
                 case _:
-                    channel = self.bot.get_channel(server['moderatorChannel'])
-            if channel is None: continue
-            try: 
-                await channel.send(**payload)
-                log[server['server_id']] = f'{server["name"]} - successfully delivered to {channel.name}'
-            except Exception as e:
-                log[server['server_id']] = f'{server["name"]} - failed to deliver to {channel.name}: {e}'
-        path = f"Attachments/Temp/Broadcast-{utility.date_to_filename(discord.utils.utcnow())}.json"
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(log, f, ensure_ascii=False, indent=4)
-        f = discord.File(path)
-        await interaction.response.send_message(file=f)
+                    all_servers = [await utility.get_server(server) for server in self.bot.guilds]
+                    servers = [server for server in all_servers if eval(f'server.{self.server_arg}')]
+            newline = message.find('\n')
+            payload = {
+                'content': None if self.embed else message,
+                'embed': discord.Embed(
+                    title=message[:newline],
+                    description=message[newline + 1:],
+                ) if self.embed else None
+            }
+            log = {}
+            for server in servers:
+                if not server: continue
+                match self.destination_bucket:
+                    case 'logging':
+                        channel = self.bot.get_channel(server['cyberlog']['defaultChannel'])
+                    case _:
+                        channel = self.bot.get_channel(server['moderatorChannel'])
+                if channel is None: continue
+                try: 
+                    await channel.send(**payload)
+                    log[server['server_id']] = f'{server["name"]} - successfully delivered to {channel.name}'
+                except Exception as e:
+                    log[server['server_id']] = f'{server["name"]} - failed to deliver to {channel.name}: {e}'
+            path = f"Attachments/Temp/Broadcast-{utility.date_to_filename(discord.utils.utcnow())}.json"
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(log, f, ensure_ascii=False, indent=4)
+            f = discord.File(path)
+            await interaction.response.send_message(file=f)
 
     @app_commands.command(name='bot_status')
     async def change_bot_status(self,
