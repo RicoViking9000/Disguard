@@ -166,8 +166,9 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
             if not await self.bot.get_cog('Cyberlog').privacyEnabledChecker(message.author, 'default', 'birthdayModule'): return #This person disabled the birthday module
         except AttributeError: return
         if re.search(r'(?:isn\'t)|(?:not)|(?:you)|(?:your)', message.content.lower()): return #Words we know won't relate to a birthday statement
-        asyncio.create_task(self.birthdayMessagehandler(message, server_data))
-        asyncio.create_task(self.ageMessageHandler(message, server_data))
+        bday_task = asyncio.create_task(self.birthdayMessagehandler(message, server_data))
+        age_task = asyncio.create_task(self.ageMessageHandler(message, server_data))
+        await asyncio.gather(bday_task, age_task)
 
     async def birthdayMessagehandler(self, message: discord.Message, server_data: dict):
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
@@ -195,7 +196,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
         if not await cyber.privacyEnabledChecker(message.author, 'birthdayModule', 'age'): return #User disabled the age features
         ages = calculateAges(message.content)
-        ages = [a for a in ages if await verifyAge(message.content, a)]
+        ages = [a for a in ages if await verifyAge(message.content, a)] if ages else []
         if not ages: return #No ages detected in message
         if (await utility.get_server(message.guild)).get('birthdayMode') == 1: #Make user add candle reaction
             def candleAutoVerify(r:discord.Reaction, u:discord.User): return u == message.author and str(r) == '🕯' and r.message.id == message.id
