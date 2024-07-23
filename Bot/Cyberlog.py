@@ -2151,7 +2151,7 @@ class Cyberlog(commands.Cog):
         asyncio.create_task(database.VerifyServer(guild, self.bot, new=True, includeMembers=guild.members))
         asyncio.create_task(database.VerifyUsers(self.bot, guild.members))
         #TODO: Improve teh server join experience
-        content=f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.com>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
+        content=f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.app>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
         content+=f'\nℹDisguard uses slash commands for interacting with commands. A help guide is available with `/help` or on the website.\n\n❔Need help with anything, or just have a question? My team is more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `/ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
         try: target = await database.CalculateModeratorChannel(guild, self.bot, False)
         except:

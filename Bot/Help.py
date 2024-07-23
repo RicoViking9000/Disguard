@@ -49,7 +49,7 @@ class Help(commands.Cog):
             super().__init__()
             self.bot = bot
             self.ctx = ctx
-            self.add_item(discord.ui.Button(label='Commands guide', style=discord.ButtonStyle.gray, url='https://disguard.netlify.com/commands'))
+            self.add_item(discord.ui.Button(label='Commands guide', style=discord.ButtonStyle.gray, url='https://disguard.netlify.app/commands'))
             self.add_item(discord.ui.Button(label='Support server', style=discord.ButtonStyle.gray, url='https://discord.gg/xSGujjz'))
             self.add_item(self.CreateTicketButton(ctx, bot))
         

@@ -222,7 +222,7 @@ class Misc(commands.Cog):
             
             async def callback(self, interaction: discord.Interaction):
                 view: Misc.AttributeHistoryView = self.view
-                view.member = interaction.user
+                view.member = self.values[0]
                 if view.attribute:
                     result = await view.check_permissions_and_continue()
                     if result == 1:
@@ -456,6 +456,7 @@ class Misc(commands.Cog):
         await webhook.send(message, username=member.display_name)
         await ctx.interaction.response.pong()
         await webhook.delete()
+        await ctx.send('Done!', ephemeral=True)
     
     def ParsePauseDuration(self, s: str):
         '''Convert a string into a number of seconds to ignore antispam or logging'''

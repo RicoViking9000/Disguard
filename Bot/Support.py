@@ -78,8 +78,8 @@ class Support(commands.Cog):
         if system: firstEntry = {'author': self.bot.user.id, 'timestamp': discord.utils.utcnow(), 'message': f'*{message}*'}
         else: firstEntry = {'author': ctx.author.id, 'timestamp': discord.utils.utcnow(), 'message': message}
         ticket['conversation'].append(firstEntry)
-        authorMember = {'id': ctx.author.id, 'bio': 'Created this ticket', 'permissions': 4, 'notifications': True},
-        devMember = {'id': 247412852925661185, 'bio': 'Bot developer team', 'permissions': 2, 'notifications': True},
+        authorMember = {'id': ctx.author.id, 'bio': 'Created this ticket', 'permissions': 4, 'notifications': True}
+        devMember = {'id': 247412852925661185, 'bio': 'Bot developer team', 'permissions': 2, 'notifications': True}
         botMember = {'id': self.bot.user.id, 'bio': 'System messages', 'permissions': 2, 'notifications': False}
         ticket['members'] = [authorMember, devMember, botMember]
         try: ticketList = await database.GetSupportTickets()

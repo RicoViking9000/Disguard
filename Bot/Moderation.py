@@ -96,7 +96,7 @@ class Moderation(commands.Cog):
         reason: str, optional
             The reason for locking out the member
         '''
-        member: discord.Member = ctx.guild.get_member(str(member))
+        await ctx.interaction.response.defer(thinking=True)
         messages = []
         for c in ctx.guild.channels:
             try:
@@ -124,6 +124,7 @@ class Moderation(commands.Cog):
         reason: str, optional
             The reason for locking out the members
         '''
+        await ctx.interaction.response.defer(thinking=True)
         members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
         messages = []
         successful = []
@@ -152,6 +153,7 @@ class Moderation(commands.Cog):
         reason: str, optional
             The reason for unlocking the member
         '''
+        await ctx.interaction.response.defer(thinking=True)
         for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
         errorMessage = None
         try: await member.send(f'You may now access channels again in {ctx.guild.name}')
@@ -174,6 +176,7 @@ class Moderation(commands.Cog):
         reason: str, optional
             The reason for unlocking the members
         '''
+        await ctx.interaction.response.defer(thinking=True)
         members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
         for member in members:
             for c in ctx.guild.channels: await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
@@ -182,7 +185,7 @@ class Moderation(commands.Cog):
             except (discord.Forbidden, discord.HTTPException) as e: errorMessage = f'Unable to notify {member.display_name} by DM because {e.text}'
         await ctx.send(content=f'{len(members)} members [{[", ".join(str(member) for member in members)]}] are now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}')
 
-    @commands.hybrid_command(description='Mutes the specified member(s) for a specified amount of time, if given')
+    @commands.hybrid_command()
     @commands.guild_only()
     @commands.has_guild_permissions(manage_roles=True, manage_channels=True)
     async def mute(self, ctx: commands.Context, member: discord.Member, duration: typing.Optional[str] = '', reason: typing.Optional[str] = ''):
@@ -198,6 +201,7 @@ class Moderation(commands.Cog):
             The reason for muting the member
         
         '''
+        await ctx.interaction.response.defer(thinking=True)
         duration, int_arg, unit = utility.ParseDuration(duration)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.muteMembers([member], ctx.author, duration=duration, reason=reason)
@@ -226,6 +230,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for muting the members
         '''
+        await ctx.interaction.response.defer(thinking=True)
         duration, int_arg, unit = utility.ParseDuration(duration)
         members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
         embed = discord.Embed(title=f'{self.emojis["muted"]}Mute {len(members)} members', color=orange[await utility.color_theme(ctx.guild)])
@@ -251,6 +256,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for unmuting the member
         '''
+        await ctx.interaction.response.defer(thinking=True)
         embed = discord.Embed(title=f'{self.emojis["unmuted"]}Unmute {member}', color=orange[await utility.color_theme(ctx.guild)])
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         results = await self.unmuteMembers([member], ctx.author, {}, reason=reason)
@@ -275,6 +281,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for unmuting the members
         '''
+        await ctx.interaction.response.defer(thinking=True)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
         results = await self.unmuteMembers(members, ctx.author, {}, reason=reason)
@@ -297,6 +304,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for kicking the member
         '''
+        await ctx.interaction.response.defer(thinking=True)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         embed = discord.Embed(title=f'👢Kick {member}', description='', color=orange[await utility.color_theme(ctx.guild)])
         try: 
@@ -322,6 +330,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for kicking the members
         '''
+        await ctx.interaction.response.defer(thinking=True)
         embed = discord.Embed(title=f'👢Kick {member}', description='', color=orange[await utility.color_theme(ctx.guild)])
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))
@@ -350,6 +359,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for banning the user
         '''
+        await ctx.interaction.response.defer(thinking=True)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
         try: 
@@ -384,6 +394,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for banning the user
         '''
+        await ctx.interaction.response.defer(thinking=True)
         embed = discord.Embed(title=f'{self.emojis["ban"]}Ban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         users = list(filter(lambda u: u, [user, user2, user3, user4, user5, user6, user7, user8, user9, user10]))
@@ -415,6 +426,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for banning the user
         '''
+        await ctx.interaction.response.defer(thinking=True)
         user = await self.bot.fetch_user(int(user_id))
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         embed = discord.Embed(title=f'{self.emojis["ban"]}Shadowban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
@@ -447,6 +459,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for banning the user
         '''
+        await ctx.interaction.response.defer(thinking=True)
         embed = discord.Embed(title=f'{self.emojis["ban"]}Shadowban {user_id}', description='', color=orange[await utility.color_theme(ctx.guild)])
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         user_ids = list(filter(lambda u: u, [user_id, user_id2, user_id3, user_id4, user_id5, user_id6, user_id7, user_id8, user_id9, user_id10]))
@@ -477,6 +490,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for unbanning the user
         '''
+        await ctx.interaction.response.defer(thinking=True)
         user = await self.bot.fetch_user(int(user))
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
@@ -501,6 +515,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for unbanning the user
         '''
+        await ctx.interaction.response.defer(thinking=True)
         embed = discord.Embed(title=f'{self.emojis["unban"]}Unban {user}', description='', color=orange[await utility.color_theme(ctx.guild)])
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         users = list(filter(lambda u: u, [user, user2, user3, user4, user5, user6, user7, user8, user9, user10]))

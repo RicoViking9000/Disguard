@@ -191,7 +191,9 @@ class Reddit(commands.Cog):
         channel: discord.TextChannel
             The channel to send the feed to, defaults to the current channel
         '''
-        subreddit = re.findall(r'r\/([A-Za-z0-9_]+)$', subreddit)[0]
+        matches = re.findall(r'(?:r\/)?([A-Za-z0-9_]+)$', subreddit)
+        if matches: subreddit = matches[0]
+        else: return await ctx.send(f'No results found for `r/{subreddit}`. Please ensure the subreddit exists, and is public, and try again.')
         if subreddit in self.redditThreads.get(ctx.guild.id, {}).keys():
             return await ctx.send(f'There is already a feed in this server for r/{subreddit}. Use `/reddit edit_feed {subreddit}` to edit the settings for this feed or `/reddit delete_feed {subreddit}` to delete it.')
         feed = {
