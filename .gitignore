@@ -12,3 +12,4 @@ timeKeeper.html
 praw.ini
 access.json
 venv/
+ruff.toml
