@@ -472,17 +472,32 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
             yield user
 
     user_id_list = [u.id for u in usrs]
+    database_users = [user async for user in yield_users()]
+    database_user_dict = {user['user_id']: user for user in database_users}
+    updated_users = []
+
+    # add new users
+    for user_id in user_id_list:
+        if user_id not in database_user_dict.keys():
+            user = b.get_user(user_id)
+            await VerifyUser(user, b, mode='update', new=True)
+            updated_users.append(user_id)
+
+    # update existing users
     async for user in yield_users():
-        u = b.get_user(user['user_id'])
-        try:
-            await lightningdb.post_user(user)
-        except errors.DuplicateKeyError:
-            if full:
-                await lightningdb.patch_user(u.id, user)
-        except (AttributeError, KeyError, TypeError):
-            pass
-        await asyncio.wait_for(VerifyUser(u, b, user, full, True, mode='update'), timeout=None)
-        # asyncio.create_task(VerifyUser(u, b, user, full, True, mode='update'))
+        if user['user_id'] not in updated_users:
+            u = b.get_user(user['user_id'])
+            try:
+                await lightningdb.post_user(user)
+            except errors.DuplicateKeyError:
+                if full:
+                    await lightningdb.patch_user(u.id, user)
+            except (AttributeError, KeyError, TypeError):
+                pass
+            await asyncio.wait_for(VerifyUser(u, b, user, full, True, mode='update'), timeout=None)
+            updated_users.append(user['user_id'])
+
+    # delete users not in the bot's mutual servers
     await users.delete_many({'user_id': {'$nin': user_id_list}})
 
 
@@ -492,62 +507,59 @@ async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, n
     if not new and not current:
         current = await users.find_one({'user_id': u.id}) or {}
     # if b.get_user(m.id) is None: return await users.delete_one({'user_id': m.id})
-    updateOperations = []
+    updateOperations: list[pymongo.UpdateOne] = []
     if full or not current:
-        await lightningdb.patch_user(u.id, current)
+        update_document = {
+            'user_id': u.id,
+            'lastActive': current.get('lastActive', {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'}),
+            'lastOnline': current.get('lastOnline', datetime.datetime.min),
+            'birthdayMessages': current.get('birthdayMessages', []),
+            'wishlist': current.get('wishlist', []),
+            'servers': [
+                {
+                    'server_id': server.id,
+                    'name': server.name,
+                    'thumbnail': server.icon.with_static_format('png').with_size(512).url if server.icon else '',
+                }
+                for server in u.mutual_guilds
+                if utility.ManageServer(server.get_member(u.id))
+            ]
+            if u.id != b.user.id
+            else [],  # d.py V2.0
+            'privacy': {
+                'default': current.get('privacy', {}).get(
+                    'default', (1, 1)
+                ),  # Index 0 - 0: Disable features, 1: Enable features || Index 1 - 0: Hidden to others, 1: Visible to everyone, Array: List of user IDs allowed to view the profile
+                'birthdayModule': current.get('privacy', {}).get(
+                    'birthdayModule', (2, 2)
+                ),  # Index 0 - 0: Disable, 1: Enable, 2: Default || Index 1 - 0: Hidden, 1: Everyone, 2: Default, Array: Certain users || Applies to the next fields unless otherwise specified
+                'age': current.get('privacy', {}).get('age', (2, 2)),
+                'birthdayDay': current.get('privacy', {}).get('birthdayDay', (2, 2)),
+                'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
+                'birthdayMessages': current.get('privacy', {}).get(
+                    'birthdayMessages', (2, 2)
+                ),  # Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
+                'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
+                'statusHistory': current.get('privacy', {}).get('statusHistory', current.get('privacy', {}).get('customStatusHistory', (0, 2))),
+                'usernameHistory': current.get('privacy', {}).get('usernameHistory', (0, 2)),
+                'displaynameHistory': current.get('privacy', {}).get('displaynameHistory', (0, 2)),
+                'avatarHistory': current.get('privacy', {}).get('avatarHistory', (0, 2)),
+                'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
+                'lastActive': current.get('privacy', {}).get('lastActive', (2, 2)),
+                'profile': current.get('privacy', {}).get('profile', (2, 2)),
+            },
+            'flags': {
+                'usedFirstCommand': current.get('flags', {}).get('usedFirstCommand', False),
+            },
+        }
         updateOperations.append(
             pymongo.UpdateOne(
                 {'user_id': u.id},
-                {
-                    '$set': {
-                        'user_id': u.id,
-                        'lastActive': current.get('lastActive', {'timestamp': datetime.datetime.min, 'reason': 'Not tracked yet'}),
-                        'lastOnline': current.get('lastOnline', datetime.datetime.min),
-                        'birthdayMessages': current.get('birthdayMessages', []),
-                        'wishlist': current.get('wishlist', []),
-                        'servers': [
-                            {
-                                'server_id': server.id,
-                                'name': server.name,
-                                'thumbnail': server.icon.with_static_format('png').with_size(512).url if server.icon else '',
-                            }
-                            for server in u.mutual_guilds
-                            if utility.ManageServer(server.get_member(u.id))
-                        ]
-                        if u.id != b.user.id
-                        else [],  # d.py V2.0
-                        'privacy': {
-                            'default': current.get('privacy', {}).get(
-                                'default', (1, 1)
-                            ),  # Index 0 - 0: Disable features, 1: Enable features || Index 1 - 0: Hidden to others, 1: Visible to everyone, Array: List of user IDs allowed to view the profile
-                            'birthdayModule': current.get('privacy', {}).get(
-                                'birthdayModule', (2, 2)
-                            ),  # Index 0 - 0: Disable, 1: Enable, 2: Default || Index 1 - 0: Hidden, 1: Everyone, 2: Default, Array: Certain users || Applies to the next fields unless otherwise specified
-                            'age': current.get('privacy', {}).get('age', (2, 2)),
-                            'birthdayDay': current.get('privacy', {}).get('birthdayDay', (2, 2)),
-                            'wishlist': current.get('privacy', {}).get('wishlist', (2, 2)),
-                            'birthdayMessages': current.get('privacy', {}).get(
-                                'birthdayMessages', (2, 2)
-                            ),  # Array of certain users is not applicable to this setting - this means when things are announced publicly in a server
-                            'attributeHistory': current.get('privacy', {}).get('attributeHistory', (2, 2)),
-                            'statusHistory': current.get('privacy', {}).get(
-                                'statusHistory', current.get('privacy').get('customStatusHistory', (0, 2))
-                            ),
-                            'usernameHistory': current.get('privacy', {}).get('usernameHistory', (0, 2)),
-                            'displaynameHistory': current.get('privacy', {}).get('displaynameHistory', (0, 2)),
-                            'avatarHistory': current.get('privacy', {}).get('avatarHistory', (0, 2)),
-                            'lastOnline': current.get('privacy', {}).get('lastOnline', (2, 2)),
-                            'lastActive': current.get('privacy', {}).get('lastActive', (2, 2)),
-                            'profile': current.get('privacy', {}).get('profile', (2, 2)),
-                        },
-                        'flags': {
-                            'usedFirstCommand': current.get('flags', {}).get('usedFirstCommand', False),
-                        },
-                    }
-                },
+                {'$set': update_document},
                 True,
             )
         )
+        await lightningdb.patch_user(u.id, update_document)
     else:
         base = {}
         serverGen = [
