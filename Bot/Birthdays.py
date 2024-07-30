@@ -53,6 +53,9 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         self.configureServerBirthdayAnnouncements.start()
         self.configureDeleteBirthdayMessages.start()
 
+        # Context Menus
+        self.bot.tree.add_command(app_commands.ContextMenu(name='View Birthday Profile', callback=self.birthday_profile_handler))
+
     def cog_unload(self):
         self.configureDailyBirthdayAnnouncements.cancel()
         self.configureServerBirthdayAnnouncements.cancel()
@@ -315,6 +318,15 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
 
     @app_commands.command(description="View a member's birthday profile")
     async def view_profile(self, interaction: discord.Interaction, member: discord.Member):
+        """View another member's birthday profile
+        ---------------------------
+        Parameters:
+        member: discord.Member
+            Whose birthday profile to view
+        """
+        await self.birthday_profile_handler(interaction, member)
+
+    async def birthday_profile_handler(self, interaction: discord.Interaction, member: discord.Member):
         """View another member's birthday profile
         ---------------------------
         Parameters:
