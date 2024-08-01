@@ -86,6 +86,9 @@ class Moderation(commands.Cog):
         self.roleCache = {}
         self.permissionsCache = {}
 
+        # context menus
+        self.bot.add_command(app_commands.ContextMenu(name='Toggle Channel Lockout', callback=self.lock_handler))
+
     @commands.hybrid_group(fallback='moderation_command_info')
     async def bulk(self, ctx: commands.Context):
         """
@@ -127,13 +130,35 @@ class Moderation(commands.Cog):
         reason: str, optional
             The reason for locking out the member
         """
-        await ctx.interaction.response.defer(thinking=True)
+        await ctx.send(await self.lock_handler(ctx, member, reason))
+
+    async def context_lock(self, interaction: discord.Interaction, member: discord.Member):
+        await interaction.response.defer(thinking=True)
+        channels_to_check = [
+            channel for channel in interaction.guild.channels if channel.type in [discord.ChannelType.text, discord.ChannelType.voice]
+        ]
+        channels_locked_out = []
+        for channel in channels_to_check:
+            if channel.type == discord.ChannelType.text:
+                if not channel.permissions_for(member).read_messages:
+                    channels_locked_out.append(channel)
+            elif channel.type == discord.ChannelType.voice:
+                if not channel.permissions_for(member).connect:
+                    channels_locked_out.append(channel)
+        if channels_locked_out / channels_to_check > 0.5:
+            # unlock
+            return await interaction.response.send_message(await self.unlock_handler(interaction, member))
+        else:
+            # lockout
+            return await interaction.response.send_message(await self.lock_handler(interaction, member))
+
+    async def lock_handler(self, ctx: commands.Context, member: discord.Member, reason: Optional[str] = ''):
         messages = []
         for c in ctx.guild.channels:
             try:
-                if c.type[0] == 'text':
+                if c.type[0] == discord.ChannelType.text:
                     await c.set_permissions(member, read_messages=False, reason=audit_log_reason(ctx.author, reason))
-                elif c.type[0] == 'voice':
+                elif c.type[0] == discord.ChannelType.voice:
                     await c.set_permissions(member, connect=False, reason=audit_log_reason(ctx.author, reason))
             except (discord.Forbidden, discord.HTTPException) as e:
                 messages.append(f'Error editing channel permission overwrites for {c.name}: {e.text}')
@@ -144,9 +169,8 @@ class Moderation(commands.Cog):
                 )
             except (discord.Forbidden, discord.HTTPException) as e:
                 messages.append(f'Error DMing {member.display_name}: {e.text}')
-        await ctx.send(
-            content=f'{member.display_name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n'
-            + (f'Notes: {NEWLINE.join(messages)}' if messages else '')
+        return f'{member.display_name} is now locked and cannot access any server channels{f" because {reason}" if len(reason) > 0 else ""}\n' + (
+            f'Notes: {NEWLINE.join(messages)}' if messages else ''
         )
 
     @bulk.command(name='lock')
@@ -216,6 +240,9 @@ class Moderation(commands.Cog):
             The reason for unlocking the member
         """
         await ctx.interaction.response.defer(thinking=True)
+        await ctx.send(await self.unlock_handler(ctx, member, reason))
+
+    async def unlock_handler(self, ctx: commands.Context, member: discord.Member, reason: Optional[str] = ''):
         for c in ctx.guild.channels:
             await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
         errorMessage = None
@@ -223,9 +250,7 @@ class Moderation(commands.Cog):
             await member.send(f'You may now access channels again in {ctx.guild.name}')
         except (discord.Forbidden, discord.HTTPException) as e:
             errorMessage = f'Unable to notify {member.display_name} by DM because {e.text}'
-        await ctx.send(
-            content=f'{member.display_name} is now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}'
-        )
+        return f'{member.display_name} is now unlocked and can access channels again{f"{NEWLINE}{NEWLINE}{errorMessage}" if errorMessage else ""}'
 
     @bulk.command(name='unlock')
     @commands.guild_only()
