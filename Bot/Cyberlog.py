@@ -128,7 +128,7 @@ class Cyberlog(commands.Cog):
                         objectID = fullDocument['user_id']
                         await lightningdb.patch_user(objectID, fullDocument)
                     if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys():
-                        asyncio.create_task(reddit.redditFeedHandler(self.bot.get_guild(objectID)))
+                        asyncio.create_task(reddit.redditFeedHandler(self.bot.get_guild(objectID)), name='Reddit Feed Handler - DB change')
                     if change['operationType'] == 'update' and any(
                         [word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]
                     ):
@@ -278,7 +278,7 @@ class Cyberlog(commands.Cog):
                             print(f'Avatar error for {m.name}: {e}')
                         if m.bot and len(cache.get('avatarHistory')) > 150:
                             stripped_avatar_history = cache.get('avatarHistory')[-150:]
-                            asyncio.create_task(database.SetAvatarHistory(m, stripped_avatar_history))
+                            asyncio.create_task(database.SetAvatarHistory(m, stripped_avatar_history), name='SyncData - Avatar History')
                     if updatedAvatar:
                         await discord.utils.sleep_until(
                             datetime.datetime.now() + datetime.timedelta(seconds=1)
@@ -288,7 +288,7 @@ class Cyberlog(commands.Cog):
                         started = datetime.datetime.now()
             print(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
             started = datetime.datetime.now()
-            asyncio.create_task(database.BulkUpdateHistory(updateOperations))
+            asyncio.create_task(database.BulkUpdateHistory(updateOperations), name='SyncData - Bulk Update History')
             print(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
             self.bot.useAttributeQueue = False
             await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
@@ -1050,7 +1050,7 @@ class Cyberlog(commands.Cog):
             hours=await utility.time_zone(after.guild)
         )  # Timestamp of receiving the message edit event
         if after.guild.id not in gimpedServers:
-            asyncio.create_task(updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'))
+            asyncio.create_task(updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'), name='message_edit - Update Last Active')
         if self.pins.get(after.channel.id) is None:
             return
         g = after.guild
@@ -1086,7 +1086,7 @@ class Cyberlog(commands.Cog):
             return
         author = g.get_member(after.author.id)  # Get the member of the edited message
         if g.id not in gimpedServers:
-            asyncio.create_task(updateLastActive(author, discord.utils.utcnow(), 'edited a message'))
+            asyncio.create_task(updateLastActive(author, discord.utils.utcnow(), 'edited a message'), name='raw_message_edit - Update Last Active')
         # if not self.pins.get(channel.id): return #V1.0: I have no clue what the purpose of this line is
         if not (await logEnabled(g, 'message')):
             return  # If the message edit log module is not enabled, return
@@ -1514,7 +1514,7 @@ class Cyberlog(commands.Cog):
             pass
         if type(channel) is discord.TextChannel:
             self.pins[channel.id] = []
-            asyncio.create_task(database.VerifyChannel(channel, True))
+            asyncio.create_task(database.VerifyChannel(channel, True), name=f'channel_create - VerifyChannel-{channel.id}')
         if msg:
 
             def reactionCheck(r: discord.Reaction, u: discord.User):
@@ -1819,9 +1819,12 @@ class Cyberlog(commands.Cog):
                 self.channelCacheHelper[after.guild.id].append(channelPosTimekey)
             except:
                 self.channelCacheHelper[after.guild.id] = [channelPosTimekey]
-            asyncio.create_task(self.delayedUpdateChannelIndexes(after.guild, channelPosTimekey))
+            asyncio.create_task(
+                self.delayedUpdateChannelIndexes(after.guild, channelPosTimekey),
+                name=f'channel_update - delayedUpdateChannelIndexes-{after.guild.id}-{channelPosTimekey}',
+            )
         if type(before) is discord.TextChannel and before.name != after.name:
-            asyncio.create_task(database.VerifyChannel(after))
+            asyncio.create_task(database.VerifyChannel(after), name=f'channel_update - VerifyChannel-{after.id}')
         try:
             if msg:
                 final = copy.deepcopy(embed)
@@ -1974,7 +1977,7 @@ class Cyberlog(commands.Cog):
             self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
         if type(channel) is discord.TextChannel:
             asyncio.create_task(
-                database.VerifyServer(channel.guild, self.bot)
+                database.VerifyServer(channel.guild, self.bot), name=f'channel_delete - VerifyServer-{channel.guild.id}'
             )  # Look into database methods to remove channels without needing to call the VerifyServer method
         if msg:
 
@@ -2000,7 +2003,7 @@ class Cyberlog(commands.Cog):
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
         self.members[member.guild.id].append(member)
-        asyncio.create_task(self.doorguardHandler(member))
+        asyncio.create_task(self.doorguardHandler(member), name=f'doorguardHandler-{member.guild.id}-{member.id}')
         msg = None
         if await logEnabled(member.guild, 'doorguard'):
             newInv = []
@@ -2161,7 +2164,7 @@ class Cyberlog(commands.Cog):
             try:
                 if event['type'] == 'mute' and event['target'] == member.id and (discord.utils.utcnow() - event['timestamp']).total_seconds > 60:
                     hadToRemute = True
-                    asyncio.create_task(muteDelay)
+                    asyncio.create_task(muteDelay, event, name=f'muteDelay-{member.guild.id}-{member.id}')
             except:
                 pass
         if msg:
@@ -2554,7 +2557,10 @@ class Cyberlog(commands.Cog):
         """[DISCORD API METHOD] Called when member leaves a server"""
         adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
         if member.guild.id not in gimpedServers:
-            asyncio.create_task(updateLastActive(member, discord.utils.utcnow(), 'left a server'))
+            asyncio.create_task(
+                updateLastActive(member, discord.utils.utcnow(), 'left a server'),
+                name=f'member_leave - updateLastActive-{member.guild.id}-{member.id}',
+            )
         message = None
         if await logEnabled(member.guild, 'doorguard'):
             content = f'{member} left the server'
@@ -2894,7 +2900,7 @@ class Cyberlog(commands.Cog):
         if before.guild_permissions != after.guild_permissions:
             await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
         if before.guild_permissions != after.guild_permissions:
-            asyncio.create_task(database.VerifyUser(before, self.bot))
+            asyncio.create_task(database.VerifyUser(before, self.bot), name=f'member_update - VerifyUser-{before.guild.id}-{before.id}')
         if msg:
 
             def reactionCheck(r, u):
@@ -2969,7 +2975,8 @@ class Cyberlog(commands.Cog):
                         asyncio.create_task(
                             database.AppendCustomStatusHistory(
                                 after, None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), a.name if a.name else None
-                            )
+                            ),
+                            name=f'presence_update - AppendCustomStatusHistory-{after.guild.id}-{after.id}',
                         )
                 except Exception as e:
                     print(f'CSH error: {e}')
@@ -3012,7 +3019,7 @@ class Cyberlog(commands.Cog):
             content += '\n•Profile picture'
             await updateLastActive(after, discord.utils.utcnow(), 'updated their profile picture')
             if await self.privacyEnabledChecker(after, 'attributeHistory', 'avatarHistory'):
-                asyncio.create_task(database.AppendAvatarHistory(after, url))
+                asyncio.create_task(database.AppendAvatarHistory(after, url), name=f'user_update - AppendAvatarHistory-{after.id}')
         if before.discriminator != after.discriminator:
             titles.append('Discriminator')
             legacyTitleEmoji.append('🔢')
@@ -3030,8 +3037,8 @@ class Cyberlog(commands.Cog):
             content += '\n•Discriminator'
             await updateLastActive(after, discord.utils.utcnow(), 'updated their username')
             if await self.privacyEnabledChecker(after, 'attributeHistory', 'usernameHistory'):
-                asyncio.create_task(database.AppendUsernameHistory(after))
-            asyncio.create_task(database.VerifyUser(membObj, self.bot))
+                asyncio.create_task(database.AppendUsernameHistory(after), name=f'user_update - AppendUsernameHistory-{after.id}')
+            asyncio.create_task(database.VerifyUser(membObj, self.bot), name=f'user_update - VerifyUser-{after.id}')
         if before.display_name != after.display_name:
             titles.append('Display name')
             legacyTitleEmoji.append('📄')
@@ -3041,7 +3048,7 @@ class Cyberlog(commands.Cog):
             content += '\n•Display name'
             await updateLastActive(after, discord.utils.utcnow(), 'updated their display name')
             if await self.privacyEnabledChecker(after, 'attributeHistory', 'displayNameHistory'):
-                asyncio.create_task(database.AppendDisplaynameHistory(after))
+                asyncio.create_task(database.AppendDisplaynameHistory(after), name=f'user_update - AppendDisplaynameHistory-{after.id}')
         embed.set_footer(text=f'User ID: {after.id}')
         for server in servers:
             try:
@@ -3085,7 +3092,10 @@ class Cyberlog(commands.Cog):
             except:
                 pass
         for s in servers:
-            asyncio.create_task(database.VerifyMember(s.get_member(after.id), warnings=(await utility.get_server(s))['antispam'].get('warn', 3)))
+            asyncio.create_task(
+                database.VerifyMember(s.get_member(after.id), warnings=(await utility.get_server(s))['antispam'].get('warn', 3)),
+                name=f'user_update - VerifyMember-{s.id}-{after.id}',
+            )
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -3100,8 +3110,10 @@ class Cyberlog(commands.Cog):
         )
         embed.set_footer(text=guild.id)
         await self.globalLogChannel.send(embed=embed)
-        asyncio.create_task(database.VerifyServer(guild, self.bot, new=True, includeMembers=guild.members))
-        asyncio.create_task(database.VerifyUsers(self.bot, guild.members))
+        asyncio.create_task(
+            database.VerifyServer(guild, self.bot, new=True, includeMembers=guild.members), name=f'guild_join - VerifyServer-{guild.id}'
+        )
+        asyncio.create_task(database.VerifyUsers(self.bot, guild.members), name=f'guild_join - VerifyUsers-{guild.id}')
         # TODO: Improve teh server join experience
         content = f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.app>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
         content += f'\nℹDisguard uses slash commands for interacting with commands. A help guide is available with `/help` or on the website.\n\n❔Need help with anything, or just have a question? My team is more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `/ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
@@ -3237,7 +3249,7 @@ class Cyberlog(commands.Cog):
                 embed.set_thumbnail(url=thumbURL)
                 embed.set_image(url=imageURL)
                 embed.add_field(name='Server icon updated', value=f'Old: [Thumbnail to the right]({thumbURL})\nNew: [Image below]({imageURL})')
-            asyncio.create_task(database.VerifyServer(after, self.bot))
+            asyncio.create_task(database.VerifyServer(after, self.bot), name=f'guild_update - VerifyServer-{after.id}')
             if len(embed.fields) > 0:
                 reactions = ['ℹ']
                 if settings['embedTimestamp'] > 1:
@@ -3310,7 +3322,7 @@ class Cyberlog(commands.Cog):
         await self.bot.change_presence(
             status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching)
         )
-        asyncio.create_task(database.VerifyServer(guild, self.bot))
+        asyncio.create_task(database.VerifyServer(guild, self.bot), name=f'guild_remove - VerifyServer-{guild.id}')
         await self.CheckDisguardServerRoles(guild.members, mode=2, reason='Bot left a server')
         path = f'Attachments/{guild.id}'
         shutil.rmtree(path)
@@ -3371,7 +3383,7 @@ class Cyberlog(commands.Cog):
                 await msg.edit(content=None)
             self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
         self.roles[role.id] = role.members
-        asyncio.create_task(database.VerifyServer(role.guild, self.bot))
+        asyncio.create_task(database.VerifyServer(role.guild, self.bot), name=f'guild_role_create - VerifyServer-{role.guild.id}')
         if msg:
 
             def reactionCheck(r, u):
@@ -3472,8 +3484,13 @@ class Cyberlog(commands.Cog):
         await self.CheckDisguardServerRoles(
             roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions'
         )
-        asyncio.create_task(database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)))
-        asyncio.create_task(database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)))
+        asyncio.create_task(
+            database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)),
+            name=f'guild_role_delete - VerifyServer-{role.guild.id}',
+        )
+        asyncio.create_task(
+            database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)), name=f'guild_role_delete - VerifyUsers-{role.guild.id}'
+        )
         self.roles.pop(role.id, None)
         if message:
             # again, everything below this is not necessarily syntactically correct with the new changes
@@ -3607,7 +3624,8 @@ class Cyberlog(commands.Cog):
         await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason="Server role was updated; member's permissions changed")
         if before.name != after.name:
             asyncio.create_task(
-                database.VerifyServer(after.guild, self.bot, includeMembers=after.members if before.permissions != after.permissions else [])
+                database.VerifyServer(after.guild, self.bot, includeMembers=after.members if before.permissions != after.permissions else []),
+                name=f'guild_role_update - VerifyServer-{after.guild.id}',
             )
         for member in after.members:
             await database.VerifyUser(member, self.bot)
@@ -4740,7 +4758,7 @@ async def updateLastActive(users: typing.Union[discord.User, typing.List[discord
                 pass
             if u not in toUpdate:
                 toUpdate.append(u)
-    asyncio.create_task(database.SetLastActive(toUpdate, timestamp, reason))
+    asyncio.create_task(database.SetLastActive(toUpdate, timestamp, reason), name='SetLastActive')
 
 
 async def lastOnline(u: discord.User):
@@ -4793,7 +4811,7 @@ class ErrorView(discord.ui.View):
         self.embed = None
         self.button = self.viewDetailsButton(cyberlog, ctx)
         self.add_item(self.button)
-        asyncio.create_task(self.writeError())
+        asyncio.create_task(self.writeError(), name='WriteError')
 
     async def writeError(self):
         consoleLogChannel: discord.TextChannel = self.cyberlog.bot.get_channel(873069122458615849)

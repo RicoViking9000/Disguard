@@ -83,7 +83,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
             if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'age'):
                 age = user_data.get('age', 0) + 1
                 if age > 1:
-                    asyncio.create_task(database.SetAge(user, age))
+                    asyncio.create_task(database.SetAge(user, age), name='SetAge DailyBirthdayAnnouncements')
             # Construct their next birthday to set in the database
             messages = user_data.get('birthdayMessages', []) if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
             filteredMessages = [m for m in messages if user.dm_channel.id in m['servers']]
@@ -233,8 +233,8 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
             return
         if re.search(r'(?:isn\'t)|(?:not)|(?:you)|(?:your)', message.content.lower()):
             return  # Words we know won't relate to a birthday statement
-        bday_task = asyncio.create_task(self.birthdayMessagehandler(message, server_data))
-        age_task = asyncio.create_task(self.ageMessageHandler(message, server_data))
+        bday_task = asyncio.create_task(self.birthdayMessagehandler(message, server_data), name='BirthdayMessageHandler on_message')
+        age_task = asyncio.create_task(self.ageMessageHandler(message, server_data), name='AgeMessageHandler on_message')
         await asyncio.gather(bday_task, age_task)
 
     async def birthdayMessagehandler(self, message: discord.Message, server_data: dict):
@@ -817,7 +817,7 @@ class DateInputInterface(discord.ui.View):
         for month in 'January.February.March.April.May.June.July.August.September.October.November.December'.split('.'):
             self.add_item(discord.ui.Button(label=month, custom_id=month))
         if start_task:
-            self.task = asyncio.create_task(self.selectMonth())
+            self.task = asyncio.create_task(self.selectMonth(), name='DateInputInterface selectMonth')
 
     def interactionCheck(self, i: discord.Interaction):
         return self.interaction.channel == i.channel and self.interaction.user == i.user
@@ -1237,7 +1237,7 @@ class AgeView(discord.ui.View):
     @discord.ui.button(label='Edit privately', emoji='⌨')
     async def privateInterface(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.usedPrivateInterface:
-            asyncio.create_task(self.confirmation())
+            asyncio.create_task(self.confirmation(), name='AgeView confirmation')
         else:
             self.usedPrivateInterface = True
         for child in self.children:
@@ -1288,8 +1288,8 @@ class AgeView(discord.ui.View):
             if not self.usedPrivateInterface and not self.ageHidden:
                 done, pending = await asyncio.wait(
                     [
-                        asyncio.create_task(self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300)),
-                        asyncio.create_task(self.birthdays.bot.wait_for('interaction', check=interactionCheck)),
+                        asyncio.create_task(self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300), name='AgeView messageCheck'),
+                        asyncio.create_task(self.birthdays.bot.wait_for('interaction', check=interactionCheck), name='AgeView interactionCheck'),
                     ],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
@@ -1414,7 +1414,7 @@ class BirthdayView(discord.ui.View):
     @discord.ui.button(label='Edit privately', emoji='⌨')
     async def privateInterface(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.usedPrivateInterface:
-            asyncio.create_task(self.confirmation())
+            asyncio.create_task(self.confirmation(), name='BirthdayView confirmation')
         else:
             self.usedPrivateInterface = True
         for child in self.children:
@@ -1465,8 +1465,10 @@ class BirthdayView(discord.ui.View):
             if not self.usedPrivateInterface and not self.bdayHidden:
                 done, pending = await asyncio.wait(
                     [
-                        asyncio.create_task(self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300)),
-                        asyncio.create_task(self.birthdays.bot.wait_for('interaction', check=interactionCheck)),
+                        asyncio.create_task(
+                            self.birthdays.bot.wait_for('message', check=messageCheck, timeout=300), name='BirthdayView messageCheck'
+                        ),
+                        asyncio.create_task(self.birthdays.bot.wait_for('interaction', check=interactionCheck), name='BirthdayView interactionCheck'),
                     ],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
@@ -1655,7 +1657,7 @@ class WishlistEditView(discord.ui.View):
         self.buttonSave = self.saveButton()
         self.add_item(self.buttonClear)
         self.add_item(self.buttonSave)
-        asyncio.create_task(self.editWishlist())
+        asyncio.create_task(self.editWishlist(), name='WishlistEditView editWishlist')
 
     @discord.ui.button(label='Cancel', style=discord.ButtonStyle.red, emoji='✖')
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -2032,8 +2034,10 @@ class UpcomingBirthdaysView(discord.ui.View):
             while not view.bot.is_closed():
                 done, pending = await asyncio.wait(
                     [
-                        asyncio.create_task(view.bot.wait_for('message', check=messageCheck, timeout=300)),
-                        asyncio.create_task(view.bot.wait_for('interaction', check=selectCheck, timeout=300)),
+                        asyncio.create_task(view.bot.wait_for('message', check=messageCheck, timeout=300), name='UpcomingBirthdaysView messageCheck'),
+                        asyncio.create_task(
+                            view.bot.wait_for('interaction', check=selectCheck, timeout=300), name='UpcomingBirthdaysView selectCheck'
+                        ),
                     ],
                     return_when=asyncio.FIRST_COMPLETED,
                 )

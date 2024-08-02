@@ -731,7 +731,7 @@ class ManageTicketMembersView(discord.ui.View):
                     'message': f'*{interaction.user.display_name} ({interaction.user.name}) left the ticket*',
                 }
             )
-            asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
+            asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket), name='LeaveTicketButton UpdateSupportTicket')
             await view.prev_view.populate_embed()
             await interaction.response.edit_message(embed=view.prev_view.embed, view=view.prev_view)
 
@@ -922,7 +922,7 @@ class AddMembersConfirmationView(discord.ui.View):
                 new_view = ManageTicketMembersView(view.prev_view.prev_view.tickets, single_ticket_view)
                 await new_view.populate_embed(**kwargs)
                 await interaction.response.edit_message(embed=new_view.embed, view=new_view)
-                asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
+                asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket), name='ConfirmButton UpdateSupportTicket')
             except:
                 traceback.print_exc()
 
@@ -956,7 +956,7 @@ class AddedToTicketView(discord.ui.View):
                     'message': f'*{interaction.user.display_name} ({interaction.user.name}) left the ticket*',
                 }
             )
-            asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket))
+            asyncio.create_task(database.UpdateSupportTicket(ticket['number'], ticket), name='LeaveButton UpdateSupportTicket')
             view.embed.description = 'You have left this ticket'
             await interaction.response.edit_message(embed=view.embed, view=None)
 
@@ -1037,7 +1037,9 @@ class ManageMemberView(discord.ui.View):
                         'message': f'*{interaction.user.display_name} updated {view.member.display_name}\'s permissions to `{PERMISSIONS[view.ticket_member["permissions"]]}`*',
                     }
                 )
-                asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
+                asyncio.create_task(
+                    database.UpdateSupportTicket(view.ticket['number'], view.ticket), name='AdjustPermissionsDropdown UpdateSupportTicket'
+                )
                 await interaction.response.edit_message(view=view)
             except:
                 traceback.print_exc()
@@ -1061,7 +1063,7 @@ class ManageMemberView(discord.ui.View):
                         'message': f'*{interaction.user.display_name} removed {view.member.display_name} ({view.member.name}) from the ticket*',
                     }
                 )
-                asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
+                asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket), name='RemoveMemberButton UpdateSupportTicket')
                 kwargs = {'description': f'Successfully removed {view.member.display_name} from the ticket'}
                 await view.prev_view.populate_embed(**kwargs)
                 await interaction.response.edit_message(embed=view.prev_view.embed, view=view.prev_view)
@@ -1104,7 +1106,7 @@ class DMNotificationView(discord.ui.View):
                 else {'id': m['id'], 'bio': m['bio'], 'permissions': m['permissions'], 'notifications': not m['notifications']}
                 for m in view.ticket['members']
             ]
-            asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket))
+            asyncio.create_task(database.UpdateSupportTicket(view.ticket['number'], view.ticket), name='NotificationsButton UpdateSupportTicket')
             await interaction.response.edit_message(view=view)
 
     class OpenTicketButton(discord.ui.Button):
@@ -1213,7 +1215,7 @@ class ReplyModal(discord.ui.Modal):
         self.view.ticket['conversation'].append({'author': interaction.user.id, 'timestamp': discord.utils.utcnow(), 'message': self.body.value})
         if self.view.ticket['status'] != 2:
             self.view.ticket['status'] = 2
-        asyncio.create_task(database.UpdateSupportTicket(self.view.ticket['number'], self.view.ticket))
+        asyncio.create_task(database.UpdateSupportTicket(self.view.ticket['number'], self.view.ticket), name='ReplyModal UpdateSupportTicket')
         await self.view.populate_embed()
         await self.view.support.notify_members(self.view.ctx, self.view.ticket)
         await interaction.response.edit_message(embed=self.view.embed, view=self.view)

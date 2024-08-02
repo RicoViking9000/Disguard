@@ -115,7 +115,7 @@ class Info(commands.Cog):
         if len(arg) == 0:
             await message.edit(content=f'{self.loading}Loading content')
             mainKeys.append('ℹInformation about you :)')
-            indiv = await asyncio.create_task(self.MemberInfo(ctx.author, calculatePosts=False))
+            indiv = await asyncio.create_task(self.MemberInfo(ctx.author, calculatePosts=False), name='retrieve MemberInfo')
         if 'me' == arg:
             await message.edit(content=f'{self.loading}Loading content')
             mainKeys.append('ℹInformation about you :)')
@@ -207,7 +207,7 @@ class Info(commands.Cog):
                 indiv = await self.BansListInfo(bans, logs, ctx.guild)
             if len(arg) == 0:
                 mainKeys.append('ℹInformation about you :)')
-                indiv = await asyncio.create_task(self.MemberInfo(ctx.author, calculatePosts=False))
+                indiv = await asyncio.create_task(self.MemberInfo(ctx.author, calculatePosts=False), name='retrieve MemberInfo - 2')
             if 'me' == arg:
                 mainKeys.append('ℹInformation about you :)')
                 indiv = await self.MemberInfo(ctx.author)
@@ -387,8 +387,8 @@ class Info(commands.Cog):
                     await message.add_reaction('🍰')
                 d, p = await asyncio.wait(
                     [
-                        asyncio.create_task(self.bot.wait_for('reaction_add', check=checkBack)),
-                        asyncio.create_task(self.bot.wait_for('reaction_add', check=checkBday)),
+                        asyncio.create_task(self.bot.wait_for('reaction_add', check=checkBack), name='info - wait for reaction - back'),
+                        asyncio.create_task(self.bot.wait_for('reaction_add', check=checkBday), name='info - wait for reaction - bday'),
                     ],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
@@ -425,8 +425,8 @@ class Info(commands.Cog):
             while not past:
                 done, pending = await asyncio.wait(
                     [
-                        asyncio.create_task(self.bot.wait_for('message', check=check, timeout=300)),
-                        asyncio.create_task(self.bot.wait_for('reaction_add', check=reacCheck, timeout=300)),
+                        asyncio.create_task(self.bot.wait_for('message', check=check, timeout=300), name='info - wait for message'),
+                        asyncio.create_task(self.bot.wait_for('reaction_add', check=reacCheck, timeout=300), name='info - wait for reaction'),
                     ],
                     return_when=asyncio.FIRST_COMPLETED,
                 )

@@ -32,7 +32,7 @@ class Reddit(commands.Cog):
         print('Syncing Reddit feeds')
         try:
             for server in self.bot.guilds:
-                asyncio.create_task(self.redditFeedHandler(server))
+                asyncio.create_task(self.redditFeedHandler(server), name=f'Reddit feed handler for {server.name}')
         except:
             print('Reddit sync fail: ')
             traceback.print_exc()
@@ -51,7 +51,7 @@ class Reddit(commands.Cog):
         ]
         feedsToDelete = [entry for entry in runningFeeds if entry not in proposedFeeds]
         for feed in feedsToCreate:
-            asyncio.create_task(self.createRedditStream(server, feed))
+            asyncio.create_task(self.createRedditStream(server, feed), name=f'Create Reddit stream for {server.name}: {feed["subreddit"]}')
         for feed in feedsToDelete:
             self.redditThreads[server.id].pop(feed, None)
 
@@ -93,7 +93,9 @@ class Reddit(commands.Cog):
             print(f'reddit feed error: {server.name} {server.id}')
             traceback.print_exc()
             await asyncio.sleep(60)
-            asyncio.create_task(self.createRedditStream(server, data, attempt + 1))
+            asyncio.create_task(
+                self.createRedditStream(server, data, attempt + 1), name=f'Retry - Create Reddit stream for {server.name}: {data["subreddit"]}'
+            )
 
     async def on_message(self, message: discord.Message):
         await asyncio.gather(*[self.redditAutocomplete(message), self.redditEnhance(message)])
@@ -293,7 +295,7 @@ class Reddit(commands.Cog):
             'color': 'colorCode',
             'timestamp': True,
         }
-        asyncio.create_task(self.createRedditStream(ctx.guild, feed))
+        asyncio.create_task(self.createRedditStream(ctx.guild, feed), name=f'command - Create Reddit stream for {ctx.guild.name}: {subreddit}')
         await database.create_reddit_feed(ctx.guild, feed)
         await ctx.send(
             f'Successfully set up a feed for r/{subreddit} inside {channel.mention if channel else ctx.channel.mention}.\nEdit the default settings with `/reddit edit_feed {subreddit}` or on the web dashboard.'

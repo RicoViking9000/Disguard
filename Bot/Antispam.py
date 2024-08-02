@@ -545,7 +545,7 @@ class Antispam(commands.Cog):
         if not spam.get('whisper') or whispered != 2:
             await message.channel.send(embed=shorter)
         if person.get('warnings') != warningsAtStart:
-            asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, warningsAtStart - 1))
+            asyncio.create_task(database.UpdateMemberWarnings(message.guild, message.author, warningsAtStart - 1), name='UpdateMemberWarnings')
         if None not in spam.get('log'):
             longer = discord.Embed(
                 title=message.author.name + ' was flagged for spam',
