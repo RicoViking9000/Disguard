@@ -434,6 +434,7 @@ class Moderation(commands.Cog):
         reason: str
             The reason for unmuting the members
         """
+
         await ctx.interaction.response.defer(thinking=True)
         reason = f'👮‍♂️: {ctx.author}\n{reason}'
         members = list(filter(lambda m: m, [member, member2, member3, member4, member5, member6, member7, member8, member9, member10]))

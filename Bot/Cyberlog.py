@@ -3901,18 +3901,6 @@ class Cyberlog(commands.Cog):
             pass
 
     @commands.Cog.listener()
-    async def on_integration_create(self, integration):
-        pass
-
-    @commands.Cog.listener()
-    async def on_integration_update(self, integration):
-        pass
-
-    @commands.Cog.listener()
-    async def on_integration_delete(self, integration):
-        pass
-
-    @commands.Cog.listener()
     async def on_webhooks_update(self, channel: discord.TextChannel):
         logs = [log async for log in channel.guild.audit_logs(limit=3)]
         await updateLastActive(
