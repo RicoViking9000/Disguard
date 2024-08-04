@@ -87,7 +87,7 @@ class Moderation(commands.Cog):
         self.permissionsCache = {}
 
         # context menus
-        self.bot.add_command(app_commands.ContextMenu(name='Toggle Channel Lockout', callback=self.lock_handler))
+        self.bot.add_command(app_commands.ContextMenu(name='Toggle Channel Lockout', callback=self.context_lock))
 
     @commands.hybrid_group(fallback='moderation_command_info')
     async def bulk(self, ctx: commands.Context):
@@ -152,7 +152,7 @@ class Moderation(commands.Cog):
             # lockout
             return await interaction.response.send_message(await self.lock_handler(interaction, member))
 
-    async def lock_handler(self, ctx: commands.Context, member: discord.Member, reason: Optional[str] = ''):
+    async def lock_handler(self, ctx: commands.Context | discord.Interaction, member: discord.Member, reason: Optional[str] = ''):
         messages = []
         for c in ctx.guild.channels:
             try:
@@ -242,7 +242,7 @@ class Moderation(commands.Cog):
         await ctx.interaction.response.defer(thinking=True)
         await ctx.send(await self.unlock_handler(ctx, member, reason))
 
-    async def unlock_handler(self, ctx: commands.Context, member: discord.Member, reason: Optional[str] = ''):
+    async def unlock_handler(self, ctx: commands.Context | discord.Interaction, member: discord.Member, reason: Optional[str] = ''):
         for c in ctx.guild.channels:
             await c.set_permissions(member, overwrite=None, reason=audit_log_reason(ctx.author, reason))
         errorMessage = None
