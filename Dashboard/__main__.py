@@ -1,7 +1,7 @@
 import datetime
 import json
 
-# import flask_breadcrumbs
+import flask_breadcrumbs
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
@@ -16,7 +16,7 @@ REDIRECT_URI = 'https://disguard.herokuapp.com/callback'
 DEV_REDIRECT_URI = 'http://localhost:5000/callback'
 
 app = Flask(__name__)
-# flask_breadcrumbs.Breadcrumbs(app=app)
+flask_breadcrumbs.Breadcrumbs(app=app)
 
 app.debug = True
 app.config['SECRET_KEY'] = oauth.Oauth('discord').client_secret
@@ -51,7 +51,7 @@ def credentials_to_dict(credentials: google.oauth2.credentials.Credentials):
 
 
 @app.route('/')
-# @flask_breadcrumbs.register_breadcrumb(app, '.', 'Dashboard')
+@flask_breadcrumbs.register_breadcrumb(app, '.', 'Dashboard')
 def index(redir=None):
     if redir:
         session['redirect'] = redir
@@ -188,7 +188,7 @@ def ReRoute(redir=None):
 
 
 @app.route('/manage')
-# @flask_breadcrumbs.register_breadcrumb(app, '.manage', 'Select a Server')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage', 'Select a Server')
 def manage():
     if 'user_id' not in session:
         return redirect(url_for('authenticate'))
@@ -201,7 +201,7 @@ def manage():
 
 
 @app.route('/manage/<int:id>/')
-# @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.', '', dynamic_list_constructor=serverNameGen)
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.', '', dynamic_list_constructor=serverNameGen)
 def manageServer(id):
     if EnsureVerification(id):
         session['server_id'] = id
@@ -212,7 +212,7 @@ def manageServer(id):
 
 
 @app.route('/manage/<int:id>/server', methods=['GET', 'POST'])
-# @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.server', 'General Server Settings')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.server', 'General Server Settings')
 def server(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))
@@ -295,7 +295,7 @@ def server(id):
 
 
 @app.route('/manage/<int:id>/antispam', methods=['GET', 'POST'])
-# @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.antispam', 'Antispam')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.antispam', 'Antispam')
 def antispam(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))
@@ -392,13 +392,13 @@ def antispam(id):
 
 
 @app.route('/manage/<int:id>/moderation')
-# @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.moderation', 'Moderation')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.moderation', 'Moderation')
 def moderation(id):
     return 'This feature will be available later!'
 
 
 @app.route('/manage/<int:id>/cyberlog', methods=['GET', 'POST'])
-# @flask_breadcrumbs.register_breadcrumb(app, '.manage.id.cyberlog', 'Logging')
+@flask_breadcrumbs.register_breadcrumb(app, '.manage.id.cyberlog', 'Logging')
 def cyberlog(id):
     if not EnsureVerification(id):
         return redirect(ReRoute(request.url))
@@ -411,7 +411,7 @@ def cyberlog(id):
         c = servObj.get('cyberlog')
 
         def boolConverter(input):
-            return None if input == None else bool(input)
+            return None if input is None else bool(input)
 
         moduleDict = {}
         for w in ['message', 'doorguard', 'server', 'channel', 'member', 'role', 'emoji', 'voice', 'misc']:
@@ -568,7 +568,6 @@ def specialLanding(landing):
     if landing != 'timekeeper':
         if 'identity' not in session:
             session['redirect'] = request.url
-            session.modified = True
             return redirect(url_for('authenticate'))
         credentials = oauth.Oauth(session['service'])
         oAuth = authentication.OAuth2Handler(
