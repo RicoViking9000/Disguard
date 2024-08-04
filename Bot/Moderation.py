@@ -87,7 +87,7 @@ class Moderation(commands.Cog):
         self.permissionsCache = {}
 
         # context menus
-        self.bot.add_command(app_commands.ContextMenu(name='Toggle Channel Lockout', callback=self.context_lock))
+        self.bot.tree.add_command(app_commands.ContextMenu(name='Toggle Channel Lockout', callback=self.context_lock))
 
     @commands.hybrid_group(fallback='moderation_command_info')
     async def bulk(self, ctx: commands.Context):
