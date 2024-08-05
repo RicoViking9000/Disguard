@@ -9,7 +9,7 @@ google-auth==2.16.2
 googleapis-common-protos==1.58.0
 google-auth-httplib2==0.1.0
 google-auth-oauthlib==1.0.0
-gunicorn==19.9.0
+gunicorn==22.0.0
 idna==2.8
 itsdangerous==2.0.0
 Jinja2==3.0.0
