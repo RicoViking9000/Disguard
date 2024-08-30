@@ -196,6 +196,7 @@ class PollAnswer(pydantic.BaseModel):
 class MessagePoll(pydantic.BaseModel):
     """A message poll"""
 
+    id: int
     message_id: int
     question: str
     answers: list[PollAnswer]
@@ -277,22 +278,6 @@ MESSAGE_TYPES = {
 }
 
 
-class Activity(pydantic.BaseModel):
-    """
-    An activity
-    """
-
-    type: Literal['join', 'spectate', 'listen', 'join_request', 'streaming', 'custom']
-    party_id: str
-    party_size: tuple[int, int]
-    party_max: int
-    join_secret: str
-    spectate_secret: str
-    match: str
-    instance: bool
-    flags: int
-
-
 class MessageEdition(pydantic.BaseModel):
     """Data specific to each edition of a message"""
 
@@ -325,7 +310,7 @@ class MessageIndex(pydantic.BaseModel):
     reference_message_id: int
     components_count: int  # do I want to fully map out components?
     tts: bool
-    type: str
+    type: str  # using MESSAGE_TYPES dict
     webhook_id: int
     system: bool
     activity: dict
@@ -337,10 +322,159 @@ class Indexing(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.channel.type == discord.ChannelType.private:
-            return
+    def poll_from_message(self, message: discord.Message):
+        """
+        Extracts poll data from a message
+        """
+        if message.poll is None:
+            return None
+        poll = message.poll
+        return MessagePoll(
+            id=discord.utils.time_snowflake(poll.created_at),
+            message_id=message.id,
+            question=poll.question,
+            answers=[
+                PollAnswer(
+                    id=answer.id,
+                    parent_poll_id=poll.id,
+                    media=PollMedia(text=answer.emoji.name, emoji=answer.emoji.url),
+                    self_voted=answer.me,
+                    text=answer.emoji.name,
+                    emoji=answer.emoji.url,
+                    vote_count=answer.count,
+                    voters=[user.id for user in answer.voters],
+                )
+                for answer in poll.answers
+            ],
+            expires_at=poll.expires_at,
+            created_at=poll.created_at,
+            total_votes={answer.emoji.name: answer.count for answer in poll.answers},
+            is_closed=poll.closed,
+        )
+
+    def stickers_from_message(self, message: discord.Message):
+        """
+        Extracts sticker data from a message
+        """
+        return [
+            Sticker(
+                message_id=message.id,
+                sticker_id=sticker.id,
+                format=sticker.format,
+                url=sticker.url,
+                type='standard' if sticker.guild_id is None else 'guild',
+                data=StandardSticker(
+                    name=sticker.name,
+                    description=sticker.description,
+                    tags=sticker.tags,
+                    sort_value=sticker.sort_value,
+                    pack_id=sticker.pack_id,
+                )
+                if sticker.guild_id is None
+                else GuildSticker(
+                    name=sticker.name,
+                    description=sticker.description,
+                    avaulable=sticker.available,
+                    guild_id=sticker.guild_id,
+                    creator_id=sticker.user.id,
+                    reference_emoji=sticker.emoji,
+                ),
+            )
+            for sticker in message.stickers
+        ]
+
+    def convert_embed(self, embed: discord.Embed):
+        """
+        Converts a discord.Embed object to a MessageEmbed object
+        """
+        return MessageEmbed(
+            message_id=embed.message.id,
+            title=embed.title,
+            type=embed.type,
+            description=embed.description,
+            url=embed.url,
+            timestamp=embed.timestamp,
+            color=embed.color.to_rgb(),
+            footer=EmbedFooter(text=embed.footer.text, icon_url=embed.footer.icon_url),
+            image=EmbedImage(url=embed.image.url, proxy_url=embed.image.proxy_url, width=embed.image.width, height=embed.image.height),
+            thumbnail=EmbedImage(
+                url=embed.thumbnail.url, proxy_url=embed.thumbnail.proxy_url, width=embed.thumbnail.width, height=embed.thumbnail.height
+            ),
+            video=EmbedVideo(url=embed.video.url, width=embed.video.width, height=embed.video.height),
+            provider=EmbedProvider(name=embed.provider.name, url=embed.provider.url),
+            author=EmbedAuthor(name=embed.author.name, url=embed.author.url, icon_url=embed.author.icon_url),
+            fields=[EmbedField(name=field.name, value=field.value, inline=field.inline) for field in embed.fields],
+        )
+
+    def convert_attachment(self, attachment: discord.Attachment):
+        """
+        Converts a discord.Attachment object to a MessageAttachment object
+        """
+        return MessageAttachment(
+            id=attachment.id,
+            message_id=attachment.message.id,
+            hash=attachment.hash,
+            size=attachment.size,
+            filename=attachment.filename,
+            url=attachment.url,
+            proxy_url=attachment.proxy_url,
+            media_attributes=None,
+            voice_attributes=None,
+            content_type=attachment.content_type,
+            ephemeral=attachment.is_ephemeral(),
+            flags={
+                'spoiler': attachment.is_spoiler(),
+                'voice_message': attachment.is_spoiler(),
+                'image': attachment.is_image(),
+            },
+            spoiler=attachment.is_spoiler(),
+            voice_message=attachment.is_spoiler(),
+            image=attachment.is_image(),
+        )
+
+    async def convert_reaction(self, reaction: discord.Reaction):
+        """
+        Converts a discord.Reaction object to a ReactionChangeEvent object
+        """
+        return ReactionChangeEvent(
+            message_id=reaction.message.id,
+            emoji=Emoji(
+                name=reaction.emoji.name,
+                custom=reaction.emoji.is_custom(),
+                source=CustomEmojiAttributes(
+                    id=reaction.emoji.id,
+                    creator_id=reaction.emoji.user.id,
+                    created_at=reaction.emoji.created_at,
+                    animated=reaction.emoji.animated,
+                    twitch=reaction.emoji.is_usable(),
+                    guild_id=reaction.emoji.guild.id,
+                    url=reaction.emoji.url,
+                )
+                if reaction.emoji.is_custom()
+                else reaction.emoji.url,
+            ),
+            users=[user.id for user in await reaction.users().flatten()],
+            static_count=reaction.count,
+            burst_count=reaction.count,
+            total_count=reaction.count,
+            custom_emoji=reaction.emoji.is_custom(),
+            timestamp=datetime.datetime.now(),
+        )
+
+    async def edition_from_message(self, message: discord.Message):
+        """
+        Converts a discord.Message object to a MessageEdition object
+        """
+        return MessageEdition(
+            content=message.content,
+            timestamp=message.created_at,
+            attachments=[self.convert_attachment(attachment) for attachment in message.attachments],
+            embeds=[self.convert_embed(embed) for embed in message.embeds],
+            reactions=[await self.convert_reaction(reaction) for reaction in message.reactions],
+            pinned=message.pinned,
+            deleted=False,
+            mentions=[],  # later
+        )
 
     async def convert_message(self, message: discord.Message):
         """
@@ -348,36 +482,33 @@ class Indexing(commands.Cog):
         """
         message_index = MessageIndex(
             _id=message.id,
-            editions=[
-                MessageEdition(
-                    content=message.content,
-                    timestamp=message.created_at,
-                    attachments=message.attachments,
-                    embeds=message.embeds,
-                    reactions=message.reactions,
-                    pinned=message.pinned,
-                    deleted=False,
-                    mentions=message.raw_mentions,
-                )
-            ],
+            editions=[],
             author_id=message.author.id,
-            content=message.content,
             created_at=message.created_at.timestamp(),
             channel_id=message.channel.id,
             guild_id=message.guild.id,
             pinned=message.pinned,
             deleted=False,
             jump_url=message.jump_url,
-            poll={},
-            stickers=[],
+            poll=None,  # later
+            stickers=[],  # later
+            thread_id=0,  # message.thread.id, d.py 2.4
+            parent_interaction_id=message.interaction.id if message.interaction else 0,
+            reference_message_id=message.reference.message_id if message.reference else 0,
+            components_count=len(message.components),
             tts=message.tts,
-            type=message.type,
+            type=MESSAGE_TYPES[message.type],
             webhook_id=message.webhook_id,
-            system=message.system,
-            activity={},
-            flags={},
+            system=message.is_system(),
+            activity=message.activity,
+            flags=message.flags,
             nsfw_channel=message.channel.is_nsfw(),
         )
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.channel.type == discord.ChannelType.private:
+            return
 
 
 async def setup(bot: commands.Bot):
