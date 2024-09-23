@@ -9,5 +9,5 @@ profanityfilter==2.0.6
 psutil==5.9.8
 py7zr==0.20.8
 py_cpuinfo==9.0.0
-pydantic==2.8.2
+pydantic==2.9.2
 pymongo==4.6.1
