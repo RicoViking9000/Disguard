@@ -9,6 +9,8 @@ from bson.codec_options import CodecOptions
 from discord import Message
 from discord.utils import utcnow
 
+import models
+
 # mongo = motor.motor_asyncio.AsyncIOMotorClient()
 
 database: motor.motor_asyncio.AsyncIOMotorDatabase = None
@@ -113,8 +115,8 @@ def message_data(message: Message, index: int = 0):
 
 
 async def post_message(message: Message):
-    if message.channel.id in (534439214289256478, 910598159963652126):
-        return
+    # if message.channel.id in (534439214289256478, 910598159963652126):
+    #     return
     data = message_data(message)
     insertion = await database[str(message.channel.id)].insert_one(data)
     try:
@@ -122,6 +124,19 @@ async def post_message(message: Message):
             await database[str(message.channel.id)].create_index('author0')
     except:
         await database[str(message.channel.id)].create_index('author0')
+    return insertion
+
+
+async def post_message_2024(message_data: models.MessageIndex):
+    # if message.channel.id in (534439214289256478, 910598159963652126):
+    #     return
+    data = message_data
+    insertion = await database[str(message_data['channel_id'])].insert_one(data)
+    try:
+        if 'author0' not in list((await database[str(message_data['channel_id'])].index_information()).keys()):
+            await database[str(message_data['channel_id'])].create_index('author0')
+    except:
+        await database[str(message_data['channel_id'])].create_index('author0')
     return insertion
 
 
