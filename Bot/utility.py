@@ -704,7 +704,7 @@ async def color_theme(s):
     return (await get_server(s)).get('colorTheme', 0)
 
 
-async def get_server(s: discord.Guild, return_value=None):
+async def get_server(s: discord.Guild, return_value={}):
     return await lightningdb.get_server(s.id, return_value)
 
 

@@ -1,10 +1,13 @@
 """Message indexing, attachment storage, and upcoming Disguard Drive functionality"""
 
+import os
+
 import discord
 from discord.ext import commands
 
 import lightningdb
 import models
+import utility
 
 
 class Indexing(commands.Cog):
@@ -252,6 +255,22 @@ class Indexing(commands.Cog):
         if message.author.bot:
             return
         # save attachments
+        await self.save_attachments(message)
+
+    async def save_attachments(self, message: discord.Message):
+        saving_enabled = await utility.get_server(message.guild).get('cyberlog', {}).get('image')
+        if saving_enabled and len(message.attachments) > 0 and not message.channel.is_nsfw():
+            path = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
+            for attachment in message.attachments:
+                # for now, only save attachments under 8mb
+                if attachment.size < 8_000_000:
+                    # if the path doesn't exist, create it
+                    if not os.path.exists(path):
+                        os.makedirs(path)
+                    try:
+                        await attachment.save(f'path/{attachment.filename}')
+                    except discord.HTTPException:
+                        pass
 
 
 async def setup(bot: commands.Bot):

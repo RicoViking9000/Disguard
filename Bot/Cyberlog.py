@@ -416,6 +416,7 @@ class Cyberlog(commands.Cog):
     async def on_message(self, message: discord.Message):
         """[DISCORD API METHOD] Called when message is sent"""
         return
+        #     now in Indexing.py
         await self.bot.wait_until_ready()
         if not serverIsGimped(message.guild):
             await updateLastActive(message.author, discord.utils.utcnow(), 'sent a message')
