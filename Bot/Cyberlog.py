@@ -18,6 +18,7 @@ import emojis
 from discord.ext import commands, tasks
 
 import database
+import Indexing
 import Info
 import lightningdb
 import Reddit
@@ -883,7 +884,9 @@ class Cyberlog(commands.Cog):
                 embed.set_thumbnail(url=url)
             if settings['author'] in (1, 2, 4):
                 embed.set_author(name=after.author.display_name, icon_url=url)
-        await lightningdb.patch_message(after)
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        new_edition = indexing_cog.edition_from_message(after)
+        await lightningdb.patch_message_2024(channel.id, after.id, new_edition)
         plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{beforeParsed if len(beforeParsed) < 1024 else beforeC}`\nAfter:`{afterParsed if len(afterParsed) < 1024 else afterC}\n`{after.jump_url}'
         try:
             msg: discord.Message = await c.send(

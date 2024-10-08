@@ -131,12 +131,14 @@ async def post_message_2024(message_data: models.MessageIndex):
     # if message.channel.id in (534439214289256478, 910598159963652126):
     #     return
     data = message_data
-    insertion = await database[str(message_data['channel_id'])].insert_one(data)
+    insertion = await database[str(message_data.channel_id)].insert_one(data)
+    author_index = pymongo.IndexModel([('author0')])
+    channel_index = pymongo.IndexModel([('channel_id')])
     try:
-        if 'author0' not in list((await database[str(message_data['channel_id'])].index_information()).keys()):
-            await database[str(message_data['channel_id'])].create_index('author0')
+        if 'author' not in list((await database[str(message_data.channel_id)].index_information()).keys()):
+            await database[str(message_data.channel_id)].create_indexes([author_index, channel_index])
     except:
-        await database[str(message_data['channel_id'])].create_index('author0')
+        await database[str(message_data.channel_id)].create_indexes([author_index, channel_index])
     return insertion
 
 
@@ -192,6 +194,10 @@ async def patch_message(message: Message):
     data = message_data(message, index=index)
     data.pop('_id')
     return await database[str(message.channel.id)].update_one({'_id': message.id}, {'$set': data})
+
+
+async def patch_message_2024(channel_id: int, message_id: int, new_edition: models.MessageIndex):
+    return await database[str(channel_id)].update_one({'_id': message_id}, {'$push': {'editions': new_edition}})
 
 
 async def delete_message(channel_id: int, message_id: int):
