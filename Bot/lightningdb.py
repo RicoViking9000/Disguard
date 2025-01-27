@@ -130,14 +130,14 @@ async def post_message(message: Message):
 async def post_message_2024(message_data: models.MessageIndex):
     # if message.channel.id in (534439214289256478, 910598159963652126):
     #     return
-    data = message_data
-    insertion = await database[str(message_data.channel_id)].insert_one(data)
-    author_index = pymongo.IndexModel([('author0')])
+    message_dict = message_data.model_dump()
+    insertion = await database[str(message_data.channel_id)].insert_one(message_dict)
+    author_index = pymongo.IndexModel([('author_id')])
     channel_index = pymongo.IndexModel([('channel_id')])
     try:
-        if 'author' not in list((await database[str(message_data.channel_id)].index_information()).keys()):
+        if 'author_id' not in list((await database[str(message_data.channel_id)].index_information()).keys()):
             await database[str(message_data.channel_id)].create_indexes([author_index, channel_index])
-    except:
+    except Exception:
         await database[str(message_data.channel_id)].create_indexes([author_index, channel_index])
     return insertion
 
