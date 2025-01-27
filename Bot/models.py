@@ -1,8 +1,9 @@
 import datetime
-from typing import Literal, Optional, TypedDict
+from typing import Literal, Optional
 
 import discord
 import pydantic
+from typing_extensions import Annotated, TypedDict
 
 
 class MediaAttributes(pydantic.BaseModel):
@@ -43,12 +44,12 @@ class MessageAttachment(pydantic.BaseModel):
     hash: str
     size: int  # size in bytes
     filename: str
-    filepath: str
+    filepath: str  # in database or local machine
     url: str
     proxy_url: str
-    media_attributes: Optional[MediaAttributes]
-    voice_attributes: Optional[VoiceAttributes]
-    content_type: str
+    media_attributes: MediaAttributes = pydantic.Field(default=None)
+    voice_attributes: VoiceAttributes = pydantic.Field(default=None)
+    content_type: str = pydantic.Field(default='')  # MIME type
     ephemeral: bool
     flags: AttachmentFlags
     spoiler: bool
@@ -59,40 +60,40 @@ class MessageAttachment(pydantic.BaseModel):
 class EmbedFooter(pydantic.BaseModel):
     """A message embed footer"""
 
-    text: str
-    icon_url: str
+    text: Annotated[str, pydantic.Field(default=''), pydantic.StringConstraints(max_length=2048)]
+    icon_url: str = pydantic.Field(default='')
 
 
 class EmbedImage(pydantic.BaseModel):
     """A message embed image"""
 
-    url: str
-    proxy_url: str
-    width: int
-    height: int
+    url: str | None = pydantic.Field(default=None)
+    proxy_url: str | None = pydantic.Field(default=None)
+    width: int | None = pydantic.Field(default=None)
+    height: int | None = pydantic.Field(default=None)
 
 
 class EmbedVideo(pydantic.BaseModel):
     """A message embed video"""
 
-    url: str
-    width: int
-    height: int
+    url: str | None = pydantic.Field(default=None)
+    width: int | None = pydantic.Field(default=None)
+    height: int | None = pydantic.Field(default=None)
 
 
 class EmbedProvider(pydantic.BaseModel):
     """A message embed provider"""
 
-    name: str
-    url: str
+    name: str | None = pydantic.Field(default=None)
+    url: str | None = pydantic.Field(default=None)
 
 
 class EmbedAuthor(pydantic.BaseModel):
     """A message embed author"""
 
-    name: str
-    url: str
-    icon_url: str
+    name: str = pydantic.Field(default='')
+    url: str | None = pydantic.Field(default=None)
+    icon_url: str | None = pydantic.Field(default=None)
 
 
 class EmbedField(pydantic.BaseModel):
@@ -112,7 +113,7 @@ class MessageEmbed(pydantic.BaseModel):
     description: str
     url: str
     type: str
-    timestamp: Optional[datetime.datetime]
+    timestamp: datetime.datetime | None
     color: tuple[int, int, int]
     footer: EmbedFooter
     image: EmbedImage
@@ -145,6 +146,62 @@ class Emoji(pydantic.BaseModel):
     name: str
     custom: bool
     source: str | CustomEmojiAttributes
+
+
+class Button(pydantic.BaseModel):
+    """A message button"""
+
+    type: str = pydantic.Field(default='button')
+    style: Literal['primary', 'secondary', 'success', 'danger', 'link', 'premium']
+    label: str = pydantic.Field(max_length=80)
+    emoji: Emoji | None
+    custom_id: str | None = pydantic.Field(max_length=100)
+    url: str | None
+    sku_id: int | None
+    disabled: bool
+
+
+class TextInput(pydantic.BaseModel):
+    """A message text input"""
+
+    type: str = pydantic.Field(default='text_input')
+    custom_id: str | None = pydantic.Field(max_length=100)
+    label: str = pydantic.Field(max_length=45)
+    style: Literal['short', 'long']
+    placeholder: str = pydantic.Field(max_length=100)
+    default_value: str | None = pydantic.Field(max_length=4000)
+    required: bool
+    min_length: int | None = pydantic.Field(ge=0, le=4000)
+    max_length: int | None = pydantic.Field(ge=1, le=4000)
+
+
+class SelectOption(pydantic.BaseModel):
+    """A message select option"""
+
+    label: str = pydantic.Field(max_length=100)
+    value: str = pydantic.Field(max_length=100)
+    description: str | None = pydantic.Field(max_length=100)
+    emoji: Emoji | None
+    default: bool
+
+
+class Dropdown(pydantic.BaseModel):
+    """A message dropdown"""
+
+    type: Literal['select_menu', 'channel_select', 'role_select', 'user_select', 'mentionable_select']
+    custom_id: str | None = pydantic.Field(max_length=100)
+    options: list[SelectOption]  # will be empty if it's a channel, role, or user select
+    placeholder: str | None = pydantic.Field(max_length=150)
+    min_values: int = pydantic.Field(ge=0, le=25)
+    max_values: int = pydantic.Field(ge=1, le=25)
+    disabled: bool
+
+
+class ActionRow(pydantic.BaseModel):
+    """A message component (button, select, etc.)"""
+
+    type: str = pydantic.Field(default='action_row')
+    children: list[Button | TextInput | Dropdown]  # children can be buttons, selects, etc.
 
 
 class ReactionChangeEvent(pydantic.BaseModel):
@@ -319,16 +376,16 @@ class MessageIndex(pydantic.BaseModel):
     pinned: bool = pydantic.Field(default=False)
     deleted: bool = pydantic.Field(default=False)
     jump_url: str
-    poll: MessagePoll
-    stickers: list[Sticker]
-    thread_id: int
-    parent_interaction_id: int
-    reference_message_id: int
+    poll: MessagePoll | None = pydantic.Field(default=None)
+    stickers: list[Sticker] | list = pydantic.Field(default_factory=list)
+    thread_id: int = pydantic.Field(default=0)
+    parent_interaction_id: int = pydantic.Field(default=0)
+    reference_message_id: int = pydantic.Field(default=0)
     components_count: int  # do I want to fully map out components?
     tts: bool
     type: str  # using MESSAGE_TYPES dict
-    webhook_id: int
+    webhook_id: int | None = pydantic.Field(default=0)
     system: bool
-    activity: bool
-    flags: dict
+    activity: str = pydantic.Field(default='')
+    flags: MessageFlags
     nsfw_channel: bool  # don't post in logs unless log channel is NSFW
