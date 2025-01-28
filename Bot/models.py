@@ -60,47 +60,47 @@ class MessageAttachment(pydantic.BaseModel):
 class EmbedFooter(pydantic.BaseModel):
     """A message embed footer"""
 
-    text: Annotated[str, pydantic.Field(default=''), pydantic.StringConstraints(max_length=2048)]
-    icon_url: str = pydantic.Field(default='')
+    text: Annotated[str, pydantic.StringConstraints(max_length=2048)]
+    icon_url: Optional[str]
 
 
 class EmbedImage(pydantic.BaseModel):
     """A message embed image"""
 
-    url: str | None = pydantic.Field(default=None)
-    proxy_url: str | None = pydantic.Field(default=None)
-    width: int | None = pydantic.Field(default=None)
-    height: int | None = pydantic.Field(default=None)
+    url: Optional[str]
+    proxy_url: Optional[str]
+    width: Optional[int]
+    height: Optional[int]
 
 
 class EmbedVideo(pydantic.BaseModel):
     """A message embed video"""
 
-    url: str | None = pydantic.Field(default=None)
-    width: int | None = pydantic.Field(default=None)
-    height: int | None = pydantic.Field(default=None)
+    url: Optional[str]
+    width: Optional[int]
+    height: Optional[int]
 
 
 class EmbedProvider(pydantic.BaseModel):
     """A message embed provider"""
 
-    name: str | None = pydantic.Field(default=None)
-    url: str | None = pydantic.Field(default=None)
+    name: Optional[str]
+    url: Optional[str]
 
 
 class EmbedAuthor(pydantic.BaseModel):
     """A message embed author"""
 
-    name: str = pydantic.Field(default='')
-    url: str | None = pydantic.Field(default=None)
-    icon_url: str | None = pydantic.Field(default=None)
+    name: Annotated[str, pydantic.StringConstraints(max_length=256)]
+    url: Optional[str]
+    icon_url: Optional[str]
 
 
 class EmbedField(pydantic.BaseModel):
     """A message embed field"""
 
-    name: str
-    value: str
+    name: Annotated[str, pydantic.StringConstraints(max_length=256)]
+    value: Annotated[str, pydantic.StringConstraints(max_length=1024)]
     inline: bool
 
 
@@ -108,12 +108,12 @@ class MessageEmbed(pydantic.BaseModel):
     """A message embed. Each edition may have multiple embeds."""
 
     message_id: int
-    title: str
+    title: Optional[Annotated[str, pydantic.StringConstraints(max_length=256)]]
     type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link']
-    description: str
-    url: str
-    type: str
-    timestamp: datetime.datetime | None
+    description: Optional[Annotated[str, pydantic.StringConstraints(max_length=4096)]]
+    url: Optional[str]
+    type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link', 'poll_result']
+    timestamp: Optional[datetime.datetime]
     color: tuple[int, int, int]
     footer: EmbedFooter
     image: EmbedImage
