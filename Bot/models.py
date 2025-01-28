@@ -351,6 +351,30 @@ class MessageFlags(pydantic.BaseModel):
     voice: bool
 
 
+class Asset(pydantic.BaseModel):
+    """
+    An asset or image
+    """
+
+    key: str
+    url: str  # 1024x1024 png or gif
+    animated: bool
+
+
+class MessageApplication(pydantic.BaseModel):
+    """
+    A message application
+    """
+
+    id: int
+    name: str
+    description: str
+    activity_type: Optional[int]
+    party_id: Optional[int]
+    cover: Asset
+    icon: Asset  # permamenace paradox
+
+
 class MessageEdition(pydantic.BaseModel):
     """Data specific to each edition of a message"""
 
@@ -362,6 +386,8 @@ class MessageEdition(pydantic.BaseModel):
     pinned: bool
     deleted: bool  # Deleted + edition timestamp = deletion time
     mentions: list[Mention]  # will need to combine member, channel & role here
+    components: list[ActionRow] = pydantic.Field(default_factory=list)  # buttons, selects, etc.
+    activity: Optional[MessageApplication] = pydantic.Field(default=None)
 
 
 class MessageIndex(pydantic.BaseModel):
@@ -381,11 +407,9 @@ class MessageIndex(pydantic.BaseModel):
     thread_id: int = pydantic.Field(default=0)
     parent_interaction_id: int = pydantic.Field(default=0)
     reference_message_id: int = pydantic.Field(default=0)
-    components_count: int  # do I want to fully map out components?
     tts: bool
     type: str  # using MESSAGE_TYPES dict
     webhook_id: int | None = pydantic.Field(default=0)
     system: bool
-    activity: str = pydantic.Field(default='')
     flags: MessageFlags
     nsfw_channel: bool  # don't post in logs unless log channel is NSFW
