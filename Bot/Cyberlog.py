@@ -212,6 +212,7 @@ class Cyberlog(commands.Cog):
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
                 print(timeString)
             started = datetime.datetime.now()
+            # drop all message indexes
             for collection in await lightningdb.database.list_collection_names():
                 if collection not in ('servers', 'users') and not self.bot.get_channel(int(collection)):
                     await lightningdb.delete_channel(int(collection))
@@ -428,6 +429,7 @@ class Cyberlog(commands.Cog):
         await self.saveMessage(message)
 
     async def saveMessage(self, message: discord.Message):
+        return
         await lightningdb.post_message(message)
         if message.author.bot:
             return
@@ -982,6 +984,8 @@ class Cyberlog(commands.Cog):
                             )
                             currentMessage = await lightningdb.get_message(after.channel.id, after.id)
                             enum = list(enumerate(currentMessage.values()))
+
+                            print(enum)
 
                             def makeHistory():  # This will create groups of 4 from enum; since 4 lines represent the file data for indexes
                                 for i in range(0, len(enum), 3):

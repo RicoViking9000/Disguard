@@ -133,7 +133,7 @@ class CustomEmojiAttributes(pydantic.BaseModel):
     creator_id: int
     created_at: datetime.datetime
     animated: bool
-    twitch: bool
+    managed: bool
     guild_id: int
     url: str
 
@@ -223,11 +223,11 @@ class ReactionChangeEvent(pydantic.BaseModel):
 
 class Mention(TypedDict):
     """
-    A channel, role, or member mention in a message
+    A channel, role, or user mention in a message
     """
 
-    type: Literal['channel', 'role', 'member']
-    id: int
+    type: Literal['channel', 'role', 'user']
+    target: int
 
 
 class PollMedia(pydantic.BaseModel):
@@ -386,7 +386,7 @@ class MessageEdition(pydantic.BaseModel):
     pinned: bool
     deleted: bool  # Deleted + edition timestamp = deletion time
     mentions: list[Mention]  # will need to combine member, channel & role here
-    components: list[ActionRow] = pydantic.Field(default_factory=list)  # buttons, selects, etc.
+    components: list[ActionRow | Button | Dropdown] = pydantic.Field(default_factory=list)
     activity: Optional[MessageApplication] = pydantic.Field(default=None)
 
 

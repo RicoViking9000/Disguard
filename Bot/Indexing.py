@@ -1,8 +1,10 @@
 """Message indexing, attachment storage, and upcoming Disguard Drive functionality"""
 
 import os
+import traceback
 
 import discord
+import emoji as pymoji
 from discord.ext import commands
 
 import lightningdb
@@ -44,7 +46,7 @@ class Indexing(commands.Cog):
             is_closed=poll.is_finalized(),
         )
 
-    def stickers_from_message(self, message: discord.Message):
+    async def stickers_from_message(self, message: discord.Message):
         """
         Extracts sticker data from a message
         """
@@ -75,6 +77,27 @@ class Indexing(commands.Cog):
             )
             for index, sticker in enumerate(message.stickers)
         ]
+
+    def convert_emoji(self, emoji: discord.Emoji | str):
+        """
+        Converts a discord.Emoji object to a MessageEmoji object
+        """
+        custom = isinstance(emoji, discord.Emoji)
+        return models.Emoji(
+            name=emoji.name if custom else pymoji.demojize(emoji).strip(':'),
+            custom=custom,
+            source=models.CustomEmojiAttributes(
+                id=emoji.id,
+                creator_id=emoji.user.id,
+                created_at=emoji.created_at,
+                animated=emoji.animated,
+                managed=emoji.managed(),
+                guild_id=emoji.guild.id,
+                url=emoji.url,  # permanence
+            )
+            if custom
+            else emoji,
+        )
 
     def convert_embed(self, embed: discord.Embed, message_id: int = 0):
         """
@@ -185,6 +208,81 @@ class Indexing(commands.Cog):
     #         timestamp=datetime.datetime.now(),
     #     )
 
+    def mentions_from_message(self, message: discord.Message):
+        """
+        Extracts mentions from a message
+        """
+        return [
+            models.Mention(
+                type='user' if isinstance(mention, discord.User) else 'role' if isinstance(mention, discord.Role) else 'channel',
+                target=mention.id,
+            )
+            for mention in [message.mentions + message.role_mentions + message.channel_mentions]
+        ]
+
+    def components_from_message(self, message: discord.Message):
+        """
+        Extracts components from a message
+        """
+
+        def to_button(component: discord.ui.Button):
+            return models.Button(
+                type='button',
+                style=component.style,
+                label=component.label,
+                emoji=self.convert_emoji(component.emoji),
+                custom_id=component.custom_id,
+                url=component.url,
+                sku_id=component.sku_id,
+                disabled=component.disabled,
+            )
+
+        def to_dropdown(
+            component: discord.ui.Select | discord.ui.ChannelSelect | discord.ui.MentionableSelect | discord.ui.RoleSelect | discord.ui.UserSelect,
+        ):
+            return models.Dropdown(
+                type='select_menu'
+                if isinstance(component, discord.ui.Select)
+                else 'channel_select'
+                if isinstance(component, discord.ui.ChannelSelect)
+                else 'mentionable_select'
+                if isinstance(component, discord.ui.MentionableSelect)
+                else 'role_select'
+                if isinstance(component, discord.ui.RoleSelect)
+                else 'user_select',
+                custom_id=component.custom_id,
+                options=[
+                    models.SelectOption(
+                        label=option.label,
+                        value=option.value,
+                        description=option.description,
+                        emoji=self.convert_emoji(option.emoji),
+                        default=option.default,
+                    )
+                    for option in component.options
+                ],
+                placeholder=component.placeholder,
+                min_values=component.min_values,
+                max_values=component.max_values,
+                disabled=component.disabled,
+            )
+
+        def process_child(component):
+            if isinstance(component, discord.ui.Button):
+                return to_button(component)
+            else:
+                return to_dropdown(component)
+
+        return [
+            models.ActionRow(
+                type='action_row',
+                children=[process_child(component) for component in message.components],
+            )
+            if type(component) is discord.ActionRow
+            else process_child(component)
+            for component in message.components
+        ]
+
     def message_content(self, message: discord.Message):
         """
         Extracts message content from a message
@@ -212,53 +310,59 @@ class Indexing(commands.Cog):
             pinned=message.pinned,
             deleted=False,
             mentions=[],  # later
+            components=[],  # later
+            activity=None,  # later
         )
 
     async def convert_message(self, message: discord.Message):
         """
         Converts a discord.Message object to a MessageIndex object
         """
-        message_index = models.MessageIndex(
-            _id=message.id,
-            editions=[],
-            author_id=message.author.id,
-            created_at=message.created_at.timestamp(),
-            channel_id=message.channel.id,
-            guild_id=message.guild.id,
-            pinned=message.pinned,
-            deleted=False,
-            jump_url=message.jump_url,
-            poll=self.poll_from_message(message),  # later
-            stickers=[self.stickers_from_message(message)],
-            thread_id=message.thread.id if message.thread else 0,
-            parent_interaction_id=message.interaction.id if message.interaction else 0,
-            reference_message_id=message.reference.message_id if message.reference else 0,
-            components_count=len(message.components),
-            tts=message.tts,
-            type=models.MESSAGE_TYPES[message.type.name],
-            webhook_id=message.webhook_id,
-            system=message.is_system(),
-            flags=self.flags_from_message(message),
-            nsfw_channel=message.channel.is_nsfw(),
-        )
-        # the first edition is the current message data
-        message_index.editions.append(await self.edition_from_message(message))
+        try:
+            message_index = models.MessageIndex(
+                _id=message.id,
+                editions=[],
+                author_id=message.author.id,
+                created_at=int(message.created_at.timestamp()),
+                channel_id=message.channel.id,
+                guild_id=message.guild.id,
+                pinned=message.pinned,
+                deleted=False,
+                jump_url=message.jump_url,
+                poll=await self.poll_from_message(message),
+                stickers=await self.stickers_from_message(message),
+                thread_id=message.thread.id if message.thread else 0,
+                parent_interaction_id=message.interaction_metadata.id if message.interaction_metadata else 0,
+                reference_message_id=message.reference.message_id if message.reference else 0,
+                tts=message.tts,
+                type=models.MESSAGE_TYPES[message.type],
+                webhook_id=message.webhook_id,
+                system=message.is_system(),
+                flags=self.flags_from_message(message),
+                nsfw_channel=message.channel.is_nsfw(),
+            )
+            # the first edition is the current message data
+            message_index.editions.append(await self.edition_from_message(message))
+            return message_index
+        except Exception:
+            print(f'Error converting message {message.id}: {traceback.print_exc()}')
 
-        return message_index
-
-    @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.channel.type == discord.ChannelType.private:
-            return
-        message_index = await self.convert_message(message)
-        await lightningdb.post_message_2024(message_index.model_dump())  # Prisma delayed due to no composite support for Python
-        if message.author.bot:
-            return
-        # save attachments
-        await self.save_attachments(message)
+        try:
+            if message.channel.type == discord.ChannelType.private:
+                return
+            message_index = await self.convert_message(message)
+            await lightningdb.post_message_2024(message_index)  # Prisma delayed due to no composite support for Python
+            if message.author.bot:
+                return
+            # save attachments
+            await self.save_attachments(message)
+        except Exception:
+            traceback.print_exc()
 
     async def save_attachments(self, message: discord.Message):
-        saving_enabled = await utility.get_server(message.guild).get('cyberlog', {}).get('image')
+        # needs to be converted to a thread
+        saving_enabled = (await utility.get_server(message.guild)).get('cyberlog', {}).get('image')
         if saving_enabled and len(message.attachments) > 0 and not message.channel.is_nsfw():
             path = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
             for attachment in message.attachments:

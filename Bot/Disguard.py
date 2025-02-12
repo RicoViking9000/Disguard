@@ -15,6 +15,7 @@ from pymongo import errors as mongoErrors
 import Birthdays
 import Cyberlog
 import database
+import Indexing
 import lightningdb
 import Misc
 import Reddit
@@ -25,7 +26,7 @@ tracemalloc.start()
 
 booted = False
 loading = None
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help', 'Privacy']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help', 'Privacy', 'Indexing']
 
 print('Connecting...')
 
@@ -175,8 +176,14 @@ async def on_message(message: discord.Message):
         return
     # cyberlog: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
     # await cyberlog.on_message(message)
+
+    # indexing: Indexing.Indexing = bot.get_cog('Indexing')
+    # await indexing.on_message(message)
+
     # antispam: Antispam.Antispam = bot.get_cog('Antispam')
     # await antispam.on_message(message)
+    indexing: Indexing.Indexing = bot.get_cog('Indexing')
+    await indexing.on_message(message)
     if not message.content:
         return
     if message.author.bot:
@@ -230,10 +237,8 @@ async def rickroll(ctx: commands.Context):
 @bot.command()
 @commands.is_owner()
 async def test(ctx: commands.Context):
-    await ctx.interaction.response.defer()
-    for server in bot.guilds:
-        await database.convert_reddit_feeds(server)
-    await ctx.send('Done converting')
+    message = await ctx.send('Evaluating this message type...')
+    await message.edit(content=f'Type: {message.type.name}')
 
 
 asyncio.run(main())
