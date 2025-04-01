@@ -83,7 +83,7 @@ class Cyberlog(commands.Cog):
             'store': self.emojis['storeChannel'],
         }
         self.repeatedJoins: typing.Dict[str, typing.List[datetime.datetime]] = {}
-        self.pins: typing.Dict[int, typing.List[int]] = {}
+        self.pins: typing.Dict[int, typing.List[int]] = {}  # enablement of this feature is tied to attachment logging being enabled
         self.categories: typing.Dict[int, typing.List[discord.abc.GuildChannel]] = {}
         self.members: typing.Dict[int, typing.List[discord.Member]] = {}
         self.invites = {}
@@ -404,6 +404,9 @@ class Cyberlog(commands.Cog):
     async def grab_pins(self):
         """Fetches pinned messages to be stored locally"""
         for g in self.bot.guilds:
+            saving_enabled = (await utility.get_server(g)).get('cyberlog', {}).get('image')
+            if not saving_enabled:
+                continue
             for c in g.text_channels:
                 try:
                     self.pins[c.id] = [m.id for m in await c.pins()]
@@ -500,10 +503,8 @@ class Cyberlog(commands.Cog):
         self.archiveLogEmbed(message.guild, m.id, embed, 'Message Pin')
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await m.edit(content=None)
-        try:
+        if self.pins.get(pinned.channel.id):
             self.pins[pinned.channel.id].append(pinned.id)
-        except KeyError:
-            self.pins[pinned.channel.id] = [pinned.id]
 
         def reactionCheck(r: discord.Reaction, u: discord.User):
             return r.message.id == m.id and not u.bot
@@ -585,7 +586,8 @@ class Cyberlog(commands.Cog):
         )
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await msg.edit(content=None)
-        self.pins[message.channel.id].remove(message.id)
+        if self.pins.get(message.channel.id):
+            self.pins[message.channel.id].remove(message.id)
 
         def reactionCheck(r: discord.Reaction, u: discord.User):
             return r.message.id == msg.id and not u.bot
@@ -887,7 +889,7 @@ class Cyberlog(commands.Cog):
             if settings['author'] in (1, 2, 4):
                 embed.set_author(name=after.author.display_name, icon_url=url)
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
-        new_edition = indexing_cog.edition_from_message(after)
+        new_edition = await indexing_cog.edition_from_message(after)
         await lightningdb.patch_message_2024(channel.id, after.id, new_edition)
         plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{beforeParsed if len(beforeParsed) < 1024 else beforeC}`\nAfter:`{afterParsed if len(afterParsed) < 1024 else afterC}\n`{after.jump_url}'
         try:
@@ -1059,8 +1061,6 @@ class Cyberlog(commands.Cog):
         )  # Timestamp of receiving the message edit event
         if after.guild.id not in gimpedServers:
             asyncio.create_task(updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'), name='message_edit - Update Last Active')
-        if self.pins.get(after.channel.id) is None:
-            return
         g = after.guild
         if not (await logEnabled(g, 'message')):
             return  # If the message edit log module is not enabled, return
@@ -1095,7 +1095,6 @@ class Cyberlog(commands.Cog):
         author = g.get_member(after.author.id)  # Get the member of the edited message
         if g.id not in gimpedServers:
             asyncio.create_task(updateLastActive(author, discord.utils.utcnow(), 'edited a message'), name='raw_message_edit - Update Last Active')
-        # if not self.pins.get(channel.id): return #V1.0: I have no clue what the purpose of this line is
         if not (await logEnabled(g, 'message')):
             return  # If the message edit log module is not enabled, return
         try:
@@ -1521,7 +1520,8 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden:
             pass
         if type(channel) is discord.TextChannel:
-            self.pins[channel.id] = []
+            if (await utility.get_server(channel.guild)).get('cyberlog', {}).get('image'):
+                self.pins[channel.id] = []
             asyncio.create_task(database.VerifyChannel(channel, True), name=f'channel_create - VerifyChannel-{channel.id}')
         if msg:
 
