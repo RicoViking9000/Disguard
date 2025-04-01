@@ -41,14 +41,14 @@ class MessageAttachment(pydantic.BaseModel):
 
     id: int
     message_id: int
-    hash: str
+    hash: int
     size: int  # size in bytes
     filename: str
     filepath: str  # in database or local machine
     url: str
     proxy_url: str
-    media_attributes: MediaAttributes = pydantic.Field(default=None)
-    voice_attributes: VoiceAttributes = pydantic.Field(default=None)
+    media_attributes: MediaAttributes | None = pydantic.Field(default=None)
+    voice_attributes: VoiceAttributes | None = pydantic.Field(default=None)
     content_type: str = pydantic.Field(default='')  # MIME type
     ephemeral: bool
     flags: AttachmentFlags

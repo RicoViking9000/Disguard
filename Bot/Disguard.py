@@ -49,8 +49,8 @@ logging.getLogger('discord.http').setLevel(logging.INFO)
 handler = logging.handlers.RotatingFileHandler(
     filename='discord.log',
     encoding='utf-8',
-    maxBytes=64 * 1024 * 1024,  # 64 MiB
-    backupCount=15,  # Rotate through 5 files
+    maxBytes=8 * 1024 * 1024,  # 8 MiB
+    backupCount=15,  # Rotate through 15 files
 )
 dt_fmt = '%Y-%m-%d %H:%M:%S'
 formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', dt_fmt, style='{')
@@ -183,17 +183,33 @@ async def on_message(message: discord.Message):
     # antispam: Antispam.Antispam = bot.get_cog('Antispam')
     # await antispam.on_message(message)
     indexing: Indexing.Indexing = bot.get_cog('Indexing')
-    await indexing.on_message(message)
+    try:
+        await indexing.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Indexing on_message: {e}')
+        traceback.print_exc()
     if not message.content:
         return
     if message.author.bot:
         return
     reddit: Reddit.Reddit = bot.get_cog('Reddit')
-    await reddit.on_message(message)
+    try:
+        await reddit.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Reddit on_message: {e}')
+        traceback.print_exc()
     birthdays: Birthdays.Birthdays = bot.get_cog('birthdays')
-    await birthdays.on_message(message)
+    try:
+        await birthdays.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Birthdays on_message: {e}')
+        traceback.print_exc()
     misc: Misc.Misc = bot.get_cog('Misc')
-    await misc.on_message(message)
+    try:
+        await misc.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Misc on_message: {e}')
+        traceback.print_exc()
 
 
 @bot.hybrid_command(help="Get Disguard's invite link")
@@ -241,4 +257,12 @@ async def test(ctx: commands.Context):
     await message.edit(content=f'Type: {message.type.name}')
 
 
-asyncio.run(main())
+try:
+    while True:
+        try:
+            asyncio.run(main())
+        except TimeoutError:
+            print('TimeoutError')
+            continue
+except KeyboardInterrupt:
+    print('KeyboardInterrupt - terminating Disguard')

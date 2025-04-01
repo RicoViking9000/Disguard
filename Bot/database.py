@@ -276,6 +276,9 @@ async def VerifyServer(
                         'server_id': s.id,
                         'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
                         'flags': {},
+                        'announcementsChannel': serv.get('announcementsChannel', (0, False)),  # Channel to send announcements to
+                        'moderatorChannel': serv.get('moderatorChannel', (0, False)),  # Channel to send moderator messages to
+                        'generalChannel': serv.get('generalChannel', (0, False)),  # Channel to send general messages to
                         #'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
                         'antispam': {
                             'enabled': spam.get('enabled', False),  # Master switch for the antispam module

@@ -196,8 +196,8 @@ async def patch_message(message: Message):
     return await database[str(message.channel.id)].update_one({'_id': message.id}, {'$set': data})
 
 
-async def patch_message_2024(channel_id: int, message_id: int, new_edition: models.MessageIndex):
-    return await database[str(channel_id)].update_one({'_id': message_id}, {'$push': {'editions': new_edition}})
+async def patch_message_2024(channel_id: int, message_id: int, new_edition: models.MessageEdition):
+    return await database[str(channel_id)].update_one({'_id': message_id}, {'$push': {'editions': new_edition.model_dump()}})
 
 
 async def delete_message(channel_id: int, message_id: int):

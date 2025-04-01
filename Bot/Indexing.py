@@ -132,7 +132,7 @@ class Indexing(commands.Cog):
             hash=hash(attachment),
             size=attachment.size,
             filename=attachment.filename,
-            # filepath=attachment.fp.name,
+            filepath=attachment.filename,
             url=attachment.url,
             proxy_url=attachment.proxy_url,
             media_attributes=models.MediaAttributes(
@@ -217,7 +217,7 @@ class Indexing(commands.Cog):
                 type='user' if isinstance(mention, discord.User) else 'role' if isinstance(mention, discord.Role) else 'channel',
                 target=mention.id,
             )
-            for mention in [message.mentions + message.role_mentions + message.channel_mentions]
+            for mention in message.mentions + message.role_mentions + message.channel_mentions
         ]
 
     def components_from_message(self, message: discord.Message):
@@ -283,6 +283,20 @@ class Indexing(commands.Cog):
             for component in message.components
         ]
 
+    def convert_activity(self, application: discord.MessageApplication, activity: dict):
+        """
+        Converts a discord.Activity object to a MessageActivity object
+        """
+        return models.MessageApplication(
+            id=application.id,
+            name=application.name,
+            description=application.description,
+            activity_type=activity.get('type', 0),
+            party_id=activity.get('party_id', 0),
+            cover=application.cover,
+            icon=application.icon,
+        )
+
     def message_content(self, message: discord.Message):
         """
         Extracts message content from a message
@@ -309,8 +323,8 @@ class Indexing(commands.Cog):
             reactions=[],  # [await self.convert_reaction(reaction) for reaction in message.reactions],
             pinned=message.pinned,
             deleted=False,
-            mentions=[],  # later
-            components=[],  # later
+            mentions=self.mentions_from_message(message),
+            components=self.components_from_message(message),
             activity=None,  # later
         )
 
@@ -372,7 +386,7 @@ class Indexing(commands.Cog):
                     if not os.path.exists(path):
                         os.makedirs(path)
                     try:
-                        await attachment.save(f'path/{attachment.filename}')
+                        await attachment.save(f'{path}/{attachment.filename}')
                     except discord.HTTPException:
                         pass
 
