@@ -120,8 +120,8 @@ async def on_ready():  # Method is called whenever bot is ready after connection
         print('Starting indexing...')
         for server in bot.guilds:
             print(f'Indexing {server.name}')
-            await asyncio.gather(*[indexMessages(server, c) for c in server.text_channels])
-            Cyberlog.indexed[server.id] = True
+            indexing_cog: Indexing.Indexing = bot.get_cog('Indexing')
+            await indexing_cog.index_channels(server.text_channels)
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Retrieving data'))
         print('Grabbing pins...')
         await cyber.grab_pins()
@@ -143,7 +143,7 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
     existing_message_counter = 0
     async for message in channel.history(limit=None, oldest_first=full):
         try:
-            await lightningdb.post_message(message)
+            await lightningdb.post_message_2024(message)
         except mongoErrors.DuplicateKeyError:
             if not full:
                 existing_message_counter += 1

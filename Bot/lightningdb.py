@@ -8,6 +8,7 @@ import pymongo
 from bson.codec_options import CodecOptions
 from discord import Message
 from discord.utils import utcnow
+from motor.motor_asyncio import AsyncIOMotorClient
 
 import models
 
@@ -23,7 +24,7 @@ def initialize():
     global database
     global servers
     global users
-    mongo = motor.motor_asyncio.AsyncIOMotorClient()
+    mongo: AsyncIOMotorClient = AsyncIOMotorClient()
     database = mongo.database.with_options(codec_options=CodecOptions(tz_aware=True))
     servers = database.servers
     users = database.users
@@ -114,6 +115,11 @@ def message_data(message: Message, index: int = 0):
     }
 
 
+async def is_channel_empty(channel_id: int):
+    """checks if a channel is empty"""
+    return database.get_collection(str(channel_id)) is None or await database[str(channel_id)].count_documents({}) == 0
+
+
 async def post_message(message: Message):
     # if message.channel.id in (534439214289256478, 910598159963652126):
     #     return
@@ -142,20 +148,22 @@ async def post_message_2024(message_data: models.MessageIndex):
     return insertion
 
 
-async def post_messages(messages: List[Message]):
-    if messages[0].channel.id in (534439214289256478, 910598159963652126):
-        return
-    operations = []
-    for message in messages:
-        data = message_data(message)
-        operations.append(pymongo.InsertOne(data))
-    return await database[str(message.channel.id)].bulk_write(operations)
+# async def post_messages(messages: List[Message]):
+#     if messages[0].channel.id in (534439214289256478, 910598159963652126):
+#         return
+#     operations = []
+#     for message in messages:
+#         data = message_data(message)
+#         operations.append(pymongo.InsertOne(data))
+#     return await database[str(message.channel.id)].bulk_write(operations)
 
 
+# good for 2025
 async def get_message(channel_id: int, message_id: int):
     return await database[str(channel_id)].find_one({'_id': message_id})
 
 
+# good for 2025
 async def get_channel_messages(channel_id: int):
     return await database[str(channel_id)].find().to_list(None)
 
@@ -164,11 +172,11 @@ async def get_messages_by_author(author_id: int, channel_ids: List[int] = []):
     results = []
     if channel_ids:
         for channel_id in channel_ids:
-            results += await database[str(channel_id)].find({'author0': author_id}).to_list(None)
+            results += await database[str(channel_id)].find({'author_id': author_id}).to_list(None)
     else:
         for collection in await database.list_collection_names():
             if collection not in ('servers', 'users'):
-                results += await database[collection].find({'author0': author_id}).to_list(None)
+                results += await database[collection].find({'author_id': author_id}).to_list(None)
     return results
 
 

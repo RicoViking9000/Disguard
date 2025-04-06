@@ -1,6 +1,5 @@
 """Cog that contains Disguard's dev-only commands"""
 
-import asyncio
 import codecs
 import datetime
 import inspect
@@ -12,13 +11,11 @@ import traceback
 import typing
 
 import discord
-import pymongo
-import pymongo.errors
 from discord import app_commands
 from discord.ext import commands
 
 import database
-import lightningdb
+import Indexing
 import Support
 import utility
 
@@ -62,7 +59,8 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
             servers: list[discord.Guild] = self.bot.guilds
         await interaction.response.send_message(f'Indexing [{",  ".join([str(s)[:15] for s in servers])}]...')
         for server in servers:
-            await asyncio.gather(*[indexMessages(server, channel, True) for channel in server.text_channels])
+            indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+            await indexing_cog.index_channels(server.text_channels)
         await interaction.edit_original_response(content='Server indexed!')
 
     @index_server.autocomplete('server_arg')
@@ -78,7 +76,8 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         """Index a channel"""
         channel = self.bot.get_channel(int(channel_arg))
         await interaction.response.send_message(f'Indexing {channel.name}...')
-        await indexMessages(channel.guild, channel, True)
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        await indexing_cog.index_channel(channel)
         await interaction.edit_original_response(content='Channel indexed!')
 
     @index_channel.autocomplete('channel_arg')
@@ -320,42 +319,6 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         fileName = f'Attachments/Temp/MessageAttachments_{utility.sanitize_filename(user.name)}_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(interaction.guild) if interaction.guild else -4)):%m-%b-%Y %I %M %p}'
         shutil.make_archive(fileName, 'zip', base_path)
         await interaction.response.edit_message(content=f'{os.path.abspath(fileName)}.zip')
-
-
-async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
-    if channel.id in (534439214289256478, 910598159963652126):
-        return
-    start = datetime.datetime.now()
-    try:
-        saveImages = (await utility.get_server(server))['cyberlog'].get('image') and not channel.is_nsfw()
-    except AttributeError:
-        return
-    if lightningdb.database.get_collection(str(channel.id)) is None:
-        full = True
-    existing_message_counter = 0
-    async for message in channel.history(limit=None, oldest_first=full):
-        try:
-            await lightningdb.post_message(message)
-        except pymongo.errors.DuplicateKeyError:
-            if not full:
-                existing_message_counter += 1
-                if existing_message_counter >= 15:
-                    break
-        if not message.author.bot and (discord.utils.utcnow() - message.created_at).days < 7 and saveImages:
-            attachments_path = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
-            try:
-                os.makedirs(attachments_path)
-            except FileExistsError:
-                pass
-            for attachment in message.attachments:
-                if attachment.size / 1000000 < 8:
-                    try:
-                        await attachment.save(f'{attachments_path}/{attachment.filename}')
-                    except discord.HTTPException:
-                        pass
-        if full:
-            await asyncio.sleep(0.0015)
-    print(f'Indexed {server.name}: {channel.name} in {(datetime.datetime.now() - start).seconds} seconds')
 
 
 async def setup(bot: commands.Bot):

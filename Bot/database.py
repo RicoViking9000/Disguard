@@ -354,7 +354,9 @@ async def VerifyServer(
                             'disguardLogRecursion': log.get(
                                 'disguardLogRecursion', False
                             ),  # Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
+                            'indexing': log.get('indexing', True),  # Whether to index messages in this server
                             'image': log.get('enabled', False),
+                            'storageCap': log.get('storageCap', 20),  # The maximum size of attachment storage in GB
                             'defaultChannel': log.get('defaultChannel', None),
                             'library': log.get(
                                 'library', 1
