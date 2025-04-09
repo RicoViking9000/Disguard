@@ -10,17 +10,17 @@ class MediaAttributes(pydantic.BaseModel):
     """Contains attachment data for images and videos"""
 
     attachment_id: int
-    height: int
-    width: int
-    description: Optional[str]
+    height: int | None
+    width: int | None
+    description: str | None
 
 
 class VoiceAttributes(pydantic.BaseModel):
     """Contains attachment data for voice messages"""
 
     attachment_id: int
-    duration: int
-    waveform: bytes
+    duration: int | None
+    waveform: bytes | None
 
 
 class AttachmentFlags(pydantic.BaseModel):
@@ -60,40 +60,40 @@ class MessageAttachment(pydantic.BaseModel):
 class EmbedFooter(pydantic.BaseModel):
     """A message embed footer"""
 
-    text: Annotated[str, pydantic.StringConstraints(max_length=2048)]
-    icon_url: Optional[str]
+    text: Annotated[str, pydantic.StringConstraints(max_length=2048)] | None
+    icon_url: str | None
 
 
 class EmbedImage(pydantic.BaseModel):
     """A message embed image"""
 
-    url: Optional[str]
-    proxy_url: Optional[str]
-    width: Optional[int]
-    height: Optional[int]
+    url: str | None
+    proxy_url: str | None
+    width: int | None
+    height: int | None
 
 
 class EmbedVideo(pydantic.BaseModel):
     """A message embed video"""
 
-    url: Optional[str]
-    width: Optional[int]
-    height: Optional[int]
+    url: str | None
+    width: int | None
+    height: int | None
 
 
 class EmbedProvider(pydantic.BaseModel):
     """A message embed provider"""
 
-    name: Optional[str]
-    url: Optional[str]
+    name: str | None
+    url: str | None
 
 
 class EmbedAuthor(pydantic.BaseModel):
     """A message embed author"""
 
-    name: Annotated[str, pydantic.StringConstraints(max_length=256)]
-    url: Optional[str]
-    icon_url: Optional[str]
+    name: Annotated[str, pydantic.StringConstraints(max_length=256)] | None
+    url: str | None
+    icon_url: str | None
 
 
 class EmbedField(pydantic.BaseModel):
@@ -114,13 +114,13 @@ class MessageEmbed(pydantic.BaseModel):
     url: Optional[str]
     type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link', 'poll_result']
     timestamp: Optional[datetime.datetime]
-    color: tuple[int, int, int]
-    footer: EmbedFooter
-    image: EmbedImage
-    thumbnail: EmbedImage
-    video: EmbedVideo
-    provider: EmbedProvider
-    author: EmbedAuthor
+    color: tuple[int, int, int] | None
+    footer: EmbedFooter | None
+    image: EmbedImage | None
+    thumbnail: EmbedImage | None
+    video: EmbedVideo | None
+    provider: EmbedProvider | None
+    author: EmbedAuthor | None
     fields: list[EmbedField]
 
 
@@ -369,10 +369,18 @@ class MessageApplication(pydantic.BaseModel):
     id: int
     name: str
     description: str
-    activity_type: Optional[int]
-    party_id: Optional[int]
-    cover: Asset
-    icon: Asset  # permamenace paradox
+    icon: Asset | None
+    cover: Asset | None  # permanence paradox
+
+
+class Activity(pydantic.BaseModel):
+    """
+    Activity sent with a message
+    """
+
+    application: MessageApplication | None
+    activity_type: int | None
+    party_id: int | None
 
 
 class MessageEdition(pydantic.BaseModel):

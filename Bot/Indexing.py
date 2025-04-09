@@ -117,15 +117,31 @@ class Indexing(commands.Cog):
             description=embed.description,
             url=embed.url,
             timestamp=embed.timestamp,
-            color=embed.color.to_rgb(),
-            footer=models.EmbedFooter(text=embed.footer.text, icon_url=embed.footer.icon_url),
-            image=models.EmbedImage(url=embed.image.url, proxy_url=embed.image.proxy_url, width=embed.image.width, height=embed.image.height),
+            color=embed.color.to_rgb() if embed.color else None,
+            footer=models.EmbedFooter(text=embed.footer.text, icon_url=embed.footer.icon_url)
+            if any((embed.footer.text, embed.footer.icon_url))
+            else None,
+            image=models.EmbedImage(url=embed.image.url, proxy_url=embed.image.proxy_url, width=embed.image.width, height=embed.image.height)
+            if any((embed.image.url, embed.image.proxy_url, embed.image.width, embed.image.height))
+            else None,
             thumbnail=models.EmbedImage(
                 url=embed.thumbnail.url, proxy_url=embed.thumbnail.proxy_url, width=embed.thumbnail.width, height=embed.thumbnail.height
-            ),
-            video=models.EmbedVideo(url=embed.video.url, width=embed.video.width, height=embed.video.height),
-            provider=models.EmbedProvider(name=embed.provider.name, url=embed.provider.url),
-            author=models.EmbedAuthor(name=embed.author.name, url=embed.author.url, icon_url=embed.author.icon_url),
+            )
+            if any((embed.thumbnail.url, embed.thumbnail.proxy_url, embed.thumbnail.width, embed.thumbnail.height))
+            else None,
+            video=models.EmbedVideo(url=embed.video.url, width=embed.video.width, height=embed.video.height)
+            if any((embed.video.url, embed.video.width, embed.video.height))
+            else None,
+            provider=models.EmbedProvider(name=embed.provider.name, url=embed.provider.url)
+            if any((embed.provider.name, embed.provider.url))
+            else None,
+            author=models.EmbedAuthor(
+                name=embed.author.name,
+                url=embed.author.url,
+                icon_url=embed.author.icon_url,
+            )
+            if any((embed.author.name, embed.author.url, embed.author.icon_url))
+            else None,
             fields=[models.EmbedField(name=field.name, value=field.value, inline=field.inline) for field in embed.fields],
         )
 
@@ -150,7 +166,7 @@ class Indexing(commands.Cog):
             voice_attributes=models.VoiceAttributes(attachment_id=attachment.id, duration=attachment.duration, waveform=attachment.waveform)
             if attachment.is_voice_message()
             else None,
-            content_type=attachment.content_type,
+            content_type=attachment.content_type or '',
             ephemeral=attachment.ephemeral,
             flags=models.AttachmentFlags(
                 clip=attachment.flags.clip,
@@ -294,14 +310,22 @@ class Indexing(commands.Cog):
         """
         Converts a discord.Activity object to a MessageActivity object
         """
-        return models.MessageApplication(
-            id=application.id,
-            name=application.name,
-            description=application.description,
-            activity_type=activity.get('type', 0),
-            party_id=activity.get('party_id', 0),
-            cover=application.cover,
-            icon=application.icon,
+        return models.Activity(
+            application=models.MessageApplication(
+                id=application.id,
+                name=application.name,
+                description=application.description,
+                cover=models.Asset(key=application.cover.key, url=application.cover.url, animated=application.cover.is_animated())
+                if application.cover
+                else None,
+                icon=models.Asset(key=application.icon.key, url=application.icon.url, animated=application.icon.is_animated())
+                if application.icon
+                else None,
+            )
+            if application
+            else None,
+            activity_type=activity.get('type'),
+            party_id=activity.get('party_id'),
         )
 
     def message_content(self, message: discord.Message):
@@ -332,7 +356,7 @@ class Indexing(commands.Cog):
             deleted=False,
             mentions=self.mentions_from_message(message),
             components=self.components_from_message(message),
-            activity=None,  # later
+            activity=self.convert_activity(message.application, message.activity) if any((message.application, message.activity)) else None,
         )
 
     async def convert_message(self, message: discord.Message):
