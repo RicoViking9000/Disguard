@@ -7,7 +7,7 @@ import traceback
 
 import discord
 import emoji as pymoji
-from discord.ext import commands
+from discord.ext import commands, tasks
 from pymongo.errors import DuplicateKeyError
 
 import lightningdb
@@ -22,6 +22,8 @@ bytes_per_gigabyte = 1_073_741_824  # 1024 * 1024 * 1024
 class Indexing(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.check_and_free_server_attachment_storage.start()
+        self.verify_indices.start()
 
     async def poll_from_message(self, message: discord.Message):
         """
@@ -408,7 +410,7 @@ class Indexing(commands.Cog):
         # check if the server has storage enabled
         dir = f'{storage_dir}/{server.id}/attachments'
         storage_used = utility.get_dir_size(dir)
-        storage_limit = (await lightningdb.get_server(server)).get('cyberlog', {}).get('storageCap', 0)
+        storage_limit = (await utility.get_server(server)).get('cyberlog', {}).get('storageCap', 0)
         over_capacity = storage_used > (storage_limit * bytes_per_gigabyte)
         delta = storage_used - (storage_limit * bytes_per_gigabyte)
 
@@ -426,16 +428,17 @@ class Indexing(commands.Cog):
             # delete the oldest attachments until we have enough space
             dir = f'{storage_dir}/{server.id}/attachments'
             space_freed = 0
+            # each folder contains all attachments for a message
             folders = utility.sort_folders_by_oldest(dir)
             i = 0
             while space_freed < space_to_free and len(folders) > 0 and i < len(folders):
-                # read files in the folder
+                # read files in the folder (each file is an attachment)
                 folder = folders[i]
-                files = os.listdir(folder)
                 # sort files by oldest first
                 files = utility.sort_files_by_oldest(folder)
                 j = 0
                 while space_freed < space_to_free and len(files) > 0 and j < len(files):
+                    # constraint - this assumes message_id folder > message attachments format
                     # delete the oldest file
                     file = files[j]
                     file_path = os.path.join(folder, file)
@@ -459,17 +462,13 @@ class Indexing(commands.Cog):
         # needs to be converted to a task
         saving_enabled = (await utility.get_server(message.guild)).get('cyberlog', {}).get('image')
         if saving_enabled and len(message.attachments) > 0 and not message.channel.is_nsfw():
-            path = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
+            path = f'{storage_dir}/{message.guild.id}/attachments/{message.id}'
             # if the path doesn't exist, create it
             if not os.path.exists(path):
                 os.makedirs(path)
             for attachment in message.attachments:
                 # for now, only save attachments under 10mb
                 if attachment.size < 10_000_000:
-                    # check storage remaining for this server
-                    _, _, over_capacity, _ = await self.get_attachment_storage(message.guild)
-                    if over_capacity:
-                        await self.delete_oldest_attachments(message.guild)
                     # check if the file already exists
                     if not os.path.exists(f'{path}/{attachment.filename}'):
                         # save the attachment
@@ -517,16 +516,18 @@ class Indexing(commands.Cog):
         existing_message_counter = 0
         async for message in channel.history(limit=None, oldest_first=full):
             try:
-                await lightningdb.post_message_2024(message)
+                message_data = await self.convert_message(message)
+                if message_data:
+                    await lightningdb.post_message_2024(message_data)
             except DuplicateKeyError:
                 if not full:
                     existing_message_counter += 1
                     if existing_message_counter >= 15:
                         break
-            if not message.author.bot and save_images:
+            if message.attachments and not message.author.bot and save_images:
                 await self.save_attachments(message)
             if full:
-                await asyncio.sleep(0.00025)
+                await asyncio.sleep(0.000025)
         print(f'Indexed channel ...{str(channel.id)[-4:]}')
         logger.info(f'Indexed channel {channel.id} in {(discord.utils.utcnow() - start)} delta')
 
@@ -547,11 +548,13 @@ class Indexing(commands.Cog):
             if not server_indexing_enabled[message.guild.id]:
                 continue
             try:
-                await lightningdb.post_message_2024(message)
+                message_data = await self.convert_message(message)
+                if message_data:
+                    await lightningdb.post_message_2024(message_data)
             except DuplicateKeyError:
                 logger.info(f'Message {message.id} already indexed')
             # save attachments if saving is enabled
-            if not message.author.bot and channel_images_enabled.get(message.channel.id, False):
+            if message.attachments and not message.author.bot and channel_images_enabled.get(message.channel.id, False):
                 await self.save_attachments(message)
 
     async def index_message(self, message: discord.Message):
@@ -559,14 +562,46 @@ class Indexing(commands.Cog):
         Indexes a message
         """
         # check if indexing is enabled
-        if not (await utility.get_server(message.guild))['cyberlog'].get('indexing'):
+        cyberlog = (await utility.get_server(message.guild)).get('cyberlog', {})
+        if not cyberlog.get('indexing'):
             return
+        await self.bot.wait_until_ready()
         try:
-            await lightningdb.post_message_2024(message)
+            message_data = await self.convert_message(message)
+            if message_data:
+                await lightningdb.post_message_2024(message_data)
         except DuplicateKeyError:
             logger.info(f'Message {message.id} already indexed')
-        if (await utility.get_server(message.guild))['cyberlog'].get('image') and not message.channel.is_nsfw():
+        if message.attachments and cyberlog.get('image') and not message.channel.is_nsfw():
             await self.save_attachments(message)
+
+    @tasks.loop(hours=6)
+    async def check_and_free_server_attachment_storage(self):
+        """
+        Checks if the server has reached its storage limit and frees up space if necessary
+        """
+        for server in self.bot.guilds:
+            # check if the server has storage enabled
+            if not (await utility.get_server(server)).get('cyberlog', {}).get('image'):
+                continue
+            _, _, over_capacity, _ = await self.get_attachment_storage(server)
+            if over_capacity:
+                await self.delete_oldest_attachments(server)
+
+    @tasks.loop(hours=24)
+    async def verify_indices(self):
+        """
+        Verifies that all indexes are valid and removes any invalid ones
+        """
+        print('Daily task - verifying indeces')
+        logger.info('Daily task - verifying indeces')
+        await self.bot.wait_until_ready()
+        for server in self.bot.guilds:
+            # check if the server has indexing enabled
+            if (await utility.get_server(server)).get('cyberlog', {}).get('indexing'):
+                await self.index_channels(server.text_channels, full=False)
+        print('Finished verifying indeces')
+        logger.info('Finished verifying indeces')
 
 
 async def setup(bot: commands.Bot):
