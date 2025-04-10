@@ -24,7 +24,7 @@ def initialize():
     global database
     global servers
     global users
-    mongo: AsyncIOMotorClient = AsyncIOMotorClient()
+    mongo = AsyncIOMotorClient()
     database = mongo.database.with_options(codec_options=CodecOptions(tz_aware=True))
     servers = database.servers
     users = database.users

@@ -109,7 +109,6 @@ class MessageEmbed(pydantic.BaseModel):
 
     message_id: int
     title: Optional[Annotated[str, pydantic.StringConstraints(max_length=256)]]
-    type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link']
     description: Optional[Annotated[str, pydantic.StringConstraints(max_length=4096)]]
     url: Optional[str]
     type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link', 'poll_result']
@@ -130,12 +129,27 @@ class CustomEmojiAttributes(pydantic.BaseModel):
     """
 
     id: int
-    creator_id: int
     created_at: datetime.datetime
+    require_colons: bool
     animated: bool
     managed: bool
     guild_id: int
+    creator_id: int
     url: str
+    usable_roles: list[int]
+    # application_owned: bool # d.py 2.5
+
+
+class PartialEmojiAttributes(pydantic.BaseModel):
+    """
+    Partial emoji attributes
+    """
+
+    id: int | None
+    created_at: datetime.datetime | None
+    unicode: bool
+    animated: bool
+    url: str | None = pydantic.Field(default=None)
 
 
 class Emoji(pydantic.BaseModel):
@@ -143,9 +157,9 @@ class Emoji(pydantic.BaseModel):
     An emoji
     """
 
-    name: str
-    custom: bool
-    source: str | CustomEmojiAttributes
+    name: str | None
+    custom: bool  # False + source existing = partial
+    source: str | CustomEmojiAttributes | PartialEmojiAttributes
 
 
 class Button(pydantic.BaseModel):
@@ -406,15 +420,15 @@ class MessageIndex(pydantic.BaseModel):
     author_id: int
     created_at: int
     channel_id: int
-    guild_id: int
+    guild_id: int | None = pydantic.Field(default=0)
     pinned: bool = pydantic.Field(default=False)
     deleted: bool = pydantic.Field(default=False)
     jump_url: str
     poll: MessagePoll | None = pydantic.Field(default=None)
     stickers: list[Sticker] | list = pydantic.Field(default_factory=list)
-    thread_id: int = pydantic.Field(default=0)
-    parent_interaction_id: int = pydantic.Field(default=0)
-    reference_message_id: int = pydantic.Field(default=0)
+    thread_id: int | None = pydantic.Field(default=0)
+    parent_interaction_id: int | None = pydantic.Field(default=0)
+    reference_message_id: int | None = pydantic.Field(default=0)
     tts: bool
     type: str  # using MESSAGE_TYPES dict
     webhook_id: int | None = pydantic.Field(default=0)

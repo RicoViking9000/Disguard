@@ -87,24 +87,33 @@ class Indexing(commands.Cog):
             for index, sticker in enumerate(message.stickers)
         ]
 
-    def convert_emoji(self, emoji: discord.Emoji | str):
+    def convert_emoji(self, emoji: discord.Emoji | discord.PartialEmoji | str):
         """
         Converts a discord.Emoji object to a MessageEmoji object
         """
         custom = isinstance(emoji, discord.Emoji)
+        unicode = isinstance(emoji, discord.PartialEmoji) and emoji.is_unicode_emoji()
         return models.Emoji(
-            name=emoji.name if custom else pymoji.demojize(emoji).strip(':'),
+            name=emoji.name if not unicode else pymoji.demojize(str(emoji)).strip(':'),
             custom=custom,
             source=models.CustomEmojiAttributes(
                 id=emoji.id,
                 creator_id=emoji.user.id,
                 created_at=emoji.created_at,
                 animated=emoji.animated,
-                managed=emoji.managed(),
+                managed=emoji.managed,
                 guild_id=emoji.guild.id,
                 url=emoji.url,  # permanence
             )
             if custom
+            else models.PartialEmojiAttributes(
+                id=emoji.id,
+                created_at=emoji.created_at,
+                unicode=unicode,
+                animated=emoji.animated,
+                url=emoji.url,
+            )
+            if isinstance(emoji, discord.PartialEmoji)
             else emoji,
         )
 
@@ -250,12 +259,21 @@ class Indexing(commands.Cog):
         Extracts components from a message
         """
 
+        BUTTON_STYLE_MAP = {
+            discord.ButtonStyle.primary: 'primary',
+            discord.ButtonStyle.secondary: 'secondary',
+            discord.ButtonStyle.success: 'success',
+            discord.ButtonStyle.danger: 'danger',
+            discord.ButtonStyle.link: 'link',
+            discord.ButtonStyle.premium: 'premium',
+        }
+
         def to_button(component: discord.ui.Button):
             return models.Button(
                 type='button',
-                style=component.style,
+                style=BUTTON_STYLE_MAP.get(component.style, 'secondary'),
                 label=component.label,
-                emoji=self.convert_emoji(component.emoji),
+                emoji=self.convert_emoji(component.emoji) if component.emoji else None,
                 custom_id=component.custom_id,
                 url=component.url,
                 sku_id=component.sku_id,
@@ -281,7 +299,7 @@ class Indexing(commands.Cog):
                         label=option.label,
                         value=option.value,
                         description=option.description,
-                        emoji=self.convert_emoji(option.emoji),
+                        emoji=self.convert_emoji(option.emoji) if option.emoji else None,
                         default=option.default,
                     )
                     for option in component.options
@@ -292,8 +310,8 @@ class Indexing(commands.Cog):
                 disabled=component.disabled,
             )
 
-        def process_child(component):
-            if isinstance(component, discord.ui.Button):
+        def process_child(component: discord.Component):
+            if component.type is discord.ComponentType.button:
                 return to_button(component)
             else:
                 return to_dropdown(component)
@@ -301,7 +319,7 @@ class Indexing(commands.Cog):
         return [
             models.ActionRow(
                 type='action_row',
-                children=[process_child(component) for component in message.components],
+                children=[process_child(child) for child in component.children],
             )
             if type(component) is discord.ActionRow
             else process_child(component)
@@ -393,6 +411,7 @@ class Indexing(commands.Cog):
             return message_index
         except Exception:
             print(f'Error converting message {message.id}: {traceback.print_exc()}')
+            logger.error(f'Error converting message {message.id}', exc_info=True)
 
     async def on_message(self, message: discord.Message):
         try:
