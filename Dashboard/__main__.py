@@ -418,7 +418,7 @@ def cyberlog(id):
             moduleDict[w] = {
                 'name': c[w]['name'],
                 'description': c[w]['description'],
-                'enabled': r.get(w),
+                'enabled': bool(r.get(w)),
                 'channel': r.get(f'{w}Channel', type=int),
                 'read': boolConverter(r.get(f'{w}read', None, type=int)),
                 'library': r.get(f'{w}Library', None, type=int),

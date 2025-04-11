@@ -91,7 +91,10 @@ class LogModule(object):
                     if k == 'embed':
                         result['plainText'] = not entry['embed']
                     else:
-                        result[k] = v
+                        if v == 'on':
+                            result[k] = True
+                        else:
+                            result[k] = v
             except Exception:
                 pass
         return result
