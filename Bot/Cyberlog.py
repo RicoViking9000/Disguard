@@ -5,14 +5,18 @@ import copy
 import datetime
 import gc
 import json
+import logging
 import math
 import os
 import random
+import re
 import shutil
 import textwrap
 import traceback
 import typing
 
+import aiofiles.os as aios
+import aioshutil
 import discord
 import emojis
 from discord.ext import commands, tasks
@@ -31,14 +35,15 @@ secondsInADay = 3600 * 24
 DST = 4 if datetime.datetime.now() < datetime.datetime(2023, 11, 5, 2) else 5
 units = ['second', 'minute', 'hour', 'day']
 logUnits = ['message', 'doorguard', 'channel', 'member', 'role', 'emoji', 'server', 'voice', 'misc']
-indexes = 'Indexes'
-temp_dir = 'Attachments/Temp'  # Path to save images for profile picture changes and other images in logs
+TEMP_DIR = 'storage/temp'  # Path to save images for profile picture changes and other images in logs
 gimpedServers = [403698615446536203, 460611346837405696, 366019576661671937]
 try:
-    os.makedirs(temp_dir)
+    os.makedirs(TEMP_DIR)
 except FileExistsError:
     pass
 stockImage = 'https://www.femalefirst.co.uk/image-library/land/500/r/rick-astley-whenever-you-need-somebody-album-cover.jpg'
+
+logger = logging.getLogger('discord')
 
 summaries = {}
 grabbedSummaries = {}
@@ -212,7 +217,7 @@ class Cyberlog(commands.Cog):
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
                 print(timeString)
             started = datetime.datetime.now()
-            # drop all message indexes
+            # drop message indexes for channels the bot can't find
             for collection in await lightningdb.database.list_collection_names():
                 if collection not in ('servers', 'users') and not self.bot.get_channel(int(collection)):
                     await lightningdb.delete_channel(int(collection))
@@ -337,69 +342,24 @@ class Cyberlog(commands.Cog):
     @tasks.loop(hours=24)
     async def delete_message_attachments(self):
         # This becomes less relevant with attachments stored in the image log channels
-        print('Deleting attachments that are old')
+        print('Deleting temp attachments')
+        logger.info('Deleting temp attachments')
         time = discord.utils.utcnow()
-
-        def get_dir_size(path='.'):  # https://note.nkmk.me/en/python-os-path-getsize/#:~:text=Use%20os.,in%20a%20directory%20(folder).
-            total = 0
-            with os.scandir(path) as it:
-                for entry in it:
-                    if entry.is_file():
-                        total += entry.stat().st_size
-                    elif entry.is_dir():
-                        total += get_dir_size(entry.path)
-            return total
-
         try:
-            removal = []
-            temporary_files = os.listdir(temp_dir)
-            # gather old attachments to delete
-            path = 'Attachments'
-            for server_folder in os.listdir(path):
-                if f'{path}/{server_folder}' == temp_dir:
-                    continue
-                if not self.bot.get_guild(int(server_folder)):  # if the bot's no longer in the server
-                    removal.append(os.path.join(path, server_folder))
-                    continue
-                server_path = f'Attachments/{server_folder}'
-                space_taken = get_dir_size(server_path)
-                for channel_folder in os.listdir(server_path):
-                    # messages = await lightningdb.get_channel_messages(int(channel_folder))
-                    messsage_folders = [folder for folder in os.listdir(os.path.join(server_path, channel_folder)) if channel_folder != 'LogArchive']
-                    messsage_folders.sort(key=lambda x: os.path.getmtime(os.path.join(server_path, channel_folder, x)))
-                    for message_folder in messsage_folders:
-                        if os.listdir(os.path.join(server_path, channel_folder, message_folder)):
-                            over_capacity = space_taken > 3e10  # 30GB
-                            # delete year-old folders or start deleting old folders if over capacity
-                            if (
-                                datetime.datetime.fromtimestamp(
-                                    os.path.getmtime(os.path.join(server_path, channel_folder, message_folder)), datetime.timezone.utc
-                                )
-                                < time - datetime.timedelta(days=365)
-                                or over_capacity
-                            ):
-                                removal.append(os.path.join(path, server_folder, channel_folder, message_folder))
-                                space_taken -= get_dir_size(os.path.join(server_path, channel_folder, message_folder))
-                        else:  # delete empty folders
-                            removal.append(os.path.join(path, server_folder, channel_folder, message_folder))
-            # gather attachments for servers the bot is no longer a member of
-            for folder in removal:
-                try:
-                    shutil.rmtree(folder)
-                except Exception as e:
-                    print(f'Attachment folder deletion fail: {e}')
-            for temp_file in temporary_files:
-                try:
-                    shutil.rmtree((os.path.join(temp_dir, temp_file)))
-                except:
-                    try:
-                        os.remove(os.path.join(temp_dir, temp_file))
-                    except Exception as e:
-                        print(f'Temp Attachment Deletion fail: {e}')
-            print(f'Removed {len(removal)} items in {(discord.utils.utcnow() - time).seconds} seconds')
+            temp_items = await aios.listdir(TEMP_DIR)
+            for item in temp_items:
+                # if the item is a folder, delete the folder
+                if await aios.path.isdir(os.path.join(TEMP_DIR, item)):
+                    await aioshutil.rmtree(TEMP_DIR)
+                # if the item is a file, delete the file
+                elif await aios.path.isfile(os.path.join(TEMP_DIR, item)):
+                    await aios.remove(os.path.join(TEMP_DIR, item))
+            print(f'Removed temp items in {(discord.utils.utcnow() - time).seconds} seconds')
+            logger.info(f'Removed temp items in {(discord.utils.utcnow() - time).seconds} seconds')
         except Exception as e:
-            print(f'Attachment deletion fail: {e}')
+            print(f'Temp files deletion fail: {e}')
             traceback.print_exc()
+            logger.error(f'Temp files deletion fail: {e}', exc_info=True)
 
     async def grab_pins(self):
         """Fetches pinned messages to be stored locally"""
@@ -420,8 +380,6 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """[DISCORD API METHOD] Called when message is sent"""
-        return
-        #     now in Indexing.py
         await self.bot.wait_until_ready()
         if not serverIsGimped(message.guild):
             await updateLastActive(message.author, discord.utils.utcnow(), 'sent a message')
@@ -429,23 +387,6 @@ class Cyberlog(commands.Cog):
             return
         if message.type is discord.MessageType.pins_add:
             await self.pinAddLogging(message)
-        await self.saveMessage(message)
-
-    async def saveMessage(self, message: discord.Message):
-        return
-        await lightningdb.post_message(message)
-        if message.author.bot:
-            return
-        if ((await utility.get_server(message.guild))['cyberlog'].get('image')) and len(message.attachments) > 0 and not message.channel.is_nsfw():
-            path2 = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
-            if not os.path.exists(path2):
-                os.makedirs(path2)
-            for a in message.attachments:
-                if a.size / 1000000 < 8:
-                    try:
-                        await a.save(f'{path2}/{a.filename}')
-                    except discord.HTTPException:
-                        pass
 
     async def pinAddLogging(self, message: discord.Message):
         received = discord.utils.utcnow()
@@ -984,20 +925,13 @@ class Cyberlog(commands.Cog):
                                 ]
                                 + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
                             )
-                            currentMessage = await lightningdb.get_message(after.channel.id, after.id)
-                            enum = list(enumerate(currentMessage.values()))
+                            message_data = await lightningdb.get_message(after.channel.id, after.id)
+                            editions = message_data['editions']
 
-                            print(enum)
-
-                            def makeHistory():  # This will create groups of 4 from enum; since 4 lines represent the file data for indexes
-                                for i in range(0, len(enum), 3):
-                                    yield enum[i : i + 3]
-
-                            entries = list(makeHistory())  # This will always have a length of 2 or more
-                            for i, entry in enumerate(entries):
+                            for i, entry in enumerate(editions):
                                 embed.add_field(
-                                    name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry[1][1]))}{" (Created)" if i == 0 else " (Current)" if i == len(entries) - 1 else ""}',
-                                    value=entry[-1][1],
+                                    name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry["timestamp"]))}{" (Created)" if i == 0 else " (Current)" if i == len(editions) - 1 else ""}',
+                                    value=entry['content'],
                                     inline=False,
                                 )
                             await msg.edit(embed=embed)
@@ -1109,8 +1043,7 @@ class Cyberlog(commands.Cog):
             return  # Invalid log channel
         message_data = await lightningdb.get_message(channel.id, after.id)
         if message_data:
-            index = int(list(message_data.keys())[-1][-1])
-            before = message_data[f'content{index}']
+            before = message_data['editions'][-2]
         else:
             before = after.content
         try:
@@ -1131,8 +1064,8 @@ class Cyberlog(commands.Cog):
             return
         try:
             message = payload.cached_message
-            if message.type != discord.MessageType.default:
-                return  # For system messages like pins add/member join, do nothing
+            # if message.type in [discord.MessageType.pins_add]:
+            #     return  # don't log
         except AttributeError:
             message = None
 
@@ -1146,27 +1079,39 @@ class Cyberlog(commands.Cog):
         if payload.message_id in self.pauseDelete:
             return self.pauseDelete.remove(payload.message_id)
         embed = discord.Embed(
-            title=f"""{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["delete"])}') if settings["context"][0] > 0 else ""}{"Message was deleted" if settings["context"][0] < 2 else ""}""",
+            title=f"""{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["delete"])}') if settings["context"][0] > 0 else ""}{" Message was deleted" if settings["context"][0] < 2 else ""}""",
             description='',
             color=color,
         )
         if settings['embedTimestamp'] in (1, 3):
             embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {payload.message_id}')
-        attachments = []  # List of files sent with this message
-        path = f'Attachments/{g.id}/{payload.channel_id}/{payload.message_id}'  # Where to retrieve message attachments from
+        attachments = []  # List of files to be sent with this message
+        # Retrieve this message index & export it to a JSON
+        message_data = await lightningdb.get_message(payload.channel_id, payload.message_id)
+        index_path = f'storage/temp/index_{payload.message_id}.json'
+        if message_data:
+            try:
+                with open(index_path, 'w') as json_file:
+                    json.dump(message_data, json_file, indent=4)
+                    attachments.append(index_path)
+            except Exception:
+                logger.error(f'Error writing message index to {index_path}', exc_info=True)
+
+        attachments_path = f'storage/{g.id}/attachments/{payload.message_id}'  # Where to retrieve message attachments from
+
         try:
-            for directory in os.listdir(path):
-                savePath = f'{path}/{directory}'
-                try:
-                    if any([ext in directory.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]) and utility.empty(embed.image.url):
-                        url = await self.uploadFiles(savePath)
-                        embed.set_image(url=url)
-                    else:
-                        attachments.append(savePath)
-                except discord.HTTPException:
-                    fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-        except OSError:
+            for file in await aios.listdir(attachments_path):
+                savePath = f'{attachments_path}/{file}'
+                attachments.append(savePath)
+
+                if any([ext in file.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]) and utility.empty(embed.image.url):
+                    embed.set_image(url=f'attachment://{file}')
+
+                # except discord.HTTPException:
+                #     fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
+        except FileNotFoundError:
+            # this message has no attachments; path does not exist
             pass
         if message:
             author = message.author
@@ -1175,11 +1120,10 @@ class Cyberlog(commands.Cog):
             channel, created, content = message.channel, message.created_at, message.content
         else:
             try:
-                message_data = await lightningdb.get_message(payload.channel_id, payload.message_id)
                 author, channel, created = (
-                    await self.bot.fetch_user(message_data['author0']),
+                    await self.bot.fetch_user(message_data['author_id']),
                     self.bot.get_channel(payload.channel_id),
-                    datetime.datetime.fromisoformat(created),
+                    datetime.datetime.fromtimestamp(message_data['created_at'], tz=discord.utils.utcnow().tzinfo),
                 )
                 await lightningdb.delete_message(payload.channel_id, payload.message_id)
             except (KeyError, IndexError):
@@ -1195,22 +1139,14 @@ class Cyberlog(commands.Cog):
                     content=plainText if 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
                     embed=embed if not settings['plainText'] else None,
                     tts=settings['tts'],
+                    files=[discord.File(attachment) for attachment in attachments] if attachments else None,
                 )
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                     await msg.edit(content=None)
-                while not self.bot.is_closed():
-                    result = await self.bot.wait_for('reaction_add', check=reactionCheck)
-                    if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
-                        await msg.edit(content=plainText, embed=None)
-                        await msg.clear_reactions()
-                        if not settings['plainText']:
-                            await msg.add_reaction(self.emojis['expand'])
-                    elif (result[0].emoji in (self.emojis['expand'], '⏬', '⬇', '🔽') or settings['plainText']) and len(msg.embeds) < 1:
-                        await msg.edit(content=None, embed=embed)
-                        await msg.clear_reactions()
-                        if settings['plainText']:
-                            await msg.add_reaction(self.emojis['collapse'])
-        if settings['botLogging'] == 1 and author.bot:
+                return
+        cyber = (await utility.get_server(g)).get('cyberlog')
+        log_bot_author = cyber.get('messageLogsBotAuthor')
+        if log_bot_author == 1 and author.bot:
             settings['plainText'] = True
         if discord.utils.utcnow() > created:
             mult = 1
@@ -1243,10 +1179,10 @@ class Cyberlog(commands.Cog):
             return
         try:
             if author.bot and author.id == self.bot.user.id:
-                p = f'Attachments/{g.id}/LogArchive/modLogs.json'
+                p = f'storage/misc/{g.id}/LogArchive/modLogs.json'
                 with open(p) as f:
                     try:
-                        logArchives = json.load(f)
+                        logArchives = json.load(f)  # TODO: async json or thread
                     except:
                         logArchives = {}
                 if payload.message_id in [int(k) for k in logArchives.keys()]:
@@ -1269,25 +1205,28 @@ class Cyberlog(commands.Cog):
             messageBefore = ''
         created -= datetime.timedelta(hours=DST)
         embed.description = textwrap.dedent(f"""
-            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Authored by" if settings["context"][1] < 2 else ""}: {author.mention} ({author.display_name}){' (No longer here)' if not memberObject else ''}
-            {utility.channelEmoji(self, channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} • Jump to [previous]({messageBefore.jump_url if messageBefore else ''} \'{messageBefore.content if messageBefore else ''}\') or [next]({messageAfter.jump_url if messageAfter else ''} \'{messageAfter.content if messageAfter else ''}\') message
-            {self.emojis['sendMessage'] if settings["context"][1] > 0 else ""}{"Sent" if settings["context"][1] < 2 else ""}: {utility.DisguardLongTimestamp(created)}
-            {self.emojis['delete'] if settings["context"][1] > 0 else ""}{"Deleted" if settings["context"][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)} ({' '.join(reversed(display))} later)""")
+            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{" Authored by" if settings["context"][1] < 2 else ""}: {author.mention} ({author.display_name}){' (No longer here)' if not memberObject else ''}
+            {utility.channelEmoji(self, channel) if settings["context"][1] > 0 else ""}{" Channel" if settings["context"][1] < 2 else ""}: {channel.mention} • Jump to [previous]({messageBefore.jump_url if messageBefore else ''}) or [next]({messageAfter.jump_url if messageAfter else ''}) message
+            {self.emojis['sendMessage'] if settings["context"][1] > 0 else ""}{" Sent" if settings["context"][1] < 2 else ""}: {utility.DisguardLongTimestamp(created)}
+            {self.emojis['delete'] if settings["context"][1] > 0 else ""}{" Deleted" if settings["context"][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)} ({' '.join(reversed(display))} later)""")
         if message:
             embed.add_field(name='Content', value=message.content[:1024] if len(message.content) > 0 else utility.contentParser(message))
         else:
-            embed.add_field(name='Content', value='<No content>' if not content else content[:1024])
-        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
-            if ext in content.lower():
-                if '://' in content:
-                    url = content[message.content.find('http') : content.find(ext) + len(ext) + 1]
-                    embed.set_image(url=url)
+            content = message_data['editions'][-1]['content']
+            embed.add_field(name='Content', value='<No content. Review attached message index for more details>' if not content else content[:1024])
+        # Regex pattern to match image URLs
+        image_url_pattern = r'(https?://[^\s]+?\.(?:png|jpg|jpeg|gif|webp))'
+        matches = re.findall(image_url_pattern, content)
+        if matches:
+            embed.set_image(url=matches[0])
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-            url = await self.imageToURL(author.display_avatar)
+            # TODO: these need to be converted to uploaded to the message
+            image_path = await self.image_to_local_attachment(author.display_avatar)
+            attachments.append(image_path)
             if settings['thumbnail'] in (1, 2, 4):
-                embed.set_thumbnail(url=url)
+                embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
             if settings['author'] in (1, 2, 4):
-                embed.set_author(name=author.display_name, icon_url=url)
+                embed.set_author(name=author.display_name, icon_url=f'attachment://{os.path.basename(image_path)}')
         modDelete = False
         plainText = ''
         log = None
@@ -1300,25 +1239,31 @@ class Cyberlog(commands.Cog):
                     and log.target.id in (author.id, channel.id)
                     and log.user != author
                 ):
-                    embed.description += f"""\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{"Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.display_name})"""
-                    embed.title = f"""{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["modDelete"])}') if settings["context"][0] > 0 else ""}{"Message was deleted" if settings["context"][1] < 2 else ''}"""
+                    embed.description += f"""\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{" Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.display_name})"""
+                    embed.title = f"""{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["modDelete"])}') if settings["context"][0] > 0 else ""}{" Message was deleted" if settings["context"][1] < 2 else ''}"""
                     if not serverIsGimped(g):
                         await updateLastActive(log.user, discord.utils.utcnow(), 'deleted a message')
                     modDelete = True
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (
                         settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name))
                     ):
-                        url = await self.imageToURL(log.user.display_avatar)
+                        image_path = await self.image_to_local_attachment(log.user.display_avatar)
+                        attachments.append(image_path)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)):
-                            embed.set_thumbnail(url=url)
+                            embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
-                            embed.set_author(name=log.user.display_name, icon_url=url)
+                            embed.set_author(name=log.user.display_name, icon_url=f'attachment://{os.path.basename(image_path)}')
                 else:
                     if g.id not in gimpedServers:
                         await updateLastActive(author, discord.utils.utcnow(), 'deleted a message')
-            except:
-                pass
-        if settings['botLogging'] in [0, 2] and author.bot:
+            except Exception:
+                logger.error(f'Encountered error when trying to get audit log for {g.name} message delete', exc_info=True)
+        if log and log.user.bot:
+            if settings['botLogging'] == 0:
+                return
+            if settings['botLogging'] == 1:
+                settings['plainText'] = True
+        if log_bot_author in [0, 2] and author.bot:
             # Check to see if the recursion deletion mode is enabled for Disguard log messages
             if author.id == self.bot.user.id and (await utility.get_server(g))['cyberlog'].get('disguardLogRecursion'):
                 channels = [(await utility.get_server(g))['cyberlog']['defaultChannel']]
@@ -1328,12 +1273,13 @@ class Cyberlog(commands.Cog):
                     # if log and log.user.id == 247412852925661185: return
                     modUser = log.user if log else 'A moderator'
                     content = f"{self.emojis['fileClone']} | {modUser.mention} ({modUser.display_name}) deleted my log embed, so I cloned it here"
-                    p = f'Attachments/{g.id}/LogArchive/modLogs.json'
+                    p = f'storage/misc/{g.id}/LogArchive/modLogs.json'
                     try:
                         with open(p) as f:
                             try:
                                 logArchives = json.load(f)
-                            except:
+                            except Exception:
+                                logger.error(f'Encountered error when trying to load log archives for {g.name} message delete', exc_info=True)
                                 logArchives = {}
                     except FileNotFoundError:
                         logArchives = {}
@@ -1343,16 +1289,17 @@ class Cyberlog(commands.Cog):
                         return
                     msg = await c.send(content=content, embed=embed, allowed_mentions=discord.AllowedMentions(users=False))
                     self.archiveLogEmbed(g, msg.id, embed, 'Message Delete (Recursion Clone)')
+                    return
             if settings['botLogging'] == 0:
                 return
         plainText = f"""{log.user if modDelete else author} deleted {f"{author}'s" if modDelete else "their"} message in #{channel.name if type(channel) is discord.TextChannel else channel}\n\n{'<No content>' if not content else content[:1900]}\n\n{plainText}"""
         a = 0
         while a < len(attachments):
             f = attachments[a]
-            if os.stat(f).st_size / 1000000 > 8:
-                fileError += f"\n{self.emojis['alert']} | This message's attachment ({os.path.basename(f)}) is too large to be sent ({round(os.stat(f).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-                savePath = f'{temp_dir}/{payload.message_id}/{os.path.basename(f)}'
-                shutil.copy2(f.fp, savePath)
+            if (await aios.stat(f)).st_size / 1_000_000 > 10:
+                fileError += f"\n{self.emojis['alert']} | This message's attachment ({os.path.basename(f)}) is too large to be sent ({round(os.stat(f).st_size / 1_000_000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
+                savePath = f'{TEMP_DIR}/{payload.message_id}/{os.path.basename(f)}'
+                await aioshutil.copy2(f, savePath)
                 attachments.pop(a)
             else:
                 a += 1
@@ -1362,22 +1309,17 @@ class Cyberlog(commands.Cog):
             if 'audit log' in plainText or 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts']))
             else None,
             embed=embed if not settings['plainText'] else None,
-            files=[discord.File(f) for f in attachments],
+            files=[discord.File(f) for f in attachments[:10]],
             tts=settings['tts'],
         )
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await msg.edit(content=None)
         self.archiveLogEmbed(g, msg.id, embed, 'Message Delete')
-        try:
-            if os.path.exists(savePath):
-                os.remove(savePath)
-        except UnboundLocalError:
-            pass
         # Now delete any attachments associated with this message
-        path = f'Attachments/{g.id}/{channel.id}/{payload.message_id}'
         try:
-            shutil.rmtree(path)
-        except:
+            await aioshutil.rmtree(attachments_path)
+        except FileNotFoundError:
+            # This message had no attachments
             pass
         while not self.bot.is_closed():
             result = await self.bot.wait_for('reaction_add', check=reactionCheck)
@@ -1978,8 +1920,8 @@ class Cyberlog(commands.Cog):
                 messages = await lightningdb.get_channel_messages(channel.id)
                 embed.add_field(name='Message count', value=len(messages) if messages else 0)
                 await lightningdb.delete_channel(channel.id)
-                channelAttachmentsPath = f'Attachments/{channel.guild.id}/{channel.id}'
-                shutil.rmtree(channelAttachmentsPath)
+                # channelAttachmentsPath = f'storage/attachments/{channel.guild.id}/{channel.id}'
+                # shutil.rmtree(channelAttachmentsPath)
                 self.pins.pop(channel.id, None)
             await msg.edit(content=None if not settings['plainText'] else content, embed=embed)
             self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
@@ -3140,23 +3082,9 @@ class Cyberlog(commands.Cog):
         except:
             pass
         await self.CheckDisguardServerRoles(guild.members, mode=1, reason='Bot joined a server')
-        await asyncio.gather(*[self.indexChannel(c) for c in guild.text_channels])
-
-    async def indexChannel(self, channel: discord.TextChannel, sleepTime=0.0025):
-        """This will fully index messages."""
-        try:
-            os.makedirs(f'{indexes}/{channel.guild.id}')
-        except FileExistsError:
-            pass
-        try:
-            async for message in channel.history(limit=None, oldest_first=True):
-                try:
-                    await lightningdb.post_message(message)
-                except:
-                    continue
-                await asyncio.sleep(sleepTime)
-        except Exception as e:
-            print(f'Index error for {channel.guild.name} - {channel.name}: {e}')
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        if indexing_cog:
+            await indexing_cog.index_channels(guild.text_channels)
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
@@ -4348,7 +4276,7 @@ class Cyberlog(commands.Cog):
         Retrieve the log archive file for this server
         """
         embed = discord.Embed(title='Log Archives', description=f'{self.emojis["loading"]}', color=yellow[await utility.color_theme(ctx.guild)])
-        p = f'Attachments/{ctx.guild.id}/LogArchive/modLogs.json'
+        p = f'storage/misc/{ctx.guild.id}/LogArchive/modLogs.json'
         f = discord.File(p)
         try:
             await ctx.send(file=f)
@@ -4394,7 +4322,7 @@ class Cyberlog(commands.Cog):
     # Compare with uploadFiles
     async def imageToURL(self, asset: discord.Asset):
         """Given an image asset, retrieve a new Discord CDN URL from it for permanent use"""
-        savePath = f'{temp_dir}/{discord.utils.utcnow():%m%d%Y%H%M%S%f}.{"gif" if asset.is_animated() else "png"}'
+        savePath = f'{TEMP_DIR}/{discord.utils.utcnow():%m%d%Y%H%M%S%f}.{"gif" if asset.is_animated() else "png"}'
         await asset.replace(size=1024, static_format='png').save(savePath)
         f = discord.File(savePath)
         message = await self.imageLogChannel.send(file=f)
@@ -4404,10 +4332,16 @@ class Cyberlog(commands.Cog):
             pass
         return message.attachments[0].url
 
+    async def image_to_local_attachment(self, asset: discord.Asset) -> str:
+        """Given an image asset, save it locally and return that filepath"""
+        save_path = f'{TEMP_DIR}/{discord.utils.utcnow():%m%d%Y%H%M%S%f}.{"gif" if asset.is_animated() else "png"}'
+        await asset.replace(size=1024, static_format='png').save(save_path)
+        return save_path
+
     def archiveLogEmbed(self, server, id, embed, flavorText):
-        p = f'Attachments/{server.id}/LogArchive/modLogs.json'
+        p = f'storage/misc/{server.id}/LogArchive/modLogs.json'
         try:
-            os.makedirs(f'Attachments/{server.id}/LogArchive')
+            os.makedirs(f'storage/misc/{server.id}/LogArchive')
         except FileExistsError:
             pass
         try:
@@ -4428,7 +4362,7 @@ class Cyberlog(commands.Cog):
             f.write(logArchives)
 
     def updateLogEmbed(self, server, id, data):
-        p = f'Attachments/{server.id}/LogArchive/modLogs.json'
+        p = f'storage/misc/{server.id}/LogArchive/modLogs.json'
         with open(p) as f:
             try:
                 logArchives = json.load(f)
@@ -4569,6 +4503,14 @@ class Cyberlog(commands.Cog):
                             await disguardMember.remove_roles(disguardVIPTester, reason=f'Automatic Scan: {reason}')
                         if not any([s.get_member(m.id).guild_permissions.manage_guild for s in memberServers]) and m.id in alphaMembers:
                             await disguardMember.remove_roles(disguardAlphaTester, reason=f'Automatic Scan: {reason}')
+
+    async def dispatch_notice(self, server: discord.Guild, embed: discord.Embed):
+        try:
+            channel = server.get_channel((await utility.get_server(server)).get('cyberlog').get('defaultChannel'))
+            if channel:
+                await channel.send(embed=embed)
+        except Exception as e:
+            logger.error(f'Error dispatching notice: {e}', exc_info=True)
 
 
 async def logEnabled(s: discord.Guild, mod: str):
@@ -4812,9 +4754,9 @@ class ErrorView(discord.ui.View):
     async def writeError(self):
         consoleLogChannel: discord.TextChannel = self.cyberlog.bot.get_channel(873069122458615849)
         self.filename = self.occurrence.strftime('%m%d%Y%H%M%S%f')
-        self.path = f'{temp_dir}/Tracebacks/{self.filename}.txt'
+        self.path = f'{TEMP_DIR}/tracebacks/{self.filename}.txt'
         try:
-            os.makedirs(f'{temp_dir}/Tracebacks')
+            os.makedirs(f'{TEMP_DIR}/tracebacks')
         except FileExistsError:
             pass
         with codecs.open(self.path, 'w+', encoding='utf-8-sig') as f:
@@ -4925,9 +4867,9 @@ class ErrorDiagnosticConfirmationView(discord.ui.View):
             # TODO: advanced traceback
             view.errorDetailsView.buttonSend.disabled = True
             filename = view.errorDetailsView.errorView.occurrence.strftime('%m%d%Y%H%M%S%f')
-            path = f'{temp_dir}/Tracebacks/{filename}-detailed.txt'
-            if not os.path.exists(f'{temp_dir}/Tracebacks'):
-                os.makedirs(f'{temp_dir}/Tracebacks')
+            path = f'{TEMP_DIR}/tracebacks/{filename}-detailed.txt'
+            if not os.path.exists(f'{TEMP_DIR}/tracebacks'):
+                os.makedirs(f'{TEMP_DIR}/tracebacks')
             header = f'Occurrence: {utility.DisguardStandardTimestamp(view.errorDetailsView.errorView.occurrence)} UTC\nServer: {view.errorDetailsView.ctx.guild.name} ({view.errorDetailsView.ctx.guild.id}) • {view.errorDetailsView.ctx.guild.member_count} members\n'
             header += f'Channel: {view.errorDetailsView.ctx.channel.name} ({view.errorDetailsView.ctx.channel.id})\nMember: {view.errorDetailsView.ctx.author.display_name} ({view.errorDetailsView.ctx.author.id})\nMember permissions: {utility.outputPermissions(view.errorDetailsView.ctx.author.guild_permissions)}\n'
             header += f'Bot permissions: {utility.outputPermissions(view.errorDetailsView.ctx.guild.me.guild_permissions)}\nMessage: {view.errorDetailsView.ctx.message.content}'

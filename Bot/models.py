@@ -111,7 +111,7 @@ class MessageEmbed(pydantic.BaseModel):
     title: Optional[Annotated[str, pydantic.StringConstraints(max_length=256)]]
     description: Optional[Annotated[str, pydantic.StringConstraints(max_length=4096)]]
     url: Optional[str]
-    type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link', 'poll_result']
+    type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link', 'poll_result', 'auto_moderation_notification']
     timestamp: Optional[datetime.datetime]
     color: tuple[int, int, int] | None
     footer: EmbedFooter | None
@@ -167,7 +167,7 @@ class Button(pydantic.BaseModel):
 
     type: str = pydantic.Field(default='button')
     style: Literal['primary', 'secondary', 'success', 'danger', 'link', 'premium']
-    label: str = pydantic.Field(max_length=80)
+    label: str | None = pydantic.Field(max_length=80)
     emoji: Emoji | None
     custom_id: str | None = pydantic.Field(max_length=100)
     url: str | None
@@ -394,14 +394,14 @@ class Activity(pydantic.BaseModel):
 
     application: MessageApplication | None
     activity_type: int | None
-    party_id: int | None
+    party_id: str | None
 
 
 class MessageEdition(pydantic.BaseModel):
     """Data specific to each edition of a message"""
 
     content: str
-    timestamp: datetime.datetime
+    timestamp: int
     attachments: list[MessageAttachment]
     embeds: list[MessageEmbed]
     reactions: list[ReactionChangeEvent]
@@ -409,13 +409,13 @@ class MessageEdition(pydantic.BaseModel):
     deleted: bool  # Deleted + edition timestamp = deletion time
     mentions: list[Mention]  # will need to combine member, channel & role here
     components: list[ActionRow | Button | Dropdown] = pydantic.Field(default_factory=list)
-    activity: Optional[MessageApplication] = pydantic.Field(default=None)
+    activity: Optional[Activity] = pydantic.Field(default=None)
 
 
 class MessageIndex(pydantic.BaseModel):
     """One per message, contains revision instances & data constant between revisions"""
 
-    _id: int
+    id: int
     editions: list[MessageEdition]
     author_id: int
     created_at: int

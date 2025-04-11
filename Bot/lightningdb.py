@@ -1,6 +1,7 @@
 """Contains the code for the local MongoDB functionality to replace cached lightningLogging"""
 
 import datetime
+import logging
 from typing import List
 
 import motor.motor_asyncio
@@ -11,6 +12,8 @@ from discord.utils import utcnow
 from motor.motor_asyncio import AsyncIOMotorClient
 
 import models
+
+logger = logging.getLogger('discord')
 
 # mongo = motor.motor_asyncio.AsyncIOMotorClient()
 
@@ -120,23 +123,28 @@ async def is_channel_empty(channel_id: int):
     return database.get_collection(str(channel_id)) is None or await database[str(channel_id)].count_documents({}) == 0
 
 
-async def post_message(message: Message):
-    # if message.channel.id in (534439214289256478, 910598159963652126):
-    #     return
-    data = message_data(message)
-    insertion = await database[str(message.channel.id)].insert_one(data)
-    try:
-        if 'author0' not in list((await database[str(message.channel.id)].index_information()).keys()):
-            await database[str(message.channel.id)].create_index('author0')
-    except:
-        await database[str(message.channel.id)].create_index('author0')
-    return insertion
+# async def post_message(message: Message):
+#     # if message.channel.id in (534439214289256478, 910598159963652126):
+#     #     return
+#     data = message_data(message)
+#     insertion = await database[str(message.channel.id)].insert_one(data)
+#     try:
+#         if 'author0' not in list((await database[str(message.channel.id)].index_information()).keys()):
+#             await database[str(message.channel.id)].create_index('author0')
+#     except:
+#         await database[str(message.channel.id)].create_index('author0')
+#     return insertion
 
 
 async def post_message_2024(message_data: models.MessageIndex):
     # if message.channel.id in (534439214289256478, 910598159963652126):
     #     return
+
     message_dict = message_data.model_dump()
+    # Pydantic doesn't support parameters in models that start with underscores.
+    # Manually shift the id field to the MongoDB id field here
+    message_dict['_id'] = message_dict['id']
+    message_dict.pop('id')
     insertion = await database[str(message_data.channel_id)].insert_one(message_dict)
     author_index = pymongo.IndexModel([('author_id')])
     channel_index = pymongo.IndexModel([('channel_id')])
@@ -144,6 +152,7 @@ async def post_message_2024(message_data: models.MessageIndex):
         if 'author_id' not in list((await database[str(message_data.channel_id)].index_information()).keys()):
             await database[str(message_data.channel_id)].create_indexes([author_index, channel_index])
     except Exception:
+        logger.error('Encountered error checking for author index keys; shifting to creating them anyway', exc_info=True)
         await database[str(message_data.channel_id)].create_indexes([author_index, channel_index])
     return insertion
 
@@ -165,7 +174,7 @@ async def get_message(channel_id: int, message_id: int):
 
 # good for 2025
 async def get_channel_messages(channel_id: int):
-    return await database[str(channel_id)].find().to_list(None)
+    return await database[str(channel_id)].find_many({}).to_list(None)
 
 
 async def get_messages_by_author(author_id: int, channel_ids: List[int] = []):
@@ -192,16 +201,16 @@ async def get_messages_by_timestamp(after: datetime.datetime = None, before: dat
     return results
 
 
-async def patch_message(message: Message):
-    if message.channel.id in (534439214289256478, 910598159963652126):
-        return
-    existing_message = await get_message(message.channel.id, message.id)
-    if not existing_message:
-        return
-    index = int(list(existing_message.keys())[-1][-1]) + 1
-    data = message_data(message, index=index)
-    data.pop('_id')
-    return await database[str(message.channel.id)].update_one({'_id': message.id}, {'$set': data})
+# async def patch_message(message: Message):
+#     if message.channel.id in (534439214289256478, 910598159963652126):
+#         return
+#     existing_message = await get_message(message.channel.id, message.id)
+#     if not existing_message:
+#         return
+#     index = int(list(existing_message.keys())[-1][-1]) + 1
+#     data = message_data(message, index=index)
+#     data.pop('_id')
+#     return await database[str(message.channel.id)].update_one({'_id': message.id}, {'$set': data})
 
 
 async def patch_message_2024(channel_id: int, message_id: int, new_edition: models.MessageEdition):
@@ -213,4 +222,12 @@ async def delete_message(channel_id: int, message_id: int):
 
 
 async def delete_channel(channel_id: int):
+    logger.info(f'Dropping channel by id {channel_id}')
     return await database[str(channel_id)].drop()
+
+
+async def delete_all_channels():
+    for collection in await database.list_collection_names():
+        if collection not in ('servers', 'users'):
+            await database[collection].drop()
+            logger.info(f'Dropped collection {collection}')

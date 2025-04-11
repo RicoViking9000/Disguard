@@ -141,6 +141,53 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await self.bot.tree.sync()
         await interaction.response.send_message('Cleared tree')
 
+    @app_commands.command(name='clear_indexes')
+    async def clear_indexes(self, interaction: discord.Interaction, *, server: typing.Optional[str], channel: typing.Optional[str]):
+        """Clear message indexes"""
+        logger.info(f'[clear_indexes] Clearing indexes for server {server} and channel {channel}')
+        await interaction.response.send_message('Clearing indexes...')
+        status_content = ''
+        if not server and not channel:
+            await lightningdb.delete_all_channels()
+            channels = []
+        elif server and not channel:
+            channels = [self.bot.get_guild(int(server)).text_channels]
+        elif channel:
+            channels = [self.bot.get_channel(int(channel))]
+        for channel in channels:
+            try:
+                await lightningdb.delete_channel(channel)
+            except Exception:
+                logger.error(f'[clear_indexes] Error deleting channel {channel}', exc_info=True)
+                status_content += f'Error deleting channel {channel}\n'
+        await interaction.edit_original_response(content=f'Indexes cleared\n\n{status_content}')
+
+    @clear_indexes.autocomplete('server')
+    async def clear_indexes_autocomplete_server(self, interaction: discord.Interaction, argument: str):
+        if argument:
+            return [app_commands.Choice(name=str(server[0]), value=str(server[0].id)) for server in utility.FindServers(self.bot.guilds, argument)][
+                :25
+            ]
+        return [app_commands.Choice(name=str(server), value=str(server.id)) for server in self.bot.guilds][:25]
+
+    @clear_indexes.autocomplete('channel')
+    async def clear_indexes_autocomplete_channel(self, interaction: discord.Interaction, argument: str):
+        def filter_list(results: list[list[tuple[discord.TextChannel, int]]]) -> list[discord.TextChannel]:
+            result = []
+            for list_entry in results:
+                result += [entry[0] for entry in list_entry if isinstance(entry[0], discord.TextChannel)]
+            return result
+
+        text_channel_results = [utility.FindChannels(server, argument) for server in self.bot.guilds]
+        filtered_results = filter_list(text_channel_results)
+        if argument:
+            return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in filtered_results][:25]
+        return [
+            app_commands.Choice(name=str(channel), value=str(channel.id))
+            for channel in self.bot.get_all_channels()
+            if isinstance(channel, discord.TextChannel)
+        ][:25]
+
     @app_commands.command(name='reload_cog')
     async def reload_cog(self, interaction: discord.Interaction, cog_name: str):
         """Reload a cog"""

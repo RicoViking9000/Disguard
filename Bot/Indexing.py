@@ -368,7 +368,7 @@ class Indexing(commands.Cog):
         """
         return models.MessageEdition(
             content=message.content,
-            timestamp=message.created_at,
+            timestamp=int(message.created_at.timestamp()),
             attachments=[self.convert_attachment(attachment) for attachment in message.attachments],
             embeds=[self.convert_embed(embed) for embed in message.embeds],
             reactions=[],  # [await self.convert_reaction(reaction) for reaction in message.reactions],
@@ -385,7 +385,7 @@ class Indexing(commands.Cog):
         """
         try:
             message_index = models.MessageIndex(
-                _id=message.id,
+                id=message.id,
                 editions=[],
                 author_id=message.author.id,
                 created_at=int(message.created_at.timestamp()),
@@ -412,15 +412,6 @@ class Indexing(commands.Cog):
         except Exception:
             print(f'Error converting message {message.id}: {traceback.print_exc()}')
             logger.error(f'Error converting message {message.id}', exc_info=True)
-
-    async def on_message(self, message: discord.Message):
-        try:
-            if message.channel.type == discord.ChannelType.private:
-                return
-            await self.index_message(message)
-        except Exception:
-            logger.error(f'Error in Indexing on_message: {message.id}', exc_info=True)
-            traceback.print_exc()
 
     async def get_attachment_storage(self, server: discord.Guild):
         """
@@ -612,15 +603,24 @@ class Indexing(commands.Cog):
         """
         Verifies that all indexes are valid and removes any invalid ones
         """
-        print('Daily task - verifying indeces')
-        logger.info('Daily task - verifying indeces')
+        print('Daily task - verifying indexes')
+        logger.info('Daily task - verifying indexes')
         await self.bot.wait_until_ready()
         for server in self.bot.guilds:
             # check if the server has indexing enabled
             if (await utility.get_server(server)).get('cyberlog', {}).get('indexing'):
                 await self.index_channels(server.text_channels, full=False)
-        print('Finished verifying indeces')
-        logger.info('Finished verifying indeces')
+        print('Finished verifying indexes')
+        logger.info('Finished verifying indexes')
+
+    async def on_message(self, message: discord.Message):
+        try:
+            if message.channel.type == discord.ChannelType.private:
+                return
+            await self.index_message(message)
+        except Exception:
+            logger.error(f'Error in Indexing on_message: {message.id}', exc_info=True)
+            traceback.print_exc()
 
 
 async def setup(bot: commands.Bot):
