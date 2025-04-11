@@ -4,6 +4,7 @@ import codecs
 import datetime
 import inspect
 import json
+import logging
 import os
 import shutil
 import textwrap
@@ -16,10 +17,13 @@ from discord.ext import commands
 
 import database
 import Indexing
+import lightningdb
 import Support
 import utility
 
 # =============================================================================
+
+logger = logging.getLogger('discord')
 
 
 @app_commands.guilds(utility.DISGUARD_SERVER_ID)
@@ -32,12 +36,14 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='shutdown')
     async def shutdown(self, interaction: discord.Interaction):
         """Shutdown the bot"""
+        logger.info('[shutdown] Shutting down')
         await interaction.response.send_message('Shutting down')
         await self.bot.close()
 
     @app_commands.command(name='verify_database')
     async def verify_database(self, interaction: discord.Interaction):
         """Verify the database"""
+        logger.info('[verify_database] Verifying database')
         await interaction.response.send_message('Verifying database...')
         await database.Verification(self.bot)
         await interaction.edit_original_response(content='Database verified!')
@@ -45,6 +51,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='unduplicate_history')
     async def unduplicate_history(self, interaction: discord.Interaction):
         """Remove duplicate entries from status, username, avatar history"""
+        logger.info('[unduplicate_history] Removing duplicate entries from status, username, avatar history')
         self.bot.useAttributeQueue = True
         await database.UnduplicateUsers(self.bot.users, interaction)
         self.bot.useAttributeQueue = False
@@ -53,6 +60,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='index_server')
     async def index_server(self, interaction: discord.Interaction, *, server_arg: typing.Optional[str]):
         """Index a server's messages"""
+        logger.info(f'[index_server] Indexing server {server_arg}')
         if server_arg:
             servers: list[discord.Guild] = [self.bot.get_guild(int(server_arg))]
         else:
@@ -74,6 +82,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='index_channel')
     async def index_channel(self, interaction: discord.Interaction, channel_arg: str):
         """Index a channel"""
+        logger.info(f'[index_channel] Indexing channel {channel_arg}')
         channel = self.bot.get_channel(int(channel_arg))
         await interaction.response.send_message(f'Indexing {channel.name}...')
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
@@ -101,6 +110,8 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='eval')
     async def eval(self, interaction: discord.Interaction, *, code: str):
         """Evaluate code"""
+        logger.info(f'[eval] Evaluating code: {code}')
+        await interaction.response.defer(thinking=True)
         code = textwrap.dedent(code)
         env = {
             'bot': self.bot,
@@ -125,18 +136,21 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='get_log_file')
     async def get_log_file(self, interaction: discord.Interaction):
         """Get the log file"""
+        logger.info('[get_log_file] Sending log file')
         await interaction.response.send_message(file=discord.File('discord.log'))
 
     @app_commands.command(name='sync')
     async def sync_tree(self, interaction: discord.Interaction):
         """Sync the tree"""
+        logger.info('[sync_tree] Syncing command tree')
         await self.bot.tree.sync()
         await self.bot.tree.sync(guild=discord.Object(utility.DISGUARD_SERVER_ID))
         await interaction.response.send_message('Synced tree')
 
     @app_commands.command(name='clear_commands')
     async def clear_commands(self, interaction: discord.Interaction):
-        """Clear the command cache"""
+        """Clear the command tree"""
+        logger.info('[clear_commands] Clearing command tree')
         await self.bot.tree.clear_commands()
         await self.bot.tree.sync()
         await interaction.response.send_message('Cleared tree')
@@ -191,6 +205,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='reload_cog')
     async def reload_cog(self, interaction: discord.Interaction, cog_name: str):
         """Reload a cog"""
+        logger.info(f'[reload_cog] Reloading {cog_name}')
         cog = self.bot.get_cog(cog_name)
         if cog is None:
             await interaction.response.send_message(f'Cog {cog_name} not found')
