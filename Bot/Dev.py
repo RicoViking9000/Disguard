@@ -58,7 +58,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
 
     @app_commands.command(name='index_server')
-    async def index_server(self, interaction: discord.Interaction, *, server_arg: typing.Optional[str]):
+    async def index_server(self, interaction: discord.Interaction, *, server_arg: typing.Optional[str], full: bool = False):
         """Index a server's messages"""
         logger.info(f'[index_server] Indexing server {server_arg}')
         if server_arg:
@@ -68,7 +68,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await interaction.response.send_message(f'Indexing [{",  ".join([str(s)[:15] for s in servers])}]...')
         for server in servers:
             indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
-            await indexing_cog.index_channels(server.text_channels)
+            await indexing_cog.index_channels(server.text_channels, full=full)
         await interaction.edit_original_response(content='Server indexed!')
 
     @index_server.autocomplete('server_arg')
@@ -80,13 +80,13 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         return [app_commands.Choice(name=str(server), value=str(server.id)) for server in self.bot.guilds][:25]
 
     @app_commands.command(name='index_channel')
-    async def index_channel(self, interaction: discord.Interaction, channel_arg: str):
+    async def index_channel(self, interaction: discord.Interaction, channel_arg: str, full: bool = False):
         """Index a channel"""
         logger.info(f'[index_channel] Indexing channel {channel_arg}')
         channel = self.bot.get_channel(int(channel_arg))
         await interaction.response.send_message(f'Indexing {channel.name}...')
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
-        await indexing_cog.index_channel(channel)
+        await indexing_cog.index_channel(channel, full=full)
         await interaction.edit_original_response(content='Channel indexed!')
 
     @index_channel.autocomplete('channel_arg')
@@ -155,7 +155,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await self.bot.tree.sync()
         await interaction.response.send_message('Cleared tree')
 
-    @app_commands.command(name='clear_indexes')
+    @app_commands.command(name='delete_indexes')
     async def clear_indexes(self, interaction: discord.Interaction, *, server: typing.Optional[str], channel: typing.Optional[str]):
         """Clear message indexes"""
         logger.info(f'[clear_indexes] Clearing indexes for server {server} and channel {channel}')
@@ -163,7 +163,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         status_content = ''
         if not server and not channel:
             await lightningdb.delete_all_channels()
-            channels = []
+            channels = []  # Set this so the loop below doesn't execute
         elif server and not channel:
             channels = [self.bot.get_guild(int(server)).text_channels]
         elif channel:
@@ -186,6 +186,51 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
 
     @clear_indexes.autocomplete('channel')
     async def clear_indexes_autocomplete_channel(self, interaction: discord.Interaction, argument: str):
+        def filter_list(results: list[list[tuple[discord.TextChannel, int]]]) -> list[discord.TextChannel]:
+            result = []
+            for list_entry in results:
+                result += [entry[0] for entry in list_entry if isinstance(entry[0], discord.TextChannel)]
+            return result
+
+        text_channel_results = [utility.FindChannels(server, argument) for server in self.bot.guilds]
+        filtered_results = filter_list(text_channel_results)
+        if argument:
+            return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in filtered_results][:25]
+        return [
+            app_commands.Choice(name=str(channel), value=str(channel.id))
+            for channel in self.bot.get_all_channels()
+            if isinstance(channel, discord.TextChannel)
+        ][:25]
+
+    @app_commands.command(name='delete_attachments')
+    async def delete_attachments(self, interaction: discord.Interaction, *, server: typing.Optional[str], channel: typing.Optional[str]):
+        """Delete message attachments"""
+        logger.info(f'[delete_attachments] Deleting attachments for server {server} and channel {channel}')
+        await interaction.response.send_message('Deleting attachments...')
+        status_content = ''
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        try:
+            if not server and not channel:
+                await indexing_cog.delete_all_attachments()
+            elif server and not channel:
+                await indexing_cog.delete_all_attachments(server=self.bot.get_guild(int(server)))
+            elif channel:
+                await indexing_cog.delete_all_attachments(channel=self.bot.get_channel(int(channel)))
+            await interaction.edit_original_response(content=f'Attachments deleted\n\n{status_content}')
+        except Exception:
+            logger.error(f'[delete_attachments] Error deleting attachments for server {server} and channel {channel}', exc_info=True)
+            status_content += f'Error deleting attachments for server {server} and channel {channel}\n'
+
+    @delete_attachments.autocomplete('server')
+    async def delete_attachments_autocomplete_server(self, interaction: discord.Interaction, argument: str):
+        if argument:
+            return [app_commands.Choice(name=str(server[0]), value=str(server[0].id)) for server in utility.FindServers(self.bot.guilds, argument)][
+                :25
+            ]
+        return [app_commands.Choice(name=str(server), value=str(server.id)) for server in self.bot.guilds][:25]
+
+    @delete_attachments.autocomplete('channel')
+    async def delete_attachments_autocomplete_channel(self, interaction: discord.Interaction, argument: str):
         def filter_list(results: list[list[tuple[discord.TextChannel, int]]]) -> list[discord.TextChannel]:
             result = []
             for list_entry in results:

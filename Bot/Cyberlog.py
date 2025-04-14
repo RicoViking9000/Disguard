@@ -1098,7 +1098,7 @@ class Cyberlog(commands.Cog):
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
 
-        attachments_path = f'storage/{g.id}/attachments/{payload.message_id}'  # Where to retrieve message attachments from
+        attachments_path = f'storage/{g.id}/attachments/{payload.channel_id}/{payload.message_id}'  # Where to retrieve message attachments from
 
         try:
             for file in await aios.listdir(attachments_path):
@@ -1920,8 +1920,12 @@ class Cyberlog(commands.Cog):
                 messages = await lightningdb.get_channel_messages(channel.id)
                 embed.add_field(name='Message count', value=len(messages) if messages else 0)
                 await lightningdb.delete_channel(channel.id)
-                # channelAttachmentsPath = f'storage/attachments/{channel.guild.id}/{channel.id}'
-                # shutil.rmtree(channelAttachmentsPath)
+                channel_attachments_path = f'storage/{channel.guild.id}/attachments/{channel.id}'
+                try:
+                    await aioshutil.rmtree(channel_attachments_path)
+                except FileNotFoundError:
+                    # this channel didn't have an attachments directory
+                    pass
                 self.pins.pop(channel.id, None)
             await msg.edit(content=None if not settings['plainText'] else content, embed=embed)
             self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')

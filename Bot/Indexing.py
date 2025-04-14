@@ -5,6 +5,8 @@ import logging
 import os
 import traceback
 
+import aiofiles.os as aios
+import aioshutil
 import discord
 import emoji as pymoji
 from discord.ext import commands, tasks
@@ -428,59 +430,98 @@ class Indexing(commands.Cog):
 
     async def delete_oldest_attachments(self, server: discord.Guild):
         """
-        Deletes the oldest attachments in a channel
+        Deletes the oldest attachments in a server, supporting unlimited folder nesting depth.
         """
         storage_limit, storage_used, over_capacity, space_to_free = await self.get_attachment_storage(server)
-        # if this server hasn't reached capacity, no need to delete old attachments
+        # If this server hasn't reached capacity, no need to delete old attachments
         if not over_capacity:
             return
         if storage_used >= storage_limit * bytes_per_gigabyte:
-            # delete the oldest attachments until we have enough space
             dir = f'{storage_dir}/{server.id}/attachments'
             space_freed = 0
-            # each folder contains all attachments for a message
-            folders = utility.sort_folders_by_oldest(dir)
-            i = 0
-            while space_freed < space_to_free and len(folders) > 0 and i < len(folders):
-                # read files in the folder (each file is an attachment)
-                folder = folders[i]
-                # sort files by oldest first
-                files = utility.sort_files_by_oldest(folder)
-                j = 0
-                while space_freed < space_to_free and len(files) > 0 and j < len(files):
-                    # constraint - this assumes message_id folder > message attachments format
-                    # delete the oldest file
-                    file = files[j]
-                    file_path = os.path.join(folder, file)
+
+            def get_all_files_sorted_by_oldest(directory):
+                """
+                Recursively collects all files in the directory and its subdirectories,
+                sorted by their last modified time (oldest first).
+                """
+                all_files = []
+                for root, _, files in os.walk(directory):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        all_files.append(file_path)
+                return sorted(all_files, key=lambda x: os.path.getmtime(x))
+
+            # Get all files sorted by oldest first
+            files = get_all_files_sorted_by_oldest(dir)
+
+            # Delete files until enough space is freed
+            for file_path in files:
+                if space_freed >= space_to_free:
+                    break
+                try:
+                    file_size = await aios.path.getsize(file_path)
+                    await aios.remove(file_path)
+                    space_freed += file_size
+                except FileNotFoundError:
+                    logger.error(f'delete_oldest_attachments - File not found: {file_path}', exc_info=True)
+                except Exception:
+                    logger.error(f'delete_oldest_attachments - Error deleting file {file_path}', exc_info=True)
+
+            # Remove empty folders
+            for root, dirs, _ in os.walk(dir, topdown=False):
+                for folder in dirs:
+                    folder_path = os.path.join(root, folder)
                     try:
-                        file_size = os.path.getsize(file_path)
-                        os.remove(file_path)
-                        space_freed += file_size
-                    except FileNotFoundError:
-                        logger.error(f'check_attachment_storage - File not found: {file_path}')
-                    j += 1
-                # if folder is empty, delete it
-                if len(os.listdir(folder)) == 0:
-                    try:
-                        os.rmdir(folder)
+                        await aios.rmdir(folder_path)
                     except OSError:
-                        logger.error(f'check_attachment_storage - Directory not empty: {folder}')
-                i += 1
-        return space_freed
+                        logger.error(f'delete_oldest_attachments - Directory not empty: {folder_path}')
+            return space_freed
+
+    async def delete_all_attachments(self, *, server: discord.Guild = None, channel: discord.TextChannel = None):
+        """
+        Deletes all attachments in a server or channel.
+        """
+        full_nuke = False
+        if not server and not channel:
+            full_nuke = True
+        elif server and not channel:
+            dir = f'{storage_dir}/{server.id}/attachments'
+        elif channel:
+            dir = f'{storage_dir}/{channel.guild.id}/attachments/{channel.id}'
+        if not full_nuke:
+            try:
+                await aioshutil.rmtree(dir)
+                logger.info(f'Deleted all attachments in {dir}')
+            except FileNotFoundError:
+                logger.error(f'delete_all_attachments - Directory not found: {dir}')
+            except Exception:
+                logger.error(f'delete_all_attachments - Error deleting directory {dir}', exc_info=True)
+        else:
+            servers = self.bot.guilds
+            for server in servers:
+                dir = f'{storage_dir}/{server.id}/attachments'
+                try:
+                    await aioshutil.rmtree(dir)
+                    logger.info(f'Deleted all attachments in {dir}')
+                except FileNotFoundError:
+                    logger.error(f'delete_all_attachments - Directory not found: {dir}')
+                except Exception:
+                    logger.error(f'delete_all_attachments - Error deleting directory {dir}', exc_info=True)
 
     async def save_attachments(self, message: discord.Message):
         # needs to be converted to a task
         saving_enabled = (await utility.get_server(message.guild)).get('cyberlog', {}).get('image')
         if saving_enabled and len(message.attachments) > 0 and not message.channel.is_nsfw():
-            path = f'{storage_dir}/{message.guild.id}/attachments/{message.id}'
+            path = f'{storage_dir}/{message.guild.id}/attachments/{message.channel.id}/{message.id}'
             # if the path doesn't exist, create it
-            if not os.path.exists(path):
-                os.makedirs(path)
+            if not await aios.path.exists(path):
+                await aios.makedirs(path)
             for attachment in message.attachments:
                 # for now, only save attachments under 10mb
                 if attachment.size < 10_000_000:
                     # check if the file already exists
-                    if not os.path.exists(f'{path}/{attachment.filename}'):
+                    if not await aios.path.exists(f'{path}/{attachment.filename}'):
                         # save the attachment
                         try:
                             await attachment.save(f'{path}/{attachment.filename}')
