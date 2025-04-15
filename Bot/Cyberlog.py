@@ -1087,6 +1087,7 @@ class Cyberlog(commands.Cog):
         if settings['embedTimestamp'] in (1, 3):
             embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {payload.message_id}')
+        cyber = (await utility.get_server(g)).get('cyberlog')
         attachments = []  # List of files to be sent with this message
         # Retrieve this message index & export it to a JSON
         message_data = await lightningdb.get_message(payload.channel_id, payload.message_id)
@@ -1095,7 +1096,8 @@ class Cyberlog(commands.Cog):
             try:
                 with open(index_path, 'w') as json_file:
                     json.dump(message_data, json_file, indent=4)
-                    attachments.append(index_path)
+                    if cyber.get('send_index_file'):
+                        attachments.append(index_path)
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
 
@@ -1145,7 +1147,6 @@ class Cyberlog(commands.Cog):
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                     await msg.edit(content=None)
                 return
-        cyber = (await utility.get_server(g)).get('cyberlog')
         log_bot_author = cyber.get('messageLogsBotAuthor')
         if log_bot_author == 1 and author.bot:
             settings['plainText'] = True
@@ -2127,7 +2128,7 @@ class Cyberlog(commands.Cog):
                 pass
         if msg:
             if member.id in [m.id for m in member.guild.members]:  # TODO: change to dict for performance if possible?
-                embed.title = f"""{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'} (React ℹ for member info viewer)" if settings['context'][0] < 2 else ''}"""
+                embed.title = f"""{(f"{self.emojis['member'] if not member.bot else '🤖'}{self.emojis['darkGreenPlus']}" if settings['library'] < 2 else self.emojis['memberJoin']) if settings['context'][0] > 0 else ''}{f"New {'member' if not member.bot else 'bot'}" if settings['context'][0] < 2 else ''}"""
                 if hadToRemute:
                     embed.description += f"\n{self.emojis['greenCheck']}Succesfully remuted {member.display_name}"
                 await msg.edit(content=msg.content, embed=embed if not settings['plainText'] else None)
@@ -3414,7 +3415,7 @@ class Cyberlog(commands.Cog):
                 embed = await self.PermissionChanges(roleMembers, message, embed)
             if settings['embedTimestamp'] > 1:
                 embed.description += f"\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}"
-            embed.title = f"""{(self.emojis['roleDelete'] if settings['library'] > 1 else f'🚩{self.emojis["delete"]}') if settings['context'][0] > 0 else ''}{'Role deleted (React ℹ for role information)' if settings['context'][0] < 2 else ''}"""
+            embed.title = f"""{(self.emojis['roleDelete'] if settings['library'] > 1 else f'🚩{self.emojis["delete"]}') if settings['context'][0] > 0 else ''}{'Role deleted' if settings['context'][0] < 2 else ''}"""
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                 await message.edit(content=None)
             await self.archiveLogEmbed(role.guild, message.id, embed, 'Role Update')

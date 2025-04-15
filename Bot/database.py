@@ -359,6 +359,7 @@ async def VerifyServer(
                             ),  # Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
                             'indexing': log.get('indexing', True),  # Whether to index messages in this server
                             'image': log.get('image', False),
+                            'send_index_file': log.get('send_index_file', True),  # Whether to send message index files with message delete logs
                             'storageCap': log.get('storageCap', 20),  # The maximum size of attachment storage in GB
                             'messageLogsBotAuthor': log.get('messageLogsBotAuthor', 0),  # Whether to send logs for messages sent by the bot
                             'defaultChannel': log.get('defaultChannel', None),
