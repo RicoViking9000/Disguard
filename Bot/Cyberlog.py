@@ -15,6 +15,7 @@ import textwrap
 import traceback
 import typing
 
+import aiofiles
 import aiofiles.os as aios
 import aioshutil
 import discord
@@ -441,7 +442,7 @@ class Cyberlog(commands.Cog):
             embed=embed if not settings['plainText'] else None,
             tts=settings['tts'],
         )
-        self.archiveLogEmbed(message.guild, m.id, embed, 'Message Pin')
+        await self.archiveLogEmbed(message.guild, m.id, embed, 'Message Pin')
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await m.edit(content=None)
         if self.pins.get(pinned.channel.id):
@@ -633,7 +634,7 @@ class Cyberlog(commands.Cog):
                 )
                 if not settings['plainText']:
                     await message.edit(embed=embed)
-                self.archiveLogEmbed(g, message.id, embed, 'Ghost Reaction Remove')
+                await self.archiveLogEmbed(g, message.id, embed, 'Ghost Reaction Remove')
             except:
                 pass
             try:
@@ -873,7 +874,7 @@ class Cyberlog(commands.Cog):
             content=None if any((settings['tts'], settings['flashText'])) and not settings['plainText'] else msg.content,
             embed=None if settings['plainText'] else embed,
         )
-        self.archiveLogEmbed(after.guild, msg.id, embed, 'Message Edit')
+        await self.archiveLogEmbed(after.guild, msg.id, embed, 'Message Edit')
         oldEmbed = copy.deepcopy(embed)
         oldContent = plainText
         if not serverIsGimped(guild):
@@ -1179,14 +1180,15 @@ class Cyberlog(commands.Cog):
             return
         try:
             if author.bot and author.id == self.bot.user.id:
-                p = f'storage/misc/{g.id}/LogArchive/modLogs.json'
-                with open(p) as f:
+                p = f'storage/{g.id}/misc/modLogs.json'
+                async with aiofiles.open(p) as f:
                     try:
-                        logArchives = json.load(f)  # TODO: async json or thread
+                        content = await f.read()
+                        logArchives = json.loads(content)
                     except:
                         logArchives = {}
                 if payload.message_id in [int(k) for k in logArchives.keys()]:
-                    self.updateLogEmbed(g, payload.message_id, {'customKeyMessageIsDeleted': True})
+                    await self.updateLogEmbed(g, payload.message_id, {'customKeyMessageIsDeleted': True})
             if (author.bot and not (await utility.get_server(g))['cyberlog'].get('disguardLogRecursion')) or not await logExclusions(
                 channel, memberObject
             ):
@@ -1273,11 +1275,12 @@ class Cyberlog(commands.Cog):
                     # if log and log.user.id == 247412852925661185: return
                     modUser = log.user if log else 'A moderator'
                     content = f"{self.emojis['fileClone']} | {modUser.mention} ({modUser.display_name}) deleted my log embed, so I cloned it here"
-                    p = f'storage/misc/{g.id}/LogArchive/modLogs.json'
+                    p = f'storage/{g.id}/misc/modLogs.json'
                     try:
-                        with open(p) as f:
+                        async with aiofiles.open(p) as f:
                             try:
-                                logArchives = json.load(f)
+                                content = await f.read()
+                                logArchives = json.loads(content)
                             except Exception:
                                 logger.error(f'Encountered error when trying to load log archives for {g.name} message delete', exc_info=True)
                                 logArchives = {}
@@ -1288,7 +1291,7 @@ class Cyberlog(commands.Cog):
                     except KeyError:
                         return
                     msg = await c.send(content=content, embed=embed, allowed_mentions=discord.AllowedMentions(users=False))
-                    self.archiveLogEmbed(g, msg.id, embed, 'Message Delete (Recursion Clone)')
+                    await self.archiveLogEmbed(g, msg.id, embed, 'Message Delete (Recursion Clone)')
                     return
             if settings['botLogging'] == 0:
                 return
@@ -1314,7 +1317,7 @@ class Cyberlog(commands.Cog):
         )
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await msg.edit(content=None)
-        self.archiveLogEmbed(g, msg.id, embed, 'Message Delete')
+        await self.archiveLogEmbed(g, msg.id, embed, 'Message Delete')
         # Now delete any attachments associated with this message
         try:
             await aioshutil.rmtree(attachments_path)
@@ -1448,7 +1451,7 @@ class Cyberlog(commands.Cog):
                 content=msg.content if not any((settings['tts'], settings['flashText'])) and not settings['plainText'] else None,
                 embed=embed if not settings['plainText'] else None,
             )
-            self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Create')
+            await self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Create')
             try:
                 if os.path.exists(savePath):
                     os.remove(savePath)
@@ -1755,7 +1758,7 @@ class Cyberlog(commands.Cog):
                     await msg.edit(content=content if settings['plainText'] else None, embed=None if settings['plainText'] else embed)
                 except discord.HTTPException:
                     await msg.edit(content=content if settings['plainText'] else None)
-                self.archiveLogEmbed(after.guild, msg.id, embed, 'Channel Update')
+                await self.archiveLogEmbed(after.guild, msg.id, embed, 'Channel Update')
                 if not settings['plainText']:
                     for reaction in reactions:
                         await msg.add_reaction(reaction)
@@ -1928,7 +1931,7 @@ class Cyberlog(commands.Cog):
                     pass
                 self.pins.pop(channel.id, None)
             await msg.edit(content=None if not settings['plainText'] else content, embed=embed)
-            self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
+            await self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
         if type(channel) is discord.TextChannel:
             asyncio.create_task(
                 database.VerifyServer(channel.guild, self.bot), name=f'channel_delete - VerifyServer-{channel.guild.id}'
@@ -2094,7 +2097,7 @@ class Cyberlog(commands.Cog):
             if member.flags.did_rejoin:
                 embed.set_footer(text='This member rejoined the server')
             await msg.edit(content=content if settings['plainText'] else None, embed=embed if not settings['plainText'] else None)
-            self.archiveLogEmbed(member.guild, msg.id, embed, 'Member Join')
+            await self.archiveLogEmbed(member.guild, msg.id, embed, 'Member Join')
         await asyncio.gather(
             *[
                 database.VerifyMember(member, new=True, warnings=(await utility.get_server(member.guild)).get('antispam', {}).get('warn', 3)),
@@ -2589,7 +2592,7 @@ class Cyberlog(commands.Cog):
             info: Info.Info = self.bot.get_cog('Info')
             embed.set_field_at(-1, name='**Post count**', value=await info.MemberPosts(member))
             await message.edit(embed=embed if not settings['plainText'] else None)
-            self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
+            await self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             # if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
         self.members[member.guild.id].remove(member)
         await asyncio.gather(*[database.VerifyMembers(member.guild, [member]), database.DeleteUser(member, self.bot)])
@@ -2666,7 +2669,7 @@ class Cyberlog(commands.Cog):
             )
             if not settings['plainText'] and any((settings['flashText'], settings['tts'])):
                 await msg.edit(content=None)
-            self.archiveLogEmbed(guild, msg.id, embed, 'Member Unban')
+            await self.archiveLogEmbed(guild, msg.id, embed, 'Member Unban')
             if msg and len(embed.fields) > 0:
                 if not settings['plainText']:
                     await msg.add_reaction(self.emojis['expand'])
@@ -2850,7 +2853,7 @@ class Cyberlog(commands.Cog):
                     )
                     if not settings['plainText'] and any((settings['flashText'], settings['tts'])):
                         await msg.edit(content=None)
-                self.archiveLogEmbed(after.guild, msg.id, embed, 'Member Update')
+                await self.archiveLogEmbed(after.guild, msg.id, embed, 'Member Update')
         if before.guild_permissions != after.guild_permissions:
             await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
         if before.guild_permissions != after.guild_permissions:
@@ -3042,7 +3045,7 @@ class Cyberlog(commands.Cog):
                     )
                     if msg.content and not settings['plainText'] and any((settings['flashText'], settings['tts'])):
                         await msg.edit(content=None)  # TODO: reduce unnecessary edits
-                    self.archiveLogEmbed(server, msg.id, embed, 'User Update')
+                    await self.archiveLogEmbed(server, msg.id, embed, 'User Update')
             except:
                 pass
         for s in servers:
@@ -3203,7 +3206,7 @@ class Cyberlog(commands.Cog):
                 )
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                     await message.edit(content=None)
-                self.archiveLogEmbed(after, message.id, embed, 'Server Update')
+                await self.archiveLogEmbed(after, message.id, embed, 'Server Update')
                 if not settings['plainText']:
                     for r in reactions:
                         await message.add_reaction(r)
@@ -3321,7 +3324,7 @@ class Cyberlog(commands.Cog):
             )
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                 await msg.edit(content=None)
-            self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
+            await self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
         self.roles[role.id] = role.members
         asyncio.create_task(database.VerifyServer(role.guild, self.bot), name=f'guild_role_create - VerifyServer-{role.guild.id}')
         if msg:
@@ -3413,7 +3416,7 @@ class Cyberlog(commands.Cog):
             embed.title = f"""{(self.emojis['roleDelete'] if settings['library'] > 1 else f'🚩{self.emojis["delete"]}') if settings['context'][0] > 0 else ''}{'Role deleted (React ℹ for role information)' if settings['context'][0] < 2 else ''}"""
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                 await message.edit(content=None)
-            self.archiveLogEmbed(role.guild, message.id, embed, 'Role Update')
+            await self.archiveLogEmbed(role.guild, message.id, embed, 'Role Update')
             if not settings['plainText']:
                 await message.edit(embed=embed)
             reactions = ['ℹ']
@@ -3557,7 +3560,7 @@ class Cyberlog(commands.Cog):
                     await message.edit(content=None)
                 if not settings['plainText']:
                     await message.edit(embed=embed)
-                self.archiveLogEmbed(after.guild, message.id, embed, 'Role Update')
+                await self.archiveLogEmbed(after.guild, message.id, embed, 'Role Update')
                 if before.permissions != after.permissions:
                     for m in after.members:
                         self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
@@ -3720,7 +3723,7 @@ class Cyberlog(commands.Cog):
                 )
                 if any((settings['plainText'], settings['flashText'])) and not settings['plainText']:
                     await msg.edit(content=None)
-                self.archiveLogEmbed(guild, msg.id, embed, 'Emoji Update')
+                await self.archiveLogEmbed(guild, msg.id, embed, 'Emoji Update')
 
                 # cutoff
                 def reactionCheck(r, u):
@@ -3787,7 +3790,7 @@ class Cyberlog(commands.Cog):
             )
             if any((settings['plainText'], settings['flashText'])) and not settings['plainText']:
                 await msg.edit(content=None)
-            self.archiveLogEmbed(guild, msg.id, embed, 'Application Command Update')
+            await self.archiveLogEmbed(guild, msg.id, embed, 'Application Command Update')
             # cutoff
 
     @commands.Cog.listener()
@@ -4233,7 +4236,7 @@ class Cyberlog(commands.Cog):
             )
             if any((settings['plainText'], settings['flashText'])) and not settings['plainText'] and not error:
                 await msg.edit(content=None)
-            self.archiveLogEmbed(member.guild, msg.id, embed, 'Voice Session Update')
+            await self.archiveLogEmbed(member.guild, msg.id, embed, 'Voice Session Update')
         else:
             msg = None
         if not after.channel and logRecapsEnabled:
@@ -4280,11 +4283,12 @@ class Cyberlog(commands.Cog):
         Retrieve the log archive file for this server
         """
         embed = discord.Embed(title='Log Archives', description=f'{self.emojis["loading"]}', color=yellow[await utility.color_theme(ctx.guild)])
-        p = f'storage/misc/{ctx.guild.id}/LogArchive/modLogs.json'
+        p = f'storage/{ctx.guild.id}/misc/modLogs.json'
         f = discord.File(p)
         try:
             await ctx.send(file=f)
-        except:
+        except Exception:
+            logger.error(f'Unable to upload Log Archive file for {ctx.guild.name} | {ctx.guild.id}', exc_info=True)
             embed.description = 'Unable to upload Log Archive file'
             await ctx.send(embed=embed)
 
@@ -4342,18 +4346,20 @@ class Cyberlog(commands.Cog):
         await asset.replace(size=1024, static_format='png').save(save_path)
         return save_path
 
-    def archiveLogEmbed(self, server, id, embed, flavorText):
-        p = f'storage/misc/{server.id}/LogArchive/modLogs.json'
+    async def archiveLogEmbed(self, server, id, embed, flavorText):
+        p = f'storage/{server.id}/misc/modLogs.json'
         try:
-            os.makedirs(f'storage/misc/{server.id}/LogArchive')
+            await aios.makedirs(f'storage/misc/{server.id}/LogArchive')
         except FileExistsError:
             pass
         try:
-            with open(p) as f:
+            async with aiofiles.open(p) as f:
                 try:
-                    logArchives = json.load(f)
-                except:
+                    content = await f.read()
+                    logArchives = json.loads(content)
+                except Exception:
                     logArchives = {}
+                    logger.info(f'Log archive file for {server.id} is empty or invalid', exec_info=True)
         except FileNotFoundError:
             logArchives = {}
         e = embed.to_dict()
@@ -4362,20 +4368,21 @@ class Cyberlog(commands.Cog):
             e['timestamp'] = discord.utils.utcnow().isoformat()
         logArchives[id] = e
         logArchives = json.dumps(logArchives, indent=4)
-        with open(p, 'w+') as f:
-            f.write(logArchives)
+        async with aiofiles.open(p, 'w+') as f:
+            await f.write(logArchives)
 
-    def updateLogEmbed(self, server, id, data):
-        p = f'storage/misc/{server.id}/LogArchive/modLogs.json'
-        with open(p) as f:
+    async def updateLogEmbed(self, server, id, data):
+        p = f'storage/{server.id}/misc/modLogs.json'
+        async with aiofiles.open(p) as f:
             try:
-                logArchives = json.load(f)
+                content = await f.read()
+                logArchives = json.loads(content)
             except:
                 logArchives = {}
         logArchives[id].update(data)
         logArchives = json.dumps(logArchives, indent=4)
-        with open(p, 'w+') as f:
-            f.write(logArchives)
+        async with open(p, 'w+') as f:
+            await f.write(logArchives)
 
     # Review this monstrosity
     async def PermissionChanges(
