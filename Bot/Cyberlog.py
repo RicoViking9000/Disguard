@@ -391,7 +391,7 @@ class Cyberlog(commands.Cog):
 
     async def pinAddLogging(self, message: discord.Message):
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(message.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(message.guild))
         destination = await logChannel(message.guild, 'message')
         if not destination:
             return
@@ -596,7 +596,7 @@ class Cyberlog(commands.Cog):
         if seconds < (await utility.get_server(g))['cyberlog']['ghostReactionTime']:
             settings = await getCyberAttributes(g, 'misc')
             received = discord.utils.utcnow()
-            adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(g))
+            adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(g))
             color = blue[await utility.color_theme(g)] if settings['color'][1] == 'auto' else settings['color'][1]
             result = await c.fetch_message(m)
             if result.author.id == self.bot.user.id:
@@ -1343,7 +1343,7 @@ class Cyberlog(commands.Cog):
         content = ''
         savePath = None
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(channel.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(channel.guild))
         msg = None
         if await logEnabled(channel.guild, 'channel'):
             settings = await getCyberAttributes(channel.guild, 'channel')
@@ -1490,7 +1490,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
         """[DISCORD API METHOD] Called when server channel is updated"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(after.guild))
         f = None
         msg = None
         channelPosFlag = False
@@ -1501,7 +1501,8 @@ class Cyberlog(commands.Cog):
             settings = await getCyberAttributes(after.guild, 'channel')
             color = blue[await utility.color_theme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(after.type, 'Unknown type')} Channel was updated (ℹ for channel info)" if settings["context"][0] < 2 else ""}""",
+                title=f"""{utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(after.type, after.type
+                )} Channel was updated" if settings["context"][0] < 2 else ""}""",
                 description=f'{self.channelKeys[after.type[0]] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {f"{after.mention} ({after.name})" if after.type[0] == "text" else after.name}',
                 color=color,
             )
@@ -1861,7 +1862,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
         """[DISCORD API METHOD] Called when channel is deleted"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(channel.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(channel.guild))
         msg = None
         if await logEnabled(channel.guild, 'channel'):
             content = f'A moderator deleted the {channel.type[0]} channel named {channel.name}'
@@ -1958,7 +1959,7 @@ class Cyberlog(commands.Cog):
     async def on_member_join(self, member: discord.Member):
         """[DISCORD API METHOD] Called when member joins a server"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
         self.members[member.guild.id].append(member)
         asyncio.create_task(self.doorguardHandler(member), name=f'doorguardHandler-{member.guild.id}-{member.id}')
         msg = None
@@ -2512,7 +2513,7 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         """[DISCORD API METHOD] Called when member leaves a server"""
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
         if member.guild.id not in gimpedServers:
             asyncio.create_task(
                 updateLastActive(member, discord.utils.utcnow(), 'left a server'),
@@ -2709,7 +2710,7 @@ class Cyberlog(commands.Cog):
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         """[DISCORD API METHOD] Called when member changes roles or nickname"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(after.guild))
         msg = None
         if await logEnabled(after.guild, 'member') and any([before.nick != after.nick, before.roles != after.roles]):
             content = ''
@@ -3010,7 +3011,7 @@ class Cyberlog(commands.Cog):
         for server in servers:
             try:
                 if await logEnabled(server, 'member') and await memberGlobal(server) != 0:
-                    adjusted = rawReceived + datetime.timedelta(await utility.time_zone(server))
+                    adjusted = rawReceived + datetime.timedelta(hours=await utility.time_zone(server))
                     settings = await getCyberAttributes(server, 'member')
                     color = blue[await utility.color_theme(server)] if settings['color'][1] == 'auto' else settings['color'][1]
                     newEmbed = copy.deepcopy(embed)
@@ -3097,13 +3098,13 @@ class Cyberlog(commands.Cog):
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
         """[DISCORD API METHOD] Called when a server's attributes are updated"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(after))
         if await logEnabled(before, 'server'):
             content = 'Server settings were updated'
             settings = await getCyberAttributes(after, 'server')
             color = blue[await utility.color_theme(after)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(
-                title=f'{(self.emojis["serverUpdate"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{"Server updated (React ℹ to view server details)" if settings["context"][0] < 2 else ""}',
+                title=f'{(self.emojis["serverUpdate"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{"Server updated" if settings["context"][0] < 2 else ""}',
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
@@ -3275,7 +3276,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_role_create(self, role: discord.Role):
         """[DISCORD API METHOD] Called when a server role is created"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(role.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(role.guild))
         msg = None
         if await logEnabled(role.guild, 'role'):
             content = f'The role "{role.name}" was created'
@@ -3349,7 +3350,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_role_delete(self, role: discord.Role):
         """[DISCORD API METHOD] Called when a server role is deleted"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(role.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(role.guild))
         message = None
         roleMembers = []
         if await logEnabled(role.guild, 'role'):
@@ -3482,14 +3483,14 @@ class Cyberlog(commands.Cog):
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role):
         """[DISCORD API METHOD] Called when a server role is updated"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(after.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(after.guild))
         message = None
         if await logEnabled(before.guild, 'role'):
             content = f'The role "{before.name}" was updated'
             settings = await getCyberAttributes(after.guild, 'role')
             color = blue[await utility.color_theme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(
-                title=f"""{(self.emojis['roleEdit'] if settings['library'] > 1 else '🚩✏')}{'Role was updated (React ℹ to view role details)' if settings['context'][0] < 2 else ''}""",
+                title=f"""{(self.emojis['roleEdit'] if settings['library'] > 1 else '🚩✏')}{'Role was updated' if settings['context'][0] < 2 else ''}""",
                 description=f"""{'🚩' if settings['context'][1] > 0 else ''}{'Role' if settings['context'][1] < 2 else ''}: {after.mention}{f" ({after.name})" if after.name == before.name else ""}""",
                 color=color,
             )
@@ -3638,7 +3639,7 @@ class Cyberlog(commands.Cog):
     async def on_guild_emojis_update(self, guild: discord.Guild, before: typing.List[discord.Emoji], after: typing.List[discord.Emoji]):
         """[DISCORD API METHOD] Called when emoji list is updated (creation, update, deletion)"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
         msg = None
         if await logEnabled(guild, 'emoji'):
             content = 'Server emoji list updated'
@@ -3746,7 +3747,7 @@ class Cyberlog(commands.Cog):
     async def on_raw_app_command_permissions_update(self, payload: discord.RawAppCommandPermissionsUpdateEvent):
         """[DISCORD API METHOD] Called when application command permissions are updated"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(payload.guild_id))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(payload.guild_id))
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
             return
@@ -3919,7 +3920,7 @@ class Cyberlog(commands.Cog):
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         """[DISCORD API METHOD] Called whenever a voice channel event is triggered - join/leave, mute/deafen, etc"""
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(await utility.time_zone(member.guild))
+        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
         msg = None
         serverData = await utility.get_server(member.guild)
         logRecapsEnabled = serverData['cyberlog']['voiceChatLogRecaps']

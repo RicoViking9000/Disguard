@@ -110,6 +110,8 @@ CHANNEL_KEYS = {
     'news_thread': 'News thread',
     'text': 'Text',
     'voice': 'Voice',
+    'forum': 'Forum',
+    'media': 'Media',
 }
 
 DISGUARD_SERVER_ID = 560457796206985216
