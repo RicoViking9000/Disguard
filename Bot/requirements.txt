@@ -1,6 +1,6 @@
 aiofiles==24.1.0
 aioshutil==1.5
-asyncpraw==7.7.1
+asyncpraw==7.8.1
 colour==0.1.5
 discord.py==2.4.0
 emoji==2.10.1
