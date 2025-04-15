@@ -174,7 +174,8 @@ async def get_message(channel_id: int, message_id: int):
 
 # good for 2025
 async def get_channel_messages(channel_id: int):
-    return await database[str(channel_id)].find_many({}).to_list(None)
+    """gets all messages from a channel"""
+    return await database[str(channel_id)].find({}).to_list(None)
 
 
 async def get_messages_by_author(author_id: int, channel_ids: List[int] = []):
@@ -222,8 +223,8 @@ async def delete_message(channel_id: int, message_id: int):
 
 
 async def delete_channel(channel_id: int):
-    logger.info(f'Dropping channel by id {channel_id}')
-    return await database[str(channel_id)].drop()
+    await database[str(channel_id)].drop()
+    logger.info(f'Dropped channel by id {channel_id}')
 
 
 async def delete_all_channels():

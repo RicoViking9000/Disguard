@@ -16,7 +16,6 @@ import Cyberlog
 import lightningdb
 import utility
 
-indexes = 'Indexes'
 qlf = '  '  # Two special characters to represent quoteLineFormat
 NEWLINE = '\n'
 newlineQuote = '\n> '

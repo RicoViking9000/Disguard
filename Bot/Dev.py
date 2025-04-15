@@ -165,15 +165,15 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
             await lightningdb.delete_all_channels()
             channels = []  # Set this so the loop below doesn't execute
         elif server and not channel:
-            channels = [self.bot.get_guild(int(server)).text_channels]
+            channels = self.bot.get_guild(int(server)).text_channels
         elif channel:
             channels = [self.bot.get_channel(int(channel))]
-        for channel in channels:
+        for entry in channels:
             try:
-                await lightningdb.delete_channel(channel)
+                await lightningdb.delete_channel(entry.id)
             except Exception:
-                logger.error(f'[clear_indexes] Error deleting channel {channel}', exc_info=True)
-                status_content += f'Error deleting channel {channel}\n'
+                logger.error(f'[clear_indexes] Error deleting channel {entry}', exc_info=True)
+                status_content += f'Error deleting channel {entry}\n'
         await interaction.edit_original_response(content=f'Indexes cleared\n\n{status_content}')
 
     @clear_indexes.autocomplete('server')
