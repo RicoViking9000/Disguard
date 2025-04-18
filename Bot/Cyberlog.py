@@ -773,14 +773,15 @@ class Cyberlog(commands.Cog):
         botIgnore = False
         c = await logChannel(guild, 'message')
         settings = await getCyberAttributes(guild, 'message')
+        bot_author_settings = await utility.get_server(guild).get('cyberlog', {}).get('messageLogsBotAuthor', 0)
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
         color = blue[await utility.color_theme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
         if not c:
             return  # Invalid log channel or bot logging is disabled
-        if settings['botLogging'] == 0 and after.author.bot:
+        if bot_author_settings == 0 and after.author.bot:
             botIgnore = True
-        elif settings['botLogging'] == 1 and after.author.bot:
+        elif bot_author_settings == 1 and after.author.bot:
             settings['plainText'] = True
         if type(before) is discord.Message:
             b4 = before
@@ -1096,7 +1097,7 @@ class Cyberlog(commands.Cog):
             try:
                 with open(index_path, 'w') as json_file:
                     json.dump(message_data, json_file, indent=4)
-                    if cyber.get('send_index_file'):
+                    if cyber.get('sendIndexFile'):
                         attachments.append(index_path)
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
