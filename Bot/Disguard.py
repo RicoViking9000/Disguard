@@ -117,17 +117,18 @@ async def on_ready():  # Method is called whenever bot is ready after connection
         print('Waiting for database callback...')
         await bot.wait_for('message', check=initializeCheck)  # Wait for bot to synchronize database
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Verifying indexes'))
-        print('Starting indexing...')
-        for server in bot.guilds:
-            print(f'Indexing {server.name}')
-            indexing_cog: Indexing.Indexing = bot.get_cog('Indexing')
-            await indexing_cog.index_channels(server.text_channels)
+        # print('Starting indexing...')
+        # for server in bot.guilds:
+        #     print(f'Indexing {server.name}')
+        #     indexing_cog: Indexing.Indexing = bot.get_cog('Indexing')
+        #     await indexing_cog.index_channels(server.text_channels)
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Retrieving data'))
         print('Grabbing pins...')
         await cyber.grab_pins()
     print('Booted')
     presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
-    await utility.update_bot_presence(bot, discord.Status.online, discord.CustomActivity(name=f'Guarding {len(bot.guilds)} servers'))
+    if not bot.activity:
+        await utility.update_bot_presence(bot, discord.Status.online, discord.CustomActivity(name=f'Guarding {len(bot.guilds)} servers'))
 
 
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
@@ -263,6 +264,13 @@ try:
             asyncio.run(main())
         except TimeoutError:
             print('TimeoutError')
+            logger.info('TimeoutError - restarting Disguard', exc_info=True)
             continue
+        except Exception as e:
+            print(f'Exception: {e}')
+            logger.info(f'Exception - restarting Disguard: {e}', exc_info=True)
+            traceback.print_exc()
 except KeyboardInterrupt:
     print('KeyboardInterrupt - terminating Disguard')
+    logger.info('KeyboardInterrupt - terminating Disguard')
+    raise
