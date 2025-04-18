@@ -658,7 +658,9 @@ class Indexing(commands.Cog):
         try:
             if message.channel.type == discord.ChannelType.private:
                 return
-            await self.index_message(message)
+            indexing_enabled = await utility.get_server(message.guild).get('cyberlog', {}).get('indexing')
+            if indexing_enabled:
+                await self.index_message(message)
         except Exception:
             logger.error(f'Error in Indexing on_message: {message.id}', exc_info=True)
             traceback.print_exc()
