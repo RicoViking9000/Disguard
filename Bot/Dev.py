@@ -68,7 +68,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         await interaction.response.send_message(f'Indexing [{",  ".join([str(s)[:15] for s in servers])}]...')
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
         for server in servers:
-            indexing_enabled = await utility.get_server(server).get('cyberlog').get('indexing')
+            indexing_enabled = (await utility.get_server(server)).get('cyberlog').get('indexing')
             if indexing_enabled:
                 await indexing_cog.index_channels(server.text_channels, full=full)
         await interaction.edit_original_response(content='Server indexed!')
@@ -86,7 +86,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         """Index a channel"""
         logger.info(f'[index_channel] Indexing channel {channel_arg}')
         channel = self.bot.get_channel(int(channel_arg))
-        indexing_enabled = await utility.get_server(channel.guild).get('cyberlog').get('indexing')
+        indexing_enabled = (await utility.get_server(channel.guild)).get('cyberlog').get('indexing')
         if not indexing_enabled:
             await interaction.response.send_message(f'Indexing is disabled for {channel.guild.name}')
             return

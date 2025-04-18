@@ -1503,8 +1503,8 @@ class Cyberlog(commands.Cog):
             settings = await getCyberAttributes(after.guild, 'channel')
             color = blue[await utility.color_theme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(after.type, after.type
-                )} Channel was updated" if settings["context"][0] < 2 else ""}""",
+                title=f"""{utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}
+                {f"{utility.CHANNEL_KEYS.get(after.type, after.type)} Channel was updated" if settings["context"][0] < 2 else ""}""",
                 description=f'{self.channelKeys[after.type[0]] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {f"{after.mention} ({after.name})" if after.type[0] == "text" else after.name}',
                 color=color,
             )

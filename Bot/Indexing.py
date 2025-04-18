@@ -656,9 +656,9 @@ class Indexing(commands.Cog):
 
     async def on_message(self, message: discord.Message):
         try:
-            if message.channel.type == discord.ChannelType.private:
+            if message.channel.type == discord.ChannelType.private or not message.guild:
                 return
-            indexing_enabled = await utility.get_server(message.guild).get('cyberlog', {}).get('indexing')
+            indexing_enabled = (await utility.get_server(message.guild)).get('cyberlog', {}).get('indexing')
             if indexing_enabled:
                 await self.index_message(message)
         except Exception:
