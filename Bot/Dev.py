@@ -323,6 +323,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
             traceback.print_exc()
 
         async def on_submit(self, interaction: discord.Interaction):
+            await interaction.response.defer(thinking=True)
             message = self.message.value
             match self.server_bucket:
                 case 'all':
