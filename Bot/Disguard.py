@@ -15,6 +15,7 @@ from pymongo import errors as mongoErrors
 import Birthdays
 import Cyberlog
 import database
+import Indexing
 import lightningdb
 import Misc
 import Reddit
@@ -25,7 +26,7 @@ tracemalloc.start()
 
 booted = False
 loading = None
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help', 'Privacy']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help', 'Privacy', 'Indexing']
 
 print('Connecting...')
 
@@ -48,8 +49,8 @@ logging.getLogger('discord.http').setLevel(logging.INFO)
 handler = logging.handlers.RotatingFileHandler(
     filename='discord.log',
     encoding='utf-8',
-    maxBytes=64 * 1024 * 1024,  # 64 MiB
-    backupCount=15,  # Rotate through 5 files
+    maxBytes=8 * 1024 * 1024,  # 8 MiB
+    backupCount=15,  # Rotate through 15 files
 )
 dt_fmt = '%Y-%m-%d %H:%M:%S'
 formatter = logging.Formatter('[{asctime}] [{levelname:<8}] {name}: {message}', dt_fmt, style='{')
@@ -116,17 +117,18 @@ async def on_ready():  # Method is called whenever bot is ready after connection
         print('Waiting for database callback...')
         await bot.wait_for('message', check=initializeCheck)  # Wait for bot to synchronize database
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Verifying indexes'))
-        print('Starting indexing...')
-        for server in bot.guilds:
-            print(f'Indexing {server.name}')
-            await asyncio.gather(*[indexMessages(server, c) for c in server.text_channels])
-            Cyberlog.indexed[server.id] = True
+        # print('Starting indexing...')
+        # for server in bot.guilds:
+        #     print(f'Indexing {server.name}')
+        #     indexing_cog: Indexing.Indexing = bot.get_cog('Indexing')
+        #     await indexing_cog.index_channels(server.text_channels)
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Retrieving data'))
         print('Grabbing pins...')
         await cyber.grab_pins()
     print('Booted')
     presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
-    await utility.update_bot_presence(bot, discord.Status.online, discord.CustomActivity(name=f'Guarding {len(bot.guilds)} servers'))
+    if not bot.activity:
+        await utility.update_bot_presence(bot, discord.Status.online, discord.CustomActivity(name=f'Guarding {len(bot.guilds)} servers'))
 
 
 async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
@@ -142,7 +144,7 @@ async def indexMessages(server: discord.Guild, channel: discord.TextChannel, ful
     existing_message_counter = 0
     async for message in channel.history(limit=None, oldest_first=full):
         try:
-            await lightningdb.post_message(message)
+            await lightningdb.post_message_2024(message)
         except mongoErrors.DuplicateKeyError:
             if not full:
                 existing_message_counter += 1
@@ -175,18 +177,40 @@ async def on_message(message: discord.Message):
         return
     # cyberlog: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
     # await cyberlog.on_message(message)
+
+    # indexing: Indexing.Indexing = bot.get_cog('Indexing')
+    # await indexing.on_message(message)
+
     # antispam: Antispam.Antispam = bot.get_cog('Antispam')
     # await antispam.on_message(message)
+    indexing: Indexing.Indexing = bot.get_cog('Indexing')
+    try:
+        await indexing.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Indexing on_message: {e}')
+        traceback.print_exc()
     if not message.content:
         return
     if message.author.bot:
         return
     reddit: Reddit.Reddit = bot.get_cog('Reddit')
-    await reddit.on_message(message)
+    try:
+        await reddit.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Reddit on_message: {e}')
+        traceback.print_exc()
     birthdays: Birthdays.Birthdays = bot.get_cog('birthdays')
-    await birthdays.on_message(message)
+    try:
+        await birthdays.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Birthdays on_message: {e}')
+        traceback.print_exc()
     misc: Misc.Misc = bot.get_cog('Misc')
-    await misc.on_message(message)
+    try:
+        await misc.on_message(message)
+    except Exception as e:
+        logger.error(f'Error in Misc on_message: {e}')
+        traceback.print_exc()
 
 
 @bot.hybrid_command(help="Get Disguard's invite link")
@@ -230,10 +254,23 @@ async def rickroll(ctx: commands.Context):
 @bot.command()
 @commands.is_owner()
 async def test(ctx: commands.Context):
-    await ctx.interaction.response.defer()
-    for server in bot.guilds:
-        await database.convert_reddit_feeds(server)
-    await ctx.send('Done converting')
+    message = await ctx.send('Evaluating this message type...')
+    await message.edit(content=f'Type: {message.type.name}')
 
 
-asyncio.run(main())
+try:
+    while True:
+        try:
+            asyncio.run(main())
+        except TimeoutError:
+            print('TimeoutError')
+            logger.info('TimeoutError - restarting Disguard', exc_info=True)
+            continue
+        except Exception as e:
+            print(f'Exception: {e}')
+            logger.info(f'Exception - restarting Disguard: {e}', exc_info=True)
+            traceback.print_exc()
+except KeyboardInterrupt:
+    print('KeyboardInterrupt - terminating Disguard')
+    logger.info('KeyboardInterrupt - terminating Disguard')
+    raise

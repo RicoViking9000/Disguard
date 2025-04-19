@@ -599,10 +599,11 @@ def calculateAges(message: str):
     return ages
 
 
-async def verifyAge(message: str, age):
+async def verifyAge(message_str: str, age):
     """Verifies that a person was talking about their age. This is far more prone to false positives than birthday verification, and the catch all is return True, so I have to make sure I return False when necessary"""
-    words = message.lower().split(' ')
-    message = [word.replace("'", '') for word in words]  # replace any apostrophes with nothing (i'm --> im) for parsing convenience
+    words = message_str.lower().split(' ')
+    split_message = [word.replace("'", '') for word in words]  # replace any apostrophes with nothing (i'm --> im) for parsing convenience
+    message = ' '.join(split_message)
     tagged = nltk.pos_tag(nltk.word_tokenize(message))  # record the parts of speech in the sentence for analysis later
     if any(word in message for word in ['im', "i'm"]) or 'i am' in message:  # Deal with age
         if 'i am' in message:

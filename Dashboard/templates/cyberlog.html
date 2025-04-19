@@ -230,7 +230,7 @@
                         {{ components.options() }}
                     </div>
                     <div class="inputPod">
-                        <label for=imageLogging>Log deleted images & attachments</label>
+                        <label for=imageLogging>Log deleted images, attachments, pins, and unpins</label>
                         <select name=imageLogging default="0">
                             <option value=0 {%if not cyberlog.image%}selected{%endif%}>Disabled</option>
                             <option value=1 {%if cyberlog.image%}selected{%endif%}>Enabled</option>
@@ -239,6 +239,7 @@
                             <p class=hoverDesc>
                                 If enabled, Disguard will include message attachments with deleted message logs. Enabling this feature will enable message indexing for the server.
                                 Message indexing stores basic message data on Disguard's machine, along with any message attachments. See the <a href="https://disguard.netlify.app/privacy.html#indexes">Privacy Policy</a> for more information.
+                                Disguard will also cache IDs of pinned messages in all channels.
                             </p>
                         </div>
                         {{ components.options() }}

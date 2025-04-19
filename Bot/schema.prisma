@@ -1,0 +1,288 @@
+datasource db {
+  provider = "mongodb"
+  url      = "mongodb+srv://disguard-main:d1sGU4rdb0t-_-main@disguard.chi8p.mongodb.net/indexing_test?retryWrites=true&w=majority&appName=Disguard"
+}
+
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+type MediaAttributes {
+  attachment_id Int
+  height        Int
+  width         Int
+  description   String?
+}
+
+type VoiceAttributes {
+  attachment_id Int
+  duration      Int
+  waveform      Bytes
+}
+
+type AttachmentFlags {
+  clip      Boolean
+  thumbnail Boolean
+  remix     Boolean
+}
+
+type Attachment {
+  id               String
+  message_id       String
+  hash             String
+  size             Int
+  filename         String
+  filepath         String           @default("")
+  url              String
+  proxy_url        String
+  media_attributes MediaAttributes?
+  voice_attributes VoiceAttributes?
+  content_type     String
+  ephemeral        Boolean
+  flags            AttachmentFlags
+  spoiler          Boolean
+  voice_message    Boolean
+  image            Boolean
+}
+
+type EmbedFooter {
+  text     String
+  icon_url String
+}
+
+type EmbedImage {
+  url       String
+  proxy_url String
+  height    Int
+  width     Int
+}
+
+type EmbedVideo {
+  url    String
+  height Int
+  width  Int
+}
+
+type EmbedProvider {
+  name String
+  url  String
+}
+
+type EmbedAuthor {
+  name     String
+  url      String
+  icon_url String
+}
+
+type EmbedField {
+  name   String
+  value  String
+  inline Boolean
+}
+
+type RGB {
+  r Int
+  g Int
+  b Int
+}
+
+type Embed {
+  message_id  String
+  title       String
+  type        String
+  description String
+  url         String
+  timestamp   DateTime
+  color       RGB
+  footer      EmbedFooter
+  image       EmbedImage
+  thumbnail   EmbedImage
+  video       EmbedVideo
+  provider    EmbedProvider
+  author      EmbedAuthor
+  fields      EmbedField[]
+}
+
+type CustomEmojiAttributes {
+  emoji_id   Int
+  creator_id Int
+  created_at DateTime
+  animated   Boolean
+  twitch     Boolean
+  guild_id   Int
+  url        String
+}
+
+type Emoji {
+  name          String
+  custom        Boolean
+  custom_source String?
+  unicode       String?
+}
+
+enum MentionType {
+  user
+  role
+  channel
+}
+
+type Mention {
+  type MentionType
+  id   Int
+}
+
+type PollMedia {
+  text  String
+  emoji String
+}
+
+type PollAnswer {
+  answer_id      Int
+  parent_poll_id Int
+  media          PollMedia
+  self_voted     Boolean
+  text           String
+  emoji          String
+  vote_count     Int
+  voters         Int[] // array of user IDs
+}
+
+type MessagePoll {
+  poll_id     Int
+  message_id  Int
+  question    String
+  answers     PollAnswer[]
+  expires_at  DateTime
+  created_at  DateTime
+  total_votes Int
+  is_closed   Boolean
+}
+
+type StandardSticker {
+  name        String
+  description String
+  tags        String[]
+  sort_value  Int
+  pack_id     Int
+}
+
+type GuildSticker {
+  name            String
+  description     String
+  available       Boolean
+  guild_id        Int
+  creator_id      Int
+  reference_emoji String
+}
+
+enum StickerImageType {
+  png
+  apng
+  lottie
+  gif
+}
+
+enum StickerType {
+  standard
+  guild
+}
+
+type Sticker {
+  sticker_id    Int
+  message_id    Int
+  format        StickerImageType
+  url           String
+  type          StickerType
+  standard_data StandardSticker?
+  guild_data    GuildSticker?
+}
+
+enum MessageTypes {
+  default
+  recipient_add
+  recipient_remove
+  call
+  channel_name_change
+  channel_icon_change
+  pins_add
+  new_member
+  premium_guild_subscription
+  premium_guild_tier_1
+  premium_guild_tier_2
+  premium_guild_tier_3
+  channel_follow_add
+  guild_stream
+  guild_discovery_disqualified
+  guild_discovery_requalified
+  guild_discovery_grace_period_initial_warning
+  guild_discovery_grace_period_final_warning
+  thread_created
+  reply
+  application_command
+  thread_starter_message
+  context_menu_command
+  auto_moderation_action
+  role_subscription_purchase
+  interaction_premium_upsell
+  stage_start
+  stage_end
+  stage_speaker
+  stage_raise_hand
+  stage_topic
+  guild_application_premium_subscription
+  guild_incident_alert_mode_enabled
+  guild_incident_alert_mode_disabled
+  guild_incident_report_raid
+  guild_incident_report_false_alarm
+}
+
+type MessageFlags {
+  crossposted                            Boolean
+  ephemeral                              Boolean
+  failed_to_mention_some_roles_in_thread Boolean
+  has_thread                             Boolean
+  is_crossposted                         Boolean
+  loading                                Boolean
+  silent                                 Boolean
+  source_message_deleted                 Boolean
+  suppress_embeds                        Boolean
+  urgent                                 Boolean
+  voice                                  Boolean
+}
+
+type MessageEdition {
+  content     String
+  timestamp   DateTime
+  attachments Attachment[]
+  embeds      Embed[]
+  reactions   String?
+  pinned      Boolean
+  deleted     Boolean
+  mentions    Mention[]
+}
+
+model Message {
+  id                    String           @id @map("_id") @db.ObjectId
+  editions              MessageEdition[]
+  author_id             Int
+  created_at            DateTime
+  channel_id            Int
+  guild_id              Int
+  pinned                Boolean
+  deleted               Boolean
+  jump_url              String
+  poll                  MessagePoll?
+  stickers              Sticker[]
+  thread_id             Int?
+  parent_interaction_id Int?
+  reference_message_id  Int?
+  components_count      Int
+  tts                   Boolean
+  type                  MessageTypes
+  webhook_id            Int?
+  system_message        Boolean
+  flags                 MessageFlags
+  nsfw_channel          Boolean
+}

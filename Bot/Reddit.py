@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import logging
 import re
 import traceback
 
@@ -18,6 +19,8 @@ NEWLINE = '\n'
 REDDIT_COLOR = 0xFF5700
 TOGGLES = {True: 'slideToggleOn', False: 'slideToggleOff'}
 
+logger = logging.getLogger('Reddit')
+
 
 class Reddit(commands.Cog):
     def __init__(self, bot) -> None:
@@ -25,16 +28,24 @@ class Reddit(commands.Cog):
         self.redditThreads: dict[int, dict[str, dict]] = {}
         self.reddit = asyncpraw.Reddit(user_agent='Portal for Disguard - Auto link & reddit feed functionality. --RV9k--')
         self.emojis: dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
+        self.tasks: set[asyncio.Task] = set()
+
+    def cog_unload(self):
+        logger.info('Unloading cog and cleaning up')
+        self.syncRedditFeeds.cancel()
+        for task in self.tasks:
+            task.cancel()
 
     @tasks.loop(hours=1)
     async def syncRedditFeeds(self):
         """Goes through all servers and ensures reddit feeds are working"""
-        print('Syncing Reddit feeds')
+        logger.info('Syncing Reddit feeds')
         try:
             for server in self.bot.guilds:
-                asyncio.create_task(self.redditFeedHandler(server), name=f'Reddit feed handler for {server.name}')
-        except:
-            print('Reddit sync fail: ')
+                task = asyncio.create_task(self.redditFeedHandler(server), name=f'Reddit feed handler for {server.name}')
+                self.tasks.add(task)
+        except Exception as e:
+            logger.error(f'Reddit sync fail: {e}')
             traceback.print_exc()
 
     async def redditFeedHandler(self, server: discord.Guild):
@@ -51,13 +62,14 @@ class Reddit(commands.Cog):
         ]
         feedsToDelete = [entry for entry in runningFeeds if entry not in proposedFeeds]
         for feed in feedsToCreate:
-            asyncio.create_task(self.createRedditStream(server, feed), name=f'Create Reddit stream for {server.name}: {feed["subreddit"]}')
+            task = asyncio.create_task(self.createRedditStream(server, feed), name=f'Create Reddit stream for {server.name}: {feed["subreddit"]}')
+            self.tasks.add(task)
         for feed in feedsToDelete:
             self.redditThreads[server.id].pop(feed, None)
 
     async def createRedditStream(self, server: discord.Guild, data: dict, attempt=0):
         """Data represents a singular subreddit customization data"""
-        print(f'creating reddit stream for {server.name}: {data["subreddit"]}', attempt)
+        logger.info(f'Creating reddit stream. Attempt {attempt}')
         if attempt > 2:
             return self.redditThreads[server.id].pop(data['subreddit'])  # This will get picked up in the next syncRedditFeeds loop
         if self.redditThreads.get(server.id) and data['subreddit'] in self.redditThreads[server.id].keys():
@@ -86,16 +98,17 @@ class Reddit(commands.Cog):
                         channel=channel,
                     )
                     await channel.send(embed=embed)
-                except:
-                    print('reddit feed submission error')
+                except Exception as e:
+                    logger.error(f'Reddit feed submission error: {e}')
                     traceback.print_exc()
-        except:
-            print(f'reddit feed error: {server.name} {server.id}')
+        except Exception as e:
+            logger.error(f'Reddit feed error - {server.name} {server.id}: {e}')
             traceback.print_exc()
             await asyncio.sleep(60)
-            asyncio.create_task(
+            task = asyncio.create_task(
                 self.createRedditStream(server, data, attempt + 1), name=f'Retry - Create Reddit stream for {server.name}: {data["subreddit"]}'
             )
+            self.tasks.add(task)
 
     async def on_message(self, message: discord.Message):
         await asyncio.gather(*[self.redditAutocomplete(message), self.redditEnhance(message)])
@@ -116,12 +129,9 @@ class Reddit(commands.Cog):
                 await message.channel.send(embed=result)
 
     async def redditEnhance(self, message: discord.Message):
-        try:
-            config = (await utility.get_server(message.guild))['redditEnhance']
-        except KeyError:
-            return
+        config = (await utility.get_server(message.guild)).get('redditEnhance')
         if not config:
-            return  # Feature is disabled
+            return  # Feature is disabled or not set up
         if config[0]:
             matches_submission = re.findall(r'^https?:\/\/(?:www\.)?(?:old\.)?reddit\.com\/r\/\w+\/comments\/([A-Za-z0-9]+\w+)', message.content)
         else:
@@ -138,13 +148,14 @@ class Reddit(commands.Cog):
                 await message.channel.send(embed=embed)
             except Exception as e:
                 await message.channel.send(f'Error retrieving subreddit info: {e}')
+                logger.error(f'Error retrieving subreddit info: {e} Message content: {message.content}')
         for match in matches_submission:
             try:
                 embed = await self.redditSubmissionEmbed(message.guild, match, False, channel=message.channel)
                 await message.channel.send(embed=embed)
             except Exception as e:
                 await message.channel.send(f'Error retrieving submission info: {e}')
-                traceback.print_exc()
+                logger.error(f'Error retrieving submission info: {e} Message content: {message.content}')
         if message.channel.permissions_for(message.guild.me).manage_messages:
             message = await message.channel.fetch_message(message.id)
             # Suppress the Discord embed for the user's link
@@ -153,7 +164,7 @@ class Reddit(commands.Cog):
                 def check(b: discord.Message, a: discord.Message):
                     return b.id == message.id and len(a.embeds) > len(b.embeds)
 
-                result = (await self.bot.wait_for('message_edit', check=check))[1]
+                result = (await self.bot.wait_for('message_edit', check=check, timeout=60))[1]
             else:
                 result = message
             await result.edit(suppress=True)

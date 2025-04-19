@@ -91,7 +91,10 @@ class LogModule(object):
                     if k == 'embed':
                         result['plainText'] = not entry['embed']
                     else:
-                        result[k] = v
+                        if v == 'on':
+                            result[k] = True
+                        else:
+                            result[k] = v
             except Exception:
                 pass
         return result
@@ -276,6 +279,9 @@ async def VerifyServer(
                         'server_id': s.id,
                         'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
                         'flags': {},
+                        'announcementsChannel': serv.get('announcementsChannel', (0, False)),  # Channel to send announcements to
+                        'moderatorChannel': serv.get('moderatorChannel', (0, False)),  # Channel to send moderator messages to
+                        'generalChannel': serv.get('generalChannel', (0, False)),  # Channel to send general messages to
                         #'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
                         'antispam': {
                             'enabled': spam.get('enabled', False),  # Master switch for the antispam module
@@ -351,7 +357,11 @@ async def VerifyServer(
                             'disguardLogRecursion': log.get(
                                 'disguardLogRecursion', False
                             ),  # Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
-                            'image': log.get('enabled', False),
+                            'indexing': log.get('indexing', log.get('enabled', True)),  # Whether to index messages in this server
+                            'image': log.get('image', False),
+                            'sendIndexFile': log.get('sendIndexFile', True),  # Whether to send message index files with message delete logs
+                            'storageCap': log.get('storageCap', 20),  # The maximum size of attachment storage in GB
+                            'messageLogsBotAuthor': log.get('messageLogsBotAuthor', 0),  # Whether to send logs for messages sent by the bot
                             'defaultChannel': log.get('defaultChannel', None),
                             'library': log.get(
                                 'library', 1

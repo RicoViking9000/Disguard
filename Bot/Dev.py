@@ -1,10 +1,10 @@
 """Cog that contains Disguard's dev-only commands"""
 
-import asyncio
 import codecs
 import datetime
 import inspect
 import json
+import logging
 import os
 import shutil
 import textwrap
@@ -12,17 +12,18 @@ import traceback
 import typing
 
 import discord
-import pymongo
-import pymongo.errors
 from discord import app_commands
 from discord.ext import commands
 
 import database
+import Indexing
 import lightningdb
 import Support
 import utility
 
 # =============================================================================
+
+logger = logging.getLogger('discord')
 
 
 @app_commands.guilds(utility.DISGUARD_SERVER_ID)
@@ -35,12 +36,14 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='shutdown')
     async def shutdown(self, interaction: discord.Interaction):
         """Shutdown the bot"""
+        logger.info('[shutdown] Shutting down')
         await interaction.response.send_message('Shutting down')
         await self.bot.close()
 
     @app_commands.command(name='verify_database')
     async def verify_database(self, interaction: discord.Interaction):
         """Verify the database"""
+        logger.info('[verify_database] Verifying database')
         await interaction.response.send_message('Verifying database...')
         await database.Verification(self.bot)
         await interaction.edit_original_response(content='Database verified!')
@@ -48,21 +51,26 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='unduplicate_history')
     async def unduplicate_history(self, interaction: discord.Interaction):
         """Remove duplicate entries from status, username, avatar history"""
+        logger.info('[unduplicate_history] Removing duplicate entries from status, username, avatar history')
         self.bot.useAttributeQueue = True
         await database.UnduplicateUsers(self.bot.users, interaction)
         self.bot.useAttributeQueue = False
         await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
 
     @app_commands.command(name='index_server')
-    async def index_server(self, interaction: discord.Interaction, *, server_arg: typing.Optional[str]):
+    async def index_server(self, interaction: discord.Interaction, *, server_arg: typing.Optional[str], full: bool = False):
         """Index a server's messages"""
+        logger.info(f'[index_server] Indexing server {server_arg}')
         if server_arg:
             servers: list[discord.Guild] = [self.bot.get_guild(int(server_arg))]
         else:
             servers: list[discord.Guild] = self.bot.guilds
         await interaction.response.send_message(f'Indexing [{",  ".join([str(s)[:15] for s in servers])}]...')
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
         for server in servers:
-            await asyncio.gather(*[indexMessages(server, channel, True) for channel in server.text_channels])
+            indexing_enabled = (await utility.get_server(server)).get('cyberlog').get('indexing')
+            if indexing_enabled:
+                await indexing_cog.index_channels(server.text_channels, full=full)
         await interaction.edit_original_response(content='Server indexed!')
 
     @index_server.autocomplete('server_arg')
@@ -74,11 +82,17 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         return [app_commands.Choice(name=str(server), value=str(server.id)) for server in self.bot.guilds][:25]
 
     @app_commands.command(name='index_channel')
-    async def index_channel(self, interaction: discord.Interaction, channel_arg: str):
+    async def index_channel(self, interaction: discord.Interaction, channel_arg: str, full: bool = False):
         """Index a channel"""
+        logger.info(f'[index_channel] Indexing channel {channel_arg}')
         channel = self.bot.get_channel(int(channel_arg))
+        indexing_enabled = (await utility.get_server(channel.guild)).get('cyberlog').get('indexing')
+        if not indexing_enabled:
+            await interaction.response.send_message(f'Indexing is disabled for {channel.guild.name}')
+            return
         await interaction.response.send_message(f'Indexing {channel.name}...')
-        await indexMessages(channel.guild, channel, True)
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        await indexing_cog.index_channel(channel, full=full)
         await interaction.edit_original_response(content='Channel indexed!')
 
     @index_channel.autocomplete('channel_arg')
@@ -102,6 +116,8 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='eval')
     async def eval(self, interaction: discord.Interaction, *, code: str):
         """Evaluate code"""
+        logger.info(f'[eval] Evaluating code: {code}')
+        await interaction.response.defer(thinking=True)
         code = textwrap.dedent(code)
         env = {
             'bot': self.bot,
@@ -126,25 +142,121 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
     @app_commands.command(name='get_log_file')
     async def get_log_file(self, interaction: discord.Interaction):
         """Get the log file"""
+        logger.info('[get_log_file] Sending log file')
         await interaction.response.send_message(file=discord.File('discord.log'))
 
     @app_commands.command(name='sync')
     async def sync_tree(self, interaction: discord.Interaction):
         """Sync the tree"""
+        logger.info('[sync_tree] Syncing command tree')
         await self.bot.tree.sync()
         await self.bot.tree.sync(guild=discord.Object(utility.DISGUARD_SERVER_ID))
         await interaction.response.send_message('Synced tree')
 
     @app_commands.command(name='clear_commands')
     async def clear_commands(self, interaction: discord.Interaction):
-        """Clear the command cache"""
+        """Clear the command tree"""
+        logger.info('[clear_commands] Clearing command tree')
         await self.bot.tree.clear_commands()
         await self.bot.tree.sync()
         await interaction.response.send_message('Cleared tree')
 
+    @app_commands.command(name='delete_indexes')
+    async def clear_indexes(self, interaction: discord.Interaction, *, server: typing.Optional[str], channel: typing.Optional[str]):
+        """Clear message indexes"""
+        logger.info(f'[clear_indexes] Clearing indexes for server {server} and channel {channel}')
+        await interaction.response.send_message('Clearing indexes...')
+        status_content = ''
+        if not server and not channel:
+            await lightningdb.delete_all_channels()
+            channels = []  # Set this so the loop below doesn't execute
+        elif server and not channel:
+            channels = self.bot.get_guild(int(server)).text_channels
+        elif channel:
+            channels = [self.bot.get_channel(int(channel))]
+        for entry in channels:
+            try:
+                await lightningdb.delete_channel(entry.id)
+            except Exception:
+                logger.error(f'[clear_indexes] Error deleting channel {entry}', exc_info=True)
+                status_content += f'Error deleting channel {entry}\n'
+        await interaction.edit_original_response(content=f'Indexes cleared\n\n{status_content}')
+
+    @clear_indexes.autocomplete('server')
+    async def clear_indexes_autocomplete_server(self, interaction: discord.Interaction, argument: str):
+        if argument:
+            return [app_commands.Choice(name=str(server[0]), value=str(server[0].id)) for server in utility.FindServers(self.bot.guilds, argument)][
+                :25
+            ]
+        return [app_commands.Choice(name=str(server), value=str(server.id)) for server in self.bot.guilds][:25]
+
+    @clear_indexes.autocomplete('channel')
+    async def clear_indexes_autocomplete_channel(self, interaction: discord.Interaction, argument: str):
+        def filter_list(results: list[list[tuple[discord.TextChannel, int]]]) -> list[discord.TextChannel]:
+            result = []
+            for list_entry in results:
+                result += [entry[0] for entry in list_entry if isinstance(entry[0], discord.TextChannel)]
+            return result
+
+        text_channel_results = [utility.FindChannels(server, argument) for server in self.bot.guilds]
+        filtered_results = filter_list(text_channel_results)
+        if argument:
+            return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in filtered_results][:25]
+        return [
+            app_commands.Choice(name=str(channel), value=str(channel.id))
+            for channel in self.bot.get_all_channels()
+            if isinstance(channel, discord.TextChannel)
+        ][:25]
+
+    @app_commands.command(name='delete_attachments')
+    async def delete_attachments(self, interaction: discord.Interaction, *, server: typing.Optional[str], channel: typing.Optional[str]):
+        """Delete message attachments"""
+        logger.info(f'[delete_attachments] Deleting attachments for server {server} and channel {channel}')
+        await interaction.response.send_message('Deleting attachments...')
+        status_content = ''
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        try:
+            if not server and not channel:
+                await indexing_cog.delete_all_attachments()
+            elif server and not channel:
+                await indexing_cog.delete_all_attachments(server=self.bot.get_guild(int(server)))
+            elif channel:
+                await indexing_cog.delete_all_attachments(channel=self.bot.get_channel(int(channel)))
+            await interaction.edit_original_response(content=f'Attachments deleted\n\n{status_content}')
+        except Exception:
+            logger.error(f'[delete_attachments] Error deleting attachments for server {server} and channel {channel}', exc_info=True)
+            status_content += f'Error deleting attachments for server {server} and channel {channel}\n'
+
+    @delete_attachments.autocomplete('server')
+    async def delete_attachments_autocomplete_server(self, interaction: discord.Interaction, argument: str):
+        if argument:
+            return [app_commands.Choice(name=str(server[0]), value=str(server[0].id)) for server in utility.FindServers(self.bot.guilds, argument)][
+                :25
+            ]
+        return [app_commands.Choice(name=str(server), value=str(server.id)) for server in self.bot.guilds][:25]
+
+    @delete_attachments.autocomplete('channel')
+    async def delete_attachments_autocomplete_channel(self, interaction: discord.Interaction, argument: str):
+        def filter_list(results: list[list[tuple[discord.TextChannel, int]]]) -> list[discord.TextChannel]:
+            result = []
+            for list_entry in results:
+                result += [entry[0] for entry in list_entry if isinstance(entry[0], discord.TextChannel)]
+            return result
+
+        text_channel_results = [utility.FindChannels(server, argument) for server in self.bot.guilds]
+        filtered_results = filter_list(text_channel_results)
+        if argument:
+            return [app_commands.Choice(name=channel.name, value=str(channel.id)) for channel in filtered_results][:25]
+        return [
+            app_commands.Choice(name=str(channel), value=str(channel.id))
+            for channel in self.bot.get_all_channels()
+            if isinstance(channel, discord.TextChannel)
+        ][:25]
+
     @app_commands.command(name='reload_cog')
     async def reload_cog(self, interaction: discord.Interaction, cog_name: str):
         """Reload a cog"""
+        logger.info(f'[reload_cog] Reloading {cog_name}')
         cog = self.bot.get_cog(cog_name)
         if cog is None:
             await interaction.response.send_message(f'Cog {cog_name} not found')
@@ -211,6 +323,7 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
             traceback.print_exc()
 
         async def on_submit(self, interaction: discord.Interaction):
+            await interaction.response.defer(thinking=True)
             message = self.message.value
             match self.server_bucket:
                 case 'all':
@@ -320,42 +433,6 @@ class Dev(commands.GroupCog, name='dev', description='Dev-only commands'):
         fileName = f'Attachments/Temp/MessageAttachments_{utility.sanitize_filename(user.name)}_{(discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(interaction.guild) if interaction.guild else -4)):%m-%b-%Y %I %M %p}'
         shutil.make_archive(fileName, 'zip', base_path)
         await interaction.response.edit_message(content=f'{os.path.abspath(fileName)}.zip')
-
-
-async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
-    if channel.id in (534439214289256478, 910598159963652126):
-        return
-    start = datetime.datetime.now()
-    try:
-        saveImages = (await utility.get_server(server))['cyberlog'].get('image') and not channel.is_nsfw()
-    except AttributeError:
-        return
-    if lightningdb.database.get_collection(str(channel.id)) is None:
-        full = True
-    existing_message_counter = 0
-    async for message in channel.history(limit=None, oldest_first=full):
-        try:
-            await lightningdb.post_message(message)
-        except pymongo.errors.DuplicateKeyError:
-            if not full:
-                existing_message_counter += 1
-                if existing_message_counter >= 15:
-                    break
-        if not message.author.bot and (discord.utils.utcnow() - message.created_at).days < 7 and saveImages:
-            attachments_path = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
-            try:
-                os.makedirs(attachments_path)
-            except FileExistsError:
-                pass
-            for attachment in message.attachments:
-                if attachment.size / 1000000 < 8:
-                    try:
-                        await attachment.save(f'{attachments_path}/{attachment.filename}')
-                    except discord.HTTPException:
-                        pass
-        if full:
-            await asyncio.sleep(0.0015)
-    print(f'Indexed {server.name}: {channel.name} in {(datetime.datetime.now() - start).seconds} seconds')
 
 
 async def setup(bot: commands.Bot):

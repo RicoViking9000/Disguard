@@ -1,6 +1,7 @@
 """Contains utility functions to be used across Disguard"""
 
 import datetime
+import os
 import re
 import string
 import typing
@@ -109,6 +110,8 @@ CHANNEL_KEYS = {
     'news_thread': 'News thread',
     'text': 'Text',
     'voice': 'Voice',
+    'forum': 'Forum',
+    'media': 'Media',
 }
 
 DISGUARD_SERVER_ID = 560457796206985216
@@ -704,7 +707,7 @@ async def color_theme(s):
     return (await get_server(s)).get('colorTheme', 0)
 
 
-async def get_server(s: discord.Guild, return_value=None):
+async def get_server(s: discord.Guild, return_value={}):
     return await lightningdb.get_server(s.id, return_value)
 
 
@@ -749,6 +752,52 @@ async def update_bot_presence(bot: commands.Bot, status: discord.Status = None, 
     new_presence = {'status': status or bot.status, 'activity': activity or bot.activity}
     if current_presence != new_presence:
         await bot.change_presence(**new_presence)
+
+
+def get_dir_size(path='.'):
+    """
+    Calculate the total size of all files in a directory, including subdirectories.
+
+    Parameters:
+        path (str): The directory path to calculate the size for. Defaults to the current directory.
+
+    Returns:
+        int: The total size of all files in the directory in bytes.
+    """
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file() and not entry.is_symlink():
+                        total += entry.stat().st_size
+                    elif entry.is_dir():
+                        total += get_dir_size(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    continue
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
+
+
+def sort_files_by_oldest(directory):
+    # Get all files in the directory
+    files = [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+
+    # Sort files by modification time (oldest first)
+    files.sort(key=lambda x: os.path.getmtime(x))
+
+    return files
+
+
+def sort_folders_by_oldest(directory):
+    # Get all folders in the directory
+    folders = [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isdir(os.path.join(directory, f))]
+
+    # Sort folders by creation time (oldest first)
+    folders.sort(key=lambda x: os.path.getctime(x))
+
+    return folders
 
 
 class BasicView(discord.ui.View):

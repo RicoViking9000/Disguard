@@ -2,7 +2,6 @@ import asyncio
 import collections
 import copy
 import datetime
-import json
 import re
 import traceback
 import typing
@@ -14,6 +13,7 @@ from discord.ext import commands
 
 import Cyberlog  # Used to prevent delete logs upon purging
 import database
+import lightningdb
 import utility
 
 filters = {}
@@ -862,7 +862,7 @@ class Moderation(commands.Cog):
             current.mentions = ctx.message
             messages = []
 
-            def channels(m):
+            def check_channels(m):
                 return (
                     m.channel == ctx.channel
                     and m.author == ctx.author
@@ -870,7 +870,7 @@ class Moderation(commands.Cog):
                 )
 
             try:
-                post = await self.bot.wait_for('message', check=channels, timeout=120)
+                post = await self.bot.wait_for('message', check=check_channels, timeout=120)
             except asyncio.TimeoutError:
                 return await message.edit(embed=timeout)
             embed.set_author(name='Please wait')
@@ -891,9 +891,14 @@ class Moderation(commands.Cog):
             except:
                 pass
             counts = []
-            for channel in channels:
-                with open(f'Indexes/{channel.guild.id}/{channel.id}.json') as f:
-                    counts.append(len(json.load(f).keys()))
+            indexing_enabled = (await utility.get_server(ctx.guild)).get('cyberlog').get('indexing')
+            if indexing_enabled:
+                for channel in channels:
+                    try:
+                        counts.append(len(await lightningdb.get_channel_messages(channel.id)))
+                    except KeyError:
+                        # no indexes
+                        continue
             total = sum(counts)
             current.channel = channels
             embed.description = "Ok cool, {} for a total of {} messages BTW.\n\nWould you like me to index the channel(s) you selected to let you know how many messages match your filters as we progress through setup? This may take a long time if the channel(s) has/have lots of messages. If it takes longer than 5 minutes, I'll tag you when I'm done. Type `yes` or `no`".format(

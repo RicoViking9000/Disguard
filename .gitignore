@@ -14,3 +14,4 @@ praw.ini
 access.json
 venv/
 ruff.toml
+storage/
