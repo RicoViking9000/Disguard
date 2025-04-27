@@ -245,7 +245,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         birthday = calculateDate(message.content, adjusted)
         # Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
         # First we make sure the user is talking about themself
-        target = await verifyBirthday(message.content, adjusted, birthday)
+        target = await verifyBirthday(message, adjusted, birthday)
         # Now, we need to make sure that the bot doesn't prompt people who already have a birthday set for the date they specified; and cancel execution of anything else if no new birthdays are detected
         if birthday and target:
             if server_data.get('birthdayMode') == 1:
@@ -563,14 +563,14 @@ def calculateDate(message: str, adjusted: datetime.datetime):
     return birthday
 
 
-async def verifyBirthday(message: typing.Union[str, discord.Message], adjusted: datetime.datetime, birthday=None):
+async def verifyBirthday(message: discord.Message, adjusted: datetime.datetime, birthday=None):
     """Return a list of relevant members if the program determines that the member is talking about their own birthday or someone else's birthday given a message, None otherwise"""
     if not birthday:
         birthday = calculateDate(message, adjusted)
-    words = message.lower().split(' ')
+    words = message.content.lower().split(' ')
     # Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
     # User most likely talking about their own birthday
-    if any(word in message.lower() for word in ['my birthday', 'my bday', 'mine is', 'my half birthday', 'my half bday']):
+    if any(word in message.content.lower() for word in ['my birthday', 'my bday', 'mine is', 'my half birthday', 'my half bday']):
         return [message.author]
     # User most likely talking about someone else's birthday
     elif type(message) is discord.Message:
