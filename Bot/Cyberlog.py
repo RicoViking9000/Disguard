@@ -773,7 +773,7 @@ class Cyberlog(commands.Cog):
         botIgnore = False
         c = await logChannel(guild, 'message')
         settings = await getCyberAttributes(guild, 'message')
-        bot_author_settings = await utility.get_server(guild).get('cyberlog', {}).get('messageLogsBotAuthor', 0)
+        bot_author_settings = (await utility.get_server(guild)).get('cyberlog', {}).get('messageLogsBotAuthor', 0)
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
         color = blue[await utility.color_theme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
@@ -4352,7 +4352,7 @@ class Cyberlog(commands.Cog):
     async def archiveLogEmbed(self, server, id, embed, flavorText):
         p = f'storage/{server.id}/misc/modLogs.json'
         try:
-            await aios.makedirs(f'storage/misc/{server.id}/LogArchive')
+            await aios.makedirs(f'storage/{server.id}/misc')
         except FileExistsError:
             pass
         try:
