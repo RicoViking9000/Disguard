@@ -111,7 +111,7 @@ class MessageEmbed(pydantic.BaseModel):
     title: Optional[Annotated[str, pydantic.StringConstraints(max_length=256)]]
     description: Optional[Annotated[str, pydantic.StringConstraints(max_length=4096)]]
     url: Optional[str]
-    type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link', 'poll_result', 'auto_moderation_notification']
+    type: Literal['rich', 'image', 'video', 'gifv', 'article', 'link', 'poll_result', 'auto_moderation_notification', 'auto_moderation_message']
     timestamp: Optional[datetime.datetime]
     color: tuple[int, int, int] | None
     footer: EmbedFooter | None

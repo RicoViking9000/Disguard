@@ -552,6 +552,8 @@ class Cyberlog(commands.Cog):
         """Discord.py event listener: When a reaction is added to a message"""
         # Layer style: Message ID > User ID > Reaction (emoji)
         u = self.bot.get_user(p.user_id)
+        if not u:
+            return
         if not serverIsGimped(self.bot.get_guild(p.guild_id)):
             await updateLastActive(u, discord.utils.utcnow(), 'added a reaction')
         if u.bot:
@@ -577,6 +579,8 @@ class Cyberlog(commands.Cog):
     async def on_raw_reaction_remove(self, p: discord.RawReactionActionEvent):
         """Discord.py event listener: When a reaction is removed from a message"""
         u = self.bot.get_user(p.user_id)
+        if not u:
+            return
         if not serverIsGimped(self.bot.get_guild(p.guild_id)):
             await updateLastActive(u, discord.utils.utcnow(), 'removed a reaction')
         if u.bot:
@@ -1045,7 +1049,10 @@ class Cyberlog(commands.Cog):
             return  # Invalid log channel
         message_data = await lightningdb.get_message(channel.id, after.id)
         if message_data:
-            before = message_data['editions'][-2]
+            try:
+                before = message_data['editions'][-2]
+            except IndexError:
+                before = after.content
         else:
             before = after.content
         try:
@@ -4590,11 +4597,11 @@ async def verifyLogChannel(bot, s: discord.Guild):
 
 
 async def logExclusions(channel: discord.TextChannel, member: discord.Member):
-    if not member:
-        return False
     server_data = await utility.get_server(channel.guild)
     if type(member) is not discord.Member:
         member = channel.guild.get_member(member.id)
+    if not member:
+        return False
     return not any(
         [
             channel.id in server_data.get('cyberlog').get('channelExclusions'),
@@ -4703,6 +4710,8 @@ async def updateLastActive(users: typing.Union[discord.User, typing.List[discord
         users = [users]
     cyber: Cyberlog = bot.get_cog('Cyberlog')
     for u in users:
+        if not u:
+            logger.info(f'updateLastActive: User is None, skipping update. {reason}')
         if await cyber.privacyEnabledChecker(u, 'profile', 'lastActive'):
             try:
                 (await utility.get_user(u))['lastActive'] = {'timestamp': timestamp, 'reason': reason}

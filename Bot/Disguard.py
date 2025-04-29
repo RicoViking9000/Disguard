@@ -63,7 +63,7 @@ async def prefix(bot: commands.Bot, message: discord.Message):
 
 
 intents = discord.Intents.all()
-intents.presences = False
+# intents.presences = False
 
 bot = commands.Bot(
     command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions=discord.AllowedMentions.none()
@@ -258,19 +258,4 @@ async def test(ctx: commands.Context):
     await message.edit(content=f'Type: {message.type.name}')
 
 
-try:
-    while True:
-        try:
-            asyncio.run(main())
-        except TimeoutError:
-            print('TimeoutError')
-            logger.info('TimeoutError - restarting Disguard', exc_info=True)
-            continue
-        except Exception as e:
-            print(f'Exception: {e}')
-            logger.info(f'Exception - restarting Disguard: {e}', exc_info=True)
-            traceback.print_exc()
-except KeyboardInterrupt:
-    print('KeyboardInterrupt - terminating Disguard')
-    logger.info('KeyboardInterrupt - terminating Disguard')
-    raise
+asyncio.run(main())
