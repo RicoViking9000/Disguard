@@ -44,6 +44,7 @@ class Indexing(commands.Cog):
                     id=answer.id,
                     parent_poll_id=snowflake_id,
                     media=models.PollMedia(text=answer.media.text, emoji=str(answer.media.emoji)),
+                    self_voted=answer.self_voted,
                     text=answer.text,
                     emoji=str(answer.emoji),
                     vote_count=answer.vote_count,
@@ -68,7 +69,7 @@ class Indexing(commands.Cog):
                 message_id=message.id,
                 format=str(sticker.format),
                 url=sticker.url,
-                type='standard' if models(fetched_stickers[index]).__name__ == 'StandardSticker' else 'guild',
+                type='standard' if fetched_stickers[index].__name__ == 'StandardSticker' else 'guild',
                 data=models.StandardSticker(
                     name=sticker.name,
                     description=fetched_stickers[index].description,
@@ -565,20 +566,23 @@ class Indexing(commands.Cog):
             full = True
         # if 15 messages in a row are already indexed, stop indexing
         existing_message_counter = 0
-        async for message in channel.history(limit=None, oldest_first=full):
-            try:
-                message_data = await self.convert_message(message)
-                if message_data:
-                    await lightningdb.post_message_2024(message_data)
-            except DuplicateKeyError:
-                if not full:
-                    existing_message_counter += 1
-                    if existing_message_counter >= 15:
-                        break
-            if message.attachments and not message.author.bot and save_images:
-                await self.save_attachments(message)
-            if full:
-                await asyncio.sleep(0.000025)
+        try:
+            async for message in channel.history(limit=None, oldest_first=full):
+                try:
+                    message_data = await self.convert_message(message)
+                    if message_data:
+                        await lightningdb.post_message_2024(message_data)
+                except DuplicateKeyError:
+                    if not full:
+                        existing_message_counter += 1
+                        if existing_message_counter >= 15:
+                            break
+                if message.attachments and not message.author.bot and save_images:
+                    await self.save_attachments(message)
+                if full:
+                    await asyncio.sleep(0.00025)
+        except discord.Forbidden:
+            logger.error(f'Forbidden to access channel {channel.id} - skipping indexing')
         print(f'Indexed channel ...{str(channel.id)[-4:]}')
         logger.info(f'Indexed channel {channel.id} in {(discord.utils.utcnow() - start)} delta')
 
