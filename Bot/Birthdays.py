@@ -1487,7 +1487,7 @@ class BirthdayView(discord.ui.View):
                     break  # If the user cancels or finishes setup, close the loop
                 if not self.usedPrivateInterface:
                     adjusted = discord.utils.utcnow() + datetime.timedelta(hours=(await utility.get_server(self.interaction.guild)).get('offset', -5))
-                    self.newBday = calculateDate(result, adjusted)  # If private interface was used, submitValue will store the value
+                    self.newBday = calculateDate(result.content, adjusted)  # If private interface was used, submitValue will store the value
                 try:
                     self.birthdays.bot.get_cog('Cyberlog').AvoidDeletionLogging(result)
                     await result.delete()

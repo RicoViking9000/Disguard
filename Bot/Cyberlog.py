@@ -452,7 +452,10 @@ class Cyberlog(commands.Cog):
             return r.message.id == m.id and not u.bot
 
         while not self.bot.is_closed():  # This stuff has never been reliable...
-            result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+            try:
+                result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+            except asyncio.TimeoutError:
+                break
             if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(m.embeds) > 0:
                 await m.edit(content=plainText, embed=None)
                 await m.clear_reactions()
@@ -535,7 +538,10 @@ class Cyberlog(commands.Cog):
             return r.message.id == msg.id and not u.bot
 
         while not self.bot.is_closed():
-            result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+            try:
+                result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+            except asyncio.TimeoutError:
+                break
             if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                 await msg.edit(content=content, embed=None)
                 await msg.clear_reactions()
@@ -1334,7 +1340,10 @@ class Cyberlog(commands.Cog):
             # This message had no attachments
             pass
         while not self.bot.is_closed():
-            result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+            try:
+                result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+            except asyncio.TimeoutError:
+                break
             if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                 await msg.edit(content=plainText, embed=None)
                 await msg.clear_reactions()
@@ -1483,7 +1492,10 @@ class Cyberlog(commands.Cog):
                 return r.message.id == msg.id and not u.bot
 
             while not self.bot.is_closed():
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                     await msg.edit(content=content, embed=None)
                     await msg.clear_reactions()
@@ -1796,7 +1808,10 @@ class Cyberlog(commands.Cog):
                     def reactionCheck(r, u):
                         return r.message.id == msg.id and not u.bot
 
-                    r = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                    try:
+                        r = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                    except asyncio.TimeoutError:
+                        break
                     if str(r[0]) == '🇵' and '🇵' in reactions:
                         await msg.edit(content=(permissionString[:1995] + '…```') if len(permissionString) > 2000 else permissionString)
 
@@ -1952,7 +1967,10 @@ class Cyberlog(commands.Cog):
                 return r.message.id == msg.id and not u.bot
 
             while not self.bot.is_closed():
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                     await msg.edit(content=content, embed=None)
                     await msg.clear_reactions()
@@ -2140,6 +2158,7 @@ class Cyberlog(commands.Cog):
                 if hadToRemute:
                     embed.description += f"\n{self.emojis['greenCheck']}Succesfully remuted {member.display_name}"
                 await msg.edit(content=msg.content, embed=embed if not settings['plainText'] else None)
+                return
                 final = copy.deepcopy(embed)
                 memberInfoEmbed = None
                 reactions = [self.emojis['expand'], 'ℹ', '🤐', '🔒', '👢', '🔨']
@@ -2612,7 +2631,10 @@ class Cyberlog(commands.Cog):
                 return r.message.id == message.id and not u.bot
 
             while not self.bot.is_closed():
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(message.embeds) > 0:
                     await message.edit(content=content, embed=None)
                     await message.clear_reactions()
@@ -2688,7 +2710,10 @@ class Cyberlog(commands.Cog):
                     def toggleCheck(r, u):
                         return not u.bot and r.message.id == msg.id
 
-                    r = await self.bot.wait_for('reaction_add', check=toggleCheck)
+                    try:
+                        r = await self.bot.wait_for('reaction_add', check=toggleCheck, timeout=1800)
+                    except asyncio.TimeoutError:
+                        break
                     if r[0].emoji == self.emojis['expand']:
                         await msg.clear_reactions()
                         if len(msg.embeds) > 0 and 'to expand' in embed.fields[-1].value:  # Normal functionality
@@ -2874,7 +2899,10 @@ class Cyberlog(commands.Cog):
                 return r.message.id == msg.id and not u.bot
 
             while not self.bot.is_closed():
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                     await msg.edit(content=content, embed=None)
                     await msg.clear_reactions()
@@ -3226,7 +3254,10 @@ class Cyberlog(commands.Cog):
                     def reactionCheck(r, u):
                         return r.message.id == message.id and not u.bot
 
-                    result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                    try:
+                        result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                    except asyncio.TimeoutError:
+                        break
                     if str(result[0]) == 'ℹ':
                         if 'Loading server information' not in embed.description:
                             embed.description += f'\n\n{self.loading}Loading server information'
@@ -3343,7 +3374,10 @@ class Cyberlog(commands.Cog):
                 return r.message.id == msg.id and not u.bot
 
             while not self.bot.is_closed():
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                     await msg.edit(content=content, embed=None)
                     await msg.clear_reactions()
@@ -3452,7 +3486,10 @@ class Cyberlog(commands.Cog):
                 def reactionCheck(r, u):
                     return r.message.id == message.id and not u.bot
 
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if str(result[0]) == 'ℹ':
                     if 'Loading role information' not in embed.description:
                         embed.description += f'\n\n{self.loading}Loading role information'
@@ -3590,7 +3627,10 @@ class Cyberlog(commands.Cog):
                 def reactionCheck(r, u):
                     return r.message.id == message.id and not u.bot
 
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if str(result[0]) == 'ℹ':
                     await message.clear_reactions()
                     if 'Loading role information' not in embed.description:
@@ -3740,7 +3780,10 @@ class Cyberlog(commands.Cog):
                     return r.message.id == msg.id and not u.bot
 
                 while not self.bot.is_closed():
-                    result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                    try:
+                        result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                    except asyncio.TimeoutError:
+                        break
                     if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                         await msg.edit(content=content, embed=None)
                         await msg.clear_reactions()
@@ -4259,7 +4302,10 @@ class Cyberlog(commands.Cog):
                 return r.message.id == msg.id and not u.bot
 
             while not self.bot.is_closed():
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck)
+                try:
+                    result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
+                except asyncio.TimeoutError:
+                    break
                 if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
                     await msg.edit(content=content, embed=None)
                     await msg.clear_reactions()
