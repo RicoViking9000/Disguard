@@ -3,12 +3,12 @@ import codecs
 import collections
 import copy
 import datetime
+import difflib
 import gc
 import json
 import logging
 import math
 import os
-import random
 import re
 import shutil
 import textwrap
@@ -568,6 +568,18 @@ class Cyberlog(commands.Cog):
         if not g:
             return
         m = p.message_id
+
+        # embed suppression handling
+        server_settings = await utility.get_server(g)
+        if server_settings['undoSuppression']:
+            if p.emoji == self.emojis['expand'] and utility.ManageServer(u):
+                message = await g.get_channel(p.channel_id).fetch_message(m)
+                await message.edit(suppress=False)
+                for r in message.reactions:
+                    if r.emoji == self.emojis['expand']:
+                        return await r.clear()
+
+        # ghost reaction handling
         if self.reactions:
             layerObject = self.reactions
         else:
@@ -652,235 +664,184 @@ class Cyberlog(commands.Cog):
             except:
                 pass
 
-    def parseEdits(self, beforeWordList, afterWordList, findChanges=False):
-        """Returns truncated version of differences given before/after list of words
-        -if findChanges is True, then one of the lists merely contains an additional word compared to the other one"""
-        beforeC = ''  # String that will be displayed in the embed - old content
-        afterC = ''  # String that will be displayed in the embed - new content
-        beforeBooleans = [
-            b in afterWordList for b in beforeWordList
-        ]  # Used for determining placement when one list has more elements than the other; Falses will decrease the iterator
-        afterBooleans = [a in beforeWordList for a in afterWordList]
-        i = 0  # Iterator variable
-        # The following code parses through both the old and new message in order to trim out what hasn't changed, which makes it much easier to see what's changed in long messages, and what makes Disguard edit logs so special
-        while i < len(beforeWordList):  # Loop through each word in the old message
-            iteratorAtStart = i  # This holds the value of the iterator at the start, and is used later
-            if beforeWordList[i] not in afterWordList:  # If the old word is not in the list of words in the new message...
-                offset = len(
-                    [b for b in beforeBooleans[:i] if not b]
-                )  # How many words aren't in the after list, up to the current iterator index i; used to determine offset
-                if i > 2:
-                    beforeC += (
-                        f'…{" ".join(beforeWordList[i-2 : i])} **{beforeWordList[i]}**'  # If it's the 3rd word or later, append three dots first
-                    )
-                    if findChanges:
-                        afterC += f'…{" ".join(afterWordList[i-2-offset : i-offset])}'  # If findChanges, add this context to the after String
-                else:
-                    beforeC += f'{" ".join(beforeWordList[:i])} **{beforeWordList[i]}**'  # Otherwise, add everything in the old message up to what's at the current iterator i
-                    if findChanges:
-                        afterC += ' '.join(afterWordList[: i - offset])  # If applicable, add all words up to i to the after content string
-                matchScanner = (
-                    i + 1
-                )  # Set this value to one number above i; it will go through the rest of the old message to scan for more words that aren't in the new message
-                altScanner = i - 1  # This is for the findChanges variable; for tracking through the new words list
-                matchCount = 0  # How many words **are** in the new message
-                matches = []  # Array of T/F depending on if word matches - if word matches, don't bold it
-                # When this is done, there will be a list formed of booleans for each remaining word in the old words list, set based on if that word is in the new message
-                while (
-                    matchScanner < len(beforeWordList) and matchCount < 2
-                ):  # Loop through the rest of the before words list as long as there are under two matches
-                    matched = beforeWordList[matchScanner] in afterWordList  # True if the current word in the old message is in the new message
-                    if matched:
-                        matchCount += 1  # Append match count if a match is found
-                    else:
-                        matchCount = 0  # Otherwise reset this because the parser checks for two identical words, then it breaks to trim the rest of the message until another difference is found
-                    matches.append(matched)
-                    matchScanner += 1
-                confirmCount = 0  # Keeps track of how many matches have been found (this will always be <= the number of True in matches)
-                for match in range(len(matches)):  # Iterate through the generated list of booleans
-                    if matches[match]:  # If True (current word *is* in new message)...
-                        confirmCount += 1
-                        beforeC += f' {beforeWordList[match + i + 1]}'  # Add this word (without bolding) to the result string
-                    else:
-                        beforeC += f' **{beforeWordList[match + i + 1]}**'  # Otherwise, add this word (with bolding) to the result string
-                        altScanner += 1  # If a word has been removed then append this by 1
-                    if findChanges:
-                        try:
-                            afterC += f' {afterWordList[match + altScanner + 1]}'  # Attempt to add the equivalent word (without bolding) to the result string
-                        except IndexError:
-                            if match + altScanner > i:
-                                afterC += f' {" ".join(afterWordList[match + altScanner - 1:])}'  # If out of bounds occurs due to the end of the message, simply add the rest of the message
-                    if confirmCount == len([m for m in matches if m]) and not findChanges:
-                        break  # If all same word matches have been found, and findChanges is False, break out of this and move on to the next iteration of the **while** loop
-                if matchScanner < len(beforeWordList):
-                    beforeC += (
-                        '… '  # If we aren't at the end of the word list, then add triple periods because the tail of the message will be truncated
-                    )
-                if altScanner < len(afterWordList) - 1 and findChanges:
-                    afterC += '… '  # Append triple periods if the remaining content is truncated
-                i = (
-                    matchScanner + 1
-                )  # Jump i ahead to the number after matchScanner because everything up to matchScanner has been parsed for differences already
-            if i == iteratorAtStart:
-                i += 1  # If no difference was found (i would equal iteratorAtStart), then simply iterate i by 1
-        i = 0  # Reset the iterator
-        # The following code does the exact same thing as above, just to the new message content
-        while i < len(afterWordList):
-            iteratorAtStart = i
-            if afterWordList[i] not in beforeWordList:
-                offset = len([a for a in afterBooleans[:i] if not a])
-                if i > 2:
-                    afterC += f'…{" ".join(afterWordList[i - 2 : i])} **{afterWordList[i]}**'
-                    if findChanges:
-                        beforeC += f'…{" ".join(beforeWordList[i - 2 - offset : i - offset])}'
-                else:
-                    afterC += f'{" ".join(afterWordList[:i])} **{afterWordList[i]}**'
-                    if findChanges:
-                        beforeC += ' '.join(beforeWordList[: i - offset])
-                matchScanner = i + 1
-                altScanner = i - 1
-                matchCount = 0
-                matches = []
-                while matchScanner < len(afterWordList) and matchCount < 2:
-                    matched = afterWordList[matchScanner] in beforeWordList
-                    if matched:
-                        matchCount += 1
-                    else:
-                        matchCount = 0
-                    matches.append(matched)
-                    matchScanner += 1
-                confirmCount = 0
-                for match in range(len(matches)):
-                    if matches[match]:
-                        confirmCount += 1
-                        afterC += f' {afterWordList[match + i + 1]}'
-                    else:
-                        afterC += f' **{afterWordList[match + i + 1]}**'
-                        altScanner += 1
-                    if findChanges:
-                        try:
-                            beforeC += f' {beforeWordList[match + altScanner + 1]}'
-                        except IndexError:
-                            if match + altScanner > i:
-                                beforeC += f' {" ".join(beforeWordList[match + altScanner - 1:])}'
-                    if confirmCount == len([m for m in matches if m]) and not findChanges:
-                        break
-                if matchScanner < len(afterWordList):
-                    afterC += '... '
-                if altScanner < len(beforeWordList) - 1 and findChanges:
-                    beforeC += '... '
-                i = matchScanner + 1
-            if i == iteratorAtStart:
-                i += 1
-        return beforeC, afterC
+    def parse_edits(before_words: list[str], after_words: list[str], context: int = 2):
+        """
+        Returns truncated differences between two strings, showing only content around the changes.
 
-    async def MessageEditHandler(self, before, after: discord.Message, timestamp):
+        Args:
+            before (str): The original string.
+            after (str): The modified string.
+            context (int): Number of words to include around the differences for context.
+
+        Returns:
+            tuple: A tuple containing the truncated 'before' and 'after' strings with differences highlighted.
+        """
+        matcher = difflib.SequenceMatcher(None, before_words, after_words)
+
+        before_result = []
+        after_result = []
+
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                # Include context words around changes
+                if len(before_result) > 0:
+                    before_result.extend(before_words[i1 : i1 + context])
+                    after_result.extend(after_words[j1 : j1 + context])
+            elif tag in ('replace', 'delete', 'insert'):
+                # Highlight differences
+                before_result.extend(before_words[max(0, i1 - context) : i1])
+                after_result.extend(after_words[max(0, j1 - context) : j1])
+
+                before_result.extend(f'**{word}**' for word in before_words[i1:i2])
+                after_result.extend(f'**{word}**' for word in after_words[j1:j2])
+
+                before_result.extend(before_words[i2 : i2 + context])
+                after_result.extend(after_words[j2 : j2 + context])
+
+        return ' '.join(before_result), ' '.join(after_result)
+
+    async def message_edit_handler(self, before: str | discord.Message, after: discord.Message, timestamp: datetime.datetime):
         # Variables to hold essential data
         guild = after.guild
-        author = after.author
-        channel = after.channel
-        b4 = None
-        botIgnore = False
-        c = await logChannel(guild, 'message')
+        # author = after.author
+        # channel = after.channel
+        # b4 = None
+        bot_ignore = False
+        log_channel = await logChannel(guild, 'message')
         settings = await getCyberAttributes(guild, 'message')
-        bot_author_settings = (await utility.get_server(guild)).get('cyberlog', {}).get('messageLogsBotAuthor', 0)
+        server_settings = await utility.get_server(guild)
+        bot_author_settings = server_settings.get('cyberlog', {}).get('messageLogsBotAuthor', 0)
         received = discord.utils.utcnow()
-        adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
+        tz_adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
         color = blue[await utility.color_theme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
-        if not c:
+        if not log_channel:
             return  # Invalid log channel or bot logging is disabled
         if bot_author_settings == 0 and after.author.bot:
-            botIgnore = True
+            bot_ignore = True
         elif bot_author_settings == 1 and after.author.bot:
             settings['plainText'] = True
         if type(before) is discord.Message:
-            b4 = before
-            before = before.content
-        if after.id in self.pins.get(after.channel.id, []) and not after.pinned and not botIgnore:  # Message was unpinned
-            await self.pinRemoveLogging(after, received, adjusted, c)
-        elif b4 and not b4.flags.suppress_embeds and after.flags.suppress_embeds and (await utility.get_server(after.guild))['undoSuppression']:
+            before_is_message = True
+            before_content = before.content
+        else:
+            before_content = before
+        if after.id in self.pins.get(after.channel.id, []) and not after.pinned and not bot_ignore:  # Message was unpinned
+            await self.pinRemoveLogging(after, received, tz_adjusted, log_channel)
+        elif before_is_message and not before.flags.suppress_embeds and after.flags.suppress_embeds and server_settings['undoSuppression']:
             await after.add_reaction(self.emojis['expand'])
-
-            def check(r: discord.Reaction, u: discord.Member):
-                return r.emoji == self.emojis['expand'] and utility.ManageServer(u) and r.message.id == after.id and not u.bot
-
-            await self.bot.wait_for('reaction_add', check=check)
-            await after.edit(suppress=False)
-            after = await after.channel.fetch_message(after.id)
-            for r in after.reactions:
-                if r.emoji == self.emojis['expand']:
-                    return await r.clear()
-        if botIgnore or after.author.id == self.bot.user.id:
             return
-        if after.content.strip() == before.strip():
-            return  # If the text before/after is the same, and after unpinned message log if applicable
-        if any(w in before.strip() for w in ['attachments>', '<1 attachment:', 'embed>']):
-            return  # Disguard's format for message content inside the indexes if the message has no regular content. Improve with regex in the future
-        beforeWordList = before.split(' ')  # A list of words in the old message
-        afterWordList = after.content.split(' ')  # A list of words in the new message
-        beforeParsed = [f'**{word}**' if word not in afterWordList else word for word in beforeWordList]
-        afterParsed = [f'**{word}**' if word not in beforeWordList else word for word in afterWordList]
-        beforeC, afterC = self.parseEdits(beforeWordList, afterWordList)
-        if any([len(m) == 0 for m in [beforeC, afterC]]):
-            beforeC, afterC = self.parseEdits(beforeWordList, afterWordList, True)
-        if len(beforeC) >= 1024:
-            beforeC = 'Message content too long to display'
-        if len(afterC) >= 1024:
-            afterC = 'Message content too long to display'
+            # code to re-expand message has been moved to on_raw_reaction_add
+        if bot_ignore or after.author.id == self.bot.user.id:
+            # return if bot edited its own message
+            return
+        attachments = []
         embed = discord.Embed(
-            title=f"""{(self.emojis['messageEdit'] if settings['library'] > 1 else "📜✏") if settings['context'][0] > 0 else ''}{"Message was edited" if settings['context'][0] < 2 else ""}""",
-            description=f"""{self.emojis['loading']} Finalizing log""",
+            title=f"""{(self.emojis['messageEdit'] if settings['library'] > 1 else "📜✏") if settings['context'][0] > 0 else ''}{"Message edited" if settings['context'][0] < 2 else ""}""",
+            description='',
             color=color,
         )
+        if after.content.strip() != before_content.strip():
+            before_words = before.split(' ')  # A list of words in the old message
+            after_words = after.content.split(' ')  # A list of words in the new message
+            before_parsed, after_parsed = self.parse_edits(before_words, after_words, 2)
+            before_in_description = False
+            after_in_description = False
+            if 0 <= len(before_parsed) < 1024:
+                before_display = before_parsed
+            elif 1024 <= len(before_parsed) < 1960:
+                embed.description += (
+                    f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **Before**: {before_parsed}\n'
+                )
+                before_in_description = True
+            else:
+                before_display = '<Message content too long to display>'
+            if 0 <= len(after_parsed) < 1024:
+                after_display = after_parsed
+            elif 1024 <= len(after_parsed) < 1960:
+                embed.description += (
+                    f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **After**: {after_parsed}\n'
+                )
+                after_in_description = True
+            else:
+                after_display = '<Message content too long to display>'
+            if not before_in_description:
+                embed.add_field(
+                    name=f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}Before',
+                    value=before_display,
+                    inline=False,
+                )
+            if not after_in_description:
+                embed.add_field(
+                    name=f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}After',
+                    value=after_display,
+                    inline=False,
+                )
+        if before_is_message and before.attachments != after.attachments:
+            # get attachments that aren't in both before & after
+            removed_attachments = list(set(after.attachments) - set(before.attachments))
+            added_attachments = list(set(before.attachments) - set(after.attachments))
+            unique_attachments = removed_attachments + added_attachments
+            embed.add_field(
+                name=f'{self.emojis["details"] if settings["context"][1] > 0 else ""}Attachments changed',
+                value='\n'.join(f'{"-" if a in removed_attachments else "+"} {a.filename}' for a in unique_attachments),
+                inline=False,
+            )
+            # update indexes
+        if before_is_message and before.flags != after.flags:
+            if before.flags.crossposted != after.flags.crossposted:
+                embed.add_field(
+                    name=f'{self.emojis["details"] if settings["context"][1] > 0 else ""}Crosspost status changed',
+                    value=f'{"This message was crossposted somewhere" if after.flags.crossposted else "This message's crosspost was removed"}',
+                    inline=False,
+                )
+            if before.flags.source_message_deleted != after.flags.source_message_deleted:
+                embed.add_field(
+                    name=f'{self.emojis["details"] if settings["context"][1] > 0 else ""}Dangling message reference',
+                    value=f'{"The original message that this message refers to was deleted" if after.flags.source_message_deleted else "This message\'s original source message was undeleted... is that even logically possible?"}',
+                    inline=False,
+                )
+            if before.flags.has_thread != after.flags.has_thread:
+                embed.add_field(
+                    name=f'{self.emojis["details"] if settings["context"][1] > 0 else ""}Thread status changed',
+                    value=f'{"This message is now in a thread" if after.flags.has_thread else "This message is no longer in a thread"}',
+                    inline=False,
+                )
         if settings['embedTimestamp'] in (1, 3):
             embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {after.id}')
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-            url = await self.imageToURL(after.author.display_avatar)
+            image_path = await self.image_to_local_attachment(after.author.display_avatar)
+            attachments.append(image_path)
             if settings['thumbnail'] in (1, 2, 4):
-                embed.set_thumbnail(url=url)
+                embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
             if settings['author'] in (1, 2, 4):
-                embed.set_author(name=after.author.display_name, icon_url=url)
+                embed.set_author(name=after.author.display_name, icon_url=f'attachment://{os.path.basename(image_path)}')
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
         new_edition = await indexing_cog.edition_from_message(after)
-        await lightningdb.patch_message_2024(channel.id, after.id, new_edition)
-        plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{beforeParsed if len(beforeParsed) < 1024 else beforeC}`\nAfter:`{afterParsed if len(afterParsed) < 1024 else afterC}\n`{after.jump_url}'
+        await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
+        plain_before_parsed, plain_after_parsed = self.parse_edits(before_words, after_words, 10)
+        plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{plain_before_parsed if len(plain_before_parsed) < 1000 else '<content too long>'}`\nAfter:`{plain_after_parsed if len(plain_after_parsed) < 1024 else '<content too long>'}\n`{after.jump_url}'
+        embed.description = (
+            f"""
+            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Author" if settings["context"][1] < 2 else ""}: {after.author.mention} ({after.author.display_name})
+            {utility.channelEmoji(self, after.channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {after.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
+            {f"{(utility.clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}
+            """
+            + embed.description
+        )
+
         try:
-            msg: discord.Message = await c.send(
+            msg: discord.Message = await log_channel.send(
                 content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
                 embed=embed if not settings['plainText'] else None,
                 tts=settings['tts'],
+                attachments=attachments,
             )
             if not settings['plainText']:
-                try:
-                    await msg.add_reaction(self.emojis['threeDots'])
-                except:
-                    pass
+                ...
+                # modal
         except discord.HTTPException as e:
-            return await c.send(f'Message edit log error: {e}')
-        embed.description = f"""
-            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Author" if settings["context"][1] < 2 else ""}: {author.mention} ({author.display_name})
-            {utility.channelEmoji(self, channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
-            {f"{(utility.clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}"""
-        rng = random.randint(1, 50) == 1  # 2% chance to display the help guide
-        embed.add_field(
-            name=f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}Before{" • Hover for full message" if rng and settings["context"][1] < 2 else ""}',
-            value=f"""[{beforeC if len(beforeC) > 0 else f'<Quick parser found no new content; {self.emojis["threeDots"]} to see full changes>'}]({msg.jump_url} '{before.strip()}')""",
-            inline=False,
-        )
-        embed.add_field(
-            name=f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}After{" • Hover for full message" if rng and settings["context"][1] < 2 else ""}',
-            value=f"""[{afterC if len(afterC) > 0 else f'<Quick parser found no new content; {self.emojis["threeDots"]} to see full changes>'}]({msg.jump_url} '{after.content.strip()}')""",
-            inline=False,
-        )
-        if len(embed.fields[0].value) > 1024:
-            embed.set_field_at(
-                0, name=embed.fields[0].name, value=beforeC if len(beforeC) <= 1024 else '<Content is too long to be displayed>', inline=False
-            )
-        if len(embed.fields[1].value) > 1024:
-            embed.set_field_at(
-                1, name=embed.fields[1].name, value=afterC if len(afterC) <= 1024 else '<Content is too long to be displayed>', inline=False
-            )
+            logger.error(f'Failed to send message edit log: {e}', exc_info=True)
         await msg.edit(
             content=None if any((settings['tts'], settings['flashText'])) and not settings['plainText'] else msg.content,
             embed=None if settings['plainText'] else embed,
@@ -889,7 +850,8 @@ class Cyberlog(commands.Cog):
         oldEmbed = copy.deepcopy(embed)
         oldContent = plainText
         if not serverIsGimped(guild):
-            await updateLastActive(author, discord.utils.utcnow(), 'edited a message')
+            await updateLastActive(after.author, discord.utils.utcnow(), 'edited a message')
+        return
         while not self.bot.is_closed():
 
             def iCheck(r, u):
@@ -996,6 +958,51 @@ class Cyberlog(commands.Cog):
             elif result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎'):
                 await msg.edit(content=plainText, embed=None)
                 await msg.clear_reactions()
+
+    class MessageEditMenu(discord.ui.View):
+        def __init__(self, bot, before_content: str, after: discord.Message, og_embed: discord.Embed):
+            super().__init__(timeout=180)
+            self.bot = bot
+            self.before_content = before_content
+            self.after = after
+            self.og_embed = og_embed
+
+        @discord.ui.button(label='Expand before & after', style=discord.ButtonStyle.secondary)
+        async def expand_fields(self, interaction: discord.Interaction, button: discord.ui.Button): ...
+
+        @discord.ui.button(label='View edit history', style=discord.ButtonStyle.secondary)
+        async def view_edit_history(self, interaction: discord.Interaction, button: discord.ui.Button):
+            try:
+                message_data = await lightningdb.get_message(self.message.channel.id, self.message.id)
+                editions = message_data['editions']
+                embed = discord.Embed(
+                    title='Message Edit History',
+                    description='',
+                    color=self.embed.color,
+                )
+                for i, entry in enumerate(editions):
+                    embed.add_field(
+                        name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry["timestamp"]))}{" (Created)" if i == 0 else " (Current)" if i == len(editions) - 1 else ""}',
+                        value=entry['content'],
+                        inline=False,
+                    )
+                await interaction.response.edit_message(embed=embed)
+            except Exception as e:
+                await interaction.response.send_message(f'Error retrieving edit history: {e}', ephemeral=True)
+
+        @discord.ui.Button(label='View index file & attachments', style=discord.ButtonStyle.secondary)
+        async def view_index_file(self, interaction: discord.Interaction, button: discord.ui.Button):
+            ...
+            # combine with message info
+
+    class BackToMessageEditMenu(discord.ui.Button):
+        def __init__(self, embed: discord.Embed, view: discord.ui.View):
+            super().__init__(label='Back', style=discord.ButtonStyle.primary)
+            self.embed = embed
+            self.view = view
+
+        async def callback(self, interaction: discord.Interaction):
+            await interaction.response.edit_message(content=None, embed=self.embed, view=self.view)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
@@ -1237,7 +1244,6 @@ class Cyberlog(commands.Cog):
         if matches:
             embed.set_image(url=matches[0])
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
-            # TODO: these need to be converted to uploaded to the message
             image_path = await self.image_to_local_attachment(author.display_avatar)
             attachments.append(image_path)
             if settings['thumbnail'] in (1, 2, 4):
