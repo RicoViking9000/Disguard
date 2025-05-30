@@ -664,7 +664,7 @@ class Cyberlog(commands.Cog):
             except:
                 pass
 
-    def parse_edits(before_words: list[str], after_words: list[str], context: int = 2):
+    def parse_edits(self, before_words: list[str], after_words: list[str], context: int = 2):
         """
         Returns truncated differences between two strings, showing only content around the changes.
 
@@ -714,6 +714,7 @@ class Cyberlog(commands.Cog):
         received = discord.utils.utcnow()
         tz_adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
         color = blue[await utility.color_theme(guild)] if settings['color'][1] == 'auto' else settings['color'][1]
+        before_is_message = False
         if not log_channel:
             return  # Invalid log channel or bot logging is disabled
         if bot_author_settings == 0 and after.author.bot:
@@ -741,7 +742,7 @@ class Cyberlog(commands.Cog):
             color=color,
         )
         if after.content.strip() != before_content.strip():
-            before_words = before.split(' ')  # A list of words in the old message
+            before_words = before_content.split(' ')  # A list of words in the old message
             after_words = after.content.split(' ')  # A list of words in the new message
             before_parsed, after_parsed = self.parse_edits(before_words, after_words, 2)
             before_in_description = False
@@ -750,7 +751,7 @@ class Cyberlog(commands.Cog):
                 before_display = before_parsed
             elif 1024 <= len(before_parsed) < 1960:
                 embed.description += (
-                    f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **Before**: {before_parsed}\n'
+                    f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **Before**:\n{before_parsed}\n'
                 )
                 before_in_description = True
             else:
@@ -759,7 +760,7 @@ class Cyberlog(commands.Cog):
                 after_display = after_parsed
             elif 1024 <= len(after_parsed) < 1960:
                 embed.description += (
-                    f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **After**: {after_parsed}\n'
+                    f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **After**:\n{after_parsed}\n'
                 )
                 after_in_description = True
             else:
@@ -791,19 +792,21 @@ class Cyberlog(commands.Cog):
             if before.flags.crossposted != after.flags.crossposted:
                 embed.add_field(
                     name=f'{self.emojis["details"] if settings["context"][1] > 0 else ""}Crosspost status changed',
-                    value=f'{"This message was crossposted somewhere" if after.flags.crossposted else "This message's crosspost was removed"}',
+                    value='This message was crossposted somewhere' if after.flags.crossposted else "This message's crosspost was removed",
                     inline=False,
                 )
             if before.flags.source_message_deleted != after.flags.source_message_deleted:
                 embed.add_field(
                     name=f'{self.emojis["details"] if settings["context"][1] > 0 else ""}Dangling message reference',
-                    value=f'{"The original message that this message refers to was deleted" if after.flags.source_message_deleted else "This message\'s original source message was undeleted... is that even logically possible?"}',
+                    value='The original message that this message refers to was deleted'
+                    if after.flags.source_message_deleted
+                    else "This message's original source message was undeleted... is that even logically possible?",
                     inline=False,
                 )
             if before.flags.has_thread != after.flags.has_thread:
                 embed.add_field(
                     name=f'{self.emojis["details"] if settings["context"][1] > 0 else ""}Thread status changed',
-                    value=f'{"This message is now in a thread" if after.flags.has_thread else "This message is no longer in a thread"}',
+                    value='This message is now in a thread' if after.flags.has_thread else 'This message is no longer in a thread',
                     inline=False,
                 )
         if settings['embedTimestamp'] in (1, 3):
@@ -819,8 +822,7 @@ class Cyberlog(commands.Cog):
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
         new_edition = await indexing_cog.edition_from_message(after)
         await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
-        plain_before_parsed, plain_after_parsed = self.parse_edits(before_words, after_words, 10)
-        plainText = f'{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{plain_before_parsed if len(plain_before_parsed) < 1000 else '<content too long>'}`\nAfter:`{plain_after_parsed if len(plain_after_parsed) < 1024 else '<content too long>'}\n`{after.jump_url}'
+        plainText = f"""{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{before_content if len(before_content) < 1000 else '<content too long>'}`\nAfter:`{after.content if len(after.content) < 1024 else '<content too long>'}\n`{after.jump_url}"""
         embed.description = (
             f"""
             {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Author" if settings["context"][1] < 2 else ""}: {after.author.mention} ({after.author.display_name})
@@ -830,12 +832,14 @@ class Cyberlog(commands.Cog):
             + embed.description
         )
 
+        view = self.MessageEditMenu(self, self.bot, settings, before_content, after, embed)
         try:
             msg: discord.Message = await log_channel.send(
                 content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
                 embed=embed if not settings['plainText'] else None,
                 tts=settings['tts'],
-                attachments=attachments,
+                files=[discord.File(attachment) for attachment in attachments],
+                view=view,
             )
             if not settings['plainText']:
                 ...
@@ -847,162 +851,184 @@ class Cyberlog(commands.Cog):
             embed=None if settings['plainText'] else embed,
         )
         await self.archiveLogEmbed(after.guild, msg.id, embed, 'Message Edit')
-        oldEmbed = copy.deepcopy(embed)
-        oldContent = plainText
         if not serverIsGimped(guild):
             await updateLastActive(after.author, discord.utils.utcnow(), 'edited a message')
         return
-        while not self.bot.is_closed():
+        #         elif str(result[0]) == '📜':
+        #             try:
+        #                 await msg.clear_reactions()
+        #                 embed.clear_fields()
+        #                 embed.description = (
+        #                     embed.description[
+        #                         : embed.description.find(utility.DisguardLongTimestamp(received)) + len(utility.DisguardLongTimestamp(received))
+        #                     ]
+        #                     + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
+        #                 )
+        #                 message_data = await lightningdb.get_message(after.channel.id, after.id)
+        #                 editions = message_data['editions']
 
-            def iCheck(r, u):
-                return r.message.id == msg.id and not u.bot
-
-            result = await self.bot.wait_for('reaction_add', check=iCheck)
-            if result[0].emoji == self.emojis['threeDots'] or settings['plainText']:
-                authorID = result[1].id
-                embed.description += (
-                    '\n\nNAVIGATION\n⬅: Go back to compressed view\nℹ: Full edited message\n📜: Message edit history\n🗒: Message in context'
-                )
-                while not self.bot.is_closed():
-                    if len(embed.author.display_name) < 1:
-                        embed.set_author(icon_url=result[1].display_avatar.url, name=f'{result[1].name} - Navigating')
-
-                    def optionsCheck(r, u):
-                        return str(r) in ['ℹ', '⬅', '📜', '🗒', self.emojis['collapse']] and r.message.id == msg.id and u.id == authorID
-
-                    if not result:
-                        try:
-                            result = await self.bot.wait_for('reaction_add', check=optionsCheck, timeout=180)
-                        except asyncio.TimeoutError:
-                            result = ['⬅']
-                    await msg.clear_reactions()
-                    if str(result[0]) == 'ℹ' or str(result[0].emoji) == str(self.emojis['threeDots']):
-                        embed.clear_fields()
-                        embed.add_field(name='Before', value=' '.join(beforeParsed), inline=False)
-                        embed.add_field(name='After', value=' '.join(afterParsed), inline=False)
-                        embed.description = (
-                            embed.description[
-                                : embed.description.find(utility.DisguardLongTimestamp(received)) + len(utility.DisguardLongTimestamp(received))
-                            ]
-                            + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n> **ℹ: Full edited message**\n{qlf}📜: Message edit history\n{qlf}🗒: Message in context'
-                        )
-                        await msg.edit(content=None, embed=embed)
-                        for r in ['⬅', '📜', '🗒']:
-                            await msg.add_reaction(r)
-                    elif str(result[0]) == '📜':
-                        try:
-                            await msg.clear_reactions()
-                            embed.clear_fields()
-                            embed.description = (
-                                embed.description[
-                                    : embed.description.find(utility.DisguardLongTimestamp(received)) + len(utility.DisguardLongTimestamp(received))
-                                ]
-                                + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
-                            )
-                            message_data = await lightningdb.get_message(after.channel.id, after.id)
-                            editions = message_data['editions']
-
-                            for i, entry in enumerate(editions):
-                                embed.add_field(
-                                    name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry["timestamp"]))}{" (Created)" if i == 0 else " (Current)" if i == len(editions) - 1 else ""}',
-                                    value=entry['content'],
-                                    inline=False,
-                                )
-                            await msg.edit(embed=embed)
-                            for r in ['⬅', 'ℹ', '🗒']:
-                                await msg.add_reaction(r)
-                        except (discord.Forbidden, discord.HTTPException) as e:
-                            embed.description += f'\n\n⚠ Error parsing message edit history: {e}'
-                            await msg.edit(embed=embed)
-                            await asyncio.sleep(5)
-                    elif str(result[0]) == '🗒':
-                        try:
-                            embed.clear_fields()
-                            embed.description = (
-                                embed.description[
-                                    : embed.description.find(utility.DisguardLongTimestamp(received)) + len({utility.DisguardLongTimestamp(received)})
-                                ]
-                                + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
-                            )
-                            messagesBefore = list(reversed([message async for message in after.channel.history(limit=6, before=after)]))
-                            messagesAfter = [message async for message in after.channel.history(limit=6, after=after, oldest_first=True)]
-                            combinedMessages = messagesBefore + [after] + messagesAfter
-                            combinedLength = sum(len(m.content) for m in combinedMessages)
-                            if combinedLength > 1850:
-                                combinedMessageContent = [utility.contentParser(m)[: 1850 // len(combinedMessages)] for m in combinedMessages]
-                            else:
-                                combinedMessageContent = [utility.contentParser(m) for m in combinedMessages]
-                            for m in range(len(combinedMessages)):
-                                embed.add_field(
-                                    name=f'**{combinedMessages[m].author.name}** • {utility.DisguardLongTimestamp(combinedMessages[m].created_at + datetime.timedelta(hours=await utility.time_zone(guild)))}',
-                                    value=combinedMessageContent[m]
-                                    if combinedMessages[m].id != after.id
-                                    else f'**[{combinedMessageContent[m]}]({combinedMessages[m].jump_url})**',
-                                    inline=False,
-                                )
-                            await msg.edit(embed=embed)
-                            for r in ['⬅', 'ℹ', '📜']:
-                                await msg.add_reaction(r)
-                        except (discord.Forbidden, discord.HTTPException) as e:
-                            embed.description += f'\n\n⚠ Error retrieving messages: {e}'
-                            await msg.edit(embed=embed)
-                            await asyncio.sleep(5)
-                    elif str(result[0]) == '⬅':
-                        await msg.clear_reactions()
-                        await msg.edit(content=oldContent if settings['plainText'] else None, embed=oldEmbed if not settings['plainText'] else None)
-                        embed = copy.deepcopy(oldEmbed)
-                        if not settings['plainText']:
-                            await msg.add_reaction(self.emojis['threeDots'])
-                        break
-                    result = None
-            elif result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎'):
-                await msg.edit(content=plainText, embed=None)
-                await msg.clear_reactions()
+        #                 for i, entry in enumerate(editions):
+        #                     embed.add_field(
+        #                         name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry["timestamp"]))}{" (Created)" if i == 0 else " (Current)" if i == len(editions) - 1 else ""}',
+        #                         value=entry['content'],
+        #                         inline=False,
+        #                     )
+        #                 await msg.edit(embed=embed)
+        #                 for r in ['⬅', 'ℹ', '🗒']:
+        #                     await msg.add_reaction(r)
+        #             except (discord.Forbidden, discord.HTTPException) as e:
+        #                 embed.description += f'\n\n⚠ Error parsing message edit history: {e}'
+        #                 await msg.edit(embed=embed)
+        #                 await asyncio.sleep(5)
+        #         elif str(result[0]) == '🗒':
+        #             try:
+        #                 embed.clear_fields()
+        #                 embed.description = (
+        #                     embed.description[
+        #                         : embed.description.find(utility.DisguardLongTimestamp(received)) + len({utility.DisguardLongTimestamp(received)})
+        #                     ]
+        #                     + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
+        #                 )
+        #                 messagesBefore = list(reversed([message async for message in after.channel.history(limit=6, before=after)]))
+        #                 messagesAfter = [message async for message in after.channel.history(limit=6, after=after, oldest_first=True)]
+        #                 combinedMessages = messagesBefore + [after] + messagesAfter
+        #                 combinedLength = sum(len(m.content) for m in combinedMessages)
+        #                 if combinedLength > 1850:
+        #                     combinedMessageContent = [utility.contentParser(m)[: 1850 // len(combinedMessages)] for m in combinedMessages]
+        #                 else:
+        #                     combinedMessageContent = [utility.contentParser(m) for m in combinedMessages]
+        #                 for m in range(len(combinedMessages)):
+        #                     embed.add_field(
+        #                         name=f'**{combinedMessages[m].author.name}** • {utility.DisguardLongTimestamp(combinedMessages[m].created_at + datetime.timedelta(hours=await utility.time_zone(guild)))}',
+        #                         value=combinedMessageContent[m]
+        #                         if combinedMessages[m].id != after.id
+        #                         else f'**[{combinedMessageContent[m]}]({combinedMessages[m].jump_url})**',
+        #                         inline=False,
+        #                     )
+        #                 await msg.edit(embed=embed)
+        #                 for r in ['⬅', 'ℹ', '📜']:
+        #                     await msg.add_reaction(r)
+        #             except (discord.Forbidden, discord.HTTPException) as e:
+        #                 embed.description += f'\n\n⚠ Error retrieving messages: {e}'
+        #                 await msg.edit(embed=embed)
+        #                 await asyncio.sleep(5)
+        #         elif str(result[0]) == '⬅':
+        #             await msg.clear_reactions()
+        #             await msg.edit(content=oldContent if settings['plainText'] else None, embed=oldEmbed if not settings['plainText'] else None)
+        #             embed = copy.deepcopy(oldEmbed)
+        #             if not settings['plainText']:
+        #                 await msg.add_reaction(self.emojis['threeDots'])
+        #             break
+        #         result = None
+        # elif result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎'):
+        #     await msg.edit(content=plainText, embed=None)
+        #     await msg.clear_reactions()
 
     class MessageEditMenu(discord.ui.View):
-        def __init__(self, bot, before_content: str, after: discord.Message, og_embed: discord.Embed):
+        def __init__(
+            self,
+            cyberlog,
+            bot: commands.Bot,
+            settings: dict,
+            before_content: str,
+            after: discord.Message,
+            flags: dict,
+            og_embed: discord.Embed,
+        ):
             super().__init__(timeout=180)
+            self.cyberlog: Cyberlog = cyberlog
             self.bot = bot
+            self.settings = settings
             self.before_content = before_content
             self.after = after
+            self.flags = flags
             self.og_embed = og_embed
+            self.back_button = self.cyberlog.BackToMessageEditMenuButton(self, og_embed)
 
         @discord.ui.button(label='Expand before & after', style=discord.ButtonStyle.secondary)
-        async def expand_fields(self, interaction: discord.Interaction, button: discord.ui.Button): ...
+        async def expand_fields(self, interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.defer()
+            after_content = self.after.content
+            self.new_embed = copy.deepcopy(self.og_embed)
+            self.new_embed.clear_fields()
+            self.new_embed.description = ''
+            using_paginated_view = False
+            before_in_description = False
+            after_in_description = False
+            if 0 <= len(self.before_content) < 1024:
+                before_display = self.before_content
+            else:
+                self.new_embed.description += f'{self.cyberlog.emojis["before"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **Before**:\n{self.before_content}\n'
+                before_in_description = True
+                if len(self.before_content) > 1960:
+                    using_paginated_view = True
+            if 0 <= len(after_content) < 1024:
+                after_display = after_content
+            else:
+                if len(after_content) > 1960:
+                    using_paginated_view = True
+                else:
+                    self.new_embed.description += f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **After**:\n{after_content}\n'
+                after_in_description = True
+
+            if not before_in_description and not using_paginated_view:
+                self.new_embed.add_field(
+                    name=f'{self.bot.emojis["before"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""}Before',
+                    value=before_display,
+                    inline=False,
+                )
+            if not after_in_description and not using_paginated_view:
+                self.new_embed.add_field(
+                    name=f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""}After',
+                    value=after_display,
+                    inline=False,
+                )
+            if not using_paginated_view:
+                await interaction.followup.edit_message(embed=self.new_embed)
+            else:
+                await interaction.followup.edit_message(
+                    embed=self.new_embed, view=Cyberlog.ExpandedMessageEditMenu(self.back_button, self.before_content, after_content, self)
+                )
+            print('done!!')
 
         @discord.ui.button(label='View edit history', style=discord.ButtonStyle.secondary)
-        async def view_edit_history(self, interaction: discord.Interaction, button: discord.ui.Button):
-            try:
-                message_data = await lightningdb.get_message(self.message.channel.id, self.message.id)
-                editions = message_data['editions']
-                embed = discord.Embed(
-                    title='Message Edit History',
-                    description='',
-                    color=self.embed.color,
-                )
-                for i, entry in enumerate(editions):
-                    embed.add_field(
-                        name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry["timestamp"]))}{" (Created)" if i == 0 else " (Current)" if i == len(editions) - 1 else ""}',
-                        value=entry['content'],
-                        inline=False,
-                    )
-                await interaction.response.edit_message(embed=embed)
-            except Exception as e:
-                await interaction.response.send_message(f'Error retrieving edit history: {e}', ephemeral=True)
+        async def view_edit_history(self, interaction: discord.Interaction, button: discord.ui.Button): ...
 
-        @discord.ui.Button(label='View index file & attachments', style=discord.ButtonStyle.secondary)
+        @discord.ui.button(label='View index file & attachments', style=discord.ButtonStyle.secondary)
         async def view_index_file(self, interaction: discord.Interaction, button: discord.ui.Button):
             ...
             # combine with message info
 
-    class BackToMessageEditMenu(discord.ui.Button):
-        def __init__(self, embed: discord.Embed, view: discord.ui.View):
-            super().__init__(label='Back', style=discord.ButtonStyle.primary)
+    class BackToMessageEditMenuButton(discord.ui.Button):
+        def __init__(self, prev_view, embed: discord.Embed):
+            super().__init__(emoji='🏠', label='Back', style=discord.ButtonStyle.primary)
+            self.prev_view: Cyberlog.MessageEditMenu = prev_view
             self.embed = embed
-            self.view = view
 
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.edit_message(content=None, embed=self.embed, view=self.view)
+            await interaction.response.edit_message(content=None, embed=self.embed, view=self.prev_view)
+
+    class ExpandedMessageEditMenu(discord.ui.View):
+        def __init__(self, back_button, before_content: str, after_content: str, previous_view: discord.ui.View):
+            super().__init__(timeout=180)
+            self.add_item(back_button)
+            self.before_content = before_content
+            self.after_content = after_content
+            self.previous_view: Cyberlog.MessageEditMenu = previous_view
+            self.showing_before = True
+
+        @discord.ui.button(label='Show after', style=discord.ButtonStyle.secondary)
+        async def show_after(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if self.showing_before:
+                self.showing_before = False
+                button.label = 'Show before'
+                self.previous_view.new_embed.description = f'{self.previous_view.cyberlog.emojis["before"] if self.previous_view.settings["context"][1] > 0 and self.previous_view.settings["library"] == 2 else ""} **Before**:\n{self.before_content}\n'
+                await interaction.response.edit_message(embed=self.previous_view.new_embed, view=self)
+            else:
+                self.showing_before = True
+                button.label = 'Show after'
+                self.previous_view.new_embed.description = f'{self.previous_view.cyberlog.emojis["after"] if self.previous_view.settings["context"][1] > 0 and self.previous_view.settings["library"] == 2 else ""} **After**:\n{self.after_content}\n'
+                await interaction.response.edit_message(embed=self.previous_view.new_embed, view=self)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
@@ -1013,18 +1039,27 @@ class Cyberlog(commands.Cog):
             hours=await utility.time_zone(after.guild)
         )  # Timestamp of receiving the message edit event
         if after.guild.id not in gimpedServers:
-            asyncio.create_task(updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'), name='message_edit - Update Last Active')
+            update_last_active_task = asyncio.create_task(
+                updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'), name='message_edit - Update Last Active'
+            )
         g = after.guild
         if not (await logEnabled(g, 'message')):
+            await utility.await_task(update_last_active_task)  # Wait for the task to finish if it was created
             return  # If the message edit log module is not enabled, return
         try:
             if not await logExclusions(after.channel, after.author):
+                await utility.await_task(update_last_active_task)
                 return  # Check the exclusion settings
         except:
             print('log exclusion error')
             traceback.print_exc()
+            await utility.await_task(update_last_active_task)
             return
-        await self.MessageEditHandler(before, after, received)
+        await self.message_edit_handler(before, after, received)
+        try:
+            await utility.await_task(update_last_active_task)  # Wait for the task to finish if it was created
+        except (asyncio.CancelledError, UnboundLocalError):
+            pass
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
@@ -1047,18 +1082,24 @@ class Cyberlog(commands.Cog):
             return
         author = g.get_member(after.author.id)  # Get the member of the edited message
         if g.id not in gimpedServers:
-            asyncio.create_task(updateLastActive(author, discord.utils.utcnow(), 'edited a message'), name='raw_message_edit - Update Last Active')
+            update_last_active_task = asyncio.create_task(
+                updateLastActive(author, discord.utils.utcnow(), 'edited a message'), name='raw_message_edit - Update Last Active'
+            )
         if not (await logEnabled(g, 'message')):
+            await utility.await_task(update_last_active_task)
             return  # If the message edit log module is not enabled, return
         try:
             if not await logExclusions(after.channel, author):
+                await utility.await_task(update_last_active_task)
                 return  # Check the exclusion settings
         except:
             print('log exclusion error')
             traceback.print_exc()
+            await utility.await_task(update_last_active_task)
             return
         c = await logChannel(g, 'message')
         if c is None:
+            await utility.await_task(update_last_active_task)
             return  # Invalid log channel
         message_data = await lightningdb.get_message(channel.id, after.id)
         if message_data:
@@ -1069,9 +1110,10 @@ class Cyberlog(commands.Cog):
         else:
             before = after.content
         try:
-            await self.MessageEditHandler(before, after, received)
+            await self.message_edit_handler(before, after, received)
         except UnboundLocalError:
-            await self.MessageEditHandler('<Data retrieval error>', after, received)  # If before doesn't exist
+            await self.message_edit_handler('<Data retrieval error>', after, received)  # If before doesn't exist
+        await utility.await_task(update_last_active_task)  # Wait for the task to finish if it was created
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):

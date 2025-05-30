@@ -1,5 +1,6 @@
 """Contains utility functions to be used across Disguard"""
 
+import asyncio
 import datetime
 import os
 import re
@@ -752,6 +753,13 @@ async def update_bot_presence(bot: commands.Bot, status: discord.Status = None, 
     new_presence = {'status': status or bot.status, 'activity': activity or bot.activity}
     if current_presence != new_presence:
         await bot.change_presence(**new_presence)
+
+
+async def await_task(task):
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 def get_dir_size(path='.'):

@@ -566,7 +566,7 @@ def calculateDate(message: str, adjusted: datetime.datetime):
 async def verifyBirthday(message: discord.Message, adjusted: datetime.datetime, birthday=None):
     """Return a list of relevant members if the program determines that the member is talking about their own birthday or someone else's birthday given a message, None otherwise"""
     if not birthday:
-        birthday = calculateDate(message, adjusted)
+        birthday = calculateDate(message.content, adjusted)
     words = message.content.lower().split(' ')
     # Now we either have a valid date in the message or we don't. So now we determine the situation and respond accordingly
     # User most likely talking about their own birthday
