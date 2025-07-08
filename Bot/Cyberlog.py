@@ -741,37 +741,49 @@ class Cyberlog(commands.Cog):
             description='',
             color=color,
         )
+        embed.description = f"""
+            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Author" if settings["context"][1] < 2 else ""}: {after.author.mention} ({after.author.display_name})
+            {utility.channelEmoji(self, after.channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {after.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
+            {f"{(utility.clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}
+            """
+
         if after.content.strip() != before_content.strip():
             before_words = before_content.split(' ')  # A list of words in the old message
             after_words = after.content.split(' ')  # A list of words in the new message
             before_parsed, after_parsed = self.parse_edits(before_words, after_words, 2)
-            before_in_description = False
-            after_in_description = False
-            if 0 <= len(before_parsed) < 1024:
-                before_display = before_parsed
-            elif 1024 <= len(before_parsed) < 1960:
+            # will be passed to the next view/button for simple view swapping
+
+            outputs = {'compressed': {'before': before_parsed, 'after': after_parsed}, 'full': {'before': before_content, 'after': after.content}}
+
+            # set embed display based on the length of before/after
+
+            room_to_grow = 4096 - len(embed.description)
+            if 1024 <= len(before_parsed) < room_to_grow:
                 embed.description += (
                     f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **Before**:\n{before_parsed}\n'
                 )
-                before_in_description = True
+                room_to_grow = 4096 - len(embed.description)
             else:
-                before_display = '<Message content too long to display>'
-            if 0 <= len(after_parsed) < 1024:
-                after_display = after_parsed
-            elif 1024 <= len(after_parsed) < 1960:
-                embed.description += (
-                    f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **After**:\n{after_parsed}\n'
-                )
-                after_in_description = True
-            else:
-                after_display = '<Message content too long to display>'
-            if not before_in_description:
+                if 0 <= len(before_parsed) < 1024:
+                    before_display = before_parsed
+                else:
+                    # I'd be amazed if this ever happens, but just in case
+                    before_display = '<Content too long to display. Use the buttons below to view the full content>'
                 embed.add_field(
                     name=f'{self.emojis["before"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}Before',
                     value=before_display,
                     inline=False,
                 )
-            if not after_in_description:
+            if 1024 <= len(after_parsed) < room_to_grow:
+                embed.description += (
+                    f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""} **After**:\n{after_parsed}\n'
+                )
+            else:
+                if 0 <= len(after_parsed) < 1024:
+                    after_display = after_parsed
+                else:
+                    # I'd be amazed if this ever happens, but just in case
+                    after_display = '<Content too long to display. Use the buttons below to view the full content>'
                 embed.add_field(
                     name=f'{self.emojis["after"] if settings["context"][1] > 0 and settings["library"] == 2 else ""}After',
                     value=after_display,
@@ -823,16 +835,8 @@ class Cyberlog(commands.Cog):
         new_edition = await indexing_cog.edition_from_message(after)
         await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
         plainText = f"""{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{before_content if len(before_content) < 1000 else '<content too long>'}`\nAfter:`{after.content if len(after.content) < 1024 else '<content too long>'}\n`{after.jump_url}"""
-        embed.description = (
-            f"""
-            {(self.emojis["member"] if settings["library"] > 0 else "👤") if settings["context"][1] > 0 else ""}{"Author" if settings["context"][1] < 2 else ""}: {after.author.mention} ({after.author.display_name})
-            {utility.channelEmoji(self, after.channel) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {after.channel.mention} {f"[{self.emojis['reply']}Jump]" if settings["context"][1] > 0 else "[Jump to message]"}({after.jump_url} 'Jump to message')
-            {f"{(utility.clockEmoji(timestamp) if settings['library'] > 0 else '🕰') if settings['context'][1] > 0 else ''}{'Timestamp' if settings['context'][1] < 2 else ''}: {utility.DisguardLongTimestamp(received)}" if settings['embedTimestamp'] > 1 else ''}
-            """
-            + embed.description
-        )
 
-        view = self.MessageEditMenu(self, self.bot, settings, before_content, after, embed)
+        view = self.MessageEditMenu(self, self.bot, settings, before_content, after, outputs, embed)
         try:
             msg: discord.Message = await log_channel.send(
                 content=plainText if any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
@@ -932,7 +936,7 @@ class Cyberlog(commands.Cog):
             settings: dict,
             before_content: str,
             after: discord.Message,
-            flags: dict,
+            outputs: dict[str, dict[str, str]],
             og_embed: discord.Embed,
         ):
             super().__init__(timeout=180)
@@ -941,7 +945,7 @@ class Cyberlog(commands.Cog):
             self.settings = settings
             self.before_content = before_content
             self.after = after
-            self.flags = flags
+            self.outputs = outputs
             self.og_embed = og_embed
             self.back_button = self.cyberlog.BackToMessageEditMenuButton(self, og_embed)
 
