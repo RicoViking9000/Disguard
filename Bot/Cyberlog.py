@@ -957,36 +957,29 @@ class Cyberlog(commands.Cog):
             self.new_embed.clear_fields()
             self.new_embed.description = ''
             using_paginated_view = False
-            before_in_description = False
-            after_in_description = False
+            description_length = 0
             if 0 <= len(self.before_content) < 1024:
-                before_display = self.before_content
-            else:
-                self.new_embed.description += f'{self.cyberlog.emojis["before"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **Before**:\n{self.before_content}\n'
-                before_in_description = True
-                if len(self.before_content) > 1960:
-                    using_paginated_view = True
-            if 0 <= len(after_content) < 1024:
-                after_display = after_content
-            else:
-                if len(after_content) > 1960:
-                    using_paginated_view = True
-                else:
-                    self.new_embed.description += f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **After**:\n{after_content}\n'
-                after_in_description = True
-
-            if not before_in_description and not using_paginated_view:
                 self.new_embed.add_field(
                     name=f'{self.bot.emojis["before"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""}Before',
-                    value=before_display,
+                    value=self.before_content,
                     inline=False,
                 )
-            if not after_in_description and not using_paginated_view:
+            else:
+                self.new_embed.description += f'{self.cyberlog.emojis["before"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **Before**:\n{self.before_content}\n'
+                description_length += len(self.new_embed.description)
+            if 0 <= len(after_content) < 1024:
                 self.new_embed.add_field(
                     name=f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""}After',
-                    value=after_display,
+                    value=self.after.content,
                     inline=False,
                 )
+            else:
+                if len(after_content) > (4096 - description_length):
+                    using_paginated_view = True
+                    self.new_embed.clear_fields()
+                    # ignore next branch
+                else:
+                    self.new_embed.description += f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **After**:\n{after_content}\n'
             if not using_paginated_view:
                 await interaction.followup.edit_message(embed=self.new_embed)
             else:
