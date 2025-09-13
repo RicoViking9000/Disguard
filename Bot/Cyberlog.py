@@ -1106,7 +1106,7 @@ class Cyberlog(commands.Cog):
         message_data = await lightningdb.get_message(channel.id, after.id)
         if message_data:
             try:
-                before = message_data['editions'][-2]
+                before = message_data['editions'][-2]['content']
             except IndexError:
                 before = after.content
         else:
