@@ -991,7 +991,32 @@ class Cyberlog(commands.Cog):
                 )
 
         @discord.ui.button(label='View edit history', style=discord.ButtonStyle.secondary)
-        async def view_edit_history(self, interaction: discord.Interaction, button: discord.ui.Button): ...
+        async def view_edit_history(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if 'Collapse' in button.label:
+                button.label = 'View edit history'
+                return await interaction.response.edit_message(content=None, embed=self.og_embed, view=self)
+            await interaction.response.defer()
+            self.new_embed = copy.deepcopy(self.og_embed)
+            self.new_embed.clear_fields()
+            self.new_embed.description = ''
+            message_data = await lightningdb.get_message(self.after.channel.id, self.after.id)
+            if message_data:
+                for i, entry in enumerate(message_data['editions']):
+                    if len(entry['content']) > 1024:
+                        # TODO: allow expanded view, maybe with dropdown selector
+                        field_value = entry['content'][:1021] + '...'
+                    else:
+                        field_value = entry['content']
+                    created_at = datetime.datetime.fromtimestamp(message_data['created_at'], tz=discord.utils.utcnow().tzinfo)
+                    self.new_embed.add_field(
+                        name=f'{utility.DisguardLongTimestamp(created_at)}{" (Created)" if i == 0 else " (Current)" if i == len(message_data["editions"]) - 1 else ""}',
+                        value=field_value,
+                        inline=False,
+                    )
+                button.label = 'Collapse edit history'
+            else:
+                self.new_embed.description = 'No historical message data found.'
+            await interaction.followup.edit_message(message_id=interaction.message.id, view=self, embed=self.new_embed)
 
         @discord.ui.button(label='View index file & attachments', style=discord.ButtonStyle.secondary)
         async def view_index_file(self, interaction: discord.Interaction, button: discord.ui.Button):
