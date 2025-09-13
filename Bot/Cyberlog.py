@@ -951,6 +951,9 @@ class Cyberlog(commands.Cog):
 
         @discord.ui.button(label='Expand before & after', style=discord.ButtonStyle.secondary)
         async def expand_fields(self, interaction: discord.Interaction, button: discord.ui.Button):
+            if 'Collapse' in button.label:
+                button.label = 'Expand before & after'
+                return await interaction.response.edit_message(content=None, embed=self.og_embed, view=self)
             await interaction.response.defer()
             after_content = self.after.content
             self.new_embed = copy.deepcopy(self.og_embed)
@@ -981,10 +984,7 @@ class Cyberlog(commands.Cog):
                 else:
                     self.new_embed.description += f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **After**:\n{after_content}\n'
             if not using_paginated_view:
-                new_button = self.cyberlog.BackToMessageEditMenuButton(self, self.og_embed)
-                new_button.label = 'Collapse before & after'
-                self.remove_item(button)
-                self.add_item(new_button)
+                button.label = 'Collapse before & after'
                 await interaction.followup.edit_message(message_id=interaction.message.id, view=self, embed=self.new_embed)
             else:
                 await interaction.response.edit_message(
