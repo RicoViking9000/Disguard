@@ -831,9 +831,6 @@ class Cyberlog(commands.Cog):
                 embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
             if settings['author'] in (1, 2, 4):
                 embed.set_author(name=after.author.display_name, icon_url=f'attachment://{os.path.basename(image_path)}')
-        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
-        new_edition = await indexing_cog.edition_from_message(after)
-        await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
         plainText = f"""{after.author} edited {"this" if settings["plainText"] else "a"} message\nBefore:`{before_content if len(before_content) < 1000 else '<content too long>'}`\nAfter:`{after.content if len(after.content) < 1024 else '<content too long>'}\n`{after.jump_url}"""
 
         view = self.MessageEditMenu(self, self.bot, settings, before_content, after, outputs, embed)
@@ -1044,6 +1041,10 @@ class Cyberlog(commands.Cog):
             update_last_active_task = asyncio.create_task(
                 updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'), name='message_edit - Update Last Active'
             )
+        # save the message edits
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        new_edition = await indexing_cog.edition_from_message(after)
+        await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
         g = after.guild
         if not (await logEnabled(g, 'message')):
             await utility.await_task(update_last_active_task)  # Wait for the task to finish if it was created
@@ -1066,9 +1067,8 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
         """[DISCORD API METHOD] Called when raw message is edited"""
-        try:
-            g = self.bot.get_guild(int(payload.data.get('guild_id')))  # Get the server of the edited message
-        except:
+        g = self.bot.get_guild(int(payload.data.get('guild_id')))  # Get the server of the edited message
+        if not g:
             return  # We don't deal with DMs
         received = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(g))  # Timestamp of receiving the message edit event
         before = ''
@@ -1082,7 +1082,12 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden:
             print('{} lacks permissions for message edit for some reason'.format(g.name))
             return
-        author = g.get_member(after.author.id)  # Get the member of the edited message
+        # save the message edits
+        indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
+        new_edition = await indexing_cog.edition_from_message(after)
+        await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
+        # Get the member of the edited message
+        author = g.get_member(after.author.id)
         if g.id not in gimpedServers:
             update_last_active_task = asyncio.create_task(
                 updateLastActive(author, discord.utils.utcnow(), 'edited a message'), name='raw_message_edit - Update Last Active'
