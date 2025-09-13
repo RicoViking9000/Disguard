@@ -981,7 +981,11 @@ class Cyberlog(commands.Cog):
                 else:
                     self.new_embed.description += f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **After**:\n{after_content}\n'
             if not using_paginated_view:
-                await interaction.followup.edit_message(message_id=interaction.message.id, embed=self.new_embed)
+                new_button = self.cyberlog.BackToMessageEditMenuButton(self, self.og_embed)
+                new_button.label = 'Collapse before & after'
+                self.remove_item(button)
+                self.add_item(new_button)
+                await interaction.followup.edit_message(message_id=interaction.message.id, view=self, embed=self.new_embed)
             else:
                 await interaction.response.edit_message(
                     message_id=interaction.message.id,
@@ -999,7 +1003,7 @@ class Cyberlog(commands.Cog):
 
     class BackToMessageEditMenuButton(discord.ui.Button):
         def __init__(self, prev_view, embed: discord.Embed):
-            super().__init__(emoji='🏠', label='Back', style=discord.ButtonStyle.primary)
+            super().__init__(label='Back', style=discord.ButtonStyle.primary)
             self.prev_view: Cyberlog.MessageEditMenu = prev_view
             self.embed = embed
 
