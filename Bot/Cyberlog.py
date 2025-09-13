@@ -981,12 +981,13 @@ class Cyberlog(commands.Cog):
                 else:
                     self.new_embed.description += f'{self.bot.emojis["after"] if self.settings["context"][1] > 0 and self.settings["library"] == 2 else ""} **After**:\n{after_content}\n'
             if not using_paginated_view:
-                await interaction.followup.edit_message(embed=self.new_embed)
+                await interaction.followup.edit_message(message_id=interaction.message.id, embed=self.new_embed)
             else:
-                await interaction.followup.edit_message(
-                    embed=self.new_embed, view=Cyberlog.ExpandedMessageEditMenu(self.back_button, self.before_content, after_content, self)
+                await interaction.response.edit_message(
+                    message_id=interaction.message.id,
+                    embed=self.new_embed,
+                    view=Cyberlog.ExpandedMessageEditMenu(self.back_button, self.before_content, after_content, self),
                 )
-            print('done!!')
 
         @discord.ui.button(label='View edit history', style=discord.ButtonStyle.secondary)
         async def view_edit_history(self, interaction: discord.Interaction, button: discord.ui.Button): ...
