@@ -855,32 +855,6 @@ class Cyberlog(commands.Cog):
         if not serverIsGimped(guild):
             await updateLastActive(after.author, discord.utils.utcnow(), 'edited a message')
         return
-        #         elif str(result[0]) == '📜':
-        #             try:
-        #                 await msg.clear_reactions()
-        #                 embed.clear_fields()
-        #                 embed.description = (
-        #                     embed.description[
-        #                         : embed.description.find(utility.DisguardLongTimestamp(received)) + len(utility.DisguardLongTimestamp(received))
-        #                     ]
-        #                     + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n> **📜: Message edit history**\n{qlf}🗒: Message in context'
-        #                 )
-        #                 message_data = await lightningdb.get_message(after.channel.id, after.id)
-        #                 editions = message_data['editions']
-
-        #                 for i, entry in enumerate(editions):
-        #                     embed.add_field(
-        #                         name=f'{utility.DisguardLongTimestamp(datetime.datetime.fromisoformat(entry["timestamp"]))}{" (Created)" if i == 0 else " (Current)" if i == len(editions) - 1 else ""}',
-        #                         value=entry['content'],
-        #                         inline=False,
-        #                     )
-        #                 await msg.edit(embed=embed)
-        #                 for r in ['⬅', 'ℹ', '🗒']:
-        #                     await msg.add_reaction(r)
-        #             except (discord.Forbidden, discord.HTTPException) as e:
-        #                 embed.description += f'\n\n⚠ Error parsing message edit history: {e}'
-        #                 await msg.edit(embed=embed)
-        #                 await asyncio.sleep(5)
         #         elif str(result[0]) == '🗒':
         #             try:
         #                 embed.clear_fields()
@@ -1020,7 +994,34 @@ class Cyberlog(commands.Cog):
 
         @discord.ui.button(label='View index file & attachments', style=discord.ButtonStyle.secondary)
         async def view_index_file(self, interaction: discord.Interaction, button: discord.ui.Button):
-            ...
+            await interaction.response.defer()
+            message_data = await lightningdb.get_message(self.after.channel.id, self.after.id)
+            index_path = f'storage/temp/index_{self.after.id}.json'
+            attachments_path = f'storage/{self.after.guild.id}/attachments/{self.after.channel.id}/{self.after.id}'
+            attachments = []
+            try:
+                with open(index_path, 'w') as json_file:
+                    json.dump(message_data, json_file, indent=4)
+            except Exception:
+                logger.error(f'Error writing message index to {index_path}', exc_info=True)
+            try:
+                for file in await aios.listdir(attachments_path):
+                    savePath = f'{attachments_path}/{file}'
+                    attachments.append(savePath)
+
+                    if file.lower().endswith(('.png', '.jpeg', '.jpg', '.gif', '.webp')):
+                        self.new_embed.set_image(url=f'attachment://{file}')
+
+            except FileNotFoundError:
+                # this message has no attachments; path does not exist
+                pass
+            await interaction.followup.send(
+                files=[discord.File(attachment) for attachment in attachments] + [discord.File(index_path)][:10],
+                ephemeral=True,
+            )
+            if len(attachments) > 10:  # index file would make 11 with ten attachments
+                await interaction.followup.send(file=discord.File(index_path), ephemeral=True)
+
             # combine with message info
 
     class BackToMessageEditMenuButton(discord.ui.Button):
