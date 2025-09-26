@@ -1122,7 +1122,7 @@ class Cyberlog(commands.Cog):
             await utility.await_task(update_last_active_task)
             return  # If the message edit log module is not enabled, return
         try:
-            if not await logExclusions(after.channel, author):
+            if author and not await logExclusions(after.channel, author):
                 await utility.await_task(update_last_active_task)
                 return  # Check the exclusion settings
         except:
