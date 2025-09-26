@@ -365,13 +365,13 @@ class Indexing(commands.Cog):
             return f'<{len(message.embeds)} embed>'
         return '<No content>'
 
-    async def edition_from_message(self, message: discord.Message):
+    async def edition_from_message(self, message: discord.Message, new_index=False):
         """
         Converts a discord.Message object to a MessageEdition object
         """
         return models.MessageEdition(
             content=message.content,
-            timestamp=int(message.created_at.timestamp()),
+            timestamp=int(message.created_at.timestamp() if new_index else discord.utils.utcnow().timestamp()),
             attachments=[self.convert_attachment(attachment) for attachment in message.attachments],
             embeds=[self.convert_embed(embed) for embed in message.embeds],
             reactions=[],  # [await self.convert_reaction(reaction) for reaction in message.reactions],
