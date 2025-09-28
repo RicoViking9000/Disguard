@@ -12,6 +12,7 @@ import emoji as pymoji
 from discord.ext import commands, tasks
 from pymongo.errors import DuplicateKeyError
 
+import Backblaze
 import lightningdb
 import models
 import utility
@@ -159,18 +160,21 @@ class Indexing(commands.Cog):
             fields=[models.EmbedField(name=field.name, value=field.value, inline=field.inline) for field in embed.fields],
         )
 
-    def convert_attachment(self, attachment: discord.Attachment, message_id: int = 0):
+    async def convert_attachment(self, attachment: discord.Attachment, message_id: int = 0, channel_id: int = 0, server_id: int = 0):
         """
         Converts a discord.Attachment object to a MessageAttachment object
         """
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
+        bucket_path = f'{server_id}/{channel_id}/{message_id}/{attachment.filename}'
+        asyncio.create_task(backblaze.upload_bytes(await attachment.read(), bucket_path))
         return models.MessageAttachment(
             id=attachment.id,
             message_id=message_id,
             hash=hash(attachment),
             size=attachment.size,
             filename=attachment.filename,
-            filepath=attachment.filename,
-            url=attachment.url,
+            filepath=bucket_path,
+            url=backblaze.direct_file_url(bucket_path),
             proxy_url=attachment.proxy_url,
             media_attributes=models.MediaAttributes(
                 attachment_id=attachment.id, height=attachment.height, width=attachment.width, description=attachment.description
@@ -372,7 +376,9 @@ class Indexing(commands.Cog):
         return models.MessageEdition(
             content=message.content,
             timestamp=int(message.created_at.timestamp() if new_index else discord.utils.utcnow().timestamp()),
-            attachments=[self.convert_attachment(attachment) for attachment in message.attachments],
+            attachments=[
+                await self.convert_attachment(attachment, message.id, message.channel.id, message.guild.id) for attachment in message.attachments
+            ],
             embeds=[self.convert_embed(embed) for embed in message.embeds],
             reactions=[],  # [await self.convert_reaction(reaction) for reaction in message.reactions],
             pinned=message.pinned,

@@ -26,7 +26,7 @@ tracemalloc.start()
 
 booted = False
 loading = None
-cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help', 'Privacy', 'Indexing']
+cogs = ['Cyberlog', 'Antispam', 'Moderation', 'Birthdays', 'Misc', 'Info', 'Reddit', 'Support', 'Dev', 'Help', 'Privacy', 'Indexing', 'Backblaze']
 
 print('Connecting...')
 
