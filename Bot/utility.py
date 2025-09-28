@@ -757,9 +757,21 @@ async def update_bot_presence(bot: commands.Bot, status: discord.Status = None, 
 
 async def await_task(task):
     try:
-        await task
+        return await task
     except asyncio.CancelledError:
         pass
+
+
+async def run_task(task: asyncio.Task, queue: set, name: str = '', cancel_after: int = 1800):
+    task = asyncio.create_task(task, name=name)
+    queue.add(task)
+    task.add_done_callback(queue.discard)
+    while not task.done and not task.cancelled() and cancel_after > 0:
+        await asyncio.sleep(1)
+        cancel_after -= 1
+    if not task.done():
+        task.cancel()
+        logger.info(f'Cancelled task {name} after {cancel_after} seconds')
 
 
 def get_dir_size(path='.'):

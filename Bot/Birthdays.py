@@ -49,6 +49,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
         self.bot = bot
         self.loading: discord.Emoji = cyber.emojis['loading']
         self.emojis: typing.Dict[str, discord.Emoji] = cyber.emojis
+        self.taskman = set()
         self.configureDailyBirthdayAnnouncements.start()
         self.configureServerBirthdayAnnouncements.start()
         self.configureDeleteBirthdayMessages.start()
@@ -83,7 +84,7 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
             if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'age'):
                 age = user_data.get('age', 0) + 1
                 if age > 1:
-                    asyncio.create_task(database.SetAge(user, age), name='SetAge DailyBirthdayAnnouncements')
+                    await utility.run_task(database.SetAge(user, age), queue=self.taskman, name='SetAge DailyBirthdayAnnouncements', cancel_after=300)
             # Construct their next birthday to set in the database
             messages = user_data.get('birthdayMessages', []) if await cyber.privacyEnabledChecker(user, 'birthdayModule', 'birthdayMessages') else []
             filteredMessages = [m for m in messages if user.dm_channel.id in m['servers']]
@@ -1238,7 +1239,7 @@ class AgeView(discord.ui.View):
     @discord.ui.button(label='Edit privately', emoji='⌨')
     async def privateInterface(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.usedPrivateInterface:
-            asyncio.create_task(self.confirmation(), name='AgeView confirmation')
+            await utility.run_task(self.confirmation(), queue=self.taskman, name='AgeView confirmation', cancel_after=3000)
         else:
             self.usedPrivateInterface = True
         for child in self.children:
@@ -1415,7 +1416,7 @@ class BirthdayView(discord.ui.View):
     @discord.ui.button(label='Edit privately', emoji='⌨')
     async def privateInterface(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.usedPrivateInterface:
-            asyncio.create_task(self.confirmation(), name='BirthdayView confirmation')
+            await utility.run_task(self.confirmation(), queue=self.taskman, name='BirthdayView confirmation', cancel_after=3000)
         else:
             self.usedPrivateInterface = True
         for child in self.children:
