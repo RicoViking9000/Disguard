@@ -63,14 +63,20 @@ class Indexing(commands.Cog):
         """
         Extracts sticker data from a message
         """
-        fetched_stickers = [await sticker.fetch() for sticker in message.stickers]
+        fetched_stickers = []
+        for sticker in message.stickers:
+            try:
+                fetched = await sticker.fetch()
+                fetched_stickers.append(fetched)
+            except (discord.NotFound, discord.HTTPException):
+                ...
         return [
             models.Sticker(
                 sticker_id=sticker.id,
                 message_id=message.id,
                 format=str(sticker.format),
                 url=sticker.url,
-                type='standard' if fetched_stickers[index].__name__ == 'StandardSticker' else 'guild',
+                type='guild' if isinstance(fetched_stickers[index], models.GuildSticker) else 'standard',
                 data=models.StandardSticker(
                     name=sticker.name,
                     description=fetched_stickers[index].description,
