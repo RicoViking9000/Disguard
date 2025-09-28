@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import logging
 import os
 import re
 import string
@@ -11,6 +12,8 @@ import discord
 from discord.ext import commands
 
 import lightningdb
+
+logger = logging.getLogger('discord')
 
 rv9k = 247412852925661185
 GREEN = (0x008000, 0x66FF66)
@@ -116,6 +119,7 @@ CHANNEL_KEYS = {
 }
 
 DISGUARD_SERVER_ID = 560457796206985216
+DISGUARD_ID = 558025201753784323
 
 
 def rickroll():
@@ -745,6 +749,10 @@ def sanitize_filename(string: str):
 
 def date_to_filename(date: datetime.datetime):
     return date.strftime('%m%d%Y%H%M%S%f')
+
+
+def large_server(server: discord.Guild):
+    return server.member_count > 300
 
 
 async def update_bot_presence(bot: commands.Bot, status: discord.Status = None, activity: discord.BaseActivity = None):
