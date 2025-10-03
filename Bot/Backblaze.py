@@ -1,3 +1,5 @@
+import typing
+
 import b2sdk.v2
 from discord.ext import commands
 
@@ -38,6 +40,12 @@ class Backblaze(commands.Cog):
 
     async def upload_bytes(self, data: bytes, file_name: str) -> b2sdk.v2.FileVersion:
         return self.backblaze.upload_bytes(data, file_name)
+
+    def ls(self, dir: str, recursive: bool = False) -> typing.Iterator[tuple[b2sdk.v2.FileVersion, str]]:
+        return self.backblaze.ls(dir, recursive=recursive)
+
+    def delete_file(self, file_id: str, file_name: str) -> None:
+        self.backblaze.delete_file_version(file_id, file_name)
 
 
 async def setup(bot: commands.Bot):

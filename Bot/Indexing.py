@@ -2,11 +2,10 @@
 
 import asyncio
 import logging
-import os
 import traceback
 
 import aiofiles.os as aios
-import aioshutil
+import b2sdk.v2
 import discord
 import emoji as pymoji
 from discord.ext import commands, tasks
@@ -19,7 +18,7 @@ import utility
 
 logger = logging.getLogger('discord')
 storage_dir = 'storage'  # /server_id/attachments/...
-bytes_per_gigabyte = 1_073_741_824  # 1024 * 1024 * 1024
+bytes_per_gigabyte = 1_000_000_000  # 1000 * 1000 * 1000
 
 
 class Indexing(commands.Cog):
@@ -433,62 +432,53 @@ class Indexing(commands.Cog):
         Checks how much attachment storage is used by this server
         """
         # check if the server has storage enabled
-        dir = f'{storage_dir}/{server.id}/attachments'
-        storage_used = utility.get_dir_size(dir)
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
+        directory = f'{server.id}/attachments'
+        request = list(backblaze.ls(directory, recursive=True))
+        storage_used = sum(file_data.size for file_data, file_name in request)
         storage_limit = (await utility.get_server(server)).get('cyberlog', {}).get('storageCap', 0)
         over_capacity = storage_used > (storage_limit * bytes_per_gigabyte)
         delta = storage_used - (storage_limit * bytes_per_gigabyte)
 
-        return storage_limit, storage_used, over_capacity, delta
+        return storage_limit, storage_used, over_capacity, delta, request
 
     async def delete_oldest_attachments(self, server: discord.Guild):
         """
         Deletes the oldest attachments in a server, supporting unlimited folder nesting depth.
         """
-        storage_limit, storage_used, over_capacity, space_to_free = await self.get_attachment_storage(server)
+        storage_limit, storage_used, over_capacity, space_to_free, files = await self.get_attachment_storage(server)
         # If this server hasn't reached capacity, no need to delete old attachments
         if not over_capacity:
             return
         if storage_used >= storage_limit * bytes_per_gigabyte:
-            dir = f'{storage_dir}/{server.id}/attachments'
+            directory = f'{server.id}/attachments'
             space_freed = 0
 
-            def get_all_files_sorted_by_oldest(directory):
+            def get_all_files_sorted_by_oldest(files: list[tuple[b2sdk.v2.FileVersion, str]]):
                 """
                 Recursively collects all files in the directory and its subdirectories,
                 sorted by their last modified time (oldest first).
                 """
-                all_files = []
-                for root, _, files in os.walk(directory):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        all_files.append(file_path)
-                return sorted(all_files, key=lambda x: os.path.getmtime(x))
+                return sorted(files, key=lambda x: x[0].upload_timestamp)
 
             # Get all files sorted by oldest first
-            files = get_all_files_sorted_by_oldest(dir)
+            sorted_files = get_all_files_sorted_by_oldest(files)
+
+            backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
 
             # Delete files until enough space is freed
-            for file_path in files:
+            for file in sorted_files:
                 if space_freed >= space_to_free:
                     break
                 try:
-                    file_size = await aios.path.getsize(file_path)
-                    await aios.remove(file_path)
-                    space_freed += file_size
+                    file_size = await aios.path.getsize(file[0].file_name)
+                    backblaze.delete_file(file[0].id_, file[0].file_name)
+                    space_freed += file[0].size
                 except FileNotFoundError:
-                    logger.error(f'delete_oldest_attachments - File not found: {file_path}', exc_info=True)
+                    logger.error(f'delete_oldest_attachments - File not found: {file[0].file_name}', exc_info=True)
                 except Exception:
-                    logger.error(f'delete_oldest_attachments - Error deleting file {file_path}', exc_info=True)
+                    logger.error(f'delete_oldest_attachments - Error deleting file {file[0].file_name}', exc_info=True)
 
-            # Remove empty folders
-            for root, dirs, _ in os.walk(dir, topdown=False):
-                for folder in dirs:
-                    folder_path = os.path.join(root, folder)
-                    try:
-                        await aios.rmdir(folder_path)
-                    except OSError:
-                        logger.error(f'delete_oldest_attachments - Directory not empty: {folder_path}')
             return space_freed
 
     async def delete_all_attachments(self, *, server: discord.Guild = None, channel: discord.TextChannel = None):
@@ -496,15 +486,18 @@ class Indexing(commands.Cog):
         Deletes all attachments in a server or channel.
         """
         full_nuke = False
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
         if not server and not channel:
             full_nuke = True
         elif server and not channel:
-            dir = f'{storage_dir}/{server.id}/attachments'
+            dir = f'{server.id}/attachments'
         elif channel:
-            dir = f'{storage_dir}/{channel.guild.id}/attachments/{channel.id}'
+            dir = f'{channel.guild.id}/attachments/{channel.id}'
         if not full_nuke:
             try:
-                await aioshutil.rmtree(dir)
+                results = list(backblaze.ls(dir, recursive=True))
+                for item in results:
+                    backblaze.delete_file(item[0].id_, item[0].file_name)
                 logger.info(f'Deleted all attachments in {dir}')
             except FileNotFoundError:
                 logger.error(f'delete_all_attachments - Directory not found: {dir}')
@@ -513,9 +506,11 @@ class Indexing(commands.Cog):
         else:
             servers = self.bot.guilds
             for server in servers:
-                dir = f'{storage_dir}/{server.id}/attachments'
+                dir = f'{server.id}/attachments'
                 try:
-                    await aioshutil.rmtree(dir)
+                    results = list(backblaze.ls(dir, recursive=True))
+                    for item in results:
+                        backblaze.delete_file(item[0].id_, item[0].file_name)
                     logger.info(f'Deleted all attachments in {dir}')
                 except FileNotFoundError:
                     logger.error(f'delete_all_attachments - Directory not found: {dir}')
@@ -642,7 +637,7 @@ class Indexing(commands.Cog):
         if message.attachments and cyberlog.get('image') and not message.channel.is_nsfw():
             await self.save_attachments(message)
 
-    @tasks.loop(hours=6)
+    @tasks.loop(hours=12)
     async def check_and_free_server_attachment_storage(self):
         """
         Checks if the server has reached its storage limit and frees up space if necessary
@@ -651,9 +646,7 @@ class Indexing(commands.Cog):
             # check if the server has storage enabled
             if not (await utility.get_server(server)).get('cyberlog', {}).get('image'):
                 continue
-            _, _, over_capacity, _ = await self.get_attachment_storage(server)
-            if over_capacity:
-                await self.delete_oldest_attachments(server)
+            await self.delete_oldest_attachments(server)
 
     @tasks.loop(hours=24)
     async def verify_indices(self):

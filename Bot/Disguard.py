@@ -70,6 +70,7 @@ bot = commands.Bot(
     command_prefix=prefix, case_insensitive=True, heartbeat_timeout=1500, intents=intents, allowed_mentions=discord.AllowedMentions.none()
 )
 bot.remove_command('help')
+bot.initialized = False
 
 
 async def main():
@@ -112,17 +113,12 @@ async def on_ready():  # Method is called whenever bot is ready after connection
         cyber: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
         emojis = cyber.emojis
 
-        def initializeCheck(m: discord.Message):
-            return m.author.id == bot.user.id and m.channel.id == cyber.imageLogChannel.id and m.content == 'Completed'
+        async def initialize_check():
+            while not bot.initialized:
+                await asyncio.sleep(1)
 
         print('Waiting for database callback...')
-        await bot.wait_for('message', check=initializeCheck)  # Wait for bot to synchronize database
-        await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Verifying indexes'))
-        # print('Starting indexing...')
-        # for server in bot.guilds:
-        #     print(f'Indexing {server.name}')
-        #     indexing_cog: Indexing.Indexing = bot.get_cog('Indexing')
-        #     await indexing_cog.index_channels(server.text_channels)
+        await asyncio.wait_for(initialize_check(), timeout=None)
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Retrieving data'))
         print('Grabbing pins...')
         await cyber.grab_pins()
