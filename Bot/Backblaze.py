@@ -5,8 +5,6 @@ from discord.ext import commands
 
 import secure
 
-url_head = 'https://disguard-beta.s3.us-east-005.backblazeb2.com/'
-
 PROD_BOT_ID = 558025201753784323
 PROD_BUCKET = 'disguard'
 PROD_CREDS = secure.backblaze()
@@ -20,7 +18,7 @@ class Backblaze(commands.Cog):
         self.prod = self.bot.user.id == PROD_BOT_ID
         bucket_name = PROD_BUCKET if self.prod else BETA_BUCKET
         self.backblaze = self.setup_backblaze(bucket_name)
-        self.url_body = url_head + bucket_name + '/'
+        self.url_head = f'https://{bucket_name}.s3.us-east-005.backblazeb2.com/'
 
     def setup_backblaze(self, bucket_name: str) -> b2sdk.v2.Bucket:
         info = b2sdk.v2.InMemoryAccountInfo()
@@ -32,7 +30,9 @@ class Backblaze(commands.Cog):
         return bucket
 
     def direct_file_url(self, file_path: str) -> str:
-        return self.url_body + file_path.replace(' ', '%20')
+        if not file_path:
+            return ''
+        return self.url_head + file_path.replace(' ', '%20')
 
     async def upload_disk_file(self, file_path: str, file_name: str) -> b2sdk.v2.FileVersion:
         with open(file_path, 'rb') as f:
@@ -40,6 +40,9 @@ class Backblaze(commands.Cog):
 
     async def upload_bytes(self, data: bytes, file_name: str) -> b2sdk.v2.FileVersion:
         return self.backblaze.upload_bytes(data, file_name)
+
+    def download_and_save_file(self, file_name: str, save_path) -> bytes:
+        return self.backblaze.download_file_by_name(file_name).save(save_path)
 
     def ls(self, dir: str, recursive: bool = False) -> typing.Iterator[tuple[b2sdk.v2.FileVersion, str]]:
         return self.backblaze.ls(dir, recursive=recursive)

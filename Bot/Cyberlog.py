@@ -18,10 +18,12 @@ import typing
 import aiofiles
 import aiofiles.os as aios
 import aioshutil
+import b2sdk.v2
 import discord
 import emojis
 from discord.ext import commands, tasks
 
+import Backblaze
 import database
 import Indexing
 import Info
@@ -1186,7 +1188,7 @@ class Cyberlog(commands.Cog):
             embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {payload.message_id}')
         cyber = (await utility.get_server(g)).get('cyberlog')
-        attachments = []  # List of files to be sent with this message
+        message_attachments: list[tuple[b2sdk.v2.FileVersion, str]] = []  # List of files to be sent with this message
         # Retrieve this message index & export it to a JSON
         message_data = await lightningdb.get_message(payload.channel_id, payload.message_id)
         index_path = f'storage/temp/index_{payload.message_id}.json'
@@ -1195,25 +1197,19 @@ class Cyberlog(commands.Cog):
                 with open(index_path, 'w') as json_file:
                     json.dump(message_data, json_file, indent=4)
                     if cyber.get('sendIndexFile'):
-                        attachments.append(index_path)
+                        message_attachments.append(index_path)
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
 
-        attachments_path = f'storage/{g.id}/attachments/{payload.channel_id}/{payload.message_id}'  # Where to retrieve message attachments from
+        attachments_path = f'{g.id}/attachments/{payload.channel_id}/{payload.message_id}'  # Where to retrieve message attachments from
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
+        results = list(backblaze.ls(attachments_path, recursive=True))
+        for item in results:
+            message_attachments.append(item)
+            image_ext_pattern = re.compile(r'\.(png|jpe?g|gif|webp)$', re.IGNORECASE)
+            if image_ext_pattern.search(item[0].file_name) and utility.empty(embed.image.url):
+                embed.set_image(url=backblaze.direct_file_url(item[0].file_name))
 
-        try:
-            for file in await aios.listdir(attachments_path):
-                savePath = f'{attachments_path}/{file}'
-                attachments.append(savePath)
-
-                if any([ext in file.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]) and utility.empty(embed.image.url):
-                    embed.set_image(url=f'attachment://{file}')
-
-                # except discord.HTTPException:
-                #     fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-        except FileNotFoundError:
-            # this message has no attachments; path does not exist
-            pass
         if message:
             author = message.author
             if not author:
@@ -1240,7 +1236,7 @@ class Cyberlog(commands.Cog):
                     content=plainText if 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
                     embed=embed if not settings['plainText'] else None,
                     tts=settings['tts'],
-                    files=[discord.File(attachment) for attachment in attachments] if attachments else None,
+                    files=[discord.File(attachment) for attachment in message_attachments] if message_attachments else None,
                 )
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                     await msg.edit(content=None)
@@ -1316,6 +1312,7 @@ class Cyberlog(commands.Cog):
             content = message_data['editions'][-1]['content']
             embed.add_field(name='Content', value='<No content. Review attached message index for more details>' if not content else content[:1024])
         # Regex pattern to match image URLs
+        attachments = []
         image_url_pattern = r'(https?://[^\s]+?\.(?:png|jpg|jpeg|gif|webp))'
         matches = re.findall(image_url_pattern, content)
         if matches:
@@ -1326,7 +1323,16 @@ class Cyberlog(commands.Cog):
             if settings['thumbnail'] in (1, 2, 4):
                 embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
             if settings['author'] in (1, 2, 4):
-                embed.set_author(name=author.display_name, icon_url=f'attachment://{os.path.basename(image_path)}')
+                (embed.set_author(name=author.display_name, icon_url=f'attachment://{os.path.basename(image_path)}'),)
+        if message_attachments:
+            embed.add_field(
+                name='Attachments',
+                value='\n'.join(
+                    f"[{re.sub(r'^.*/', '', item[0].file_name)}]({backblaze.direct_file_url(item[0].file_name)})" for item in message_attachments
+                ),
+                inline=False,
+            )
+            # links are getting markdown converted
         modDelete = False
         plainText = ''
         log = None
@@ -1402,16 +1408,6 @@ class Cyberlog(commands.Cog):
             if settings['botLogging'] == 0:
                 return
         plainText = f"""{log.user if modDelete else author} deleted {f"{author}'s" if modDelete else "their"} message in #{channel.name if type(channel) is discord.TextChannel else channel}\n\n{'<No content>' if not content else content[:1900]}\n\n{plainText}"""
-        a = 0
-        while a < len(attachments):
-            f = attachments[a]
-            if (await aios.stat(f)).st_size / 1_000_000 > 10:
-                fileError += f"\n{self.emojis['alert']} | This message's attachment ({os.path.basename(f)}) is too large to be sent ({round(os.stat(f).st_size / 1_000_000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-                savePath = f'{TEMP_DIR}/{payload.message_id}/{os.path.basename(f)}'
-                await aioshutil.copy2(f, savePath)
-                attachments.pop(a)
-            else:
-                a += 1
         content += f'\n\n{fileError}'
         msg = await c.send(
             content=plainText
@@ -1424,12 +1420,6 @@ class Cyberlog(commands.Cog):
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await msg.edit(content=None)
         await self.archiveLogEmbed(g, msg.id, embed, 'Message Delete')
-        # Now delete any attachments associated with this message
-        try:
-            await aioshutil.rmtree(attachments_path)
-        except FileNotFoundError:
-            # This message had no attachments
-            pass
         while not self.bot.is_closed():
             try:
                 result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)

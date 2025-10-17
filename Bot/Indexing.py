@@ -165,16 +165,20 @@ class Indexing(commands.Cog):
             fields=[models.EmbedField(name=field.name, value=field.value, inline=field.inline) for field in embed.fields],
         )
 
-    async def convert_attachment(self, attachment: discord.Attachment, message_id: int = 0, channel_id: int = 0, server_id: int = 0):
+    async def convert_attachment(self, attachment: discord.Attachment, message: discord.Message):
         """
         Converts a discord.Attachment object to a MessageAttachment object
         """
         backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
-        bucket_path = f'{server_id}/{channel_id}/{message_id}/{attachment.filename}'
-        asyncio.create_task(backblaze.upload_bytes(await attachment.read(), bucket_path))
+        bucket_path = ''
+        if await self.attachment_saving_enabled(message):
+            bucket_path = f'{message.guild.id}/attachments/{message.channel.id}/{message.id}/{attachment.filename}'
+            asyncio.create_task(backblaze.upload_bytes(await attachment.read(), bucket_path))
+            # TODO task needs to be collected
+
         return models.MessageAttachment(
             id=attachment.id,
-            message_id=message_id,
+            message_id=message.id,
             hash=hash(attachment),
             size=attachment.size,
             filename=attachment.filename,
@@ -381,9 +385,7 @@ class Indexing(commands.Cog):
         return models.MessageEdition(
             content=message.content,
             timestamp=int(message.created_at.timestamp() if new_index else discord.utils.utcnow().timestamp()),
-            attachments=[
-                await self.convert_attachment(attachment, message.id, message.channel.id, message.guild.id) for attachment in message.attachments
-            ],
+            attachments=[await self.convert_attachment(attachment, message) for attachment in message.attachments],
             embeds=[self.convert_embed(embed) for embed in message.embeds],
             reactions=[],  # [await self.convert_reaction(reaction) for reaction in message.reactions],
             pinned=message.pinned,
@@ -519,22 +521,21 @@ class Indexing(commands.Cog):
 
     async def save_attachments(self, message: discord.Message):
         # needs to be converted to a task
-        saving_enabled = (await utility.get_server(message.guild)).get('cyberlog', {}).get('image')
-        if saving_enabled and len(message.attachments) > 0 and not message.channel.is_nsfw():
-            path = f'{storage_dir}/{message.guild.id}/attachments/{message.channel.id}/{message.id}'
-            # if the path doesn't exist, create it
-            if not await aios.path.exists(path):
-                await aios.makedirs(path)
+        if await self.attachment_saving_enabled(message):
+            backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
             for attachment in message.attachments:
-                # for now, only save attachments under 10mb
-                if attachment.size < 10_000_000:
-                    # check if the file already exists
-                    if not await aios.path.exists(f'{path}/{attachment.filename}'):
-                        # save the attachment
-                        try:
-                            await attachment.save(f'{path}/{attachment.filename}')
-                        except discord.HTTPException:
-                            pass
+                bucket_path = f'{message.guild.id}/{message.channel.id}/{message.id}/{attachment.filename}'
+                asyncio.create_task(backblaze.upload_bytes(await attachment.read(), bucket_path))
+
+    async def attachment_saving_enabled(self, message: discord.Message):
+        """
+        Checks if attachment saving is enabled for a server
+        """
+        return (
+            (await utility.get_server(message.guild)).get('cyberlog', {}).get('image', False)
+            and not message.channel.is_nsfw()
+            and message.attachments
+        )
 
     # need to handle tasks to index messages in the background and/or on bot bootup
 
@@ -564,10 +565,6 @@ class Indexing(commands.Cog):
         if channel.id in (534439214289256478, 910598159963652126):
             return
         start = discord.utils.utcnow()
-        try:
-            save_images = (await utility.get_server(channel.guild))['cyberlog'].get('image') and not channel.is_nsfw()
-        except KeyError:
-            save_images = False
         # if there's no indexes in the DB for this channel, index everything
         if await lightningdb.is_channel_empty(channel.id):
             full = True
@@ -584,8 +581,8 @@ class Indexing(commands.Cog):
                         existing_message_counter += 1
                         if existing_message_counter >= 15:
                             break
-                if message.attachments and not message.author.bot and save_images:
-                    await self.save_attachments(message)
+                # if message.attachments and not message.author.bot and save_images:
+                #     await self.save_attachments(message)
                 if full:
                     await asyncio.sleep(0.00025)
         except discord.Forbidden:
@@ -616,8 +613,8 @@ class Indexing(commands.Cog):
             except DuplicateKeyError:
                 logger.info(f'Message {message.id} already indexed')
             # save attachments if saving is enabled
-            if message.attachments and not message.author.bot and channel_images_enabled.get(message.channel.id, False):
-                await self.save_attachments(message)
+            # if message.attachments and not message.author.bot and channel_images_enabled.get(message.channel.id, False):
+            #     await self.save_attachments(message)
 
     async def index_message(self, message: discord.Message):
         """
@@ -634,8 +631,8 @@ class Indexing(commands.Cog):
                 await lightningdb.post_message_2024(message_data)
         except DuplicateKeyError:
             logger.info(f'Message {message.id} already indexed')
-        if message.attachments and cyberlog.get('image') and not message.channel.is_nsfw():
-            await self.save_attachments(message)
+        # if message.attachments and cyberlog.get('image') and not message.channel.is_nsfw():
+        #     await self.save_attachments(message)
 
     @tasks.loop(hours=12)
     async def check_and_free_server_attachment_storage(self):
@@ -653,7 +650,10 @@ class Indexing(commands.Cog):
         """
         Verifies that all indexes are valid and removes any invalid ones
         """
+        if self.verify_indices.current_loop == 0:
+            return
         print('Daily task - verifying indexes')
+        # cyberlog and this both call indexing
         logger.info('Daily task - verifying indexes')
         await self.bot.wait_until_ready()
         for server in self.bot.guilds:
