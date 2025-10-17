@@ -1203,7 +1203,7 @@ class Cyberlog(commands.Cog):
 
         attachments_path = f'{g.id}/attachments/{payload.channel_id}/{payload.message_id}'  # Where to retrieve message attachments from
         backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
-        results = list(backblaze.ls(attachments_path, recursive=True))
+        results = list(await backblaze.ls(attachments_path, recursive=True))
         for item in results:
             message_attachments.append(item)
             image_ext_pattern = re.compile(r'\.(png|jpe?g|gif|webp)$', re.IGNORECASE)
