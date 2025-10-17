@@ -1189,6 +1189,7 @@ class Cyberlog(commands.Cog):
         embed.set_footer(text=f'Message ID: {payload.message_id}')
         cyber = (await utility.get_server(g)).get('cyberlog')
         message_attachments: list[tuple[b2sdk.v2.FileVersion, str]] = []  # List of files to be sent with this message
+        send_attachments = []
         # Retrieve this message index & export it to a JSON
         message_data = await lightningdb.get_message(payload.channel_id, payload.message_id)
         index_path = f'storage/temp/index_{payload.message_id}.json'
@@ -1197,7 +1198,7 @@ class Cyberlog(commands.Cog):
                 with open(index_path, 'w') as json_file:
                     json.dump(message_data, json_file, indent=4)
                     if cyber.get('sendIndexFile'):
-                        message_attachments.append(index_path)
+                        send_attachments.append(index_path)
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
 
@@ -1312,14 +1313,13 @@ class Cyberlog(commands.Cog):
             content = message_data['editions'][-1]['content']
             embed.add_field(name='Content', value='<No content. Review attached message index for more details>' if not content else content[:1024])
         # Regex pattern to match image URLs
-        attachments = []
         image_url_pattern = r'(https?://[^\s]+?\.(?:png|jpg|jpeg|gif|webp))'
         matches = re.findall(image_url_pattern, content)
         if matches:
             embed.set_image(url=matches[0])
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
             image_path = await self.image_to_local_attachment(author.display_avatar)
-            attachments.append(image_path)
+            send_attachments.append(image_path)
             if settings['thumbnail'] in (1, 2, 4):
                 embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
             if settings['author'] in (1, 2, 4):
@@ -1358,7 +1358,7 @@ class Cyberlog(commands.Cog):
                         settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name))
                     ):
                         image_path = await self.image_to_local_attachment(log.user.display_avatar)
-                        attachments.append(image_path)
+                        send_attachments.append(image_path)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)):
                             embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
@@ -1414,27 +1414,12 @@ class Cyberlog(commands.Cog):
             if 'audit log' in plainText or 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts']))
             else None,
             embed=embed if not settings['plainText'] else None,
-            files=[discord.File(f) for f in attachments[:10]],
+            files=[discord.File(f) for f in send_attachments[:10]],
             tts=settings['tts'],
         )
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await msg.edit(content=None)
         await self.archiveLogEmbed(g, msg.id, embed, 'Message Delete')
-        while not self.bot.is_closed():
-            try:
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
-            except asyncio.TimeoutError:
-                break
-            if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
-                await msg.edit(content=plainText, embed=None)
-                await msg.clear_reactions()
-                if not settings['plainText']:
-                    await msg.add_reaction(self.emojis['expand'])
-            elif (result[0].emoji in (self.emojis['expand'], '⏬', '⬇', '🔽') or settings['plainText']) and len(msg.embeds) < 1:
-                await msg.edit(content=None, embed=embed)
-                await msg.clear_reactions()
-                if settings['plainText']:
-                    await msg.add_reaction(self.emojis['collapse'])
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
