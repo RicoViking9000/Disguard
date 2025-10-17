@@ -18,10 +18,12 @@ import typing
 import aiofiles
 import aiofiles.os as aios
 import aioshutil
+import b2sdk.v2
 import discord
 import emojis
 from discord.ext import commands, tasks
 
+import Backblaze
 import database
 import Indexing
 import Info
@@ -37,7 +39,6 @@ DST = 4 if datetime.datetime.now() < datetime.datetime(2023, 11, 5, 2) else 5
 units = ['second', 'minute', 'hour', 'day']
 logUnits = ['message', 'doorguard', 'channel', 'member', 'role', 'emoji', 'server', 'voice', 'misc']
 TEMP_DIR = 'storage/temp'  # Path to save images for profile picture changes and other images in logs
-gimpedServers = [403698615446536203, 460611346837405696, 366019576661671937]
 try:
     os.makedirs(TEMP_DIR)
 except FileExistsError:
@@ -100,6 +101,7 @@ class Cyberlog(commands.Cog):
         self.pauseDelete = []
         self.resumeToken = None
         self.channelCacheHelper = {}
+        self.taskman = set()
         self.syncData.start()
         self.delete_message_attachments.start()
         self.trackChanges.start()
@@ -135,7 +137,12 @@ class Cyberlog(commands.Cog):
                         objectID = fullDocument['user_id']
                         await lightningdb.patch_user(objectID, fullDocument)
                     if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys():
-                        asyncio.create_task(reddit.redditFeedHandler(self.bot.get_guild(objectID)), name='Reddit Feed Handler - DB change')
+                        await utility.run_task(
+                            reddit.redditFeedHandler(self.bot.get_guild(objectID)),
+                            queue=self.taskman,
+                            name='Reddit Feed Handler - DB change',
+                            cancel_after=300,
+                        )
                     if change['operationType'] == 'update' and any(
                         [word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]
                     ):
@@ -150,6 +157,7 @@ class Cyberlog(commands.Cog):
     @tasks.loop(hours=24)  # V1.0: This now only runs once per day
     async def syncData(self):
         print('Syncing data')
+        logger.info('Syncing data')
         started = datetime.datetime.now()
         rawStarted = datetime.datetime.now()
         try:
@@ -167,6 +175,7 @@ class Cyberlog(commands.Cog):
             for g in self.bot.guilds:
                 timeString = f'Processing attributes for {g.name}'
                 print(timeString)
+                logger.info(timeString)
                 started = datetime.datetime.now()
                 serverStarted = datetime.datetime.now()
                 try:
@@ -217,13 +226,16 @@ class Cyberlog(commands.Cog):
                     pass
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
                 print(timeString)
+                logger.info(timeString)
             started = datetime.datetime.now()
             # drop message indexes for channels the bot can't find
             for collection in await lightningdb.database.list_collection_names():
                 if collection not in ('servers', 'users') and not self.bot.get_channel(int(collection)):
                     await lightningdb.delete_channel(int(collection))
             print(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
+            logger.info(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
             print("About to process users' attribute history")
+            logger.info("About to process users' attribute history")
             started = datetime.datetime.now()
             started2 = datetime.datetime.now()
             self.bot.useAttributeQueue = True
@@ -257,18 +269,21 @@ class Cyberlog(commands.Cog):
                                         )
                         except Exception as e:
                             print(f'Custom status error for {m.name}: {e}')
+                            logger.error(f'Custom status error for {m.name}: {e}', exc_info=True)
                     if await self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
                         try:
                             if m.name != cache.get('usernameHistory', [{}])[-1].get('name'):
                                 updateOperations[m.id].update({'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}})
                         except Exception as e:
                             print(f'Username error for {m.name}: {e}')
+                            logger.error(f'Username error for {m.name}: {e}', exc_info=True)
                     if await self.privacyEnabledChecker(m, 'attributeHistory', 'displaynameHistory'):
                         try:
                             if m.display_name != cache.get('displaynameHistory', [{}])[-1].get('name'):
                                 updateOperations[m.id].update({'displaynameHistory': {'name': m.display_name, 'timestamp': discord.utils.utcnow()}})
                         except Exception as e:
                             print(f'Displayname error for {m.name}: {e}')
+                            logger.error(f'Displayname error for {m.name}: {e}', exc_info=True)
                     if await self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
                         try:
                             if m.display_avatar.url != cache.get('avatarHistory', [{}])[-1].get('discordURL'):
@@ -284,20 +299,30 @@ class Cyberlog(commands.Cog):
                                 updatedAvatar = True
                         except Exception as e:
                             print(f'Avatar error for {m.name}: {e}')
+                            logger.error(f'Avatar error for {m.name}: {e}', exc_info=True)
                         if m.bot and len(cache.get('avatarHistory')) > 150:
                             stripped_avatar_history = cache.get('avatarHistory')[-150:]
-                            asyncio.create_task(database.SetAvatarHistory(m, stripped_avatar_history), name='SyncData - Avatar History')
+                            await utility.run_task(
+                                database.SetAvatarHistory(m, stripped_avatar_history), queue=self.taskman, name='SyncData - Avatar History Strip'
+                            )
                     if updatedAvatar:
                         await discord.utils.sleep_until(
                             datetime.datetime.now() + datetime.timedelta(seconds=1)
                         )  # To prevent ratelimiting if Disguard sends a message to retrieve the image URL
                     if i % 1000 == 0 and i > 0:
                         print(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
+                        logger.info(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
                         started = datetime.datetime.now()
             print(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
+            logger.info(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
             started = datetime.datetime.now()
-            asyncio.create_task(database.BulkUpdateHistory(updateOperations), name='SyncData - Bulk Update History')
+            print('Bulk updating attribute history')
+            logger.info('Bulk updating attribute history')
+            await utility.run_task(
+                database.BulkUpdateHistory(updateOperations), name='SyncData - Bulk Update History', queue=self.taskman, cancel_after=600
+            )
             print(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
+            logger.info(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
             self.bot.useAttributeQueue = False
             await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
             self.bot.attributeHistoryQueue = []
@@ -316,15 +341,16 @@ class Cyberlog(commands.Cog):
             #             asyncio.create_task(self.indexChannel(c, 0.0040))
             await updateLastOnline([m for m in self.bot.get_all_members() if m.status != discord.Status.offline], discord.utils.utcnow())
             print(f'Finished everything else in {(datetime.datetime.now() - started).seconds}s')
+            logger.info(f'Finished everything else in {(datetime.datetime.now() - started).seconds}s')
             print(f'Garbage collection: {gc.collect()} objects')
-        except Exception:
+            logger.info(f'Garbage collection: {gc.collect()} objects')
+        except Exception as e:
             print('Data sync error: {}'.format(traceback.format_exc()))
-            traceback.print_exc()
+            logger.error(f'Data sync error: {e}', exc_info=True)
         finally:
-            await self.imageLogChannel.send(
-                'Completed'
-            )  # Moved this into finally so that message indexing and other bootup tasks can commence even if this fails
+            self.bot.initialized = True
         print(f'Done syncing data: {(datetime.datetime.now() - rawStarted).seconds}s')
+        logger.info(f'Done syncing data: {(datetime.datetime.now() - rawStarted).seconds}s')
 
     # async def synchronizeDatabase(self, notify=False):
     #     '''This method downloads data from the database and puts it in the local mongoDB variables, then is kept updated in the motorMongo changeStream method (trackChanges)'''
@@ -383,7 +409,9 @@ class Cyberlog(commands.Cog):
         """[DISCORD API METHOD] Called when message is sent"""
         await self.bot.wait_until_ready()
         if not serverIsGimped(message.guild):
-            await updateLastActive(message.author, discord.utils.utcnow(), 'sent a message')
+            await utility.run_task(
+                updateLastActive(message.author, discord.utils.utcnow(), 'sent a message'), queue=self.taskman, name='OnMessage UpdateLastActive'
+            )
         if type(message.channel) is discord.DMChannel:
             return
         if message.type is discord.MessageType.pins_add:
@@ -497,8 +525,12 @@ class Cyberlog(commands.Cog):
                     if settings['author'] > 1:
                         embed.set_author(name=log.user.display_name, icon_url=url)
                 content = f'{log.user} unpinned a message from #{message.channel.name}'
-                if message.guild.id not in gimpedServers:
-                    await updateLastActive(log.user, discord.utils.utcnow(), 'unpinned a message')
+                if not serverIsGimped(message.guild):
+                    await utility.run_task(
+                        updateLastActive(log.user, discord.utils.utcnow(), 'unpinned a message'),
+                        queue=self.taskman,
+                        name='OnMessage UpdateLastActive',
+                    )
             except:
                 pass  # the message on audit log fails will be phased out by permissions showing on the dashboard. this also allows us to swallow conditions when we may fail to retrieve the audit log
         embed.description += (
@@ -561,7 +593,9 @@ class Cyberlog(commands.Cog):
         if not u:
             return
         if not serverIsGimped(self.bot.get_guild(p.guild_id)):
-            await updateLastActive(u, discord.utils.utcnow(), 'added a reaction')
+            await utility.run_task(
+                updateLastActive(u, discord.utils.utcnow(), 'added a reaction'), queue=self.taskman, name='OnRawReactionAdd UpdateLastActive'
+            )
         if u.bot:
             return
         g = self.bot.get_guild(p.guild_id)
@@ -600,7 +634,9 @@ class Cyberlog(commands.Cog):
         if not u:
             return
         if not serverIsGimped(self.bot.get_guild(p.guild_id)):
-            await updateLastActive(u, discord.utils.utcnow(), 'removed a reaction')
+            await utility.run_task(
+                updateLastActive(u, discord.utils.utcnow(), 'removed a reaction'), queue=self.taskman, name='OnRawReactionRemove UpdateLastActive'
+            )
         if u.bot:
             return
         g = self.bot.get_guild(p.guild_id)
@@ -853,51 +889,9 @@ class Cyberlog(commands.Cog):
         )
         await self.archiveLogEmbed(after.guild, msg.id, embed, 'Message Edit')
         if not serverIsGimped(guild):
-            await updateLastActive(after.author, discord.utils.utcnow(), 'edited a message')
-        return
-        #         elif str(result[0]) == '🗒':
-        #             try:
-        #                 embed.clear_fields()
-        #                 embed.description = (
-        #                     embed.description[
-        #                         : embed.description.find(utility.DisguardLongTimestamp(received)) + len({utility.DisguardLongTimestamp(received)})
-        #                     ]
-        #                     + f'\n\nNAVIGATION\n{qlf}⬅: Go back to compressed view\n{qlf}ℹ: Full edited message\n{qlf}📜: Message edit history\n> **🗒: Message in context**'
-        #                 )
-        #                 messagesBefore = list(reversed([message async for message in after.channel.history(limit=6, before=after)]))
-        #                 messagesAfter = [message async for message in after.channel.history(limit=6, after=after, oldest_first=True)]
-        #                 combinedMessages = messagesBefore + [after] + messagesAfter
-        #                 combinedLength = sum(len(m.content) for m in combinedMessages)
-        #                 if combinedLength > 1850:
-        #                     combinedMessageContent = [utility.contentParser(m)[: 1850 // len(combinedMessages)] for m in combinedMessages]
-        #                 else:
-        #                     combinedMessageContent = [utility.contentParser(m) for m in combinedMessages]
-        #                 for m in range(len(combinedMessages)):
-        #                     embed.add_field(
-        #                         name=f'**{combinedMessages[m].author.name}** • {utility.DisguardLongTimestamp(combinedMessages[m].created_at + datetime.timedelta(hours=await utility.time_zone(guild)))}',
-        #                         value=combinedMessageContent[m]
-        #                         if combinedMessages[m].id != after.id
-        #                         else f'**[{combinedMessageContent[m]}]({combinedMessages[m].jump_url})**',
-        #                         inline=False,
-        #                     )
-        #                 await msg.edit(embed=embed)
-        #                 for r in ['⬅', 'ℹ', '📜']:
-        #                     await msg.add_reaction(r)
-        #             except (discord.Forbidden, discord.HTTPException) as e:
-        #                 embed.description += f'\n\n⚠ Error retrieving messages: {e}'
-        #                 await msg.edit(embed=embed)
-        #                 await asyncio.sleep(5)
-        #         elif str(result[0]) == '⬅':
-        #             await msg.clear_reactions()
-        #             await msg.edit(content=oldContent if settings['plainText'] else None, embed=oldEmbed if not settings['plainText'] else None)
-        #             embed = copy.deepcopy(oldEmbed)
-        #             if not settings['plainText']:
-        #                 await msg.add_reaction(self.emojis['threeDots'])
-        #             break
-        #         result = None
-        # elif result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎'):
-        #     await msg.edit(content=plainText, embed=None)
-        #     await msg.clear_reactions()
+            await utility.run_task(
+                updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'), queue=self.taskman, name='OnMessage UpdateLastActive'
+            )
 
     class MessageEditMenu(discord.ui.View):
         def __init__(
@@ -1009,9 +1003,6 @@ class Cyberlog(commands.Cog):
                     savePath = f'{attachments_path}/{file}'
                     attachments.append(savePath)
 
-                    if file.lower().endswith(('.png', '.jpeg', '.jpg', '.gif', '.webp')):
-                        self.new_embed.set_image(url=f'attachment://{file}')
-
             except FileNotFoundError:
                 # this message has no attachments; path does not exist
                 pass
@@ -1063,30 +1054,35 @@ class Cyberlog(commands.Cog):
         received = discord.utils.utcnow() + datetime.timedelta(
             hours=await utility.time_zone(after.guild)
         )  # Timestamp of receiving the message edit event
-        if after.guild.id not in gimpedServers:
-            update_last_active_task = asyncio.create_task(
-                updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'), name='message_edit - Update Last Active'
+
+        async def update_last_active():
+            await utility.run_task(
+                updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'),
+                queue=self.taskman,
+                name='message_edit - Update Last Active',
             )
+
+        if not serverIsGimped(after.guild):
+            await update_last_active()
         # save the message edits
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
         new_edition = await indexing_cog.edition_from_message(after)
         await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
         g = after.guild
         if not (await logEnabled(g, 'message')):
-            await utility.await_task(update_last_active_task)  # Wait for the task to finish if it was created
+            await update_last_active()
             return  # If the message edit log module is not enabled, return
         try:
             if not await logExclusions(after.channel, after.author):
-                await utility.await_task(update_last_active_task)
+                await update_last_active()
                 return  # Check the exclusion settings
         except:
-            print('log exclusion error')
-            traceback.print_exc()
-            await utility.await_task(update_last_active_task)
+            logger.info('Log exclusion error', exc_info=True)
+            await update_last_active()
             return
         await self.message_edit_handler(before, after, received)
         try:
-            await utility.await_task(update_last_active_task)  # Wait for the task to finish if it was created
+            await update_last_active()  # Wait for the task to finish if it was created
         except (asyncio.CancelledError, UnboundLocalError):
             pass
 
@@ -1108,31 +1104,38 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden:
             print('{} lacks permissions for message edit for some reason'.format(g.name))
             return
+
+        async def update_last_active():
+            await utility.run_task(
+                updateLastActive(after.author, discord.utils.utcnow(), 'edited a message'),
+                queue=self.taskman,
+                name='message_edit - Update Last Active',
+            )
+
         # save the message edits
         indexing_cog: Indexing.Indexing = self.bot.get_cog('Indexing')
         new_edition = await indexing_cog.edition_from_message(after)
         await lightningdb.patch_message_2024(after.channel.id, after.id, new_edition)
         # Get the member of the edited message
         author = g.get_member(after.author.id)
-        if g.id not in gimpedServers:
-            update_last_active_task = asyncio.create_task(
-                updateLastActive(author, discord.utils.utcnow(), 'edited a message'), name='raw_message_edit - Update Last Active'
-            )
         if not (await logEnabled(g, 'message')):
-            await utility.await_task(update_last_active_task)
+            if not serverIsGimped(g):
+                await update_last_active()
             return  # If the message edit log module is not enabled, return
         try:
             if author and not await logExclusions(after.channel, author):
-                await utility.await_task(update_last_active_task)
+                if not serverIsGimped(g):
+                    await update_last_active()
                 return  # Check the exclusion settings
         except:
-            print('log exclusion error')
-            traceback.print_exc()
-            await utility.await_task(update_last_active_task)
+            logger.info('Log exclusion error', exc_info=True)
+            if not serverIsGimped(g):
+                await update_last_active()
             return
         c = await logChannel(g, 'message')
         if c is None:
-            await utility.await_task(update_last_active_task)
+            if not serverIsGimped(g):
+                await update_last_active()
             return  # Invalid log channel
         message_data = await lightningdb.get_message(channel.id, after.id)
         if message_data:
@@ -1146,7 +1149,8 @@ class Cyberlog(commands.Cog):
             await self.message_edit_handler(before, after, received)
         except UnboundLocalError:
             await self.message_edit_handler('<Data retrieval error>', after, received)  # If before doesn't exist
-        await utility.await_task(update_last_active_task)  # Wait for the task to finish if it was created
+        if not serverIsGimped(g):
+            await update_last_active()
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
@@ -1184,7 +1188,8 @@ class Cyberlog(commands.Cog):
             embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {payload.message_id}')
         cyber = (await utility.get_server(g)).get('cyberlog')
-        attachments = []  # List of files to be sent with this message
+        message_attachments: list[tuple[b2sdk.v2.FileVersion, str]] = []  # List of files to be sent with this message
+        send_attachments = []
         # Retrieve this message index & export it to a JSON
         message_data = await lightningdb.get_message(payload.channel_id, payload.message_id)
         index_path = f'storage/temp/index_{payload.message_id}.json'
@@ -1193,25 +1198,19 @@ class Cyberlog(commands.Cog):
                 with open(index_path, 'w') as json_file:
                     json.dump(message_data, json_file, indent=4)
                     if cyber.get('sendIndexFile'):
-                        attachments.append(index_path)
+                        send_attachments.append(index_path)
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
 
-        attachments_path = f'storage/{g.id}/attachments/{payload.channel_id}/{payload.message_id}'  # Where to retrieve message attachments from
+        attachments_path = f'{g.id}/attachments/{payload.channel_id}/{payload.message_id}'  # Where to retrieve message attachments from
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
+        results = list(await backblaze.ls(attachments_path, recursive=True))
+        for item in results:
+            message_attachments.append(item)
+            image_ext_pattern = re.compile(r'\.(png|jpe?g|gif|webp)$', re.IGNORECASE)
+            if image_ext_pattern.search(item[0].file_name) and utility.empty(embed.image.url):
+                embed.set_image(url=backblaze.direct_file_url(item[0].file_name))
 
-        try:
-            for file in await aios.listdir(attachments_path):
-                savePath = f'{attachments_path}/{file}'
-                attachments.append(savePath)
-
-                if any([ext in file.lower() for ext in ['.png', '.jpeg', '.jpg', '.gif', '.webp']]) and utility.empty(embed.image.url):
-                    embed.set_image(url=f'attachment://{file}')
-
-                # except discord.HTTPException:
-                #     fileError += f"\n{self.emojis['alert']} | This message's attachment ({directory}) is too large to be sent ({round(os.stat(savePath).st_size / 1000000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-        except FileNotFoundError:
-            # this message has no attachments; path does not exist
-            pass
         if message:
             author = message.author
             if not author:
@@ -1238,7 +1237,7 @@ class Cyberlog(commands.Cog):
                     content=plainText if 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
                     embed=embed if not settings['plainText'] else None,
                     tts=settings['tts'],
-                    files=[discord.File(attachment) for attachment in attachments] if attachments else None,
+                    files=[discord.File(attachment) for attachment in message_attachments] if message_attachments else None,
                 )
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                     await msg.edit(content=None)
@@ -1320,11 +1319,20 @@ class Cyberlog(commands.Cog):
             embed.set_image(url=matches[0])
         if any(a in (1, 2, 4) for a in (settings['thumbnail'], settings['author'])):
             image_path = await self.image_to_local_attachment(author.display_avatar)
-            attachments.append(image_path)
+            send_attachments.append(image_path)
             if settings['thumbnail'] in (1, 2, 4):
                 embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
             if settings['author'] in (1, 2, 4):
-                embed.set_author(name=author.display_name, icon_url=f'attachment://{os.path.basename(image_path)}')
+                (embed.set_author(name=author.display_name, icon_url=f'attachment://{os.path.basename(image_path)}'),)
+        if message_attachments:
+            embed.add_field(
+                name='Attachments',
+                value='\n'.join(
+                    f"[{re.sub(r'^.*/', '', item[0].file_name)}]({backblaze.direct_file_url(item[0].file_name)})" for item in message_attachments
+                ),
+                inline=False,
+            )
+            # links are getting markdown converted
         modDelete = False
         plainText = ''
         log = None
@@ -1340,20 +1348,28 @@ class Cyberlog(commands.Cog):
                     embed.description += f"""\n{(f'{self.emojis["modDelete"]}👮‍♂️') if settings['context'][1] > 0 else ''}{" Deleted by" if settings['context'][1] < 2 else ""}: {log.user.mention} ({log.user.display_name})"""
                     embed.title = f"""{(f'{self.emojis["messageDelete"] if settings["library"] > 1 else "📜" + str(self.emojis["modDelete"])}') if settings["context"][0] > 0 else ""}{" Message was deleted" if settings["context"][1] < 2 else ''}"""
                     if not serverIsGimped(g):
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'deleted a message')
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'deleted a message'),
+                            queue=self.taskman,
+                            name='OnMessageDelete - Update Last Active',
+                        )
                     modDelete = True
                     if (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url))) or (
                         settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name))
                     ):
                         image_path = await self.image_to_local_attachment(log.user.display_avatar)
-                        attachments.append(image_path)
+                        send_attachments.append(image_path)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)):
                             embed.set_thumbnail(url=f'attachment://{os.path.basename(image_path)}')
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=f'attachment://{os.path.basename(image_path)}')
                 else:
-                    if g.id not in gimpedServers:
-                        await updateLastActive(author, discord.utils.utcnow(), 'deleted a message')
+                    if not serverIsGimped(g):
+                        await utility.run_task(
+                            updateLastActive(author, discord.utils.utcnow(), 'deleted a message'),
+                            queue=self.taskman,
+                            name='OnMessageDelete - Update Last Active',
+                        )
             except Exception:
                 logger.error(f'Encountered error when trying to get audit log for {g.name} message delete', exc_info=True)
         if log and log.user.bot:
@@ -1392,49 +1408,18 @@ class Cyberlog(commands.Cog):
             if settings['botLogging'] == 0:
                 return
         plainText = f"""{log.user if modDelete else author} deleted {f"{author}'s" if modDelete else "their"} message in #{channel.name if type(channel) is discord.TextChannel else channel}\n\n{'<No content>' if not content else content[:1900]}\n\n{plainText}"""
-        a = 0
-        while a < len(attachments):
-            f = attachments[a]
-            if (await aios.stat(f)).st_size / 1_000_000 > 10:
-                fileError += f"\n{self.emojis['alert']} | This message's attachment ({os.path.basename(f)}) is too large to be sent ({round(os.stat(f).st_size / 1_000_000, 2)}mb). Please view [this page](https://disguard.netlify.app/privacy.html#appendixF) for more information including file retrieval."
-                savePath = f'{TEMP_DIR}/{payload.message_id}/{os.path.basename(f)}'
-                await aioshutil.copy2(f, savePath)
-                attachments.pop(a)
-            else:
-                a += 1
         content += f'\n\n{fileError}'
         msg = await c.send(
             content=plainText
             if 'audit log' in plainText or 'too large' in plainText or any((settings['plainText'], settings['flashText'], settings['tts']))
             else None,
             embed=embed if not settings['plainText'] else None,
-            files=[discord.File(f) for f in attachments[:10]],
+            files=[discord.File(f) for f in send_attachments[:10]],
             tts=settings['tts'],
         )
         if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
             await msg.edit(content=None)
         await self.archiveLogEmbed(g, msg.id, embed, 'Message Delete')
-        # Now delete any attachments associated with this message
-        try:
-            await aioshutil.rmtree(attachments_path)
-        except FileNotFoundError:
-            # This message had no attachments
-            pass
-        while not self.bot.is_closed():
-            try:
-                result = await self.bot.wait_for('reaction_add', check=reactionCheck, timeout=1800)
-            except asyncio.TimeoutError:
-                break
-            if result[0].emoji in (self.emojis['collapse'], '⏫', '⬆', '🔼', '❌', '✖', '❎') and len(msg.embeds) > 0:
-                await msg.edit(content=plainText, embed=None)
-                await msg.clear_reactions()
-                if not settings['plainText']:
-                    await msg.add_reaction(self.emojis['expand'])
-            elif (result[0].emoji in (self.emojis['expand'], '⏬', '⬇', '🔽') or settings['plainText']) and len(msg.embeds) < 1:
-                await msg.edit(content=None, embed=embed)
-                await msg.clear_reactions()
-                if settings['plainText']:
-                    await msg.add_reaction(self.emojis['collapse'])
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
@@ -1473,8 +1458,12 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} created a new {channel.type[0]} channel called {channel.name}'
-                    if channel.guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'created a channel')
+                    if not serverIsGimped(channel.guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'created a channel'),
+                            queue=self.taskman,
+                            name='OnChannelCreate - Update Last Active',
+                        )
                 except:
                     pass
             embed.set_footer(text=f'Channel ID: {channel.id}')
@@ -1566,7 +1555,7 @@ class Cyberlog(commands.Cog):
         if type(channel) is discord.TextChannel:
             if (await utility.get_server(channel.guild)).get('cyberlog', {}).get('image'):
                 self.pins[channel.id] = []
-            asyncio.create_task(database.VerifyChannel(channel, True), name=f'channel_create - VerifyChannel-{channel.id}')
+            await utility.run_task(database.VerifyChannel(channel, True), queue=self.taskman, name=f'channel_create - VerifyChannel-{channel.id}')
         if msg:
 
             def reactionCheck(r: discord.Reaction, u: discord.User):
@@ -1638,8 +1627,12 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} updated the {after.type[0]} channel called {before.name}'
-                    if after.guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'edited a channel')
+                    if not serverIsGimped(after.guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'edited a channel'),
+                            queue=self.taskman,
+                            name='OnChannelEdit - Update Last Active',
+                        )
                 except:
                     pass  # Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             embed.set_footer(text=f'Channel ID: {before.id}')
@@ -1875,12 +1868,16 @@ class Cyberlog(commands.Cog):
                 self.channelCacheHelper[after.guild.id].append(channelPosTimekey)
             except:
                 self.channelCacheHelper[after.guild.id] = [channelPosTimekey]
-            asyncio.create_task(
+            await utility.run_task(
                 self.delayedUpdateChannelIndexes(after.guild, channelPosTimekey),
+                queue=self.taskman,
                 name=f'channel_update - delayedUpdateChannelIndexes-{after.guild.id}-{channelPosTimekey}',
+                cancel_after=300,
             )
         if type(before) is discord.TextChannel and before.name != after.name:
-            asyncio.create_task(database.VerifyChannel(after), name=f'channel_update - VerifyChannel-{after.id}')
+            await utility.run_task(
+                database.VerifyChannel(after), queue=self.taskman, name=f'channel_update - VerifyChannel-{after.id}', cancel_after=60
+            )
         try:
             if msg:
                 final = copy.deepcopy(embed)
@@ -1997,8 +1994,12 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} deleted the {channel.type[0]} channel named {channel.name}'
-                    if channel.guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'deleted a channel')
+                    if not serverIsGimped(channel.guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'deleted a channel'),
+                            queue=self.taskman,
+                            name='OnChannelDelete - Update Last Active',
+                        )
                 except:
                     pass
             if settings['embedTimestamp'] > 1:
@@ -2039,8 +2040,11 @@ class Cyberlog(commands.Cog):
             await msg.edit(content=None if not settings['plainText'] else content, embed=embed)
             await self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
         if type(channel) is discord.TextChannel:
-            asyncio.create_task(
-                database.VerifyServer(channel.guild, self.bot), name=f'channel_delete - VerifyServer-{channel.guild.id}'
+            await utility.run_task(
+                database.VerifyServer(channel.guild, self.bot),
+                queue=self.taskman,
+                name=f'channel_delete - VerifyServer-{channel.guild.id}',
+                cancel_after=60,
             )  # Look into database methods to remove channels without needing to call the VerifyServer method
         if msg:
 
@@ -2068,8 +2072,13 @@ class Cyberlog(commands.Cog):
         """[DISCORD API METHOD] Called when member joins a server"""
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
-        self.members[member.guild.id].append(member)
-        asyncio.create_task(self.doorguardHandler(member), name=f'doorguardHandler-{member.guild.id}-{member.id}')
+        try:
+            self.members[member.guild.id].append(member)
+        except KeyError:
+            self.members[member.guild.id] = [member]
+        await utility.run_task(
+            self.doorguardHandler(member), queue=self.taskman, name=f'doorguardHandler-{member.guild.id}-{member.id}', cancel_after=300
+        )
         msg = None
         if await logEnabled(member.guild, 'doorguard'):
             newInv = []
@@ -2148,7 +2157,11 @@ class Cyberlog(commands.Cog):
                             if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                                 embed.set_author(name=log.user.display_name, icon_url=url)
                         content = f'{log.user} added the {member.display_name} bot to the server'
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'added a bot to a server')
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'added a bot to a server'),
+                            queue=self.taskman,
+                            name='OnMessageDelete - Update Last Active',
+                        )
                 except:
                     pass
             else:
@@ -2230,7 +2243,7 @@ class Cyberlog(commands.Cog):
             try:
                 if event['type'] == 'mute' and event['target'] == member.id and (discord.utils.utcnow() - event['timestamp']).total_seconds > 60:
                     hadToRemute = True
-                    asyncio.create_task(muteDelay, event, name=f'muteDelay-{member.guild.id}-{member.id}')
+                    await utility.run_task(muteDelay(event), queue=self.taskman, name=f'muteDelay-{member.guild.id}-{member.id}', cancel_after=30)
             except:
                 pass
         if msg:
@@ -2623,10 +2636,12 @@ class Cyberlog(commands.Cog):
     async def on_member_remove(self, member: discord.Member):
         """[DISCORD API METHOD] Called when member leaves a server"""
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
-        if member.guild.id not in gimpedServers:
-            asyncio.create_task(
+        if not serverIsGimped(member.guild):
+            await utility.run_task(
                 updateLastActive(member, discord.utils.utcnow(), 'left a server'),
+                queue=self.taskman,
                 name=f'member_leave - updateLastActive-{member.guild.id}-{member.id}',
+                cancel_after=15,
             )
         message = None
         if await logEnabled(member.guild, 'doorguard'):
@@ -2682,8 +2697,12 @@ class Cyberlog(commands.Cog):
                 tts=settings['tts'],
             )
             try:
-                sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or discord.utils.utcnow())
-                memberJoinPlacement = sortedMembers.index(member) + 1
+                try:
+                    sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or discord.utils.utcnow())
+                    memberJoinPlacement = sortedMembers.index(member) + 1
+                except KeyError:
+                    sortedMembers = member.guild.members
+                    memberJoinPlacement = 0
                 hoverPlainText = textwrap.dedent(f"""
                     Here since: {(member.joined_at + datetime.timedelta(hours=await utility.time_zone(member.guild))):%b %d, %Y • %I:%M:%S %p} {await utility.name_zone(member.guild)}
                     Left at: {adjusted:%b %d, %Y • %I:%M:%S %p}
@@ -2704,7 +2723,10 @@ class Cyberlog(commands.Cog):
             await message.edit(embed=embed if not settings['plainText'] else None)
             await self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             # if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
-        self.members[member.guild.id].remove(member)
+        try:
+            self.members[member.guild.id].remove(member)
+        except (KeyError, ValueError):
+            pass
         await asyncio.gather(*[database.VerifyMembers(member.guild, [member]), database.DeleteUser(member, self.bot)])
         if message:
 
@@ -2760,8 +2782,12 @@ class Cyberlog(commands.Cog):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
-                    if guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'unbanned a user')
+                    if not serverIsGimped(guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'unbanned a user'),
+                            queue=self.taskman,
+                            name='OnUserUnban - Update Last Active',
+                        )
                     log = await guild.audit_logs(limit=None).get(action=discord.AuditLogAction.ban, target__id=user.id)
                     content = f'{log.user} unbanned {user}'
                     bannedForDisplay = utility.elapsedDuration(discord.utils.utcnow() - log.created_at)
@@ -2870,8 +2896,12 @@ class Cyberlog(commands.Cog):
                                 embed.set_thumbnail(url=url)
                             if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                                 embed.set_author(name=log.user.display_name, icon_url=url)
-                        if after.guild.id not in gimpedServers:
-                            await updateLastActive(log.user, discord.utils.utcnow(), "updated someone's roles")
+                        if not serverIsGimped(after.guild):
+                            await utility.run_task(
+                                updateLastActive(log.user, discord.utils.utcnow(), "updated someone's roles"),
+                                queue=self.taskman,
+                                name='OnMemberUpdate - Update Last Active',
+                            )
                     except:
                         pass
                     added = sorted([r for r in after.roles if r not in before.roles], key=lambda r: r.position)
@@ -2941,8 +2971,12 @@ class Cyberlog(commands.Cog):
                                 embed.set_thumbnail(url=url)
                             if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                                 embed.set_author(name=log.user.display_name, icon_url=url)
-                        if after.guild.id not in gimpedServers:
-                            await updateLastActive(log.user, discord.utils.utcnow(), 'updated a nickname')
+                        if not serverIsGimped(after.guild):
+                            await utility.run_task(
+                                updateLastActive(log.user, discord.utils.utcnow(), 'updated a nickname'),
+                                queue=self.taskman,
+                                name='OnMemberUpdate - Update Last Active',
+                            )
                     except:
                         pass
                     oldNick = before.nick if before.nick is not None else '<No nickname>'
@@ -2973,7 +3007,12 @@ class Cyberlog(commands.Cog):
         if before.guild_permissions != after.guild_permissions:
             await self.CheckDisguardServerRoles(after, mode=0, reason='Member permissions changed')
         if before.guild_permissions != after.guild_permissions:
-            asyncio.create_task(database.VerifyUser(before, self.bot), name=f'member_update - VerifyUser-{before.guild.id}-{before.id}')
+            await utility.run_task(
+                database.VerifyUser(before, self.bot),
+                queue=self.taskman,
+                name=f'member_update - VerifyUser-{before.guild.id}-{before.id}',
+                cancel_after=60,
+            )
         if msg:
 
             def reactionCheck(r, u):
@@ -3010,17 +3049,25 @@ class Cyberlog(commands.Cog):
         targetServer = after.mutual_guilds[0]
         if after.guild.id == targetServer.id and before.status != after.status:
             # if after.guild.id == targetServer.id:
-            if after.status == discord.Status.offline and after.guild.id not in gimpedServers:
-                await updateLastOnline(
-                    after, discord.utils.utcnow()
-                )  # If we "catch" a member going offline, mark them as last being online right now
+            if after.status == discord.Status.offline and not serverIsGimped(after.guild):
+                await utility.run_task(
+                    updateLastOnline(after, discord.utils.utcnow()),
+                    queue=self.taskman,
+                    name=f'presence_update - updateLastOnline-{after.guild.id}-{after.id}',
+                    cancel_after=15,
+                )
             # if not any(a == discord.Status.offline for a in [before.status, after.status]) and any(a in [discord.Status.online, discord.Status.idle] for a in [before.status, after.status]) and any(a == discord.Status.dnd for a in [before.status, after.status]): await updateLastActive(after, discord.utils.utcnow(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
             if (
                 any(a == discord.Status.dnd for a in (before.status, after.status))
                 and not any(a == discord.Status.offline for a in (before.status, after.status))
-                and after.guild.id not in gimpedServers
+                and not serverIsGimped(after.guild)
             ):
-                await updateLastActive(after, discord.utils.utcnow(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND')
+                await utility.run_task(
+                    updateLastActive(after, discord.utils.utcnow(), 'left DND' if before.status == discord.Status.dnd else 'enabled DND'),
+                    queue=self.taskman,
+                    name=f'presence_update - updateLastActiveDND-{after.guild.id}-{after.id}',
+                    cancel_after=15,
+                )
         if (
             after.guild.id == targetServer.id
             and before.activity != after.activity
@@ -3048,11 +3095,13 @@ class Cyberlog(commands.Cog):
                     proposed = {'e': None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), 'n': a.name if a else None}
                     if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}:
                         # if not (await database.GetUser(after)).get('customStatusHistory'):
-                        asyncio.create_task(
+                        await utility.run_task(
                             database.AppendCustomStatusHistory(
                                 after, None if not a.emoji else a.emoji.url if a.emoji.is_custom_emoji() else str(a.emoji), a.name if a.name else None
                             ),
+                            queue=self.taskman,
                             name=f'presence_update - AppendCustomStatusHistory-{after.guild.id}-{after.id}',
+                            cancel_after=60,
                         )
                 except Exception as e:
                     print(f'CSH error: {e}')
@@ -3060,8 +3109,13 @@ class Cyberlog(commands.Cog):
                 # except TypeError: asyncio.create_task(database.AppendCustomStatusHistory(after, None if a.emoji is None else str(a.emoji.url) if a.emoji.is_custom_emoji() else str(a.emoji), a.name)) #If the customStatusHistory is empty, we create the first entry
             # newMemb = before.guild.get_member(before.id)
             # if before.status == newMemb.status and before.name != newMemb.name: await updateLastActive(after, discord.utils.utcnow(), 'changed custom status')
-            if after.guild.id not in gimpedServers:
-                await updateLastActive(after, discord.utils.utcnow(), 'changed custom status')
+            if not serverIsGimped(after.guild):
+                await utility.run_task(
+                    updateLastActive(after, discord.utils.utcnow(), 'changed custom status'),
+                    queue=self.taskman,
+                    name=f'presence_update - updateLastActive-{after.guild.id}-{after.id}',
+                    cancel_after=15,
+                )
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
@@ -3093,9 +3147,19 @@ class Cyberlog(commands.Cog):
                 name='Profile picture updated', value=f'Old: [Thumbnail to the right]({thumbnailURL})\nNew: [Image below]({url})', inline=False
             )
             content += '\n•Profile picture'
-            await updateLastActive(after, discord.utils.utcnow(), 'updated their profile picture')
+            await utility.run_task(
+                updateLastActive(after, discord.utils.utcnow(), 'updated their profile picture'),
+                queue=self.taskman,
+                name=f'user_update - updateLastActive-{after.id}',
+                cancel_after=60,
+            )
             if await self.privacyEnabledChecker(after, 'attributeHistory', 'avatarHistory'):
-                asyncio.create_task(database.AppendAvatarHistory(after, url), name=f'user_update - AppendAvatarHistory-{after.id}')
+                await utility.run_task(
+                    database.AppendAvatarHistory(after, url),
+                    queue=self.taskman,
+                    name=f'user_update - AppendAvatarHistory-{after.id}',
+                    cancel_after=60,
+                )
         if before.discriminator != after.discriminator:
             titles.append('Discriminator')
             legacyTitleEmoji.append('🔢')
@@ -3103,7 +3167,12 @@ class Cyberlog(commands.Cog):
             embed.add_field(name='Old discriminator', value=before.discriminator)
             embed.add_field(name='New discriminator', value=after.discriminator)
             content += '\n•Discriminator'
-            await updateLastActive(after, discord.utils.utcnow(), 'updated their discriminator')
+            await utility.run_task(
+                updateLastActive(after, discord.utils.utcnow(), 'updated their discriminator'),
+                queue=self.taskman,
+                name=f'user_update - updateLastActive-{after.id}',
+                cancel_after=60,
+            )
         if before.name != after.name:
             titles.append('Username')
             legacyTitleEmoji.append('📄')
@@ -3111,10 +3180,25 @@ class Cyberlog(commands.Cog):
             embed.add_field(name='Old username', value=before.name)
             embed.add_field(name='New username', value=after.name)
             content += '\n•Discriminator'
-            await updateLastActive(after, discord.utils.utcnow(), 'updated their username')
+            await utility.run_task(
+                updateLastActive(after, discord.utils.utcnow(), 'updated their username'),
+                queue=self.taskman,
+                name=f'user_update - updateLastActive-{after.id}',
+                cancel_after=60,
+            )
             if await self.privacyEnabledChecker(after, 'attributeHistory', 'usernameHistory'):
-                asyncio.create_task(database.AppendUsernameHistory(after), name=f'user_update - AppendUsernameHistory-{after.id}')
-            asyncio.create_task(database.VerifyUser(membObj, self.bot), name=f'user_update - VerifyUser-{after.id}')
+                await utility.run_task(
+                    database.AppendUsernameHistory(after),
+                    queue=self.taskman,
+                    name=f'user_update - AppendUsernameHistory-{after.id}',
+                    cancel_after=60,
+                )
+            await utility.run_task(
+                database.VerifyUser(membObj, self.bot),
+                queue=self.taskman,
+                name=f'user_update - VerifyUser-{after.id}',
+                cancel_after=60,
+            )
         if before.display_name != after.display_name:
             titles.append('Display name')
             legacyTitleEmoji.append('📄')
@@ -3122,9 +3206,19 @@ class Cyberlog(commands.Cog):
             embed.add_field(name='Old display name', value=before.display_name)
             embed.add_field(name='New display name', value=after.display_name)
             content += '\n•Display name'
-            await updateLastActive(after, discord.utils.utcnow(), 'updated their display name')
+            await utility.run_task(
+                updateLastActive(after, discord.utils.utcnow(), 'updated their display name'),
+                queue=self.taskman,
+                name=f'user_update - updateLastActive-{after.id}',
+                cancel_after=60,
+            )
             if await self.privacyEnabledChecker(after, 'attributeHistory', 'displayNameHistory'):
-                asyncio.create_task(database.AppendDisplaynameHistory(after), name=f'user_update - AppendDisplaynameHistory-{after.id}')
+                await utility.run_task(
+                    database.AppendDisplaynameHistory(after),
+                    queue=self.taskman,
+                    name=f'user_update - AppendDisplaynameHistory-{after.id}',
+                    cancel_after=60,
+                )
         embed.set_footer(text=f'User ID: {after.id}')
         for server in servers:
             try:
@@ -3168,9 +3262,11 @@ class Cyberlog(commands.Cog):
             except:
                 pass
         for s in servers:
-            asyncio.create_task(
+            await utility.run_task(
                 database.VerifyMember(s.get_member(after.id), warnings=(await utility.get_server(s))['antispam'].get('warn', 3)),
+                queue=self.taskman,
                 name=f'user_update - VerifyMember-{s.id}-{after.id}',
+                cancel_after=300,
             )
 
     @commands.Cog.listener()
@@ -3186,12 +3282,20 @@ class Cyberlog(commands.Cog):
         )
         embed.set_footer(text=guild.id)
         await self.globalLogChannel.send(embed=embed)
-        asyncio.create_task(
-            database.VerifyServer(guild, self.bot, new=True, includeMembers=guild.members), name=f'guild_join - VerifyServer-{guild.id}'
+        await utility.run_task(
+            database.VerifyServer(guild, self.bot, new=True, includeMembers=guild.members),
+            queue=self.taskman,
+            name=f'guild_join - VerifyServer-{guild.id}',
+            cancel_after=300,
         )
-        asyncio.create_task(database.VerifyUsers(self.bot, guild.members), name=f'guild_join - VerifyUsers-{guild.id}')
-        # TODO: Improve teh server join experience
-        content = f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.app>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, inviting the bot to your own server, and my GitHub repository\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
+        await utility.run_task(
+            database.VerifyUsers(self.bot, guild.members),
+            queue=self.taskman,
+            name=f'guild_join - VerifyUsers-{guild.id}',
+            cancel_after=300,
+        )
+        # TODO: Improve the server join experience
+        content = f"Thank you for inviting me to {guild.name}!\n\n--Quick Start Guide--\n🔗Disguard Website: <https://disguard.netlify.app>\n{qlf}{qlf}Contains links to help page, server configuration, Disguard's official server, and inviting the bot to your own server\n🔗Configure your server's settings: <https://disguard.herokuapp.com/manage/{guild.id}>"
         content += f'\nℹDisguard uses slash commands for interacting with commands. A help guide is available with `/help` or on the website.\n\n❔Need help with anything, or just have a question? My team is more than happy to resolve your questions or concerns - you can quickly get in touch with my developer in the following ways:\n{qlf}Open a support ticket using the `/ticket` command\n{qlf}Join my support server: <https://discord.gg/xSGujjz>'
         try:
             target = await database.CalculateModeratorChannel(guild, self.bot, False)
@@ -3222,7 +3326,7 @@ class Cyberlog(commands.Cog):
             settings = await getCyberAttributes(after, 'server')
             color = blue[await utility.color_theme(after)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(
-                title=f'{(self.emojis["serverUpdate"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{"Server updated" if settings["context"][0] < 2 else ""}',
+                title=f'{(self.emojis["serverEdit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}{"Server updated" if settings["context"][0] < 2 else ""}',
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
@@ -3235,7 +3339,7 @@ class Cyberlog(commands.Cog):
                     embed.set_author(name=after.display_name, icon_url=url)
             if await readPerms(before, 'server'):
                 try:
-                    log = await after.audit_logs().get(action=discord.AuditLogAction.guild_update)
+                    log: discord.AuditLogEntry = await after.audit_logs().get(action=discord.AuditLogAction.guild_update)
                     if settings['botLogging'] == 0 and log.user.bot:
                         return
                     elif settings['botLogging'] == 1 and log.user.bot:
@@ -3250,8 +3354,13 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} updated server settings'
-                    if after.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'updated a server')
+                    if not serverIsGimped(after):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'updated a server'),
+                            queue=self.taskman,
+                            name=f'audit_log - updateLastActive-{log.user.id}',
+                            cancel_after=60,
+                        )
                 except Exception as e:
                     content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             if before.afk_channel != after.afk_channel:
@@ -3311,7 +3420,9 @@ class Cyberlog(commands.Cog):
                 embed.set_thumbnail(url=thumbURL)
                 embed.set_image(url=imageURL)
                 embed.add_field(name='Server icon updated', value=f'Old: [Thumbnail to the right]({thumbURL})\nNew: [Image below]({imageURL})')
-            asyncio.create_task(database.VerifyServer(after, self.bot), name=f'guild_update - VerifyServer-{after.id}')
+            await utility.run_task(
+                database.VerifyServer(after, self.bot), queue=self.taskman, name=f'guild_update - VerifyServer-{after.id}', cancel_after=300
+            )
             if len(embed.fields) > 0:
                 reactions = ['ℹ']
                 if settings['embedTimestamp'] > 1:
@@ -3387,7 +3498,9 @@ class Cyberlog(commands.Cog):
         await self.bot.change_presence(
             status=discord.Status.online, activity=discord.Activity(name=f'{len(self.bot.guilds)} servers', type=discord.ActivityType.watching)
         )
-        asyncio.create_task(database.VerifyServer(guild, self.bot), name=f'guild_remove - VerifyServer-{guild.id}')
+        await utility.run_task(
+            database.VerifyServer(guild, self.bot), queue=self.taskman, name=f'guild_remove - VerifyServer-{guild.id}', cancel_after=300
+        )
         await self.CheckDisguardServerRoles(guild.members, mode=2, reason='Bot left a server')
         path = f'Attachments/{guild.id}'
         shutil.rmtree(path)
@@ -3432,8 +3545,13 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} created the role "{role.name}"'
-                    if role.guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'created a role')
+                    if not serverIsGimped(role.guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'created a role'),
+                            queue=self.taskman,
+                            name=f'guild_role_create - updateLastActive-{role.guild.id}',
+                            cancel_after=60,
+                        )
                 except Exception as e:
                     content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             if settings['embedTimestamp'] > 1:
@@ -3448,7 +3566,12 @@ class Cyberlog(commands.Cog):
                 await msg.edit(content=None)
             await self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
         self.roles[role.id] = role.members
-        asyncio.create_task(database.VerifyServer(role.guild, self.bot), name=f'guild_role_create - VerifyServer-{role.guild.id}')
+        await utility.run_task(
+            database.VerifyServer(role.guild, self.bot),
+            queue=self.taskman,
+            name=f'guild_role_create - VerifyServer-{role.guild.id}',
+            cancel_after=300,
+        )
         if msg:
 
             def reactionCheck(r, u):
@@ -3508,8 +3631,13 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} deleted the role "{role.name}"'
-                    if role.guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'deleted a role')
+                    if not serverIsGimped(role.guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'deleted a role'),
+                            queue=self.taskman,
+                            name=f'guild_role_delete - updateLastActive-{role.guild.id}',
+                            cancel_after=60,
+                        )
                 except:
                     pass  # Exception as e: content+=f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             content += utility.embedToPlaintext(embed)
@@ -3552,12 +3680,17 @@ class Cyberlog(commands.Cog):
         await self.CheckDisguardServerRoles(
             roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions'
         )
-        asyncio.create_task(
+        await utility.run_task(
             database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)),
             name=f'guild_role_delete - VerifyServer-{role.guild.id}',
+            queue=self.taskman,
+            cancel_after=300,
         )
-        asyncio.create_task(
-            database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)), name=f'guild_role_delete - VerifyUsers-{role.guild.id}'
+        await utility.run_task(
+            database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)),
+            queue=self.taskman,
+            name=f'guild_role_delete - VerifyUsers-{role.guild.id}',
+            cancel_after=300,
         )
         self.roles.pop(role.id, None)
         if message:
@@ -3644,8 +3777,13 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} updated the role {before.name}'
-                    if after.guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'updated a role')
+                    if not serverIsGimped(after.guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'updated a role'),
+                            queue=self.taskman,
+                            name=f'guild_role_update - updateLastActive-{after.guild.id}',
+                            cancel_after=60,
+                        )
                 except:
                     pass
             embed.set_footer(text=f'Role ID: {before.id}')
@@ -3694,9 +3832,11 @@ class Cyberlog(commands.Cog):
                         self.memberPermissions[after.guild.id][m.id] = m.guild_permissions
         await self.CheckDisguardServerRoles(after.guild.members, mode=0, reason="Server role was updated; member's permissions changed")
         if before.name != after.name:
-            asyncio.create_task(
+            await utility.run_task(
                 database.VerifyServer(after.guild, self.bot, includeMembers=after.members if before.permissions != after.permissions else []),
                 name=f'guild_role_update - VerifyServer-{after.guild.id}',
+                queue=self.taskman,
+                cancel_after=300,
             )
         for member in after.members:
             await database.VerifyUser(member, self.bot)
@@ -3834,8 +3974,13 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} updated the server emoji list'
-                    if guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'updated server emojis somewhere')
+                    if not serverIsGimped(guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'updated server emojis somewhere'),
+                            queue=self.taskman,
+                            name=f'guild_emoji_update - updateLastActive-{guild.id}',
+                            cancel_after=60,
+                        )
                 except Exception as e:
                     content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             if footerIDList:
@@ -3912,8 +4057,13 @@ class Cyberlog(commands.Cog):
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
                     content = f'{log.user} updated the application command permissions'
-                    if guild.id not in gimpedServers:
-                        await updateLastActive(log.user, discord.utils.utcnow(), 'updated application command permissions somewhere')
+                    if not serverIsGimped(guild):
+                        await utility.run_task(
+                            updateLastActive(log.user, discord.utils.utcnow(), 'updated application command permissions somewhere'),
+                            queue=self.taskman,
+                            name=f'guild_command_update - updateLastActive-{guild.id}',
+                            cancel_after=60,
+                        )
                 except Exception as e:
                     content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             content += utility.embedToPlaintext(embed)
@@ -3980,13 +4130,19 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_webhooks_update(self, channel: discord.TextChannel):
         logs = [log async for log in channel.guild.audit_logs(limit=3)]
-        await updateLastActive(
-            await discord.utils.find(
-                lambda x: x.action
-                in (discord.AuditLogAction.webhook_create, discord.AuditLogAction.webhook_update, discord.AuditLogAction.webhook_delete),
-                logs,
-            ).user,
-            'updated webhooks',
+        await utility.run_task(
+            updateLastActive(
+                await discord.utils.find(
+                    lambda x: x.action
+                    in (discord.AuditLogAction.webhook_create, discord.AuditLogAction.webhook_update, discord.AuditLogAction.webhook_delete),
+                    logs,
+                ).user,
+                discord.utils.utcnow(),
+                'updated webhooks',
+            ),
+            queue=self.taskman,
+            name=f'audit_log - updateLastActive-{channel.guild.id}-{channel.id}',
+            cancel_after=60,
         )
 
     @commands.Cog.listener()
@@ -4168,8 +4324,13 @@ class Cyberlog(commands.Cog):
                                     embed.set_thumbnail(url=url)
                                 if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                                     embed.set_author(name=log.user.display_name, icon_url=url)
-                            if member.guild.id not in gimpedServers:
-                                await updateLastActive(log.user, discord.utils.utcnow(), 'moderated a user in voice chat')
+                            if not serverIsGimped(member.guild):
+                                await utility.run_task(
+                                    updateLastActive(log.user, discord.utils.utcnow(), 'moderated a user in voice chat'),
+                                    queue=self.taskman,
+                                    name=f'guild_voice_moderation - updateLastActive-{member.guild.id}',
+                                    cancel_after=60,
+                                )
                     except:
                         pass
             # The 'onlyJoinLeave' and 'onlyModActions' moved inwards to allow the event history log to always be added to - this will be the new server default setting.
@@ -4229,10 +4390,13 @@ class Cyberlog(commands.Cog):
                                 name=f"""{(self.emojis['modDeafened'] if settings['library'] > 0 else '🔨🔇') if settings['context'][1] > 0 else ''}Deafened by moderator""",
                                 value=f"""{'👮‍♂️' if settings['context'][1] > 0 else ''}{'Moderator' if settings['context'][1] < 2 else ''}: {log.user.mention} ({log.user.display_name})""",
                             )
-            if member.guild.id not in gimpedServers:
-                await updateLastActive(
-                    member, discord.utils.utcnow(), 'voice channel activity'
-                )  # Not 100% accurate, especially for moderator actions
+            if not serverIsGimped(member.guild):
+                await utility.run_task(
+                    updateLastActive(member, discord.utils.utcnow(), 'voice channel activity'),
+                    queue=self.taskman,
+                    name=f'guild_voice_activity - updateLastActive-{member.guild.id}',
+                    cancel_after=60,
+                )
             # Member changed self-deafen status
             if before.self_deaf != after.self_deaf:
                 if before.self_deaf:
@@ -4401,7 +4565,12 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_typing(self, c: discord.abc.Messageable, u: discord.User, w: datetime.datetime):
         if c.guild and not serverIsGimped(c.guild):
-            await updateLastActive(u, discord.utils.utcnow(), 'started typing somewhere')  # 9/29/21: Changed behavior to not work in DMs
+            await utility.run_task(
+                updateLastActive(u, discord.utils.utcnow(), 'started typing somewhere'),
+                queue=self.taskman,
+                name=f'typing - updateLastActive-{u.id}',
+                cancel_after=60,
+            )
 
     # TODO: Implement views
     @commands.Cog.listener()
@@ -4467,6 +4636,8 @@ class Cyberlog(commands.Cog):
     # Compare with uploadFiles
     async def imageToURL(self, asset: discord.Asset):
         """Given an image asset, retrieve a new Discord CDN URL from it for permanent use"""
+        if not asset:
+            return ''
         savePath = f'{TEMP_DIR}/{discord.utils.utcnow():%m%d%Y%H%M%S%f}.{"gif" if asset.is_animated() else "png"}'
         await asset.replace(size=1024, static_format='png').save(savePath)
         f = discord.File(savePath)
@@ -4496,7 +4667,7 @@ class Cyberlog(commands.Cog):
                     logArchives = json.loads(content)
                 except Exception:
                     logArchives = {}
-                    logger.info(f'Log archive file for {server.id} is empty or invalid', exec_info=True)
+                    logger.info(f'Log archive file for {server.id} is empty or invalid', exc_info=True)
         except FileNotFoundError:
             logArchives = {}
         e = embed.to_dict()
@@ -4846,7 +5017,7 @@ async def updateLastActive(users: typing.Union[discord.User, typing.List[discord
                 pass
             if u not in toUpdate:
                 toUpdate.append(u)
-    asyncio.create_task(database.SetLastActive(toUpdate, timestamp, reason), name='SetLastActive')
+    await database.SetLastActive(toUpdate, timestamp, reason)
 
 
 async def lastOnline(u: discord.User):
@@ -4870,7 +5041,7 @@ async def updateLastOnline(users: typing.Union[discord.User, typing.List[discord
 
 
 def serverIsGimped(s: discord.Guild):
-    return False
+    return utility.large_server(s)
 
 
 def beginPurge(s: discord.Guild):

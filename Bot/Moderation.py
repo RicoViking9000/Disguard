@@ -85,6 +85,7 @@ class Moderation(commands.Cog):
         self.emojis = self.bot.get_cog('Cyberlog').emojis
         self.roleCache = {}
         self.permissionsCache = {}
+        self.taskman = set()
 
         # context menus
         self.bot.tree.add_command(app_commands.ContextMenu(name='Toggle Channel Lockout', callback=self.context_lock))
@@ -1697,7 +1698,7 @@ class Moderation(commands.Cog):
                         f'{self.emojis["alert"]} | Unable to mute member{"s" if len(members) != 1 else ""} - error during AutoMute role creation: {type(e).__name__}: {e}'
                     )
                     return results
-                asyncio.create_task(database.SetMuteRole(g, muteRole), name='mute SetMuteRole')
+                await utility.run_task(database.SetMuteRole(g, muteRole), queue=self.taskman, name='mute SetMuteRole', cancel_after=30)
         # Move the mute role's position to the position right below Disguard's top role, if it's not already there
         if muteRole.position < g.me.top_role.position - 1:
             try:
@@ -1710,14 +1711,24 @@ class Moderation(commands.Cog):
         for c in g.text_channels:
             if c.overwrites_for(muteRole).send_messages is not False:
                 try:
-                    asyncio.create_task(c.set_permissions(muteRole, send_messages=False), name='mute set_permissions for muteRole')
+                    await utility.run_task(
+                        c.set_permissions(muteRole, send_messages=False),
+                        queue=self.taskman,
+                        name='mute set_permissions for muteRole',
+                        cancel_after=30,
+                    )
                 except Exception as e:
                     results['Notes'].append(f'{self.emojis["alert"]} | #{c.name} (🚩{muteRole.name}): `{type(e).__name__}: {e}`')
             for m in members:
                 results[m] = {'Channel Permission Overwrites': [], 'Add Mute Role': [], 'Cache/Data Management': []}
                 if harsh and c.overwrites_for(m).send_messages is not False:
                     try:
-                        asyncio.create_task(c.set_permissions(m, send_messages=False), name='mute set_permissions for member')
+                        await utility.run_task(
+                            c.set_permissions(m, send_messages=False),
+                            queue=self.taskman,
+                            name='mute set_permissions for member',
+                            cancel_after=30,
+                        )
                         permissionsTaken[str(m.id)][str(c.id)] = (
                             (c.overwrites.get(m).pair()[0].value, c.overwrites.get(m).pair()[1].value) if c.overwrites.get(m) else (0, 0)
                         )
@@ -1725,12 +1736,17 @@ class Moderation(commands.Cog):
                         results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: `{type(e).__name__}: {e}`')
                 elif not harsh and c.overwrites_for(m):
                     try:
-                        asyncio.create_task(c.set_permissions(m, overwrite=None), name='mute set_permissions for member')
+                        await utility.run_task(
+                            c.set_permissions(m, overwrite=None),
+                            queue=self.taskman,
+                            name='mute set_permissions for member',
+                            cancel_after=30,
+                        )
                         permissionsTaken[str(m.id)][str(c.id)] = (
                             (c.overwrites.get(m).pair()[0].value, c.overwrites.get(m).pair()[1].value) if c.overwrites.get(m) else (0, 0)
                         )
                     except Exception as e:
-                        results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: {type(e).__name__}: {e}')
+                        results[m]['Channel Permission Overwrites'].append(f'{self.emojis["alert"]} | #{c.name}: `{type(e).__name__}: {e}`')
                 if len(results[m]['Channel Permission Overwrites']) == 0:
                     results[m]['Channel Permission Overwrites'].append(f'{self.emojis["greenCheck"]}')
         # Since we're removing most of the member's roles to enforce this mute, we need to keep track of the changes
@@ -1760,16 +1776,24 @@ class Moderation(commands.Cog):
                         'timestamp': discord.utils.utcnow(),
                         'expires': discord.utils.utcnow() + datetime.timedelta(seconds=duration),
                     }
-                    asyncio.create_task(database.AppendTimedEvent(g, muteTimedEvents[m.id]), name='mute AppendTimedEvent')
+                    await utility.run_task(
+                        database.AppendTimedEvent(g, muteTimedEvents[m.id]), queue=self.taskman, name='mute AppendTimedEvent', cancel_after=30
+                    )
                 results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
             except Exception as e:
                 results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e).__name__}: {e}`')
-        asyncio.create_task(database.SetMuteCache(m.guild, members, memberRolesTaken), name='mute SetMuteCache')
-        asyncio.create_task(database.SetPermissionsCache(m.guild, members, permissionsTaken), name='mute SetPermissionsCache')
+        await utility.run_task(
+            database.SetMuteCache(m.guild, members, memberRolesTaken), queue=self.taskman, name='mute SetMuteCache', cancel_after=30
+        )
+        await utility.run_task(
+            database.SetPermissionsCache(m.guild, members, permissionsTaken), queue=self.taskman, name='mute SetPermissionsCache', cancel_after=30
+        )
         if duration and waitToUnmute:
-            asyncio.create_task(
+            await utility.run_task(
                 self.waitToUnmute(members, author, muteTimedEvents, discord.utils.utcnow() + datetime.timedelta(seconds=duration)),
+                queue=self.taskman,
                 name='mute waitToUnmute',
+                cancel_after=duration + 300,
             )
         return results
 
@@ -1801,7 +1825,9 @@ class Moderation(commands.Cog):
                 except Exception:
                     traceback.print_exc()
                 if events and events.get(m.id):
-                    asyncio.create_task(database.RemoveTimedEvent(m.guild, events[m.id]), name='unmute RemoveTimedEvent')
+                    await utility.run_task(
+                        database.RemoveTimedEvent(m.guild, events[m.id]), queue=self.taskman, name='unmute RemoveTimedEvent', cancel_after=30
+                    )
                 if self.roleCache.get(f'{m.guild.id}_{m.id}'):
                     self.roleCache.pop(f'{m.guild.id}_{m.id}')
                 if self.permissionsCache.get(f'{m.guild.id}_{m.id}'):
@@ -1809,16 +1835,20 @@ class Moderation(commands.Cog):
                 results[m]['Cache/Data Management'].append(f'{self.emojis["greenCheck"]}')
             except Exception as e:
                 results[m]['Cache/Data Management'].append(f'{self.emojis["alert"]} | `{type(e)}: {e}`')
-        asyncio.create_task(database.SetMuteCache(m.guild, members, []), name='unmute SetMuteCache')
-        asyncio.create_task(database.SetPermissionsCache(m.guild, members, []), name='unmute SetPermissionsCache')
+        await utility.run_task(database.SetMuteCache(m.guild, members, []), queue=self.taskman, name='unmute SetMuteCache', cancel_after=30)
+        await utility.run_task(
+            database.SetPermissionsCache(m.guild, members, []), queue=self.taskman, name='unmute SetPermissionsCache', cancel_after=30
+        )
         for c in m.guild.text_channels:
             for m in members:
                 try:
                     if m.id in [o.id for o in c.overwrites.keys()] and str(c.id) not in removedOverwrites[m.id].keys():
-                        asyncio.create_task(c.set_permissions(m, overwrite=None))
+                        await utility.run_task(
+                            c.set_permissions(m, overwrite=None), queue=self.taskman, name='unmute set_permissions', cancel_after=30
+                        )
                     elif str(c.id) in removedOverwrites[m.id].keys():
                         currentOverwrite = removedOverwrites[m.id].get(str(c.id), (0, 0))
-                        asyncio.create_task(
+                        await utility.run_task(
                             c.set_permissions(
                                 m,
                                 overwrite=discord.PermissionOverwrite.from_pair(

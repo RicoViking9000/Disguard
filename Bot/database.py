@@ -3,12 +3,16 @@
 import asyncio
 import copy
 import datetime
+import logging
 import typing
 
 import discord
 import motor.motor_asyncio
 import pymongo
 from bson.codec_options import CodecOptions
+
+logger = logging.getLogger('discord')
+
 from discord.ext import commands
 from pymongo import errors
 
@@ -169,6 +173,7 @@ async def Verification(b: commands.Bot):
     # await VerifyServers(b, b.guilds, full=True)
     # await VerifyUsers(b, list(b.get_all_members()), full=True)
     print(f'Finished verification for {len(b.guilds)} servers and {len(list(b.get_all_members()))} users')
+    logger.info(f'Finished verification for {len(b.guilds)} servers and {len(list(b.get_all_members()))} users')
 
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
@@ -222,6 +227,7 @@ async def VerifyServer(
     includeMembers: update the members whose IDs are specified, if any
     """
     print(f'Verifying server: {s.name} - {s.id}')
+    logger.info(f'Verifying server: {s.name} - {s.id}')
     # mode = 'update'
     started = datetime.datetime.now()
     global bot
@@ -447,6 +453,9 @@ async def VerifyServer(
     print(
         f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Member updates: {(started3 - started2).seconds}s\n Database write: {(datetime.datetime.now() - started3).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s'
     )
+    logger.info(
+        f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Member updates: {(started3 - started2).seconds}s\n Database write: {(datetime.datetime.now() - started3).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s'
+    )
     if mode == 'return':
         return updateOperations
 
@@ -476,27 +485,33 @@ async def VerifyMembers(s: discord.Guild, members: typing.Generator[discord.Memb
 async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=False):
     """Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date"""
     print(f'Verifying {len(usrs)} users...')
+    logger.info(f'Verifying {len(usrs)} users...')
+    start_time = datetime.datetime.now()
 
-    async def yield_users():
-        async for user in users.find({'user_id': {'$in': user_id_list}}):
-            yield user
-
-    user_id_list = [u.id for u in usrs]
-    database_users = [user async for user in yield_users()]
+    user_obj_dict = {u.id: u for u in usrs}
+    user_id_list = list(user_obj_dict.keys())
+    # Query all users in one go
+    database_users = await users.find({'user_id': {'$in': user_id_list}}).to_list(None)
     database_user_dict = {user['user_id']: user for user in database_users}
-    updated_users = []
+    updated_users = set()
 
-    # add new users
+    # Prepare bulk operations
+    update_ops = []
+
+    # Add new users
     for user_id in user_id_list:
-        if user_id not in database_user_dict.keys():
-            user = b.get_user(user_id)
-            await VerifyUser(user, b, mode='update', new=True)
-            updated_users.append(user_id)
+        if user_id not in database_user_dict:
+            user = user_obj_dict.get(user_id)
+            # Collect update operation instead of calling VerifyUser
+            op = await VerifyUser(user, b, mode='return', new=True)
+            if op:
+                update_ops += op
+            updated_users.add(user_id)
 
-    # update existing users
-    async for user in yield_users():
+    # Update existing users
+    for user in database_users:
         if user['user_id'] not in updated_users:
-            u = b.get_user(user['user_id'])
+            u = user_obj_dict.get(user['user_id'])
             try:
                 await lightningdb.post_user(user)
             except errors.DuplicateKeyError:
@@ -504,11 +519,19 @@ async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=Fal
                     await lightningdb.patch_user(u.id, user)
             except (AttributeError, KeyError, TypeError):
                 pass
-            await asyncio.wait_for(VerifyUser(u, b, user, full, True, mode='update'), timeout=None)
-            updated_users.append(user['user_id'])
+            op = await VerifyUser(u, b, user, full, True, mode='return')
+            if op:
+                update_ops += op
+            updated_users.add(user['user_id'])
 
-    # delete users not in the bot's mutual servers
+    # Bulk write all updates at once
+    if update_ops:
+        await users.bulk_write(update_ops, ordered=False)
+
+    # Delete users not in the bot's mutual servers
     await users.delete_many({'user_id': {'$nin': user_id_list}})
+    print(f'Verified {len(updated_users)} users')
+    logger.info(f'Verified {len(updated_users)} users in {(datetime.datetime.now() - start_time)} delta')
 
 
 async def VerifyUser(u: discord.User, b: commands.Bot, current={}, full=False, new=False, *, mode='update', parallel=True):

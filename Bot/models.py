@@ -19,7 +19,7 @@ class VoiceAttributes(pydantic.BaseModel):
     """Contains attachment data for voice messages"""
 
     attachment_id: int
-    duration: int | None
+    duration: float | None
     waveform: bytes | None
 
 

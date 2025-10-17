@@ -2,28 +2,28 @@
 
 import asyncio
 import logging
-import os
 import traceback
 
-import aiofiles.os as aios
-import aioshutil
+import b2sdk.v2
 import discord
 import emoji as pymoji
 from discord.ext import commands, tasks
 from pymongo.errors import DuplicateKeyError
 
+import Backblaze
 import lightningdb
 import models
 import utility
 
 logger = logging.getLogger('discord')
 storage_dir = 'storage'  # /server_id/attachments/...
-bytes_per_gigabyte = 1_073_741_824  # 1024 * 1024 * 1024
+bytes_per_gigabyte = 1_000_000_000  # 1000 * 1000 * 1000
 
 
 class Indexing(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.taskman = set()
         self.check_and_free_server_attachment_storage.start()
         self.verify_indices.start()
 
@@ -62,14 +62,20 @@ class Indexing(commands.Cog):
         """
         Extracts sticker data from a message
         """
-        fetched_stickers = [await sticker.fetch() for sticker in message.stickers]
+        fetched_stickers = []
+        for sticker in message.stickers:
+            try:
+                fetched = await sticker.fetch()
+                fetched_stickers.append(fetched)
+            except (discord.NotFound, discord.HTTPException):
+                ...
         return [
             models.Sticker(
                 sticker_id=sticker.id,
                 message_id=message.id,
                 format=str(sticker.format),
                 url=sticker.url,
-                type='standard' if fetched_stickers[index].__name__ == 'StandardSticker' else 'guild',
+                type='guild' if isinstance(fetched_stickers[index], models.GuildSticker) else 'standard',
                 data=models.StandardSticker(
                     name=sticker.name,
                     description=fetched_stickers[index].description,
@@ -159,18 +165,24 @@ class Indexing(commands.Cog):
             fields=[models.EmbedField(name=field.name, value=field.value, inline=field.inline) for field in embed.fields],
         )
 
-    def convert_attachment(self, attachment: discord.Attachment, message_id: int = 0):
+    async def convert_attachment(self, attachment: discord.Attachment, message: discord.Message):
         """
         Converts a discord.Attachment object to a MessageAttachment object
         """
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
+        bucket_path = ''
+        if await self.attachment_saving_enabled(message):
+            bucket_path = f'{message.guild.id}/attachments/{message.channel.id}/{message.id}/{attachment.filename}'
+            await utility.run_task(backblaze.upload_bytes(await attachment.read(), bucket_path), queue=self.taskman, name=f'upload-{attachment.id}')
+
         return models.MessageAttachment(
             id=attachment.id,
-            message_id=message_id,
+            message_id=message.id,
             hash=hash(attachment),
             size=attachment.size,
             filename=attachment.filename,
-            filepath=attachment.filename,
-            url=attachment.url,
+            filepath=bucket_path,
+            url=backblaze.direct_file_url(bucket_path),
             proxy_url=attachment.proxy_url,
             media_attributes=models.MediaAttributes(
                 attachment_id=attachment.id, height=attachment.height, width=attachment.width, description=attachment.description
@@ -372,7 +384,7 @@ class Indexing(commands.Cog):
         return models.MessageEdition(
             content=message.content,
             timestamp=int(message.created_at.timestamp() if new_index else discord.utils.utcnow().timestamp()),
-            attachments=[self.convert_attachment(attachment) for attachment in message.attachments],
+            attachments=[await self.convert_attachment(attachment, message) for attachment in message.attachments],
             embeds=[self.convert_embed(embed) for embed in message.embeds],
             reactions=[],  # [await self.convert_reaction(reaction) for reaction in message.reactions],
             pinned=message.pinned,
@@ -421,62 +433,51 @@ class Indexing(commands.Cog):
         Checks how much attachment storage is used by this server
         """
         # check if the server has storage enabled
-        dir = f'{storage_dir}/{server.id}/attachments'
-        storage_used = utility.get_dir_size(dir)
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
+        directory = f'{server.id}/attachments'
+        request = list(await backblaze.ls(directory, recursive=True))
+        storage_used = sum(file_data.size for file_data, file_name in request)
         storage_limit = (await utility.get_server(server)).get('cyberlog', {}).get('storageCap', 0)
         over_capacity = storage_used > (storage_limit * bytes_per_gigabyte)
         delta = storage_used - (storage_limit * bytes_per_gigabyte)
 
-        return storage_limit, storage_used, over_capacity, delta
+        return storage_limit, storage_used, over_capacity, delta, request
 
     async def delete_oldest_attachments(self, server: discord.Guild):
         """
         Deletes the oldest attachments in a server, supporting unlimited folder nesting depth.
         """
-        storage_limit, storage_used, over_capacity, space_to_free = await self.get_attachment_storage(server)
+        storage_limit, storage_used, over_capacity, space_to_free, files = await self.get_attachment_storage(server)
         # If this server hasn't reached capacity, no need to delete old attachments
         if not over_capacity:
             return
         if storage_used >= storage_limit * bytes_per_gigabyte:
-            dir = f'{storage_dir}/{server.id}/attachments'
             space_freed = 0
 
-            def get_all_files_sorted_by_oldest(directory):
+            def get_all_files_sorted_by_oldest(files: list[tuple[b2sdk.v2.FileVersion, str]]):
                 """
                 Recursively collects all files in the directory and its subdirectories,
                 sorted by their last modified time (oldest first).
                 """
-                all_files = []
-                for root, _, files in os.walk(directory):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        all_files.append(file_path)
-                return sorted(all_files, key=lambda x: os.path.getmtime(x))
+                return sorted(files, key=lambda x: x[0].upload_timestamp)
 
             # Get all files sorted by oldest first
-            files = get_all_files_sorted_by_oldest(dir)
+            sorted_files = get_all_files_sorted_by_oldest(files)
+
+            backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
 
             # Delete files until enough space is freed
-            for file_path in files:
+            for file in sorted_files:
                 if space_freed >= space_to_free:
                     break
                 try:
-                    file_size = await aios.path.getsize(file_path)
-                    await aios.remove(file_path)
-                    space_freed += file_size
+                    await backblaze.delete_file(file[0].id_, file[0].file_name)
+                    space_freed += file[0].size
                 except FileNotFoundError:
-                    logger.error(f'delete_oldest_attachments - File not found: {file_path}', exc_info=True)
+                    logger.error(f'delete_oldest_attachments - File not found: {file[0].file_name}', exc_info=True)
                 except Exception:
-                    logger.error(f'delete_oldest_attachments - Error deleting file {file_path}', exc_info=True)
+                    logger.error(f'delete_oldest_attachments - Error deleting file {file[0].file_name}', exc_info=True)
 
-            # Remove empty folders
-            for root, dirs, _ in os.walk(dir, topdown=False):
-                for folder in dirs:
-                    folder_path = os.path.join(root, folder)
-                    try:
-                        await aios.rmdir(folder_path)
-                    except OSError:
-                        logger.error(f'delete_oldest_attachments - Directory not empty: {folder_path}')
             return space_freed
 
     async def delete_all_attachments(self, *, server: discord.Guild = None, channel: discord.TextChannel = None):
@@ -484,15 +485,18 @@ class Indexing(commands.Cog):
         Deletes all attachments in a server or channel.
         """
         full_nuke = False
+        backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
         if not server and not channel:
             full_nuke = True
         elif server and not channel:
-            dir = f'{storage_dir}/{server.id}/attachments'
+            dir = f'{server.id}/attachments'
         elif channel:
-            dir = f'{storage_dir}/{channel.guild.id}/attachments/{channel.id}'
+            dir = f'{channel.guild.id}/attachments/{channel.id}'
         if not full_nuke:
             try:
-                await aioshutil.rmtree(dir)
+                results = list(await backblaze.ls(dir, recursive=True))
+                for item in results:
+                    await backblaze.delete_file(item[0].id_, item[0].file_name)
                 logger.info(f'Deleted all attachments in {dir}')
             except FileNotFoundError:
                 logger.error(f'delete_all_attachments - Directory not found: {dir}')
@@ -501,9 +505,11 @@ class Indexing(commands.Cog):
         else:
             servers = self.bot.guilds
             for server in servers:
-                dir = f'{storage_dir}/{server.id}/attachments'
+                dir = f'{server.id}/attachments'
                 try:
-                    await aioshutil.rmtree(dir)
+                    results = list(await backblaze.ls(dir, recursive=True))
+                    for item in results:
+                        await backblaze.delete_file(item[0].id_, item[0].file_name)
                     logger.info(f'Deleted all attachments in {dir}')
                 except FileNotFoundError:
                     logger.error(f'delete_all_attachments - Directory not found: {dir}')
@@ -512,22 +518,23 @@ class Indexing(commands.Cog):
 
     async def save_attachments(self, message: discord.Message):
         # needs to be converted to a task
-        saving_enabled = (await utility.get_server(message.guild)).get('cyberlog', {}).get('image')
-        if saving_enabled and len(message.attachments) > 0 and not message.channel.is_nsfw():
-            path = f'{storage_dir}/{message.guild.id}/attachments/{message.channel.id}/{message.id}'
-            # if the path doesn't exist, create it
-            if not await aios.path.exists(path):
-                await aios.makedirs(path)
+        if await self.attachment_saving_enabled(message):
+            backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
             for attachment in message.attachments:
-                # for now, only save attachments under 10mb
-                if attachment.size < 10_000_000:
-                    # check if the file already exists
-                    if not await aios.path.exists(f'{path}/{attachment.filename}'):
-                        # save the attachment
-                        try:
-                            await attachment.save(f'{path}/{attachment.filename}')
-                        except discord.HTTPException:
-                            pass
+                bucket_path = f'{message.guild.id}/{message.channel.id}/{message.id}/{attachment.filename}'
+                await utility.run_task(
+                    backblaze.upload_bytes(await attachment.read(), bucket_path), queue=self.taskman, name=f'upload-{attachment.id}'
+                )
+
+    async def attachment_saving_enabled(self, message: discord.Message):
+        """
+        Checks if attachment saving is enabled for a server
+        """
+        return (
+            (await utility.get_server(message.guild)).get('cyberlog', {}).get('image', False)
+            and not message.channel.is_nsfw()
+            and message.attachments
+        )
 
     # need to handle tasks to index messages in the background and/or on bot bootup
 
@@ -557,10 +564,6 @@ class Indexing(commands.Cog):
         if channel.id in (534439214289256478, 910598159963652126):
             return
         start = discord.utils.utcnow()
-        try:
-            save_images = (await utility.get_server(channel.guild))['cyberlog'].get('image') and not channel.is_nsfw()
-        except KeyError:
-            save_images = False
         # if there's no indexes in the DB for this channel, index everything
         if await lightningdb.is_channel_empty(channel.id):
             full = True
@@ -577,8 +580,8 @@ class Indexing(commands.Cog):
                         existing_message_counter += 1
                         if existing_message_counter >= 15:
                             break
-                if message.attachments and not message.author.bot and save_images:
-                    await self.save_attachments(message)
+                # if message.attachments and not message.author.bot and save_images:
+                #     await self.save_attachments(message)
                 if full:
                     await asyncio.sleep(0.00025)
         except discord.Forbidden:
@@ -609,8 +612,8 @@ class Indexing(commands.Cog):
             except DuplicateKeyError:
                 logger.info(f'Message {message.id} already indexed')
             # save attachments if saving is enabled
-            if message.attachments and not message.author.bot and channel_images_enabled.get(message.channel.id, False):
-                await self.save_attachments(message)
+            # if message.attachments and not message.author.bot and channel_images_enabled.get(message.channel.id, False):
+            #     await self.save_attachments(message)
 
     async def index_message(self, message: discord.Message):
         """
@@ -627,10 +630,10 @@ class Indexing(commands.Cog):
                 await lightningdb.post_message_2024(message_data)
         except DuplicateKeyError:
             logger.info(f'Message {message.id} already indexed')
-        if message.attachments and cyberlog.get('image') and not message.channel.is_nsfw():
-            await self.save_attachments(message)
+        # if message.attachments and cyberlog.get('image') and not message.channel.is_nsfw():
+        #     await self.save_attachments(message)
 
-    @tasks.loop(hours=6)
+    @tasks.loop(hours=12)
     async def check_and_free_server_attachment_storage(self):
         """
         Checks if the server has reached its storage limit and frees up space if necessary
@@ -639,16 +642,17 @@ class Indexing(commands.Cog):
             # check if the server has storage enabled
             if not (await utility.get_server(server)).get('cyberlog', {}).get('image'):
                 continue
-            _, _, over_capacity, _ = await self.get_attachment_storage(server)
-            if over_capacity:
-                await self.delete_oldest_attachments(server)
+            await self.delete_oldest_attachments(server)
 
     @tasks.loop(hours=24)
     async def verify_indices(self):
         """
         Verifies that all indexes are valid and removes any invalid ones
         """
+        if self.verify_indices.current_loop == 0:
+            return
         print('Daily task - verifying indexes')
+        # cyberlog and this both call indexing
         logger.info('Daily task - verifying indexes')
         await self.bot.wait_until_ready()
         for server in self.bot.guilds:
