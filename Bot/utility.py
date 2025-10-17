@@ -774,7 +774,7 @@ async def run_task(task: asyncio.Task, queue: set, name: str = '', cancel_after:
     task = asyncio.create_task(task, name=name)
     queue.add(task)
     task.add_done_callback(queue.discard)
-    while not task.done and not task.cancelled() and cancel_after > 0:
+    while not task.done() and not task.cancelled() and cancel_after > 0:
         await asyncio.sleep(1)
         cancel_after -= 1
     if not task.done():
