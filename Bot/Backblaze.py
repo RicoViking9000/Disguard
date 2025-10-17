@@ -1,3 +1,4 @@
+import asyncio
 import typing
 
 import b2sdk.v2
@@ -35,20 +36,29 @@ class Backblaze(commands.Cog):
         return self.url_head + file_path.replace(' ', '%20')
 
     async def upload_disk_file(self, file_path: str, file_name: str) -> b2sdk.v2.FileVersion:
-        with open(file_path, 'rb') as f:
-            return await self.backblaze.upload_bytes(f.read(), file_name)
+        # perform file open + upload inside a thread
+        def _sync_upload():
+            with open(file_path, 'rb') as f:
+                return self.backblaze.upload_bytes(f.read(), file_name)
+
+        return await asyncio.to_thread(_sync_upload)
 
     async def upload_bytes(self, data: bytes, file_name: str) -> b2sdk.v2.FileVersion:
-        return self.backblaze.upload_bytes(data, file_name)
+        # upload_bytes is blocking -> run in a thread
+        return await asyncio.to_thread(self.backblaze.upload_bytes, data, file_name)
 
-    def download_and_save_file(self, file_name: str, save_path) -> bytes:
-        return self.backblaze.download_file_by_name(file_name).save(save_path)
+    async def download_and_save_file(self, file_name: str, save_path) -> bytes:
+        def _sync_download():
+            return self.backblaze.download_file_by_name(file_name).save(save_path)
 
-    def ls(self, dir: str, recursive: bool = False) -> typing.Iterator[tuple[b2sdk.v2.FileVersion, str]]:
-        return self.backblaze.ls(dir, recursive=recursive)
+        return await asyncio.to_thread(_sync_download)
 
-    def delete_file(self, file_id: str, file_name: str) -> None:
-        self.backblaze.delete_file_version(file_id, file_name)
+    async def ls(self, dir: str, recursive: bool = False) -> typing.List[tuple[b2sdk.v2.FileVersion, str]]:
+        # convert the SDK generator into a concrete list in a thread
+        return await asyncio.to_thread(list, self.backblaze.ls(dir, recursive=recursive))
+
+    async def delete_file(self, file_id: str, file_name: str) -> None:
+        await asyncio.to_thread(self.backblaze.delete_file_version, file_id, file_name)
 
 
 async def setup(bot: commands.Bot):

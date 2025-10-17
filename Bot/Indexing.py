@@ -4,7 +4,6 @@ import asyncio
 import logging
 import traceback
 
-import aiofiles.os as aios
 import b2sdk.v2
 import discord
 import emoji as pymoji
@@ -24,6 +23,7 @@ bytes_per_gigabyte = 1_000_000_000  # 1000 * 1000 * 1000
 class Indexing(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.taskman = set()
         self.check_and_free_server_attachment_storage.start()
         self.verify_indices.start()
 
@@ -173,8 +173,7 @@ class Indexing(commands.Cog):
         bucket_path = ''
         if await self.attachment_saving_enabled(message):
             bucket_path = f'{message.guild.id}/attachments/{message.channel.id}/{message.id}/{attachment.filename}'
-            asyncio.create_task(backblaze.upload_bytes(await attachment.read(), bucket_path))
-            # TODO task needs to be collected
+            await utility.run_task(backblaze.upload_bytes(await attachment.read(), bucket_path), queue=self.taskman, name=f'upload-{attachment.id}')
 
         return models.MessageAttachment(
             id=attachment.id,
@@ -436,7 +435,7 @@ class Indexing(commands.Cog):
         # check if the server has storage enabled
         backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
         directory = f'{server.id}/attachments'
-        request = list(backblaze.ls(directory, recursive=True))
+        request = list(await backblaze.ls(directory, recursive=True))
         storage_used = sum(file_data.size for file_data, file_name in request)
         storage_limit = (await utility.get_server(server)).get('cyberlog', {}).get('storageCap', 0)
         over_capacity = storage_used > (storage_limit * bytes_per_gigabyte)
@@ -453,7 +452,6 @@ class Indexing(commands.Cog):
         if not over_capacity:
             return
         if storage_used >= storage_limit * bytes_per_gigabyte:
-            directory = f'{server.id}/attachments'
             space_freed = 0
 
             def get_all_files_sorted_by_oldest(files: list[tuple[b2sdk.v2.FileVersion, str]]):
@@ -473,8 +471,7 @@ class Indexing(commands.Cog):
                 if space_freed >= space_to_free:
                     break
                 try:
-                    file_size = await aios.path.getsize(file[0].file_name)
-                    backblaze.delete_file(file[0].id_, file[0].file_name)
+                    await backblaze.delete_file(file[0].id_, file[0].file_name)
                     space_freed += file[0].size
                 except FileNotFoundError:
                     logger.error(f'delete_oldest_attachments - File not found: {file[0].file_name}', exc_info=True)
@@ -497,9 +494,9 @@ class Indexing(commands.Cog):
             dir = f'{channel.guild.id}/attachments/{channel.id}'
         if not full_nuke:
             try:
-                results = list(backblaze.ls(dir, recursive=True))
+                results = list(await backblaze.ls(dir, recursive=True))
                 for item in results:
-                    backblaze.delete_file(item[0].id_, item[0].file_name)
+                    await backblaze.delete_file(item[0].id_, item[0].file_name)
                 logger.info(f'Deleted all attachments in {dir}')
             except FileNotFoundError:
                 logger.error(f'delete_all_attachments - Directory not found: {dir}')
@@ -510,9 +507,9 @@ class Indexing(commands.Cog):
             for server in servers:
                 dir = f'{server.id}/attachments'
                 try:
-                    results = list(backblaze.ls(dir, recursive=True))
+                    results = list(await backblaze.ls(dir, recursive=True))
                     for item in results:
-                        backblaze.delete_file(item[0].id_, item[0].file_name)
+                        await backblaze.delete_file(item[0].id_, item[0].file_name)
                     logger.info(f'Deleted all attachments in {dir}')
                 except FileNotFoundError:
                     logger.error(f'delete_all_attachments - Directory not found: {dir}')
@@ -525,7 +522,9 @@ class Indexing(commands.Cog):
             backblaze: Backblaze.Backblaze = self.bot.get_cog('Backblaze')
             for attachment in message.attachments:
                 bucket_path = f'{message.guild.id}/{message.channel.id}/{message.id}/{attachment.filename}'
-                asyncio.create_task(backblaze.upload_bytes(await attachment.read(), bucket_path))
+                await utility.run_task(
+                    backblaze.upload_bytes(await attachment.read(), bucket_path), queue=self.taskman, name=f'upload-{attachment.id}'
+                )
 
     async def attachment_saving_enabled(self, message: discord.Message):
         """
