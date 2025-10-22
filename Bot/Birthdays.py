@@ -224,6 +224,8 @@ class Birthdays(commands.GroupCog, name='birthdays', description='Birthday modul
 
     async def on_message(self, message: discord.Message):
         """Used for parsing and handling of birthday features"""
+        if utility.large_server(message.guild):
+            return
         server_data = await utility.get_server(message.guild)
         try:
             if server_data.get('birthdayMode') in [None, 0]:

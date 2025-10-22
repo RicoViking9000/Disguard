@@ -662,11 +662,11 @@ class Indexing(commands.Cog):
         print('Finished verifying indexes')
         logger.info('Finished verifying indexes')
 
-    async def on_message(self, message: discord.Message):
+    async def on_message(self, message: discord.Message, server_data: dict):
         try:
             if message.channel.type == discord.ChannelType.private or not message.guild:
                 return
-            indexing_enabled = (await utility.get_server(message.guild)).get('cyberlog', {}).get('indexing')
+            indexing_enabled = server_data.get('cyberlog', {}).get('indexing')
             if indexing_enabled:
                 await self.index_message(message)
         except Exception:

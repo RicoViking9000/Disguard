@@ -1,7 +1,6 @@
 """This file contains the main runtime operations of Disguard. Cogs, the main features, are split into a trio of files"""
 
 import asyncio
-import datetime
 import logging
 import logging.handlers
 import os
@@ -10,7 +9,6 @@ import tracemalloc
 
 import discord
 from discord.ext import commands
-from pymongo import errors as mongoErrors
 
 import Birthdays
 import Cyberlog
@@ -128,86 +126,49 @@ async def on_ready():  # Method is called whenever bot is ready after connection
         await utility.update_bot_presence(bot, discord.Status.online, discord.CustomActivity(name=f'Guarding {len(bot.guilds)} servers'))
 
 
-async def indexMessages(server: discord.Guild, channel: discord.TextChannel, full=False):
-    if channel.id in (534439214289256478, 910598159963652126):
-        return
-    start = datetime.datetime.now()
-    try:
-        saveImages = (await utility.get_server(server))['cyberlog'].get('image') and not channel.is_nsfw()
-    except AttributeError:
-        return
-    if lightningdb.database.get_collection(str(channel.id)) is None:
-        full = True
-    existing_message_counter = 0
-    async for message in channel.history(limit=None, oldest_first=full):
-        try:
-            await lightningdb.post_message_2024(message)
-        except mongoErrors.DuplicateKeyError:
-            if not full:
-                existing_message_counter += 1
-                if existing_message_counter >= 15:
-                    break
-        if not message.author.bot and (discord.utils.utcnow() - message.created_at).days < 7 and saveImages:
-            attachments_path = f'Attachments/{message.guild.id}/{message.channel.id}/{message.id}'
-            try:
-                os.makedirs(attachments_path)
-            except FileExistsError:
-                pass
-            for attachment in message.attachments:
-                if attachment.size / 1000000 < 8:
-                    try:
-                        await attachment.save(f'{attachments_path}/{attachment.filename}')
-                    except discord.HTTPException:
-                        pass
-        if full:
-            await asyncio.sleep(0.0015)
-    print(f'Indexed {server.name}: {channel.name} in {(datetime.datetime.now() - start).seconds} seconds')
-
-
 @bot.listen()
 async def on_message(message: discord.Message):
     """Calls the various functions in other cogs"""
-    await bot.wait_until_ready()
+    if not bot.is_ready():
+        return
     if not isinstance(message.channel, discord.TextChannel):
         return
     if message.author.id == bot.user.id:
         return
-    # cyberlog: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
-    # await cyberlog.on_message(message)
 
-    # indexing: Indexing.Indexing = bot.get_cog('Indexing')
-    # await indexing.on_message(message)
-
-    # antispam: Antispam.Antispam = bot.get_cog('Antispam')
-    # await antispam.on_message(message)
-    indexing: Indexing.Indexing = bot.get_cog('Indexing')
-    try:
-        await indexing.on_message(message)
-    except Exception as e:
-        logger.error(f'Error in Indexing on_message: {e}')
-        traceback.print_exc()
+    # cheap early exits before heavier work
     if not message.content:
         return
     if message.author.bot:
         return
+
+    data = await utility.get_server(message.guild)
+
+    # gather other handlers concurrently to reduce latency
+    indexing: Indexing.Indexing = bot.get_cog('Indexing')
+    cyberlog: Cyberlog.Cyberlog = bot.get_cog('Cyberlog')
     reddit: Reddit.Reddit = bot.get_cog('Reddit')
-    try:
-        await reddit.on_message(message)
-    except Exception as e:
-        logger.error(f'Error in Reddit on_message: {e}')
-        traceback.print_exc()
     birthdays: Birthdays.Birthdays = bot.get_cog('birthdays')
-    try:
-        await birthdays.on_message(message)
-    except Exception as e:
-        logger.error(f'Error in Birthdays on_message: {e}')
-        traceback.print_exc()
     misc: Misc.Misc = bot.get_cog('Misc')
-    try:
-        await misc.on_message(message)
-    except Exception as e:
-        logger.error(f'Error in Misc on_message: {e}')
-        traceback.print_exc()
+
+    tasks = []
+    if indexing:
+        tasks.append(asyncio.create_task(indexing.on_message(message, data)))
+    if cyberlog:
+        tasks.append(asyncio.create_task(cyberlog.on_message(message, data)))
+    if reddit:
+        tasks.append(asyncio.create_task(reddit.on_message(message, data)))
+    if birthdays:
+        tasks.append(asyncio.create_task(birthdays.on_message(message, data)))
+    if misc:
+        tasks.append(asyncio.create_task(misc.on_message(message, data)))
+
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for res in results:
+            if isinstance(res, Exception):
+                logger.error(f'Error in on_message handler task: {res}')
+                traceback.print_exc()
 
 
 @bot.hybrid_command(help="Get Disguard's invite link")
