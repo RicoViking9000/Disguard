@@ -404,7 +404,6 @@ class Cyberlog(commands.Cog):
     async def on_command(self, ctx: commands.Context):
         pass  # But eventually add command statistics
 
-    @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """[DISCORD API METHOD] Called when message is sent"""
         await self.bot.wait_until_ready()

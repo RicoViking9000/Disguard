@@ -110,12 +110,12 @@ class Reddit(commands.Cog):
             )
             self.tasks.add(task)
 
-    async def on_message(self, message: discord.Message):
-        await asyncio.gather(*[self.redditAutocomplete(message), self.redditEnhance(message)])
+    async def on_message(self, message: discord.Message, server_data: dict):
+        await asyncio.gather(*[self.redditAutocomplete(message, server_data), self.redditEnhance(message, server_data)])
 
-    async def redditAutocomplete(self, message: discord.Message):
+    async def redditAutocomplete(self, message: discord.Message, server_data: dict):
         try:
-            config = (await utility.get_server(message.guild))['redditComplete']
+            config = server_data['redditComplete']
         except KeyError:
             return
         if not config:
@@ -128,8 +128,8 @@ class Reddit(commands.Cog):
             else:
                 await message.channel.send(embed=result)
 
-    async def redditEnhance(self, message: discord.Message):
-        config = (await utility.get_server(message.guild)).get('redditEnhance')
+    async def redditEnhance(self, message: discord.Message, server_data: dict):
+        config = server_data.get('redditEnhance')
         if not config:
             return  # Feature is disabled or not set up
         if config[0]:

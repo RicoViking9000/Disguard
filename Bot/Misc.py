@@ -32,11 +32,11 @@ class Misc(commands.Cog):
         self.emojis: typing.Dict[str, discord.Emoji] = bot.get_cog('Cyberlog').emojis
         self.loading = self.emojis['loading']
 
-    async def on_message(self, message: discord.Message):
+    async def on_message(self, message: discord.Message, server_data: dict):
         if message.content == f'<@{self.bot.user.id}>':
             await self.sendGuideMessage(message)  # See if this will work in Disguard.py
         try:
-            if (await utility.get_server(message.guild)).get('jumpContext') and message.content:
+            if server_data.get('jumpContext') and message.content:
                 await self.jump_link_quote_context(message)
         except AttributeError:
             pass
