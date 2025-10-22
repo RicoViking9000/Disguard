@@ -2494,7 +2494,7 @@ class Cyberlog(commands.Cog):
 
     async def doorguardHandler(self, member: discord.Member):
         """REPEATED JOINS"""  # Consider splitting this up into three methods or adding exception catchers
-        rj = await antispamObject(member.guild).get('repeatedJoins')
+        rj = (await antispamObject(member.guild)).get('repeatedJoins')
         if 0 not in rj[:2]:  # Make sure this module is enabled (remember, modules are set to 0 to mark them as disabled)
             try:
                 self.repeatedJoins[f'{member.guild.id}_{member.id}'].append(member.joined_at)
