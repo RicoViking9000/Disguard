@@ -73,10 +73,10 @@ bot.initialized = False
 
 async def main():
     lightningdb.initialize()
-    # database.initialize(secure.beta())
-    # await bot.start(secure.beta())
-    database.initialize(secure.token())
-    await bot.start(secure.token())
+    database.initialize(secure.beta())
+    await bot.start(secure.beta())
+    # database.initialize(secure.token())
+    # await bot.start(secure.token())
 
 
 indexes = 'Indexes'
@@ -154,13 +154,13 @@ async def on_message(message: discord.Message):
     tasks = []
     if indexing:
         tasks.append(asyncio.create_task(indexing.on_message(message, data)))
-    if cyberlog:
+    if cyberlog and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(cyberlog.on_message(message, data)))
-    if reddit:
+    if reddit and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(reddit.on_message(message, data)))
-    if birthdays:
+    if birthdays and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(birthdays.on_message(message, data)))
-    if misc:
+    if misc and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(misc.on_message(message, data)))
 
     if tasks:

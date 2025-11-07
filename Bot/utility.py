@@ -752,7 +752,7 @@ def date_to_filename(date: datetime.datetime):
 
 
 def large_server(server: discord.Guild):
-    return server.member_count > 150
+    return server.member_count > 200
 
 
 async def update_bot_presence(bot: commands.Bot, status: discord.Status = None, activity: discord.BaseActivity = None):
