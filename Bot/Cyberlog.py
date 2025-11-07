@@ -66,6 +66,7 @@ yellow = (0xFFFF00, 0xFFFF66)
 NEWLINE = '\n'
 newlineQuote = '\n> '
 qlf = '  '  # Two special characters to represent quoteLineFormat
+_server_cache: dict[int, tuple[float, dict]] = {}
 
 
 class Cyberlog(commands.Cog):
@@ -89,14 +90,16 @@ class Cyberlog(commands.Cog):
             'news': self.emojis['announcementsChannel'],
             'store': self.emojis['storeChannel'],
         }
+        # caches use IDs to avoid holding large Member objects
         self.repeatedJoins: typing.Dict[str, typing.List[datetime.datetime]] = {}
         self.pins: typing.Dict[int, typing.List[int]] = {}  # enablement of this feature is tied to attachment logging being enabled
         self.categories: typing.Dict[int, typing.List[discord.abc.GuildChannel]] = {}
-        self.members: typing.Dict[int, typing.List[discord.Member]] = {}
+        self.members: typing.Dict[int, set[int]] = {}  # guild_id -> set(member_id)
         self.invites = {}
-        self.roles: typing.Dict[int, discord.Member] = {}
+        self.roles: typing.Dict[int, set[int]] = {}  # role_id -> set(member_id)
         self.reactions = {}
-        self.memberPermissions = collections.defaultdict(lambda: collections.defaultdict(dict))
+        # store permission ints (guild_permissions.value) to avoid keeping Permissions objects
+        self.memberPermissions = collections.defaultdict(lambda: collections.defaultdict(int))
         self.memberVoiceLogs = {}
         self.pauseDelete = []
         self.resumeToken = None
@@ -190,10 +193,19 @@ class Cyberlog(commands.Cog):
                 timeString += f'\n •Default channel calculations: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 for r in g.roles:
-                    self.roles[r.id] = r.members  # This allows the bot to properly display how many members had a role before it was deleted
-                self.members[g.id] = g.members
+                    # store role member IDs (avoid storing Member objects)
+                    try:
+                        self.roles[r.id] = {m.id for m in r.members}
+                    except Exception:
+                        self.roles[r.id] = set()
+                # store guild member IDs
+                self.members[g.id] = {m.id for m in g.members}
                 for m in g.members:
-                    self.memberPermissions[g.id][m.id] = m.guild_permissions
+                    # store permission integer
+                    try:
+                        self.memberPermissions[g.id][m.id] = m.guild_permissions.value
+                    except Exception:
+                        self.memberPermissions[g.id][m.id] = 0
                 timeString += f'\n •Member cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 for c in g.categories:
@@ -391,7 +403,7 @@ class Cyberlog(commands.Cog):
     async def grab_pins(self):
         """Fetches pinned messages to be stored locally"""
         for g in self.bot.guilds:
-            saving_enabled = (await utility.get_server(g)).get('cyberlog', {}).get('image')
+            saving_enabled = (await cached_get_server(g)).get('cyberlog', {}).get('image')
             if not saving_enabled:
                 continue
             for c in g.text_channels:
@@ -603,7 +615,7 @@ class Cyberlog(commands.Cog):
         m = p.message_id
 
         # embed suppression handling
-        server_settings = await utility.get_server(g)
+        server_settings = await cached_get_server(g)
         if server_settings['undoSuppression']:
             if p.emoji == self.emojis['expand'] and utility.ManageServer(u):
                 message = await g.get_channel(p.channel_id).fetch_message(m)
@@ -619,7 +631,7 @@ class Cyberlog(commands.Cog):
             layerObject = collections.defaultdict(lambda: collections.defaultdict(dict))
         layerObject[m][u.id][p.emoji.name] = {'timestamp': discord.utils.utcnow(), 'guild': g.id}
         self.reactions = layerObject
-        sleepTime = (await utility.get_server(g))['cyberlog']['ghostReactionTime']
+        sleepTime = (await cached_get_server(g))['cyberlog']['ghostReactionTime']
         await asyncio.sleep(sleepTime)
         try:
             layerObject[m][u.id].remove(p.emoji.name)
@@ -650,7 +662,7 @@ class Cyberlog(commands.Cog):
         except KeyError:
             return
         seconds = (discord.utils.utcnow() - layerObject['timestamp']).seconds
-        if seconds < (await utility.get_server(g))['cyberlog']['ghostReactionTime']:
+        if seconds < (await cached_get_server(g))['cyberlog']['ghostReactionTime']:
             settings = await getCyberAttributes(g, 'misc')
             received = discord.utils.utcnow()
             adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(g))
@@ -744,7 +756,7 @@ class Cyberlog(commands.Cog):
         bot_ignore = False
         log_channel = await logChannel(guild, 'message')
         settings = await getCyberAttributes(guild, 'message')
-        server_settings = await utility.get_server(guild)
+        server_settings = await cached_get_server(guild)
         bot_author_settings = server_settings.get('cyberlog', {}).get('messageLogsBotAuthor', 0)
         received = discord.utils.utcnow()
         tz_adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
@@ -993,8 +1005,8 @@ class Cyberlog(commands.Cog):
             attachments_path = f'storage/{self.after.guild.id}/attachments/{self.after.channel.id}/{self.after.id}'
             attachments = []
             try:
-                with open(index_path, 'w') as json_file:
-                    json.dump(message_data, json_file, indent=4)
+                async with aiofiles.open(index_path, 'w') as json_file:
+                    await json_file.write(json.dumps(message_data, indent=4))
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
             try:
@@ -1186,7 +1198,7 @@ class Cyberlog(commands.Cog):
         if settings['embedTimestamp'] in (1, 3):
             embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {payload.message_id}')
-        cyber = (await utility.get_server(g)).get('cyberlog')
+        cyber = (await cached_get_server(g)).get('cyberlog')
         message_attachments: list[tuple[b2sdk.v2.FileVersion, str]] = []  # List of files to be sent with this message
         send_attachments = []
         # Retrieve this message index & export it to a JSON
@@ -1194,8 +1206,8 @@ class Cyberlog(commands.Cog):
         index_path = f'storage/temp/index_{payload.message_id}.json'
         if message_data:
             try:
-                with open(index_path, 'w') as json_file:
-                    json.dump(message_data, json_file, indent=4)
+                async with aiofiles.open(index_path, 'w') as json_file:
+                    await json_file.write(json.dumps(message_data, indent=4))
                     if cyber.get('sendIndexFile'):
                         send_attachments.append(index_path)
             except Exception:
@@ -1284,7 +1296,7 @@ class Cyberlog(commands.Cog):
                         logArchives = {}
                 if payload.message_id in [int(k) for k in logArchives.keys()]:
                     await self.updateLogEmbed(g, payload.message_id, {'customKeyMessageIsDeleted': True})
-            if (author.bot and not (await utility.get_server(g))['cyberlog'].get('disguardLogRecursion')) or not await logExclusions(
+            if (author.bot and not (await cached_get_server(g))['cyberlog'].get('disguardLogRecursion')) or not await logExclusions(
                 channel, memberObject
             ):
                 return
@@ -1378,10 +1390,10 @@ class Cyberlog(commands.Cog):
                 settings['plainText'] = True
         if log_bot_author in [0, 2] and author.bot:
             # Check to see if the recursion deletion mode is enabled for Disguard log messages
-            if author.id == self.bot.user.id and (await utility.get_server(g))['cyberlog'].get('disguardLogRecursion'):
-                channels = [(await utility.get_server(g))['cyberlog']['defaultChannel']]
+            if author.id == self.bot.user.id and (await cached_get_server(g))['cyberlog'].get('disguardLogRecursion'):
+                channels = [(await cached_get_server(g))['cyberlog']['defaultChannel']]
                 for w in logUnits:
-                    channels.append((await utility.get_server(g))['cyberlog'][w]['channel'])
+                    channels.append((await cached_get_server(g))['cyberlog'][w]['channel'])
                 if channel.id in channels:  # We have a log channel
                     # if log and log.user.id == 247412852925661185: return
                     modUser = log.user if log else 'A moderator'
@@ -1552,7 +1564,7 @@ class Cyberlog(commands.Cog):
         except discord.Forbidden:
             pass
         if type(channel) is discord.TextChannel:
-            if (await utility.get_server(channel.guild)).get('cyberlog', {}).get('image'):
+            if (await cached_get_server(channel.guild)).get('cyberlog', {}).get('image'):
                 self.pins[channel.id] = []
             await utility.run_task(database.VerifyChannel(channel, True), queue=self.taskman, name=f'channel_create - VerifyChannel-{channel.id}')
         if msg:
@@ -1877,6 +1889,7 @@ class Cyberlog(commands.Cog):
             await utility.run_task(
                 database.VerifyChannel(after), queue=self.taskman, name=f'channel_update - VerifyChannel-{after.id}', cancel_after=60
             )
+        return
         try:
             if msg:
                 final = copy.deepcopy(embed)
@@ -2071,10 +2084,15 @@ class Cyberlog(commands.Cog):
         """[DISCORD API METHOD] Called when member joins a server"""
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
+        # store only member id
         try:
-            self.members[member.guild.id].append(member)
+            self.members[member.guild.id].add(member.id)
         except KeyError:
-            self.members[member.guild.id] = [member]
+            self.members[member.guild.id] = {member.id}
+        except AttributeError:
+            self.members[member.guild.id] = {member.id}
+        # store permissions int
+        self.memberPermissions[member.guild.id][member.id] = member.guild_permissions.value
         await utility.run_task(
             self.doorguardHandler(member), queue=self.taskman, name=f'doorguardHandler-{member.guild.id}-{member.id}', cancel_after=300
         )
@@ -2221,7 +2239,7 @@ class Cyberlog(commands.Cog):
             await self.archiveLogEmbed(member.guild, msg.id, embed, 'Member Join')
         await asyncio.gather(
             *[
-                database.VerifyMember(member, new=True, warnings=(await utility.get_server(member.guild)).get('antispam', {}).get('warn', 3)),
+                database.VerifyMember(member, new=True, warnings=(await cached_get_server(member.guild)).get('antispam', {}).get('warn', 3)),
                 database.VerifyUser(member, self.bot, new=True),
                 updateLastActive(member, discord.utils.utcnow(), 'joined a server'),
             ]
@@ -2237,7 +2255,7 @@ class Cyberlog(commands.Cog):
             )
 
         hadToRemute = False
-        events = (await utility.get_server(member.guild)).get('antispam', {}).get('timedEvents')
+        events = (await cached_get_server(member.guild)).get('antispam', {}).get('timedEvents')
         for event in events:
             try:
                 if event['type'] == 'mute' and event['target'] == member.id and (discord.utils.utcnow() - event['timestamp']).total_seconds > 60:
@@ -2494,7 +2512,7 @@ class Cyberlog(commands.Cog):
 
     async def doorguardHandler(self, member: discord.Member):
         """REPEATED JOINS"""  # Consider splitting this up into three methods or adding exception catchers
-        rj = await antispamObject(member.guild).get('repeatedJoins')
+        rj = (await antispamObject(member.guild)).get('repeatedJoins')
         if 0 not in rj[:2]:  # Make sure this module is enabled (remember, modules are set to 0 to mark them as disabled)
             try:
                 self.repeatedJoins[f'{member.guild.id}_{member.id}'].append(member.joined_at)
@@ -2697,7 +2715,8 @@ class Cyberlog(commands.Cog):
             )
             try:
                 try:
-                    sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or discord.utils.utcnow())
+                    # compute placement from live guild members (avoid reading cached Member objects)
+                    sortedMembers = sorted(member.guild.members, key=lambda x: x.joined_at or discord.utils.utcnow())
                     memberJoinPlacement = sortedMembers.index(member) + 1
                 except KeyError:
                     sortedMembers = member.guild.members
@@ -2722,10 +2741,19 @@ class Cyberlog(commands.Cog):
             await message.edit(embed=embed if not settings['plainText'] else None)
             await self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             # if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
+        # clean up ID caches
         try:
-            self.members[member.guild.id].remove(member)
-        except (KeyError, ValueError):
+            self.members.get(member.guild.id, set()).discard(member.id)
+        except Exception:
             pass
+        # remove permission cache for this member
+        try:
+            self.memberPermissions[member.guild.id].pop(member.id, None)
+        except Exception:
+            pass
+        # cleanup voice/repeated join caches
+        self.memberVoiceLogs.pop(member.id, None)
+        self.repeatedJoins.pop(f'{member.guild.id}_{member.id}', None)
         await asyncio.gather(*[database.VerifyMembers(member.guild, [member]), database.DeleteUser(member, self.bot)])
         if message:
 
@@ -2910,10 +2938,16 @@ class Cyberlog(commands.Cog):
                     )
                     for r in added:
                         if after.guild.get_role(r):
-                            self.roles[r.id] = r.members
+                            try:
+                                self.roles[r.id] = {m.id for m in r.members}
+                            except Exception:
+                                self.roles[r.id] = set()
                     for r in removed:
                         if after.guild.get_role(r):
-                            self.roles[r.id] = r.members
+                            try:
+                                self.roles[r.id] = {m.id for m in r.members}
+                            except Exception:
+                                self.roles[r.id] = set()
                     if len(added) > 0:
                         embed.add_field(name=f'Role{"s" if len(added) > 1 else ""} added', value='\n'.join([r.name for r in added]))
                     if len(removed) > 0:
@@ -3262,7 +3296,7 @@ class Cyberlog(commands.Cog):
                 pass
         for s in servers:
             await utility.run_task(
-                database.VerifyMember(s.get_member(after.id), warnings=(await utility.get_server(s))['antispam'].get('warn', 3)),
+                database.VerifyMember(s.get_member(after.id), warnings=(await cached_get_server(s))['antispam'].get('warn', 3)),
                 queue=self.taskman,
                 name=f'user_update - VerifyMember-{s.id}-{after.id}',
                 cancel_after=300,
@@ -3436,6 +3470,7 @@ class Cyberlog(commands.Cog):
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                     await message.edit(content=None)
                 await self.archiveLogEmbed(after, message.id, embed, 'Server Update')
+                return
                 if not settings['plainText']:
                     for r in reactions:
                         await message.add_reaction(r)
@@ -3564,7 +3599,11 @@ class Cyberlog(commands.Cog):
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                 await msg.edit(content=None)
             await self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
-        self.roles[role.id] = role.members
+        # store member IDs for this role to avoid caching Member objects
+        try:
+            self.roles[role.id] = {m.id for m in role.members}
+        except Exception:
+            self.roles[role.id] = set()
         await utility.run_task(
             database.VerifyServer(role.guild, self.bot),
             queue=self.taskman,
@@ -3647,6 +3686,13 @@ class Cyberlog(commands.Cog):
             )
             # Cache role members, and expel them upon role deletion. work for 2021.
             roleMembers = self.roles.get(role.id)
+            # roleMembers stored as IDs; convert to Member objects for downstream helpers
+            role_member_ids = self.roles.get(role.id)
+            if role_member_ids:
+                roleMembers = [role.guild.get_member(mid) for mid in role_member_ids]
+                roleMembers = [m for m in roleMembers if m is not None]
+            else:
+                roleMembers = []
             if roleMembers:
                 membersWhoLost = (
                     '\n'.join([f'👤{m.display_name}' for m in roleMembers])
@@ -3679,14 +3725,16 @@ class Cyberlog(commands.Cog):
         await self.CheckDisguardServerRoles(
             roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions'
         )
-        await utility.run_task(
-            database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)),
-            name=f'guild_role_delete - VerifyServer-{role.guild.id}',
-            queue=self.taskman,
-            cancel_after=300,
+        (
+            await utility.run_task(
+                database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)),
+                role.guild,
+                self.bot,
+                includeMembers=[role.guild.get_member(mid) for mid in self.roles.get(role.id, [m.id for m in role.guild.members])],
+            ),
         )
         await utility.run_task(
-            database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)),
+            database.VerifyUsers(self.bot, [role.guild.get_member(mid) for mid in self.roles.get(role.id, [m.id for m in role.guild.members])]),
             queue=self.taskman,
             name=f'guild_role_delete - VerifyUsers-{role.guild.id}',
             cancel_after=300,
@@ -3839,6 +3887,7 @@ class Cyberlog(commands.Cog):
             )
         for member in after.members:
             await database.VerifyUser(member, self.bot)
+        return
         if message and len(embed.fields) > 0 or before.name != after.name:
             # cutoff
             final = copy.deepcopy(embed)
@@ -4210,7 +4259,7 @@ class Cyberlog(commands.Cog):
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
         msg = None
-        serverData = await utility.get_server(member.guild)
+        serverData = await cached_get_server(member.guild)
         logRecapsEnabled = serverData['cyberlog']['voiceChatLogRecaps']
         if not await logEnabled(member.guild, 'voice') and not logRecapsEnabled:
             return
@@ -4688,7 +4737,7 @@ class Cyberlog(commands.Cog):
                 logArchives = {}
         logArchives[id].update(data)
         logArchives = json.dumps(logArchives, indent=4)
-        async with open(p, 'w+') as f:
+        async with aiofiles.open(p, 'w+') as f:
             await f.write(logArchives)
 
     # Review this monstrosity
@@ -4702,14 +4751,15 @@ class Cyberlog(commands.Cog):
         g = message.guild
         settings = await getCyberAttributes(g, mod)
         for m in membersInput:
-            oldPerms = self.memberPermissions[g.id][m.id]
-            # Technically can be made faster by calling each of the loops once separately rather than twice in a gen
-            removed = ' '.join(
-                [p[0] for p in oldPerms if p[1] and p[0] not in [pp[0] for pp in m.guild_permissions if pp[1]]]
-            )  # Permissions that were set to true previously and aren't currently set to True
-            gained = ' '.join(
-                [p[0] for p in m.guild_permissions if p[1] and p[0] not in [pp[0] for pp in oldPerms if pp[1]]]
-            )  # Same but permissions that are set to True not but weren't before
+            # memberPermissions stores perm integers; convert back before using utility.stringifyPermissions
+            try:
+                prev_perm_int = self.memberPermissions[g.id].get(m.id, 0)
+            except Exception:
+                prev_perm_int = 0
+            prev_perm_list = utility.stringifyPermissions(discord.Permissions(prev_perm_int))
+            curr_perm_list = utility.stringifyPermissions(m.guild_permissions)
+            removed = ' '.join([p for p in prev_perm_list if p not in curr_perm_list])
+            gained = ' '.join([p for p in curr_perm_list if p not in prev_perm_list])
             if removed:
                 try:
                     members[m.id].update({'removed': removed})
@@ -4824,15 +4874,26 @@ class Cyberlog(commands.Cog):
 
     async def dispatch_notice(self, server: discord.Guild, embed: discord.Embed):
         try:
-            channel = server.get_channel((await utility.get_server(server)).get('cyberlog').get('defaultChannel'))
+            channel = server.get_channel((await cached_get_server(server)).get('cyberlog').get('defaultChannel'))
             if channel:
                 await channel.send(embed=embed)
         except Exception as e:
             logger.error(f'Error dispatching notice: {e}', exc_info=True)
 
 
+# async memo with short TTL
+async def cached_get_server(guild, ttl=2.0) -> dict:
+    now = asyncio.get_event_loop().time()
+    entry = _server_cache.get(guild.id)
+    if entry and now - entry[0] < ttl:
+        return entry[1]
+    data = await utility.get_server(guild)
+    _server_cache[guild.id] = (now, data)
+    return data
+
+
 async def logEnabled(s: discord.Guild, mod: str):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     return all(
         [
             server_data.get('cyberlog').get(mod).get('enabled'),
@@ -4850,14 +4911,14 @@ async def logEnabled(s: discord.Guild, mod: str):
 
 
 async def logChannel(s: discord.Guild, mod: str):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     modular = server_data.get('cyberlog').get(mod).get('channel')
     default = server_data.get('cyberlog').get('defaultChannel')
     return s.get_channel(default) if modular is None else s.get_channel(modular)
 
 
 async def verifyLogChannel(bot, s: discord.Guild):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     try:
         default = server_data.get('cyberlog').get('defaultChannel')
     except:
@@ -4894,7 +4955,7 @@ async def verifyLogChannel(bot, s: discord.Guild):
 
 
 async def logExclusions(channel: discord.TextChannel, member: discord.Member):
-    server_data = await utility.get_server(channel.guild)
+    server_data = await cached_get_server(channel.guild)
     if type(member) is not discord.Member:
         member = channel.guild.get_member(member.id)
     if not member:
@@ -4909,15 +4970,15 @@ async def logExclusions(channel: discord.TextChannel, member: discord.Member):
 
 
 async def memberGlobal(s: discord.Guild):
-    return (await utility.get_server(s)).get('cyberlog').get('memberGlobal')
+    return (await cached_get_server(s)).get('cyberlog').get('memberGlobal')
 
 
 async def antispamObject(s: discord.Guild):
-    return (await utility.get_server(s)).get('antispam')
+    return (await cached_get_server(s)).get('antispam')
 
 
 async def readPerms(s: discord.Guild, mod):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     return server_data.get('cyberlog').get(mod).get('read') or server_data['cyberlog']['read']
 
 
@@ -4963,7 +5024,7 @@ async def getTTS(s: discord.Guild, mod):
 
 async def cyberAttribute(s: discord.Guild, mod, a):
     """Returns common attribute: cyberlog <--> cyberlog module. Not coded for beta datasystem"""
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     default = server_data['cyberlog'][a]
     specific = server_data['cyberlog'][mod][a]
 
