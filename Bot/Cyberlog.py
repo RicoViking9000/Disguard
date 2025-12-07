@@ -1560,10 +1560,10 @@ class Cyberlog(commands.Cog):
             settings = await getCyberAttributes(channel.guild, 'channel')
             color = green[await utility.color_theme(channel.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             keytypes = {discord.Member: '👤', discord.Role: '🚩'}
-            content = f'A moderator created a new {channel.type[0]} channel called {channel.name}'
+            content = f'A moderator created a new {channel.type.name} channel called {channel.name}'
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["darkGreenPlus"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type, 'Unknown type')} Channel was created" if settings["context"][0] < 2 else ""}""",
-                description=f'{self.channelKeys[channel.type[0] if settings["context"][1] > 0 else ""]}{"Channel" if settings["context"][1] < 2 else ""}: {f"{channel.mention} ({channel.name})" if channel.type[0] == "text" else channel.name}',
+                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["darkGreenPlus"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type.name, 'Unknown type')} Channel was created" if settings["context"][0] < 2 else ""}""",
+                description=f'{self.channelKeys[channel.type.name if settings["context"][1] > 0 else ""]}{"Channel" if settings["context"][1] < 2 else ""}: {f"{channel.mention} ({channel.name})" if channel.type.name == "text" else channel.name}',
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
@@ -1584,7 +1584,7 @@ class Cyberlog(commands.Cog):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
-                    content = f'{log.user} created a new {channel.type[0]} channel called {channel.name}'
+                    content = f'{log.user} created a new {channel.type.name} channel called {channel.name}'
                     if not serverIsGimped(channel.guild):
                         await utility.run_task(
                             updateLastActive(log.user, discord.utils.utcnow(), 'created a channel'),
@@ -1615,8 +1615,12 @@ class Cyberlog(commands.Cog):
             memberUnaccessibleNewline = ' ' if len(unaccessibleMembers) > 20 else NEWLINE
             roleAccessibleNewline = ' ' if len(accessibleRoles) > 20 else NEWLINE
             roleUnaccessibleNewline = ' ' if len(unaccessibleRoles) > 20 else NEWLINE
-            accessibleTail = f'ACCESSIBLE TO\n------------------\nROLES\n{roleAccessibleNewline.join([f"🚩 {r.name}" for r in accessibleRoles])}\n\nMEMBERS\n{memberAccessibleNewline.join([f"👤 {m.name}" for m in accessibleMembers])}'
-            unaccessibleTail = f'NOT ACCESSIBLE TO\n-----------------------\nROLES\n{roleUnaccessibleNewline.join([f"🚩 {r.name}" for r in unaccessibleRoles])}\n\nMEMBERS\n{memberUnaccessibleNewline.join([f"👤 {m.name}" for m in unaccessibleMembers])}'
+            accessibleTail = utility.sanitize_tooltip(
+                f'ACCESSIBLE TO\n------------------\nROLES\n{roleAccessibleNewline.join([f"🚩 {r.name}" for r in accessibleRoles])}\n\nMEMBERS\n{memberAccessibleNewline.join([f"👤 {m.name}" for m in accessibleMembers])}'
+            )
+            unaccessibleTail = utility.sanitize_tooltip(
+                f'NOT ACCESSIBLE TO\n-----------------------\nROLES\n{roleUnaccessibleNewline.join([f"🚩 {r.name}" for r in unaccessibleRoles])}\n\nMEMBERS\n{memberUnaccessibleNewline.join([f"👤 {m.name}" for m in unaccessibleMembers])}'
+            )
             if channel.overwrites_for(channel.guild.default_role).read_messages is not False:
                 tempAccessibleString = f"""\n[{'🔓' if settings['context'][1] > 0 else ''}{'Accessible to' if settings['context'][1] < 2 else ''}: **Everyone by default**]({msg.jump_url} '{accessibleTail}')"""
             else:
@@ -1647,16 +1651,16 @@ class Cyberlog(commands.Cog):
             # plainTextUnaccessibleString = f"{tempUnaccessibleString[tempUnaccessibleString.find('[') + 1:tempUnaccessibleString.find(']')]}{newline}{tempUnaccessibleString[tempUnaccessibleString.find(singleQuoteMark) + 1:tempUnaccessibleString.find(')') - 1]}"
             if settings['embedTimestamp'] > 1:
                 embed.description += f"""\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)}"""
-            if channel.type[0] != 'category':
+            if channel.type.name != 'category':
                 channelList = channel.category.channels if channel.category is not None else [c for c in channel.guild.channels if c.category is None]
                 cIndexes = (
                     channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0,
                     channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList),
                 )
-                plainTextChannelList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
+                plainTextChannelList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
                 embed.add_field(
                     name='Category Tree',
-                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:cIndexes[0]])} more channel{'s' if len(channelList[:cIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:cIndexes[0]])}'){NEWLINE}" if cIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{NEWLINE}[Hover to view {len(channelList[cIndexes[1]:])} more channel{'s' if len(channelList[cIndexes:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}""",
+                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:cIndexes[0]])} more channel{'s' if len(channelList[:cIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:cIndexes[0]])}'){NEWLINE}" if cIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{NEWLINE}[Hover to view {len(channelList[cIndexes[1]:])} more channel{'s' if len(channelList[cIndexes:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}""",
                 )
                 if len(embed.fields[0].value) > 1024:
                     embed.set_field_at(0, name=embed.fields[0].name, value=plainTextChannelList)
@@ -1674,9 +1678,11 @@ class Cyberlog(commands.Cog):
                 pass
         try:
             if channel.category is not None:
-                self.categories[channel.category.id] = [c for c in channel.category.channels]
+                data = await lightningdb.convert_category_to_simple_data(channel.category).model_dump()
+                await lightningdb.patch_channel_category(channel.category.id, data)
             else:
-                self.categories[channel.guild.id] = [c[1] for c in channel.guild.by_category() if c[0] is None]
+                data = await lightningdb.convert_category_to_simple_data(channel.guild).model_dump()
+                await lightningdb.patch_channel_category(channel.guild.id, data)
         except discord.Forbidden:
             pass
         if type(channel) is discord.TextChannel:
@@ -1711,22 +1717,30 @@ class Cyberlog(commands.Cog):
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(after.guild))
         f = None
         msg = None
-        channelPosFlag = False
-        channelPosTimekey = f'{discord.utils.utcnow():%m%d%Y%H%M%S}'
         if await logEnabled(before.guild, 'channel'):
-            content = f'A moderator updated the {after.type[0]} channel called {before.name}'
+            content = f'A moderator updated the {after.type.name} channel called {before.name}'
             savePath = None
             settings = await getCyberAttributes(after.guild, 'channel')
             color = blue[await utility.color_theme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}
-                {f"{utility.CHANNEL_KEYS.get(after.type, after.type)} Channel was updated" if settings["context"][0] < 2 else ""}""",
-                description=f'{self.channelKeys[after.type[0]] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {f"{after.mention} ({after.name})" if after.type[0] == "text" else after.name}',
+                title=textwrap.dedent(f"""
+                    {utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}
+                    {(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}
+                    {f"{utility.CHANNEL_KEYS.get(after.type.name, after.type.name)} Channel was updated" if settings["context"][0] < 2 else ""}
+                """)
+                .strip()
+                .replace(NEWLINE, ''),
+                description=textwrap.dedent(f"""
+                    {self.channelKeys[after.type.name] if settings["context"][1] > 0 else ""}
+                    {"Channel" if settings["context"][1] < 2 else ""}: {f"{after.mention} ({after.name})" if after.type.name == "text" else after.name}
+                """)
+                .strip()
+                .replace(NEWLINE, ''),
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
                 embed.timestamp = discord.utils.utcnow()
-            reactions = ['ℹ']
+            reactions = []
             if await readPerms(before.guild, 'channel'):
                 try:
                     log = await before.guild.audit_logs().find(
@@ -1753,7 +1767,7 @@ class Cyberlog(commands.Cog):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
-                    content = f'{log.user} updated the {after.type[0]} channel called {before.name}'
+                    content = f'{log.user} updated the {after.type.name} channel called {before.name}'
                     if not serverIsGimped(after.guild):
                         await utility.run_task(
                             updateLastActive(log.user, discord.utils.utcnow(), 'edited a channel'),
@@ -1764,24 +1778,25 @@ class Cyberlog(commands.Cog):
                     pass  # Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             embed.set_footer(text=f'Channel ID: {before.id}')
             if before.category == after.category is not None:
-                bc = self.categories.get(before.category.id)
-                if bc and abs(bc.index(before) - after.category.channels.index(after)) > 1:
-                    indexes = []  # Channel, before index, after index
-                    channelPosFlag = True
-                    self.channelCacheHelper[after.guild.id] = []
-                    for i in range(len(before.category.channels)):
-                        indexes.append(
-                            {
-                                'before': bc.index(before.category.channels[i]),
-                                'after': after.category.channels.index(before.category.channels[i]),
-                                'channel': after.category.channels[i],
-                            }
-                        )
+                # bc: models.StrippedCategoryChannel = (await lightningdb.get_channel_category(before.category.id))
+                # before_pos = bc[str(before.id)]['position']
+                if abs(before.position - after.position) > 1:
+                    string_display = [f'{self.emojis["folder"] if settings["library"] > 1 else "📁"}{after.category.name}']
+                    position_offset = after.category.channels[0].position
+                    for i, channel in enumerate(after.category.channels):
+                        print(i, position_offset, before.position, after.position)
+                        if i + position_offset == before.position and before.position < after.position:  # moving down
+                            string_display.append(f'~~{self.channelKeys.get(before.type.name)}{before.name}~~❌')
+                        meat_display = f"{self.channelKeys.get(channel.type.name)}{'__**' if channel.id == before.id else ''}{channel.name}{'**__' if channel.id == before.id else ''}"
+                        flair_display = f" {'↩' if channel.id == before.id and abs(before.position - after.position) > 1 else '⬆' if channel.id == before.id and before.position > after.position else '⬇' if channel.id == before.id and before.position < after.position else ''}"
+                        string_display.append(f'{meat_display}{flair_display}')
+                        if i + position_offset == before.position and before.position > after.position:  # moving up
+                            string_display.append(f'~~{self.channelKeys.get(before.type.name)}{before.name}~~❌')
+                    string_display = NEWLINE.join(string_display)
                     embed.add_field(
                         name='Channel position changed',
-                        value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category.name}\n{NEWLINE.join([(f'~~{self.channelKeys.get(before.type[0])}{before.name}~~❌{NEWLINE}' if bc.index(before) == c and indexes[c].get('before') > indexes[c].get('after') else '') + f'{self.channelKeys.get(indexes[c].get("channel").type[0])}' + ('__**' if indexes[c].get('channel').id == before.id else '') + f'{indexes[c].get("channel").name} ' + ('**__' if indexes[c].get('channel').id == before.id else '') + ('↩' if abs(indexes[c].get('before') - indexes[c].get('after')) > 1 else '⬆' if indexes[c].get('before') > indexes[c].get('after') else '⬇' if indexes[c].get('before') < indexes[c].get('after') else '') + (f'{NEWLINE}~~{self.channelKeys.get(before.type[0])}{before.name}~~❌' if bc.index(before) == c and indexes[c].get('before') < indexes[c].get('after') else '') for c in range(len(indexes))])}""",
+                        value=string_display,
                     )
-                    self.categories[after.category.id] = [c for c in after.category.channels]
             if before.overwrites != after.overwrites:
                 embed.add_field(
                     name='Permission overwrites updated', value='Manually react 🇵 to show/hide'
@@ -1843,19 +1858,19 @@ class Cyberlog(commands.Cog):
                         newChannelList.index(after) - 3 if newChannelList.index(after) >= 3 else 0,
                         newChannelList.index(after) + 4 if newChannelList.index(after) + 4 < len(newChannelList) else len(newChannelList),
                     )
-                    plainTextOldList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList])}"
-                    plainTextNewList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList])}"
+                    plainTextOldList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList])}"
+                    plainTextNewList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList])}"
                     for i, field in enumerate(embed.fields):
                         if field.name == 'Old Category':
                             embed.set_field_at(
                                 i,
                                 name='Old Category',
-                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category}\n{f"> [...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channel{'s' if len(oldChannelList[:oldIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){NEWLINE}" if oldIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(oldChannelList[oldIndexes[1]:])} more channel{'s' if len(oldChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] < len(oldChannelList) else ""}""",
+                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category}\n{f"> [...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channel{'s' if len(oldChannelList[:oldIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){NEWLINE}" if oldIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(oldChannelList[oldIndexes[1]:])} more channel{'s' if len(oldChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] < len(oldChannelList) else ""}""",
                             )
                             embed.set_field_at(
                                 i + 1,
                                 name='New Category',
-                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{after.category}\n{f"> [...Hover to view {len(newChannelList[:newIndexes[0]])} more channel{'s' if len(newChannelList[:newIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){NEWLINE}" if newIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(newChannelList[newIndexes[1]:])} more channel{'s' if len(newChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] < len(newChannelList) else ""}""",
+                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{after.category}\n{f"> [...Hover to view {len(newChannelList[:newIndexes[0]])} more channel{'s' if len(newChannelList[:newIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){NEWLINE}" if newIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(newChannelList[newIndexes[1]:])} more channel{'s' if len(newChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] < len(newChannelList) else ""}""",
                             )
                             if len(embed.fields[i].value) > 1024:
                                 embed.set_field_at(i, name=embed.fields[i].name, value=plainTextOldList)
@@ -1990,17 +2005,6 @@ class Cyberlog(commands.Cog):
                         os.remove(savePath)
                 except:
                     pass
-        if (before.position != after.position or before.category != after.category) and not channelPosFlag:
-            try:
-                self.channelCacheHelper[after.guild.id].append(channelPosTimekey)
-            except:
-                self.channelCacheHelper[after.guild.id] = [channelPosTimekey]
-            await utility.run_task(
-                self.delayedUpdateChannelIndexes(after.guild, channelPosTimekey),
-                queue=self.taskman,
-                name=f'channel_update - delayedUpdateChannelIndexes-{after.guild.id}-{channelPosTimekey}',
-                cancel_after=300,
-            )
         if type(before) is discord.TextChannel and before.name != after.name:
             await utility.run_task(
                 database.VerifyChannel(after), queue=self.taskman, name=f'channel_update - VerifyChannel-{after.id}', cancel_after=60
@@ -2037,8 +2041,8 @@ class Cyberlog(commands.Cog):
                         info: Info.Info = self.bot.get_cog('Info')
                         result = await info.ChannelInfo(
                             after,
-                            None if after.type[0] == 'category' else await after.invites(),
-                            None if after.type[0] != 'text' else await after.pins(),
+                            None if after.type.name == 'category' else await after.invites(),
+                            None if after.type.name != 'text' else await after.pins(),
                             [log async for log in after.guild.audit_logs(limit=None)],
                         )
                         await msg.edit(content=result[0], embed=result[1])
@@ -2070,24 +2074,6 @@ class Cyberlog(commands.Cog):
         except UnboundLocalError:
             return
 
-    async def delayedUpdateChannelIndexes(self, g: discord.Guild, timekey):
-        """Updates channel cache data after 1 second, to account for logging
-        Timekey: Unique key based on timestamp that allows the update process to go through only if it hasn't already, reducing inaccuracies in data
-        """
-        await asyncio.sleep(1)
-        if timekey not in self.channelCacheHelper[g.id]:
-            return
-        for c in g.categories:
-            try:
-                self.categories[c.id] = [c for c in c.channels]
-            except discord.Forbidden:
-                pass
-        try:
-            self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
-        except discord.Forbidden:
-            pass
-        self.channelCacheHelper[g.id].remove(timekey)
-
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
         """[DISCORD API METHOD] Called when channel is deleted"""
@@ -2095,12 +2081,12 @@ class Cyberlog(commands.Cog):
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(channel.guild))
         msg = None
         if await logEnabled(channel.guild, 'channel'):
-            content = f'A moderator deleted the {channel.type[0]} channel named {channel.name}'
+            content = f'A moderator deleted the {channel.type.name} channel named {channel.name}'
             settings = await getCyberAttributes(channel.guild, 'channel')
             color = red[await utility.color_theme(channel.guild)] if settings['color'][2] == 'auto' else settings['color'][2]
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelDelete"] if settings["library"] > 1 else self.emojis["delete"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type, 'Unknown type')} Channel was deleted" if settings['context'][0] < 2 else ''}""",
-                description=f'{self.channelKeys.get(channel.type[0]) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.name}',
+                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelDelete"] if settings["library"] > 1 else self.emojis["delete"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type.name, 'Unknown type')} Channel was deleted" if settings['context'][0] < 2 else ''}""",
+                description=f'{self.channelKeys.get(channel.type.name) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.name}',
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
@@ -2121,7 +2107,7 @@ class Cyberlog(commands.Cog):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
-                    content = f'{log.user} deleted the {channel.type[0]} channel named {channel.name}'
+                    content = f'{log.user} deleted the {channel.type.name} channel named {channel.name}'
                     if not serverIsGimped(channel.guild):
                         await utility.run_task(
                             updateLastActive(log.user, discord.utils.utcnow(), 'deleted a channel'),
@@ -2139,8 +2125,9 @@ class Cyberlog(commands.Cog):
                 embed=embed if not settings['plainText'] else None,
                 tts=settings['tts'],
             )
-            if channel.type[0] != 'category':
-                channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)
+            if channel.type.name != 'category':
+                channelList = channel.category.channels if channel.category else [c[1] for c in channel.guild.by_category() if c[0] is None]
+                # channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)
                 startEnd = (
                     channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0,
                     channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList),
@@ -2148,22 +2135,18 @@ class Cyberlog(commands.Cog):
                 # plainTextChannelList = f"{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
                 embed.add_field(
                     name='Category Tree',
-                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){NEWLINE}" if startEnd[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{NEWLINE}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}""",
+                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){NEWLINE}" if startEnd[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{NEWLINE}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}""",
                 )
                 if channel.category is not None:
                     self.categories[channel.category.id].remove(channel)
                 else:
                     self.categories[channel.guild.id].remove(channel)
-            if channel.type[0] == 'text':
+            if channel.type.name == 'text':
                 messages = await lightningdb.get_channel_messages(channel.id)
                 embed.add_field(name='Message count', value=len(messages) if messages else 0)
                 await lightningdb.delete_channel(channel.id)
-                channel_attachments_path = f'storage/{channel.guild.id}/attachments/{channel.id}'
-                try:
-                    await aioshutil.rmtree(channel_attachments_path)
-                except FileNotFoundError:
-                    # this channel didn't have an attachments directory
-                    pass
+                indexing: Indexing.Indexing = self.bot.get_cog('Indexing')
+                indexing.delete_all_attachments(channel)
                 self.pins.pop(channel.id, None)
             await msg.edit(content=None if not settings['plainText'] else content, embed=embed)
             await self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
