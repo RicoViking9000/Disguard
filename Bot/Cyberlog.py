@@ -93,7 +93,7 @@ class Cyberlog(commands.Cog):
         # caches use IDs to avoid holding large Member objects
         self.repeatedJoins: typing.Dict[str, typing.List[datetime.datetime]] = {}
         self.pins: typing.Dict[int, typing.List[int]] = {}  # enablement of this feature is tied to attachment logging being enabled
-        self.categories: typing.Dict[int, typing.List[discord.abc.GuildChannel]] = {}
+        self.categories: typing.Dict[int, typing.List[discord.abc.GuildChannel]] = {}  # only need to store id and cat pos
         self.members: typing.Dict[int, set[int]] = {}  # guild_id -> set(member_id)
         self.invites = {}
         self.roles: typing.Dict[int, set[int]] = {}  # role_id -> set(member_id)
@@ -103,16 +103,53 @@ class Cyberlog(commands.Cog):
         self.memberVoiceLogs = {}
         self.pauseDelete = []
         self.resumeToken = None
-        self.channelCacheHelper = {}
         self.taskman = set()
+
+        # change stream queue + workers to keep trackChanges loop lightweight
+        self._change_queue: asyncio.Queue | None = None
+        self._change_workers: list[asyncio.Task] = []
+        self._start_change_workers()
+
         self.syncData.start()
         self.delete_message_attachments.start()
         self.trackChanges.start()
+
+    def _start_change_workers(self, workers: int = 3) -> None:
+        if self._change_queue is None:
+            self._change_queue = asyncio.Queue(maxsize=10000)
+        # spawn workers only once
+        print('queue:', self._change_queue)
+        if not self._change_workers:
+            for i in range(workers):
+                self._change_workers.append(asyncio.create_task(self._change_worker(), name=f'change_worker_{i}'))
+
+    def cog_load(self):
+        return super().cog_load()
 
     def cog_unload(self):
         self.syncData.cancel()
         self.delete_message_attachments.cancel()
         self.trackChanges.cancel()
+        # shutdown workers asynchronously to avoid races
+        self.bot.loop.create_task(self._shutdown_change_workers())
+
+    async def _shutdown_change_workers(self) -> None:
+        # cancel workers first so they stop reading the queue
+        for w in self._change_workers:
+            w.cancel()
+        if self._change_workers:
+            await asyncio.gather(*self._change_workers, return_exceptions=True)
+        self._change_workers.clear()
+        # drain then null the queue
+        q = self._change_queue
+        if q is not None:
+            try:
+                while not q.empty():
+                    q.get_nowait()
+                    q.task_done()
+            except Exception:
+                pass
+        self._change_queue = None
 
     @tasks.loop()
     async def trackChanges(self):
@@ -122,40 +159,75 @@ class Cyberlog(commands.Cog):
             async with database.getDatabase().watch(full_document='updateLookup', resume_after=self.resumeToken) as change_stream:
                 async for change in change_stream:
                     self.resumeToken = change_stream.resume_token
-                    if change['operationType'] == 'delete':
-                        print(
-                            f"{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}"
-                        )
-                        continue
-                    fullDocument = change['fullDocument']
-                    collection = change['ns']['coll']
-                    if collection == 'disguard':
-                        continue
-                    elif collection == 'servers':
-                        name = 'name'
-                        objectID = fullDocument['server_id']
-                        await lightningdb.patch_server(objectID, fullDocument)
-                    elif collection == 'users':
-                        name = 'user_id'
-                        objectID = fullDocument['user_id']
-                        await lightningdb.patch_user(objectID, fullDocument)
-                    if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys():
-                        await utility.run_task(
-                            reddit.redditFeedHandler(self.bot.get_guild(objectID)),
-                            queue=self.taskman,
-                            name='Reddit Feed Handler - DB change',
-                            cancel_after=300,
-                        )
-                    if change['operationType'] == 'update' and any(
-                        [word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]
-                    ):
-                        continue  # Add attribute history probably
-                    print(
-                        f"""{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}"""
-                    )
+                    # fast-path: enqueue change for background workers (don't await heavy work here)
+                    try:
+                        self._change_queue.put_nowait(change)
+                    except asyncio.QueueFull:
+                        # queue is full; drop this change (or log/throttle) to avoid blocking stream
+                        logger.warning('Change queue full; dropping change event')
         except Exception as e:
             print(f'Tracking error: {e}')
             traceback.print_exc()
+        finally:
+            return
+
+    @trackChanges.before_loop
+    async def _before_trackChanges(self):
+        await self.bot.wait_until_ready()
+
+    async def _change_worker(self):
+        """Background worker to process DB change events from the change stream queue."""
+        reddit = self.bot.get_cog('Reddit')
+        while True:
+            try:
+                change = await self._change_queue.get()
+            except asyncio.CancelledError:
+                break
+            try:
+                try:
+                    if change.get('operationType') == 'delete':
+                        # nothing to do for deletes here
+                        continue
+                    fullDocument = change.get('fullDocument') or {}
+                    collection = change.get('ns', {}).get('coll')
+                    if collection == 'disguard':
+                        continue
+                    elif collection == 'servers':
+                        name = 'server_id'
+                        objectID = fullDocument.get('server_id')
+                        if objectID is not None:
+                            await lightningdb.patch_server(objectID, fullDocument)
+                    elif collection == 'users':
+                        name = 'user_id'
+                        objectID = fullDocument.get('user_id')
+                        if objectID is not None:
+                            await lightningdb.patch_user(objectID, fullDocument)
+                    # reddit feed trigger: schedule task (non-blocking)
+                    if change.get('operationType') == 'update' and change.get('updateDescription'):
+                        updated = change['updateDescription'].get('updatedFields', {})
+                        if 'redditFeeds' in updated:
+                            try:
+                                await utility.run_task(
+                                    reddit.redditFeedHandler(self.bot.get_guild(objectID)),
+                                    queue=self.taskman,
+                                    name='Reddit Feed Handler - DB change',
+                                    cancel_after=300,
+                                )
+                            except Exception:
+                                logger.exception('redditFeedHandler failed for guild %s', objectID)
+                        # ignore attribute-only changes that are expected to be handled elsewhere
+                        if any(k in updated for k in ('lastActive', 'lastOnline')):
+                            continue
+                    print(
+                        f"""{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}"""
+                    )
+                except Exception:
+                    logger.exception('Error processing change event')
+            finally:
+                try:
+                    self._change_queue.task_done()
+                except Exception:
+                    pass
 
     @tasks.loop(hours=24)  # V1.0: This now only runs once per day
     async def syncData(self):
@@ -208,15 +280,18 @@ class Cyberlog(commands.Cog):
                         self.memberPermissions[g.id][m.id] = 0
                 timeString += f'\n •Member cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
+                await lightningdb.delete_all_channel_categories()
                 for c in g.categories:
                     try:
-                        self.categories[c.id] = c.channels
+                        data = lightningdb.convert_category_to_simple_data(c).model_dump()
+                        await lightningdb.post_channel_category(c.id, data)
                     except discord.Forbidden:
-                        pass
+                        logger.warning(f'Forbidden to access categories in guild {g.id} during syncData')
                 try:
-                    self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]  # This can be made faster without a generator
+                    data = lightningdb.convert_category_to_simple_data(g).model_dump()
+                    await lightningdb.post_channel_category(g.id, data)
                 except discord.Forbidden:
-                    pass
+                    logger.warning(f'Forbidden to access uncategorized channels in guild {g.id} during syncData')
                 timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
@@ -242,7 +317,7 @@ class Cyberlog(commands.Cog):
             started = datetime.datetime.now()
             # drop message indexes for channels the bot can't find
             for collection in await lightningdb.database.list_collection_names():
-                if collection not in ('servers', 'users') and not self.bot.get_channel(int(collection)):
+                if collection not in ('servers', 'users', 'categories') and not self.bot.get_channel(int(collection)):
                     await lightningdb.delete_channel(int(collection))
             print(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
             logger.info(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
@@ -251,97 +326,138 @@ class Cyberlog(commands.Cog):
             started = datetime.datetime.now()
             started2 = datetime.datetime.now()
             self.bot.useAttributeQueue = True
-            updateOperations = collections.defaultdict(dict)
+            # batched attribute history collection + periodic flush to avoid unbounded memory growth
+            flush_threshold = 2000  # number of user entries before flushing
+            update_operations: dict[int, dict] = {}
+
+            async def _flush_update_ops(ops: dict):
+                if not ops:
+                    return
+                batch = dict(ops)  # copy to avoid mutation while background task runs
+                ops.clear()
+                await utility.run_task(
+                    database.BulkUpdateHistory(batch),
+                    name=f'SyncData - Bulk Update History (flushed {len(batch)})',
+                    queue=self.taskman,
+                    cancel_after=600,
+                )
+
             for i, m in enumerate(self.bot.get_all_members()):
                 m: discord.Member = m
-                updatedAvatar = False
-                if await self.privacyEnabledChecker(m, 'default', 'attributeHistory'):
-                    # for g in self.bot.guilds:
-                    #     m = g.get_member(u.id)
-                    #     if m: break
+                if not await self.privacyEnabledChecker(m, 'default', 'attributeHistory'):
+                    continue
+                try:
                     cache = await utility.get_user(m)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'statusHistory'):
-                        try:
-                            if m.status != discord.Status.offline:
-                                if m.activity == discord.ActivityType.custom or not m.activity:
-                                    prev = cache.get('statusHistory', [{}])[-1]
-                                    proposed = {
-                                        'e': None
-                                        if not m.activity
-                                        else m.activity.emoji.url
-                                        if m.activity.emoji.is_custom_emoji()
-                                        else str(m.activity.emoji)
-                                        if m.activity.emoji
-                                        else None,
-                                        'n': m.activity.name if m.activity else None,
-                                    }
-                                    if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}:
-                                        updateOperations[m.id].update(
-                                            {'statusHistory': {'emoji': proposed['e'], 'name': proposed['n'], 'timestamp': discord.utils.utcnow()}}
-                                        )
-                        except Exception as e:
-                            print(f'Custom status error for {m.name}: {e}')
-                            logger.error(f'Custom status error for {m.name}: {e}', exc_info=True)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
-                        try:
-                            if m.name != cache.get('usernameHistory', [{}])[-1].get('name'):
-                                updateOperations[m.id].update({'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}})
-                        except Exception as e:
-                            print(f'Username error for {m.name}: {e}')
-                            logger.error(f'Username error for {m.name}: {e}', exc_info=True)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'displaynameHistory'):
-                        try:
-                            if m.display_name != cache.get('displaynameHistory', [{}])[-1].get('name'):
-                                updateOperations[m.id].update({'displaynameHistory': {'name': m.display_name, 'timestamp': discord.utils.utcnow()}})
-                        except Exception as e:
-                            print(f'Displayname error for {m.name}: {e}')
-                            logger.error(f'Displayname error for {m.name}: {e}', exc_info=True)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
-                        try:
-                            if m.display_avatar.url != cache.get('avatarHistory', [{}])[-1].get('discordURL'):
-                                updateOperations[m.id].update(
-                                    {
-                                        'avatarHistory': {
-                                            'discordURL': m.display_avatar.url,
-                                            'imageURL': await self.imageToURL(m.display_avatar),
-                                            'timestamp': discord.utils.utcnow(),
-                                        }
-                                    }
+                except Exception:
+                    continue
+
+                updated_avatar = False
+
+                # statusHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'statusHistory'):
+                    try:
+                        if m.status != discord.Status.offline:
+                            prev = cache.get('statusHistory', [{}])[-1]
+                            proposed = {
+                                'e': None
+                                if not getattr(m, 'activity', None)
+                                else (
+                                    m.activity.emoji.url
+                                    if getattr(m.activity, 'emoji', None) and m.activity.emoji.is_custom_emoji()
+                                    else (str(m.activity.emoji) if getattr(m.activity, 'emoji', None) else None)
+                                ),
+                                'n': m.activity.name if getattr(m, 'activity', None) else None,
+                            }
+                            if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}:
+                                update_operations.setdefault(m.id, {}).update(
+                                    {'statusHistory': {'emoji': proposed['e'], 'name': proposed['n'], 'timestamp': discord.utils.utcnow()}}
                                 )
-                                updatedAvatar = True
-                        except Exception as e:
-                            print(f'Avatar error for {m.name}: {e}')
-                            logger.error(f'Avatar error for {m.name}: {e}', exc_info=True)
-                        if m.bot and len(cache.get('avatarHistory')) > 150:
-                            stripped_avatar_history = cache.get('avatarHistory')[-150:]
-                            await utility.run_task(
-                                database.SetAvatarHistory(m, stripped_avatar_history), queue=self.taskman, name='SyncData - Avatar History Strip'
+                    except Exception as e:
+                        logger.error(f'Custom status error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                # usernameHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
+                    try:
+                        if m.name != cache.get('usernameHistory', [{}])[-1].get('name'):
+                            update_operations.setdefault(m.id, {}).update({'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}})
+                    except Exception as e:
+                        logger.error(f'Username error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                # displaynameHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'displaynameHistory'):
+                    try:
+                        if m.display_name != cache.get('displaynameHistory', [{}])[-1].get('name'):
+                            update_operations.setdefault(m.id, {}).update(
+                                {'displaynameHistory': {'name': m.display_name, 'timestamp': discord.utils.utcnow()}}
                             )
-                    if updatedAvatar:
-                        await discord.utils.sleep_until(
-                            datetime.datetime.now() + datetime.timedelta(seconds=1)
-                        )  # To prevent ratelimiting if Disguard sends a message to retrieve the image URL
-                    if i % 1000 == 0 and i > 0:
-                        print(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
-                        logger.info(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
-                        started = datetime.datetime.now()
-            print(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
-            logger.info(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
-            started = datetime.datetime.now()
-            print('Bulk updating attribute history')
-            logger.info('Bulk updating attribute history')
-            await utility.run_task(
-                database.BulkUpdateHistory(updateOperations), name='SyncData - Bulk Update History', queue=self.taskman, cancel_after=600
-            )
-            print(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
-            logger.info(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
+                    except Exception as e:
+                        logger.error(f'Displayname error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                # avatarHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
+                    try:
+                        if m.display_avatar.url != cache.get('avatarHistory', [{}])[-1].get('discordURL'):
+                            image_url = await self.imageToURL(m.display_avatar)
+                            update_operations.setdefault(m.id, {}).update(
+                                {'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': image_url, 'timestamp': discord.utils.utcnow()}}
+                            )
+                            updated_avatar = True
+                    except Exception as e:
+                        logger.error(f'Avatar error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                if updated_avatar:
+                    # small pause to avoid potential flood when resolving many avatars
+                    await asyncio.sleep(0.25)
+
+                # flush intermediate batch if needed
+                if len(update_operations) >= flush_threshold:
+                    logger.info(f'Flushing {len(update_operations)} update operations (intermediate batch)')
+                    await _flush_update_ops(update_operations)
+
+                if i % 1000 == 0 and i > 0:
+                    logger.info(f'Processed attribute history for {i} users in {(datetime.datetime.now() - started).seconds}s')
+
+            # final flush of any remaining operations
+            if update_operations:
+                logger.info(f'Final flush of {len(update_operations)} update operations')
+                await _flush_update_ops(update_operations)
+
+            # process bot.attributeHistoryQueue in bounded batches to avoid huge single writes
+            try:
+                q = getattr(self.bot, 'attributeHistoryQueue', {}) or {}
+            except Exception:
+                q = {}
+
+            # attributeHistoryQueue is expected to be a mapping user_id -> updates
+            if q:
+                batch_limit = 2000
+                temp_batch = {}
+                for uid, updates in list(q.items()):
+                    temp_batch[uid] = updates
+                    if len(temp_batch) >= batch_limit:
+                        await utility.run_task(
+                            database.BulkUpdateHistory(dict(temp_batch)),
+                            name='SyncData - BulkUpdateHistory (attrQueue batch)',
+                            queue=self.taskman,
+                            cancel_after=600,
+                        )
+                        temp_batch.clear()
+                if temp_batch:
+                    await utility.run_task(
+                        database.BulkUpdateHistory(dict(temp_batch)),
+                        name='SyncData - BulkUpdateHistory (attrQueue final)',
+                        queue=self.taskman,
+                        cancel_after=600,
+                    )
+                # reset queue after flushing
+                self.bot.attributeHistoryQueue = collections.defaultdict(dict)
             self.bot.useAttributeQueue = False
-            await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
-            self.bot.attributeHistoryQueue = []
             started = datetime.datetime.now()
             if self.syncData.current_loop % 2 == 0:
                 if self.syncData.current_loop == 0:
-                    self.bot.get_cog('Reddit').syncRedditFeeds.start()
+                    reddit: Reddit.Reddit = self.bot.get_cog('Reddit')
+                    if not reddit.syncRedditFeeds.is_running():
+                        reddit.syncRedditFeeds.start()
                 for g in self.bot.guilds:
                     try:
                         await verifyLogChannel(self.bot, g)
