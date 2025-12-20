@@ -119,7 +119,7 @@ async def on_ready():  # Method is called whenever bot is ready after connection
         await asyncio.wait_for(initialize_check(), timeout=None)
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Retrieving data'))
         print('Grabbing pins...')
-        await cyber.grab_pins()
+        # await cyber.grab_pins()
     print('Booted')
     presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
     if not bot.activity:
