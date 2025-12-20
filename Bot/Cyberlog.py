@@ -93,7 +93,6 @@ class Cyberlog(commands.Cog):
         # caches use IDs to avoid holding large Member objects
         self.repeatedJoins: typing.Dict[str, typing.List[datetime.datetime]] = {}
         self.pins: typing.Dict[int, typing.List[int]] = {}  # enablement of this feature is tied to attachment logging being enabled
-        self.categories: typing.Dict[int, typing.List[discord.abc.GuildChannel]] = {}  # only need to store id and cat pos
         self.members: typing.Dict[int, set[int]] = {}  # guild_id -> set(member_id)
         self.invites = {}
         self.roles: typing.Dict[int, set[int]] = {}  # role_id -> set(member_id)
@@ -1784,7 +1783,6 @@ class Cyberlog(commands.Cog):
                     string_display = [f'{self.emojis["folder"] if settings["library"] > 1 else "📁"}{after.category.name}']
                     position_offset = after.category.channels[0].position
                     for i, channel in enumerate(after.category.channels):
-                        print(i, position_offset, before.position, after.position)
                         if i + position_offset == before.position and before.position < after.position:  # moving down
                             string_display.append(f'~~{self.channelKeys.get(before.type.name)}{before.name}~~❌')
                         meat_display = f"{self.channelKeys.get(channel.type.name)}{'__**' if channel.id == before.id else ''}{channel.name}{'**__' if channel.id == before.id else ''}"
@@ -1846,7 +1844,9 @@ class Cyberlog(commands.Cog):
                     tts=settings['tts'],
                 )
                 if type(before) is not discord.CategoryChannel and before.category != after.category:
-                    oldChannelList = self.categories.get(before.category.id) if before.category is not None else self.categories.get(before.guild.id)
+                    oldChannelList = (
+                        before.category.channels if before.category is not None else [c[1] for c in before.guild.by_category() if c[0] is None]
+                    )
                     newChannelList = (
                         after.category.channels if after.category is not None else [c[1] for c in after.guild.by_category() if c[0] is None]
                     )
@@ -2127,7 +2127,6 @@ class Cyberlog(commands.Cog):
             )
             if channel.type.name != 'category':
                 channelList = channel.category.channels if channel.category else [c[1] for c in channel.guild.by_category() if c[0] is None]
-                # channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)
                 startEnd = (
                     channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0,
                     channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList),
@@ -2137,10 +2136,6 @@ class Cyberlog(commands.Cog):
                     name='Category Tree',
                     value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){NEWLINE}" if startEnd[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{NEWLINE}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}""",
                 )
-                if channel.category is not None:
-                    self.categories[channel.category.id].remove(channel)
-                else:
-                    self.categories[channel.guild.id].remove(channel)
             if channel.type.name == 'text':
                 messages = await lightningdb.get_channel_messages(channel.id)
                 embed.add_field(name='Message count', value=len(messages) if messages else 0)
