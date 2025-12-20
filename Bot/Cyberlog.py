@@ -148,7 +148,7 @@ class Cyberlog(commands.Cog):
                     q.task_done()
             except Exception:
                 pass
-        self._change_queue = None
+        self._change_queue = asyncio.Queue(maxsize=10000)
 
     @tasks.loop()
     async def trackChanges(self):
@@ -311,7 +311,7 @@ class Cyberlog(commands.Cog):
                         vanity = await g.vanity_invite()
                         self.invites[str(g.id)][vanity.id] = vanity.uses
                     except (discord.HTTPException, discord.Forbidden):
-                        logger.info(f'No vanity invite for guild {g.id} during syncData')
+                        logger.info(f'No vanity invite for guild {g.name} during syncData')
                 except (discord.Forbidden, discord.HTTPException):
                     logger.warning(f'Could not access invites for guild {g.id} during syncData')
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
