@@ -94,7 +94,7 @@ class Cyberlog(commands.Cog):
         self.repeatedJoins: typing.Dict[str, typing.List[datetime.datetime]] = {}
         self.pins: typing.Dict[int, typing.List[int]] = {}  # enablement of this feature is tied to attachment logging being enabled
         self.members: typing.Dict[int, set[int]] = {}  # guild_id -> set(member_id)
-        self.invites = {}
+        self.invites: typing.Dict[str, typing.Dict[str, int]] = {}  # 12/2025 - being converted to only store invite id : usage count mapping
         self.roles: typing.Dict[int, set[int]] = {}  # role_id -> set(member_id)
         self.reactions = {}
         # store permission ints (guild_permissions.value) to avoid keeping Permissions objects
@@ -303,13 +303,17 @@ class Cyberlog(commands.Cog):
                 timeString += f'\n •Local attachment management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 try:
-                    self.invites[str(g.id)] = await g.invites()
+                    invites = await g.invites()
+                    self.invites[str(g.id)] = {}
+                    for invite in invites:
+                        self.invites[str(g.id)][invite.id] = invite.uses
                     try:
-                        self.invites[str(g.id) + '_vanity'] = await g.vanity_invite()
-                    except discord.HTTPException:
-                        pass
-                except:
-                    pass
+                        vanity = await g.vanity_invite()
+                        self.invites[str(g.id)][vanity.id] = vanity.uses
+                    except (discord.HTTPException, discord.Forbidden):
+                        logger.info(f'No vanity invite for guild {g.id} during syncData')
+                except (discord.Forbidden, discord.HTTPException):
+                    logger.warning(f'Could not access invites for guild {g.id} during syncData')
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
                 print(timeString)
                 logger.info(timeString)
@@ -2192,9 +2196,7 @@ class Cyberlog(commands.Cog):
         )
         msg = None
         if await logEnabled(member.guild, 'doorguard'):
-            newInv = []
             content = f'{member} joined the server'
-            targetInvite = None
             settings = await getCyberAttributes(member.guild, 'doorguard')
             color = green[await utility.color_theme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             count = len(member.guild.members)
@@ -2212,40 +2214,36 @@ class Cyberlog(commands.Cog):
                 if settings['author'] in (1, 2, 4):
                     embed.set_author(name=member.display_name, icon_url=url)
             try:
-                newInv = await member.guild.invites()
-                oldInv = self.invites.get(str(member.guild.id))
-            except discord.Forbidden:
-                pass
-                # content+="Tip: I can determine who invited new members if I have the `Manage Server` permissions"
-            try:
-                for invite in oldInv:
+                invite_used = None
+                new_invites = await member.guild.invites()
+                old_invites = self.invites.get(str(member.guild.id))
+                for invite in new_invites:
                     try:
-                        if newInv[newInv.index(invite)].uses > invite.uses:
-                            targetInvite = newInv[newInv.index(invite)]
+                        if invite.uses > old_invites[invite.id]:
+                            invite_used = invite
                             break
                     except ValueError:  # An invite that reached max uses will be missing from the new list
-                        targetInvite = newInv[newInv.index(invite)]
+                        invite_used = invite
                         break
-                if not targetInvite:  # Check the vanity invite (if applicable) if we don't have an invite
+                if not invite_used:  # Check the vanity invite (if applicable) if we don't have an invite
                     try:
                         invite = await member.guild.vanity_invite()
-                        if invite.uses > self.invites.get(str(member.guild.id) + '_vanity').uses:
-                            targetInvite = invite
+                        if invite.uses > old_invites[invite.id]:
+                            invite_used = invite
                     except discord.HTTPException:
                         pass
-                if not targetInvite:  # If the vanity invite either doesn't exist or isn't the invite used, then it was an invite created between the invites were stored & now
-                    for i in newInv:
-                        if i.id not in [oi.id for oi in oldInv] and i.uses != 0:
-                            targetInvite = i
+                if not invite_used:  # If the vanity invite either doesn't exist or isn't the invite used, then it was an invite created between the invites were stored & now
+                    for i in new_invites:
+                        if i.id not in old_invites.keys() and i.uses != 0:
+                            invite_used = i
                             break
+                self.invites[str(member.guild.id)] = {inv.id: inv.uses for inv in new_invites}
+                vanity = await member.guild.vanity_invite()
+                self.invites[str(member.guild.id)][vanity.id] = vanity.uses
             except discord.Forbidden:
                 embed.add_field(name='Invite Details', value='Enable `manage server` permissions to use this feature')
-            except Exception as e:
-                embed.add_field(name='Invite Details', value=f'Error retrieving details: {e}'[:1023])
-            try:
-                self.invites[str(member.guild.id)] = newInv
-            except:
-                pass
+            except discord.HTTPException:
+                embed.add_field(name='Invite Details', value='Could not retrieve invite details due to a Discord error')
             msg = await (await logChannel(member.guild, 'doorguard')).send(
                 content=content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
                 embed=embed if not settings['plainText'] else None,
@@ -2297,35 +2295,35 @@ class Cyberlog(commands.Cog):
                         QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.display_name}\n🔒: Quarantine {member.display_name}\n👢: Kick {member.display_name}\n🔨: Ban {member.display_name}')"""),
                 ]
                 embed.description = descriptionString[1]
-                if targetInvite:
-                    content = f'{targetInvite.inviter} invited {member} to the server' if targetInvite.inviter else content
+                if invite_used:
+                    content = f'{invite_used.inviter} invited {member} to the server' if invite_used.inviter else content
                     if (
                         (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)))
                         or (settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)))
-                        and targetInvite.inviter
+                        and invite_used.inviter
                     ):
-                        url = await self.imageToURL(targetInvite.inviter.display_avatar)
+                        url = await self.imageToURL(invite_used.inviter.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
-                            embed.set_author(name=targetInvite.inviter.name, icon_url=url)
+                            embed.set_author(name=invite_used.inviter.name, icon_url=url)
                     inviteString = [  # First: plaintext version, second: hover-links hybrid version
                         textwrap.dedent(f"""
-                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.display_name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
-                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
-                            {self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
-                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {utility.DisguardIntermediateTimestamp(targetInvite.created_at)}
-                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {utility.DisguardRelativeTimestamp(discord.utils.utcnow() + datetime.timedelta(seconds=targetInvite.max_age))}"}
-                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times"""),
+                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{invite_used.inviter.display_name} ({invite_used.inviter.mention})" if invite_used.inviter else "N/A"}
+                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{invite_used.code}
+                            {self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {invite_used.channel.name if invite_used.channel else "N/A"}
+                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {utility.DisguardIntermediateTimestamp(invite_used.created_at)}
+                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if invite_used.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {utility.DisguardRelativeTimestamp(invite_used.expires_at)}"}
+                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {invite_used.uses} of {"∞" if invite_used.max_uses == 0 else invite_used.max_uses} times"""),
                         textwrap.dedent(f"""
-                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.display_name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
+                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{invite_used.inviter.display_name} ({invite_used.inviter.mention})" if invite_used.inviter else "N/A"}
                             [Hover or react {self.emojis["expand"]} for more details]({msg.jump_url} '
-                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
-                            {"🚪" if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
-                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {await utility.name_zone(member.guild)}
-                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {(discord.utils.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {await utility.name_zone(member.guild)}"}
-                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')"""),
-                    ]  # Note to self: in v2.0, invites have an "expired_at" attribute, thus making "max age" calculations redundant
+                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{invite_used.code}
+                            {"🚪" if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {invite_used.channel.name if invite_used.channel else "N/A"}
+                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {invite_used.created_at:%b %d, %Y • %I:%M %p} {await utility.name_zone(member.guild)}
+                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if invite_used.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {invite_used.expires_at:%b %d, %Y • %I:%M %p} UTC"}
+                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {invite_used.uses} of {"∞" if invite_used.max_uses == 0 else invite_used.max_uses} times')"""),
+                    ]
                     embed.add_field(name='Invite Details', value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             if member.flags.did_rejoin:
                 embed.set_footer(text='This member rejoined the server')
@@ -4258,16 +4256,22 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_invite_create(self, invite: discord.Invite):
         try:
-            self.invites[str(invite.guild.id)] = await invite.guild.invites()
-        except discord.HTTPException:
-            pass
+            invites = await invite.guild.invites()
+            self.invites[str(invite.guild.id)] = {inv.id: inv.uses for inv in invites}
+            vanity = await invite.guild.vanity_invite()
+            self.invites[str(invite.guild.id)][vanity.id] = vanity.uses
+        except (discord.HTTPException, discord.Forbidden):
+            logger.warning(f'Could not fetch invites for guild {invite.guild.id} on invite creation.')
 
     @commands.Cog.listener()
     async def on_invite_delete(self, invite: discord.Invite):
         try:
-            self.invites[str(invite.guild.id)] = await invite.guild.invites()
-        except discord.HTTPException:
-            pass
+            invites = await invite.guild.invites()
+            self.invites[str(invite.guild.id)] = {inv.id: inv.uses for inv in invites}
+            vanity = await invite.guild.vanity_invite()
+            self.invites[str(invite.guild.id)][vanity.id] = vanity.uses
+        except (discord.HTTPException, discord.Forbidden):
+            logger.warning(f'Could not fetch invites for guild {invite.guild.id} on invite deletion.')
 
     @commands.Cog.listener()
     async def on_webhooks_update(self, channel: discord.TextChannel):
