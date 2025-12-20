@@ -828,6 +828,11 @@ def sort_folders_by_oldest(directory):
     return folders
 
 
+def sanitize_tooltip(text: str) -> str:
+    """Sanitize text for use in Markdown hover tooltips."""
+    return text.replace('\\', '\\\\').replace("'", "\\'").replace('\n', ' ')
+
+
 class BasicView(discord.ui.View):
     """For when you just need somewhere to stick some components"""
 
