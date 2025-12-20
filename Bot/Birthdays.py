@@ -440,16 +440,17 @@ async def ageHandler(self: Birthdays, interaction: discord.Interaction, previous
 async def wishlistHandler(self: Birthdays, interaction: discord.Interaction, previousView, mode: str = 'home'):
     cyber: Cyberlog.Cyberlog = self.bot.get_cog('Cyberlog')
     wishlist_hidden = interaction.guild and not await cyber.privacyVisibilityChecker(interaction.user, 'birthdayModule', 'wishlist')
-    translation = {'view wishlist': 'home', 'add items': 'add', 'remove items': 'remove'}
-    view = WishlistView(self, interaction, previousView, wishlist_hidden, translation[mode] if mode in translation.keys() else 'home')
-    if translation[mode] == 'home':
+    legend = {'view wishlist': 'home', 'add items': 'add', 'remove items': 'remove'}
+    directive = legend[mode] if mode in legend.keys() else 'home'
+    view = WishlistView(self, interaction, previousView, wishlist_hidden, directive)
+    if directive == 'home':
         embed = await view.createEmbed()
         if interaction.response.is_done():
             await interaction.followup.send(embed=embed, view=view, ephemeral=wishlist_hidden)
         else:
             await interaction.response.send_message(embed=embed, view=view, ephemeral=wishlist_hidden)
     else:
-        await view.wishlistEditPreview(interaction, translation[mode] == 'add')
+        await view.wishlistEditPreview(interaction, directive == 'add')
 
 
 async def upcomingBirthdaysPrep(self: Birthdays, interaction: discord.Interaction, currentServer, disguardSuggest, weekBirthday):
