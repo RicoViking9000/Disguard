@@ -752,7 +752,7 @@ def date_to_filename(date: datetime.datetime):
 
 
 def large_server(server: discord.Guild):
-    return server.member_count > 150
+    return server.member_count > 200
 
 
 async def update_bot_presence(bot: commands.Bot, status: discord.Status = None, activity: discord.BaseActivity = None):
@@ -826,6 +826,11 @@ def sort_folders_by_oldest(directory):
     folders.sort(key=lambda x: os.path.getctime(x))
 
     return folders
+
+
+def sanitize_tooltip(text: str) -> str:
+    """Sanitize text for use in Markdown hover tooltips."""
+    return text.replace('\\', '\\\\').replace("'", "\\'").replace('\n', ' ')
 
 
 class BasicView(discord.ui.View):

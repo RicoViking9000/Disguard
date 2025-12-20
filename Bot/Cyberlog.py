@@ -66,6 +66,7 @@ yellow = (0xFFFF00, 0xFFFF66)
 NEWLINE = '\n'
 newlineQuote = '\n> '
 qlf = '  '  # Two special characters to represent quoteLineFormat
+_server_cache: dict[int, tuple[float, dict]] = {}
 
 
 class Cyberlog(commands.Cog):
@@ -89,27 +90,65 @@ class Cyberlog(commands.Cog):
             'news': self.emojis['announcementsChannel'],
             'store': self.emojis['storeChannel'],
         }
+        # caches use IDs to avoid holding large Member objects
         self.repeatedJoins: typing.Dict[str, typing.List[datetime.datetime]] = {}
         self.pins: typing.Dict[int, typing.List[int]] = {}  # enablement of this feature is tied to attachment logging being enabled
-        self.categories: typing.Dict[int, typing.List[discord.abc.GuildChannel]] = {}
-        self.members: typing.Dict[int, typing.List[discord.Member]] = {}
-        self.invites = {}
-        self.roles: typing.Dict[int, discord.Member] = {}
+        self.members: typing.Dict[int, set[int]] = {}  # guild_id -> set(member_id)
+        self.invites: typing.Dict[str, typing.Dict[str, int]] = {}  # 12/2025 - being converted to only store invite id : usage count mapping
+        self.roles: typing.Dict[int, set[int]] = {}  # role_id -> set(member_id)
         self.reactions = {}
-        self.memberPermissions = collections.defaultdict(lambda: collections.defaultdict(dict))
+        # store permission ints (guild_permissions.value) to avoid keeping Permissions objects
+        self.memberPermissions = collections.defaultdict(lambda: collections.defaultdict(int))
         self.memberVoiceLogs = {}
         self.pauseDelete = []
         self.resumeToken = None
-        self.channelCacheHelper = {}
         self.taskman = set()
+
+        # change stream queue + workers to keep trackChanges loop lightweight
+        self._change_queue: asyncio.Queue | None = None
+        self._change_workers: list[asyncio.Task] = []
+        self._start_change_workers()
+
         self.syncData.start()
         self.delete_message_attachments.start()
         self.trackChanges.start()
+
+    def _start_change_workers(self, workers: int = 3) -> None:
+        if self._change_queue is None:
+            self._change_queue = asyncio.Queue(maxsize=10000)
+        # spawn workers only once
+        print('queue:', self._change_queue)
+        if not self._change_workers:
+            for i in range(workers):
+                self._change_workers.append(asyncio.create_task(self._change_worker(), name=f'change_worker_{i}'))
+
+    def cog_load(self):
+        return super().cog_load()
 
     def cog_unload(self):
         self.syncData.cancel()
         self.delete_message_attachments.cancel()
         self.trackChanges.cancel()
+        # shutdown workers asynchronously to avoid races
+        self.bot.loop.create_task(self._shutdown_change_workers())
+
+    async def _shutdown_change_workers(self) -> None:
+        # cancel workers first so they stop reading the queue
+        for w in self._change_workers:
+            w.cancel()
+        if self._change_workers:
+            await asyncio.gather(*self._change_workers, return_exceptions=True)
+        self._change_workers.clear()
+        # drain then null the queue
+        q = self._change_queue
+        if q is not None:
+            try:
+                while not q.empty():
+                    q.get_nowait()
+                    q.task_done()
+            except Exception:
+                pass
+        self._change_queue = asyncio.Queue(maxsize=10000)
 
     @tasks.loop()
     async def trackChanges(self):
@@ -119,40 +158,75 @@ class Cyberlog(commands.Cog):
             async with database.getDatabase().watch(full_document='updateLookup', resume_after=self.resumeToken) as change_stream:
                 async for change in change_stream:
                     self.resumeToken = change_stream.resume_token
-                    if change['operationType'] == 'delete':
-                        print(
-                            f"{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - database {change['operationType']}: {change['ns']['db']} - {change['ns']['coll']}"
-                        )
-                        continue
-                    fullDocument = change['fullDocument']
-                    collection = change['ns']['coll']
-                    if collection == 'disguard':
-                        continue
-                    elif collection == 'servers':
-                        name = 'name'
-                        objectID = fullDocument['server_id']
-                        await lightningdb.patch_server(objectID, fullDocument)
-                    elif collection == 'users':
-                        name = 'user_id'
-                        objectID = fullDocument['user_id']
-                        await lightningdb.patch_user(objectID, fullDocument)
-                    if change['operationType'] == 'update' and 'redditFeeds' in change['updateDescription']['updatedFields'].keys():
-                        await utility.run_task(
-                            reddit.redditFeedHandler(self.bot.get_guild(objectID)),
-                            queue=self.taskman,
-                            name='Reddit Feed Handler - DB change',
-                            cancel_after=300,
-                        )
-                    if change['operationType'] == 'update' and any(
-                        [word in change['updateDescription']['updatedFields'].keys() for word in ('lastActive', 'lastOnline')]
-                    ):
-                        continue  # Add attribute history probably
-                    print(
-                        f"""{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}"""
-                    )
+                    # fast-path: enqueue change for background workers (don't await heavy work here)
+                    try:
+                        self._change_queue.put_nowait(change)
+                    except asyncio.QueueFull:
+                        # queue is full; drop this change (or log/throttle) to avoid blocking stream
+                        logger.warning('Change queue full; dropping change event')
         except Exception as e:
             print(f'Tracking error: {e}')
             traceback.print_exc()
+        finally:
+            return
+
+    @trackChanges.before_loop
+    async def _before_trackChanges(self):
+        await self.bot.wait_until_ready()
+
+    async def _change_worker(self):
+        """Background worker to process DB change events from the change stream queue."""
+        reddit = self.bot.get_cog('Reddit')
+        while True:
+            try:
+                change = await self._change_queue.get()
+            except asyncio.CancelledError:
+                break
+            try:
+                try:
+                    if change.get('operationType') == 'delete':
+                        # nothing to do for deletes here
+                        continue
+                    fullDocument = change.get('fullDocument') or {}
+                    collection = change.get('ns', {}).get('coll')
+                    if collection == 'disguard':
+                        continue
+                    elif collection == 'servers':
+                        name = 'server_id'
+                        objectID = fullDocument.get('server_id')
+                        if objectID is not None:
+                            await lightningdb.patch_server(objectID, fullDocument)
+                    elif collection == 'users':
+                        name = 'user_id'
+                        objectID = fullDocument.get('user_id')
+                        if objectID is not None:
+                            await lightningdb.patch_user(objectID, fullDocument)
+                    # reddit feed trigger: schedule task (non-blocking)
+                    if change.get('operationType') == 'update' and change.get('updateDescription'):
+                        updated = change['updateDescription'].get('updatedFields', {})
+                        if 'redditFeeds' in updated:
+                            try:
+                                await utility.run_task(
+                                    reddit.redditFeedHandler(self.bot.get_guild(objectID)),
+                                    queue=self.taskman,
+                                    name='Reddit Feed Handler - DB change',
+                                    cancel_after=300,
+                                )
+                            except Exception:
+                                logger.exception('redditFeedHandler failed for guild %s', objectID)
+                        # ignore attribute-only changes that are expected to be handled elsewhere
+                        if any(k in updated for k in ('lastActive', 'lastOnline')):
+                            continue
+                    print(
+                        f"""{qlf}{change['clusterTime'].as_datetime() - datetime.timedelta(hours=DST):%b %d, %Y • %I:%M:%S %p} - (database {change['operationType']} -- {change['ns']['db']} - {change['ns']['coll']}){f": {fullDocument[name]} - {', '.join([f' {k}' for k in change['updateDescription']['updatedFields'].keys()])}" if change['operationType'] == 'update' else ''}"""
+                    )
+                except Exception:
+                    logger.exception('Error processing change event')
+            finally:
+                try:
+                    self._change_queue.task_done()
+                except Exception:
+                    pass
 
     @tasks.loop(hours=24)  # V1.0: This now only runs once per day
     async def syncData(self):
@@ -190,21 +264,33 @@ class Cyberlog(commands.Cog):
                 timeString += f'\n •Default channel calculations: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 for r in g.roles:
-                    self.roles[r.id] = r.members  # This allows the bot to properly display how many members had a role before it was deleted
-                self.members[g.id] = g.members
+                    # store role member IDs (avoid storing Member objects)
+                    try:
+                        self.roles[r.id] = {m.id for m in r.members}
+                    except Exception:
+                        self.roles[r.id] = set()
+                # store guild member IDs
+                self.members[g.id] = {m.id for m in g.members}
                 for m in g.members:
-                    self.memberPermissions[g.id][m.id] = m.guild_permissions
+                    # store permission integer
+                    try:
+                        self.memberPermissions[g.id][m.id] = m.guild_permissions.value
+                    except Exception:
+                        self.memberPermissions[g.id][m.id] = 0
                 timeString += f'\n •Member cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
+                await lightningdb.delete_all_channel_categories()
                 for c in g.categories:
                     try:
-                        self.categories[c.id] = c.channels
+                        data = lightningdb.convert_category_to_simple_data(c).model_dump()
+                        await lightningdb.post_channel_category(c.id, data)
                     except discord.Forbidden:
-                        pass
+                        logger.warning(f'Forbidden to access categories in guild {g.id} during syncData')
                 try:
-                    self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]  # This can be made faster without a generator
+                    data = lightningdb.convert_category_to_simple_data(g).model_dump()
+                    await lightningdb.post_channel_category(g.id, data)
                 except discord.Forbidden:
-                    pass
+                    logger.warning(f'Forbidden to access uncategorized channels in guild {g.id} during syncData')
                 timeString += f'\n •Channel cache management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 attachmentsPath = f'Attachments/{g.id}'
@@ -217,20 +303,24 @@ class Cyberlog(commands.Cog):
                 timeString += f'\n •Local attachment management: {(datetime.datetime.now() - started).seconds}s'
                 started = datetime.datetime.now()
                 try:
-                    self.invites[str(g.id)] = await g.invites()
+                    invites = await g.invites()
+                    self.invites[str(g.id)] = {}
+                    for invite in invites:
+                        self.invites[str(g.id)][invite.id] = invite.uses
                     try:
-                        self.invites[str(g.id) + '_vanity'] = await g.vanity_invite()
-                    except discord.HTTPException:
-                        pass
-                except:
-                    pass
+                        vanity = await g.vanity_invite()
+                        self.invites[str(g.id)][vanity.id] = vanity.uses
+                    except (discord.HTTPException, discord.Forbidden):
+                        logger.info(f'No vanity invite for guild {g.name} during syncData')
+                except (discord.Forbidden, discord.HTTPException):
+                    logger.warning(f'Could not access invites for guild {g.id} during syncData')
                 timeString += f'\n •Invites management: {(datetime.datetime.now() - started).seconds}s\nFinished attribute processing in {(datetime.datetime.now() - serverStarted).seconds}s total'
                 print(timeString)
                 logger.info(timeString)
             started = datetime.datetime.now()
             # drop message indexes for channels the bot can't find
             for collection in await lightningdb.database.list_collection_names():
-                if collection not in ('servers', 'users') and not self.bot.get_channel(int(collection)):
+                if collection not in ('servers', 'users', 'categories') and not self.bot.get_channel(int(collection)):
                     await lightningdb.delete_channel(int(collection))
             print(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
             logger.info(f'Verified local message indexes in {(datetime.datetime.now() - started).seconds}s')
@@ -239,97 +329,138 @@ class Cyberlog(commands.Cog):
             started = datetime.datetime.now()
             started2 = datetime.datetime.now()
             self.bot.useAttributeQueue = True
-            updateOperations = collections.defaultdict(dict)
+            # batched attribute history collection + periodic flush to avoid unbounded memory growth
+            flush_threshold = 2000  # number of user entries before flushing
+            update_operations: dict[int, dict] = {}
+
+            async def _flush_update_ops(ops: dict):
+                if not ops:
+                    return
+                batch = dict(ops)  # copy to avoid mutation while background task runs
+                ops.clear()
+                await utility.run_task(
+                    database.BulkUpdateHistory(batch),
+                    name=f'SyncData - Bulk Update History (flushed {len(batch)})',
+                    queue=self.taskman,
+                    cancel_after=600,
+                )
+
             for i, m in enumerate(self.bot.get_all_members()):
                 m: discord.Member = m
-                updatedAvatar = False
-                if await self.privacyEnabledChecker(m, 'default', 'attributeHistory'):
-                    # for g in self.bot.guilds:
-                    #     m = g.get_member(u.id)
-                    #     if m: break
+                if not await self.privacyEnabledChecker(m, 'default', 'attributeHistory'):
+                    continue
+                try:
                     cache = await utility.get_user(m)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'statusHistory'):
-                        try:
-                            if m.status != discord.Status.offline:
-                                if m.activity == discord.ActivityType.custom or not m.activity:
-                                    prev = cache.get('statusHistory', [{}])[-1]
-                                    proposed = {
-                                        'e': None
-                                        if not m.activity
-                                        else m.activity.emoji.url
-                                        if m.activity.emoji.is_custom_emoji()
-                                        else str(m.activity.emoji)
-                                        if m.activity.emoji
-                                        else None,
-                                        'n': m.activity.name if m.activity else None,
-                                    }
-                                    if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}:
-                                        updateOperations[m.id].update(
-                                            {'statusHistory': {'emoji': proposed['e'], 'name': proposed['n'], 'timestamp': discord.utils.utcnow()}}
-                                        )
-                        except Exception as e:
-                            print(f'Custom status error for {m.name}: {e}')
-                            logger.error(f'Custom status error for {m.name}: {e}', exc_info=True)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
-                        try:
-                            if m.name != cache.get('usernameHistory', [{}])[-1].get('name'):
-                                updateOperations[m.id].update({'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}})
-                        except Exception as e:
-                            print(f'Username error for {m.name}: {e}')
-                            logger.error(f'Username error for {m.name}: {e}', exc_info=True)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'displaynameHistory'):
-                        try:
-                            if m.display_name != cache.get('displaynameHistory', [{}])[-1].get('name'):
-                                updateOperations[m.id].update({'displaynameHistory': {'name': m.display_name, 'timestamp': discord.utils.utcnow()}})
-                        except Exception as e:
-                            print(f'Displayname error for {m.name}: {e}')
-                            logger.error(f'Displayname error for {m.name}: {e}', exc_info=True)
-                    if await self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
-                        try:
-                            if m.display_avatar.url != cache.get('avatarHistory', [{}])[-1].get('discordURL'):
-                                updateOperations[m.id].update(
-                                    {
-                                        'avatarHistory': {
-                                            'discordURL': m.display_avatar.url,
-                                            'imageURL': await self.imageToURL(m.display_avatar),
-                                            'timestamp': discord.utils.utcnow(),
-                                        }
-                                    }
+                except Exception:
+                    continue
+
+                updated_avatar = False
+
+                # statusHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'statusHistory'):
+                    try:
+                        if m.status != discord.Status.offline:
+                            prev = cache.get('statusHistory', [{}])[-1]
+                            proposed = {
+                                'e': None
+                                if not getattr(m, 'activity', None)
+                                else (
+                                    m.activity.emoji.url
+                                    if getattr(m.activity, 'emoji', None) and m.activity.emoji.is_custom_emoji()
+                                    else (str(m.activity.emoji) if getattr(m.activity, 'emoji', None) else None)
+                                ),
+                                'n': m.activity.name if getattr(m, 'activity', None) else None,
+                            }
+                            if proposed != {'e': prev.get('emoji'), 'n': prev.get('name')}:
+                                update_operations.setdefault(m.id, {}).update(
+                                    {'statusHistory': {'emoji': proposed['e'], 'name': proposed['n'], 'timestamp': discord.utils.utcnow()}}
                                 )
-                                updatedAvatar = True
-                        except Exception as e:
-                            print(f'Avatar error for {m.name}: {e}')
-                            logger.error(f'Avatar error for {m.name}: {e}', exc_info=True)
-                        if m.bot and len(cache.get('avatarHistory')) > 150:
-                            stripped_avatar_history = cache.get('avatarHistory')[-150:]
-                            await utility.run_task(
-                                database.SetAvatarHistory(m, stripped_avatar_history), queue=self.taskman, name='SyncData - Avatar History Strip'
+                    except Exception as e:
+                        logger.error(f'Custom status error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                # usernameHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'usernameHistory'):
+                    try:
+                        if m.name != cache.get('usernameHistory', [{}])[-1].get('name'):
+                            update_operations.setdefault(m.id, {}).update({'usernameHistory': {'name': m.name, 'timestamp': discord.utils.utcnow()}})
+                    except Exception as e:
+                        logger.error(f'Username error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                # displaynameHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'displaynameHistory'):
+                    try:
+                        if m.display_name != cache.get('displaynameHistory', [{}])[-1].get('name'):
+                            update_operations.setdefault(m.id, {}).update(
+                                {'displaynameHistory': {'name': m.display_name, 'timestamp': discord.utils.utcnow()}}
                             )
-                    if updatedAvatar:
-                        await discord.utils.sleep_until(
-                            datetime.datetime.now() + datetime.timedelta(seconds=1)
-                        )  # To prevent ratelimiting if Disguard sends a message to retrieve the image URL
-                    if i % 1000 == 0 and i > 0:
-                        print(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
-                        logger.info(f'Processed attribute history for 1000 users in {(datetime.datetime.now() - started).seconds}s')
-                        started = datetime.datetime.now()
-            print(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
-            logger.info(f'Processed attribute history for {len(self.bot.users)} users in {(datetime.datetime.now() - started2).seconds}s')
-            started = datetime.datetime.now()
-            print('Bulk updating attribute history')
-            logger.info('Bulk updating attribute history')
-            await utility.run_task(
-                database.BulkUpdateHistory(updateOperations), name='SyncData - Bulk Update History', queue=self.taskman, cancel_after=600
-            )
-            print(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
-            logger.info(f'Saved attribute history for everyone in {(datetime.datetime.now() - started).seconds}s')
+                    except Exception as e:
+                        logger.error(f'Displayname error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                # avatarHistory
+                if await self.privacyEnabledChecker(m, 'attributeHistory', 'avatarHistory'):
+                    try:
+                        if m.display_avatar.url != cache.get('avatarHistory', [{}])[-1].get('discordURL'):
+                            image_url = await self.imageToURL(m.display_avatar)
+                            update_operations.setdefault(m.id, {}).update(
+                                {'avatarHistory': {'discordURL': m.display_avatar.url, 'imageURL': image_url, 'timestamp': discord.utils.utcnow()}}
+                            )
+                            updated_avatar = True
+                    except Exception as e:
+                        logger.error(f'Avatar error for {getattr(m, "name", m.id)}: {e}', exc_info=True)
+
+                if updated_avatar:
+                    # small pause to avoid potential flood when resolving many avatars
+                    await asyncio.sleep(0.25)
+
+                # flush intermediate batch if needed
+                if len(update_operations) >= flush_threshold:
+                    logger.info(f'Flushing {len(update_operations)} update operations (intermediate batch)')
+                    await _flush_update_ops(update_operations)
+
+                if i % 1000 == 0 and i > 0:
+                    logger.info(f'Processed attribute history for {i} users in {(datetime.datetime.now() - started).seconds}s')
+
+            # final flush of any remaining operations
+            if update_operations:
+                logger.info(f'Final flush of {len(update_operations)} update operations')
+                await _flush_update_ops(update_operations)
+
+            # process bot.attributeHistoryQueue in bounded batches to avoid huge single writes
+            try:
+                q = getattr(self.bot, 'attributeHistoryQueue', {}) or {}
+            except Exception:
+                q = {}
+
+            # attributeHistoryQueue is expected to be a mapping user_id -> updates
+            if q:
+                batch_limit = 2000
+                temp_batch = {}
+                for uid, updates in list(q.items()):
+                    temp_batch[uid] = updates
+                    if len(temp_batch) >= batch_limit:
+                        await utility.run_task(
+                            database.BulkUpdateHistory(dict(temp_batch)),
+                            name='SyncData - BulkUpdateHistory (attrQueue batch)',
+                            queue=self.taskman,
+                            cancel_after=600,
+                        )
+                        temp_batch.clear()
+                if temp_batch:
+                    await utility.run_task(
+                        database.BulkUpdateHistory(dict(temp_batch)),
+                        name='SyncData - BulkUpdateHistory (attrQueue final)',
+                        queue=self.taskman,
+                        cancel_after=600,
+                    )
+                # reset queue after flushing
+                self.bot.attributeHistoryQueue = collections.defaultdict(dict)
             self.bot.useAttributeQueue = False
-            await database.BulkUpdateHistory(self.bot.attributeHistoryQueue)
-            self.bot.attributeHistoryQueue = []
             started = datetime.datetime.now()
             if self.syncData.current_loop % 2 == 0:
                 if self.syncData.current_loop == 0:
-                    self.bot.get_cog('Reddit').syncRedditFeeds.start()
+                    reddit: Reddit.Reddit = self.bot.get_cog('Reddit')
+                    if not reddit.syncRedditFeeds.is_running():
+                        reddit.syncRedditFeeds.start()
                 for g in self.bot.guilds:
                     try:
                         await verifyLogChannel(self.bot, g)
@@ -391,7 +522,7 @@ class Cyberlog(commands.Cog):
     async def grab_pins(self):
         """Fetches pinned messages to be stored locally"""
         for g in self.bot.guilds:
-            saving_enabled = (await utility.get_server(g)).get('cyberlog', {}).get('image')
+            saving_enabled = (await cached_get_server(g)).get('cyberlog', {}).get('image')
             if not saving_enabled:
                 continue
             for c in g.text_channels:
@@ -603,7 +734,7 @@ class Cyberlog(commands.Cog):
         m = p.message_id
 
         # embed suppression handling
-        server_settings = await utility.get_server(g)
+        server_settings = await cached_get_server(g)
         if server_settings['undoSuppression']:
             if p.emoji == self.emojis['expand'] and utility.ManageServer(u):
                 message = await g.get_channel(p.channel_id).fetch_message(m)
@@ -619,7 +750,7 @@ class Cyberlog(commands.Cog):
             layerObject = collections.defaultdict(lambda: collections.defaultdict(dict))
         layerObject[m][u.id][p.emoji.name] = {'timestamp': discord.utils.utcnow(), 'guild': g.id}
         self.reactions = layerObject
-        sleepTime = (await utility.get_server(g))['cyberlog']['ghostReactionTime']
+        sleepTime = (await cached_get_server(g))['cyberlog']['ghostReactionTime']
         await asyncio.sleep(sleepTime)
         try:
             layerObject[m][u.id].remove(p.emoji.name)
@@ -650,7 +781,7 @@ class Cyberlog(commands.Cog):
         except KeyError:
             return
         seconds = (discord.utils.utcnow() - layerObject['timestamp']).seconds
-        if seconds < (await utility.get_server(g))['cyberlog']['ghostReactionTime']:
+        if seconds < (await cached_get_server(g))['cyberlog']['ghostReactionTime']:
             settings = await getCyberAttributes(g, 'misc')
             received = discord.utils.utcnow()
             adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(g))
@@ -744,7 +875,7 @@ class Cyberlog(commands.Cog):
         bot_ignore = False
         log_channel = await logChannel(guild, 'message')
         settings = await getCyberAttributes(guild, 'message')
-        server_settings = await utility.get_server(guild)
+        server_settings = await cached_get_server(guild)
         bot_author_settings = server_settings.get('cyberlog', {}).get('messageLogsBotAuthor', 0)
         received = discord.utils.utcnow()
         tz_adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(guild))
@@ -993,8 +1124,8 @@ class Cyberlog(commands.Cog):
             attachments_path = f'storage/{self.after.guild.id}/attachments/{self.after.channel.id}/{self.after.id}'
             attachments = []
             try:
-                with open(index_path, 'w') as json_file:
-                    json.dump(message_data, json_file, indent=4)
+                async with aiofiles.open(index_path, 'w') as json_file:
+                    await json_file.write(json.dumps(message_data, indent=4))
             except Exception:
                 logger.error(f'Error writing message index to {index_path}', exc_info=True)
             try:
@@ -1186,7 +1317,7 @@ class Cyberlog(commands.Cog):
         if settings['embedTimestamp'] in (1, 3):
             embed.timestamp = discord.utils.utcnow()
         embed.set_footer(text=f'Message ID: {payload.message_id}')
-        cyber = (await utility.get_server(g)).get('cyberlog')
+        cyber = (await cached_get_server(g)).get('cyberlog')
         message_attachments: list[tuple[b2sdk.v2.FileVersion, str]] = []  # List of files to be sent with this message
         send_attachments = []
         # Retrieve this message index & export it to a JSON
@@ -1194,8 +1325,8 @@ class Cyberlog(commands.Cog):
         index_path = f'storage/temp/index_{payload.message_id}.json'
         if message_data:
             try:
-                with open(index_path, 'w') as json_file:
-                    json.dump(message_data, json_file, indent=4)
+                async with aiofiles.open(index_path, 'w') as json_file:
+                    await json_file.write(json.dumps(message_data, indent=4))
                     if cyber.get('sendIndexFile'):
                         send_attachments.append(index_path)
             except Exception:
@@ -1284,7 +1415,7 @@ class Cyberlog(commands.Cog):
                         logArchives = {}
                 if payload.message_id in [int(k) for k in logArchives.keys()]:
                     await self.updateLogEmbed(g, payload.message_id, {'customKeyMessageIsDeleted': True})
-            if (author.bot and not (await utility.get_server(g))['cyberlog'].get('disguardLogRecursion')) or not await logExclusions(
+            if (author.bot and not (await cached_get_server(g))['cyberlog'].get('disguardLogRecursion')) or not await logExclusions(
                 channel, memberObject
             ):
                 return
@@ -1378,10 +1509,10 @@ class Cyberlog(commands.Cog):
                 settings['plainText'] = True
         if log_bot_author in [0, 2] and author.bot:
             # Check to see if the recursion deletion mode is enabled for Disguard log messages
-            if author.id == self.bot.user.id and (await utility.get_server(g))['cyberlog'].get('disguardLogRecursion'):
-                channels = [(await utility.get_server(g))['cyberlog']['defaultChannel']]
+            if author.id == self.bot.user.id and (await cached_get_server(g))['cyberlog'].get('disguardLogRecursion'):
+                channels = [(await cached_get_server(g))['cyberlog']['defaultChannel']]
                 for w in logUnits:
-                    channels.append((await utility.get_server(g))['cyberlog'][w]['channel'])
+                    channels.append((await cached_get_server(g))['cyberlog'][w]['channel'])
                 if channel.id in channels:  # We have a log channel
                     # if log and log.user.id == 247412852925661185: return
                     modUser = log.user if log else 'A moderator'
@@ -1432,10 +1563,10 @@ class Cyberlog(commands.Cog):
             settings = await getCyberAttributes(channel.guild, 'channel')
             color = green[await utility.color_theme(channel.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             keytypes = {discord.Member: '👤', discord.Role: '🚩'}
-            content = f'A moderator created a new {channel.type[0]} channel called {channel.name}'
+            content = f'A moderator created a new {channel.type.name} channel called {channel.name}'
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["darkGreenPlus"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type, 'Unknown type')} Channel was created" if settings["context"][0] < 2 else ""}""",
-                description=f'{self.channelKeys[channel.type[0] if settings["context"][1] > 0 else ""]}{"Channel" if settings["context"][1] < 2 else ""}: {f"{channel.mention} ({channel.name})" if channel.type[0] == "text" else channel.name}',
+                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelCreate"] if settings["library"] > 1 else self.emojis["darkGreenPlus"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type.name, 'Unknown type')} Channel was created" if settings["context"][0] < 2 else ""}""",
+                description=f'{self.channelKeys[channel.type.name if settings["context"][1] > 0 else ""]}{"Channel" if settings["context"][1] < 2 else ""}: {f"{channel.mention} ({channel.name})" if channel.type.name == "text" else channel.name}',
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
@@ -1456,7 +1587,7 @@ class Cyberlog(commands.Cog):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
-                    content = f'{log.user} created a new {channel.type[0]} channel called {channel.name}'
+                    content = f'{log.user} created a new {channel.type.name} channel called {channel.name}'
                     if not serverIsGimped(channel.guild):
                         await utility.run_task(
                             updateLastActive(log.user, discord.utils.utcnow(), 'created a channel'),
@@ -1487,8 +1618,12 @@ class Cyberlog(commands.Cog):
             memberUnaccessibleNewline = ' ' if len(unaccessibleMembers) > 20 else NEWLINE
             roleAccessibleNewline = ' ' if len(accessibleRoles) > 20 else NEWLINE
             roleUnaccessibleNewline = ' ' if len(unaccessibleRoles) > 20 else NEWLINE
-            accessibleTail = f'ACCESSIBLE TO\n------------------\nROLES\n{roleAccessibleNewline.join([f"🚩 {r.name}" for r in accessibleRoles])}\n\nMEMBERS\n{memberAccessibleNewline.join([f"👤 {m.name}" for m in accessibleMembers])}'
-            unaccessibleTail = f'NOT ACCESSIBLE TO\n-----------------------\nROLES\n{roleUnaccessibleNewline.join([f"🚩 {r.name}" for r in unaccessibleRoles])}\n\nMEMBERS\n{memberUnaccessibleNewline.join([f"👤 {m.name}" for m in unaccessibleMembers])}'
+            accessibleTail = utility.sanitize_tooltip(
+                f'ACCESSIBLE TO\n------------------\nROLES\n{roleAccessibleNewline.join([f"🚩 {r.name}" for r in accessibleRoles])}\n\nMEMBERS\n{memberAccessibleNewline.join([f"👤 {m.name}" for m in accessibleMembers])}'
+            )
+            unaccessibleTail = utility.sanitize_tooltip(
+                f'NOT ACCESSIBLE TO\n-----------------------\nROLES\n{roleUnaccessibleNewline.join([f"🚩 {r.name}" for r in unaccessibleRoles])}\n\nMEMBERS\n{memberUnaccessibleNewline.join([f"👤 {m.name}" for m in unaccessibleMembers])}'
+            )
             if channel.overwrites_for(channel.guild.default_role).read_messages is not False:
                 tempAccessibleString = f"""\n[{'🔓' if settings['context'][1] > 0 else ''}{'Accessible to' if settings['context'][1] < 2 else ''}: **Everyone by default**]({msg.jump_url} '{accessibleTail}')"""
             else:
@@ -1519,16 +1654,16 @@ class Cyberlog(commands.Cog):
             # plainTextUnaccessibleString = f"{tempUnaccessibleString[tempUnaccessibleString.find('[') + 1:tempUnaccessibleString.find(']')]}{newline}{tempUnaccessibleString[tempUnaccessibleString.find(singleQuoteMark) + 1:tempUnaccessibleString.find(')') - 1]}"
             if settings['embedTimestamp'] > 1:
                 embed.description += f"""\n{(utility.clockEmoji(adjusted) if settings['library'] > 0 else "🕰") if settings['context'][1] > 0 else ""}{"Timestamp" if settings['context'][1] < 2 else ""}: {utility.DisguardLongTimestamp(received)}"""
-            if channel.type[0] != 'category':
+            if channel.type.name != 'category':
                 channelList = channel.category.channels if channel.category is not None else [c for c in channel.guild.channels if c.category is None]
                 cIndexes = (
                     channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0,
                     channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList),
                 )
-                plainTextChannelList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
+                plainTextChannelList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
                 embed.add_field(
                     name='Category Tree',
-                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:cIndexes[0]])} more channel{'s' if len(channelList[:cIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:cIndexes[0]])}'){NEWLINE}" if cIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{NEWLINE}[Hover to view {len(channelList[cIndexes[1]:])} more channel{'s' if len(channelList[cIndexes:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}""",
+                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:cIndexes[0]])} more channel{'s' if len(channelList[:cIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:cIndexes[0]])}'){NEWLINE}" if cIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[cIndexes[0]:cIndexes[1]]])}{f"{NEWLINE}[Hover to view {len(channelList[cIndexes[1]:])} more channel{'s' if len(channelList[cIndexes:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[cIndexes[1]:])}')" if cIndexes[1] < len(channelList) else ""}""",
                 )
                 if len(embed.fields[0].value) > 1024:
                     embed.set_field_at(0, name=embed.fields[0].name, value=plainTextChannelList)
@@ -1546,13 +1681,15 @@ class Cyberlog(commands.Cog):
                 pass
         try:
             if channel.category is not None:
-                self.categories[channel.category.id] = [c for c in channel.category.channels]
+                data = await lightningdb.convert_category_to_simple_data(channel.category).model_dump()
+                await lightningdb.patch_channel_category(channel.category.id, data)
             else:
-                self.categories[channel.guild.id] = [c[1] for c in channel.guild.by_category() if c[0] is None]
+                data = await lightningdb.convert_category_to_simple_data(channel.guild).model_dump()
+                await lightningdb.patch_channel_category(channel.guild.id, data)
         except discord.Forbidden:
             pass
         if type(channel) is discord.TextChannel:
-            if (await utility.get_server(channel.guild)).get('cyberlog', {}).get('image'):
+            if (await cached_get_server(channel.guild)).get('cyberlog', {}).get('image'):
                 self.pins[channel.id] = []
             await utility.run_task(database.VerifyChannel(channel, True), queue=self.taskman, name=f'channel_create - VerifyChannel-{channel.id}')
         if msg:
@@ -1583,22 +1720,30 @@ class Cyberlog(commands.Cog):
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(after.guild))
         f = None
         msg = None
-        channelPosFlag = False
-        channelPosTimekey = f'{discord.utils.utcnow():%m%d%Y%H%M%S}'
         if await logEnabled(before.guild, 'channel'):
-            content = f'A moderator updated the {after.type[0]} channel called {before.name}'
+            content = f'A moderator updated the {after.type.name} channel called {before.name}'
             savePath = None
             settings = await getCyberAttributes(after.guild, 'channel')
             color = blue[await utility.color_theme(after.guild)] if settings['color'][1] == 'auto' else settings['color'][1]
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}{(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}
-                {f"{utility.CHANNEL_KEYS.get(after.type, after.type)} Channel was updated" if settings["context"][0] < 2 else ""}""",
-                description=f'{self.channelKeys[after.type[0]] if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {f"{after.mention} ({after.name})" if after.type[0] == "text" else after.name}',
+                title=textwrap.dedent(f"""
+                    {utility.channelEmoji(self, after) if settings["context"][0] > 0 else ""}
+                    {(self.emojis["channelEdit"] if settings["library"] > 1 else self.emojis["edit"] if settings["library"] > 0 else "✏") if settings["context"][0] > 0 else ""}
+                    {f"{utility.CHANNEL_KEYS.get(after.type.name, after.type.name)} Channel was updated" if settings["context"][0] < 2 else ""}
+                """)
+                .strip()
+                .replace(NEWLINE, ''),
+                description=textwrap.dedent(f"""
+                    {self.channelKeys[after.type.name] if settings["context"][1] > 0 else ""}
+                    {"Channel" if settings["context"][1] < 2 else ""}: {f"{after.mention} ({after.name})" if after.type.name == "text" else after.name}
+                """)
+                .strip()
+                .replace(NEWLINE, ''),
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
                 embed.timestamp = discord.utils.utcnow()
-            reactions = ['ℹ']
+            reactions = []
             if await readPerms(before.guild, 'channel'):
                 try:
                     log = await before.guild.audit_logs().find(
@@ -1625,7 +1770,7 @@ class Cyberlog(commands.Cog):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
-                    content = f'{log.user} updated the {after.type[0]} channel called {before.name}'
+                    content = f'{log.user} updated the {after.type.name} channel called {before.name}'
                     if not serverIsGimped(after.guild):
                         await utility.run_task(
                             updateLastActive(log.user, discord.utils.utcnow(), 'edited a channel'),
@@ -1636,24 +1781,24 @@ class Cyberlog(commands.Cog):
                     pass  # Exception as e: content += f'\nYou have enabled audit log reading for your server, but I encountered an error utilizing that feature: `{e}`'
             embed.set_footer(text=f'Channel ID: {before.id}')
             if before.category == after.category is not None:
-                bc = self.categories.get(before.category.id)
-                if bc and abs(bc.index(before) - after.category.channels.index(after)) > 1:
-                    indexes = []  # Channel, before index, after index
-                    channelPosFlag = True
-                    self.channelCacheHelper[after.guild.id] = []
-                    for i in range(len(before.category.channels)):
-                        indexes.append(
-                            {
-                                'before': bc.index(before.category.channels[i]),
-                                'after': after.category.channels.index(before.category.channels[i]),
-                                'channel': after.category.channels[i],
-                            }
-                        )
+                # bc: models.StrippedCategoryChannel = (await lightningdb.get_channel_category(before.category.id))
+                # before_pos = bc[str(before.id)]['position']
+                if abs(before.position - after.position) > 1:
+                    string_display = [f'{self.emojis["folder"] if settings["library"] > 1 else "📁"}{after.category.name}']
+                    position_offset = after.category.channels[0].position
+                    for i, channel in enumerate(after.category.channels):
+                        if i + position_offset == before.position and before.position < after.position:  # moving down
+                            string_display.append(f'~~{self.channelKeys.get(before.type.name)}{before.name}~~❌')
+                        meat_display = f"{self.channelKeys.get(channel.type.name)}{'__**' if channel.id == before.id else ''}{channel.name}{'**__' if channel.id == before.id else ''}"
+                        flair_display = f" {'↩' if channel.id == before.id and abs(before.position - after.position) > 1 else '⬆' if channel.id == before.id and before.position > after.position else '⬇' if channel.id == before.id and before.position < after.position else ''}"
+                        string_display.append(f'{meat_display}{flair_display}')
+                        if i + position_offset == before.position and before.position > after.position:  # moving up
+                            string_display.append(f'~~{self.channelKeys.get(before.type.name)}{before.name}~~❌')
+                    string_display = NEWLINE.join(string_display)
                     embed.add_field(
                         name='Channel position changed',
-                        value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category.name}\n{NEWLINE.join([(f'~~{self.channelKeys.get(before.type[0])}{before.name}~~❌{NEWLINE}' if bc.index(before) == c and indexes[c].get('before') > indexes[c].get('after') else '') + f'{self.channelKeys.get(indexes[c].get("channel").type[0])}' + ('__**' if indexes[c].get('channel').id == before.id else '') + f'{indexes[c].get("channel").name} ' + ('**__' if indexes[c].get('channel').id == before.id else '') + ('↩' if abs(indexes[c].get('before') - indexes[c].get('after')) > 1 else '⬆' if indexes[c].get('before') > indexes[c].get('after') else '⬇' if indexes[c].get('before') < indexes[c].get('after') else '') + (f'{NEWLINE}~~{self.channelKeys.get(before.type[0])}{before.name}~~❌' if bc.index(before) == c and indexes[c].get('before') < indexes[c].get('after') else '') for c in range(len(indexes))])}""",
+                        value=string_display,
                     )
-                    self.categories[after.category.id] = [c for c in after.category.channels]
             if before.overwrites != after.overwrites:
                 embed.add_field(
                     name='Permission overwrites updated', value='Manually react 🇵 to show/hide'
@@ -1703,7 +1848,9 @@ class Cyberlog(commands.Cog):
                     tts=settings['tts'],
                 )
                 if type(before) is not discord.CategoryChannel and before.category != after.category:
-                    oldChannelList = self.categories.get(before.category.id) if before.category is not None else self.categories.get(before.guild.id)
+                    oldChannelList = (
+                        before.category.channels if before.category is not None else [c[1] for c in before.guild.by_category() if c[0] is None]
+                    )
                     newChannelList = (
                         after.category.channels if after.category is not None else [c[1] for c in after.guild.by_category() if c[0] is None]
                     )
@@ -1715,19 +1862,19 @@ class Cyberlog(commands.Cog):
                         newChannelList.index(after) - 3 if newChannelList.index(after) >= 3 else 0,
                         newChannelList.index(after) + 4 if newChannelList.index(after) + 4 < len(newChannelList) else len(newChannelList),
                     )
-                    plainTextOldList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList])}"
-                    plainTextNewList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList])}"
+                    plainTextOldList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList])}"
+                    plainTextNewList = f"{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList])}"
                     for i, field in enumerate(embed.fields):
                         if field.name == 'Old Category':
                             embed.set_field_at(
                                 i,
                                 name='Old Category',
-                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category}\n{f"> [...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channel{'s' if len(oldChannelList[:oldIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){NEWLINE}" if oldIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(oldChannelList[oldIndexes[1]:])} more channel{'s' if len(oldChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] < len(oldChannelList) else ""}""",
+                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{before.category}\n{f"> [...Hover to view {len(oldChannelList[:oldIndexes[0]])} more channel{'s' if len(oldChannelList[:oldIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[:oldIndexes[0]])}'){NEWLINE}" if oldIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in oldChannelList[oldIndexes[0]:oldIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(oldChannelList[oldIndexes[1]:])} more channel{'s' if len(oldChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in oldChannelList[oldIndexes[1]:])}')" if oldIndexes[1] < len(oldChannelList) else ""}""",
                             )
                             embed.set_field_at(
                                 i + 1,
                                 name='New Category',
-                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{after.category}\n{f"> [...Hover to view {len(newChannelList[:newIndexes[0]])} more channel{'s' if len(newChannelList[:newIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){NEWLINE}" if newIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(newChannelList[newIndexes[1]:])} more channel{'s' if len(newChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] < len(newChannelList) else ""}""",
+                                value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{after.category}\n{f"> [...Hover to view {len(newChannelList[:newIndexes[0]])} more channel{'s' if len(newChannelList[:newIndexes[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[:newIndexes[0]])}'){NEWLINE}" if newIndexes[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == after.id else c.name) for c in newChannelList[newIndexes[0]:newIndexes[1]]])}{f"{NEWLINE}> [Hover to view {len(newChannelList[newIndexes[1]:])} more channel{'s' if len(newChannelList[oldIndexes[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in newChannelList[newIndexes[1]:])}')" if newIndexes[1] < len(newChannelList) else ""}""",
                             )
                             if len(embed.fields[i].value) > 1024:
                                 embed.set_field_at(i, name=embed.fields[i].name, value=plainTextOldList)
@@ -1862,21 +2009,11 @@ class Cyberlog(commands.Cog):
                         os.remove(savePath)
                 except:
                     pass
-        if (before.position != after.position or before.category != after.category) and not channelPosFlag:
-            try:
-                self.channelCacheHelper[after.guild.id].append(channelPosTimekey)
-            except:
-                self.channelCacheHelper[after.guild.id] = [channelPosTimekey]
-            await utility.run_task(
-                self.delayedUpdateChannelIndexes(after.guild, channelPosTimekey),
-                queue=self.taskman,
-                name=f'channel_update - delayedUpdateChannelIndexes-{after.guild.id}-{channelPosTimekey}',
-                cancel_after=300,
-            )
         if type(before) is discord.TextChannel and before.name != after.name:
             await utility.run_task(
                 database.VerifyChannel(after), queue=self.taskman, name=f'channel_update - VerifyChannel-{after.id}', cancel_after=60
             )
+        return
         try:
             if msg:
                 final = copy.deepcopy(embed)
@@ -1908,8 +2045,8 @@ class Cyberlog(commands.Cog):
                         info: Info.Info = self.bot.get_cog('Info')
                         result = await info.ChannelInfo(
                             after,
-                            None if after.type[0] == 'category' else await after.invites(),
-                            None if after.type[0] != 'text' else await after.pins(),
+                            None if after.type.name == 'category' else await after.invites(),
+                            None if after.type.name != 'text' else await after.pins(),
                             [log async for log in after.guild.audit_logs(limit=None)],
                         )
                         await msg.edit(content=result[0], embed=result[1])
@@ -1941,24 +2078,6 @@ class Cyberlog(commands.Cog):
         except UnboundLocalError:
             return
 
-    async def delayedUpdateChannelIndexes(self, g: discord.Guild, timekey):
-        """Updates channel cache data after 1 second, to account for logging
-        Timekey: Unique key based on timestamp that allows the update process to go through only if it hasn't already, reducing inaccuracies in data
-        """
-        await asyncio.sleep(1)
-        if timekey not in self.channelCacheHelper[g.id]:
-            return
-        for c in g.categories:
-            try:
-                self.categories[c.id] = [c for c in c.channels]
-            except discord.Forbidden:
-                pass
-        try:
-            self.categories[g.id] = [c[1] for c in g.by_category() if c[0] is None]
-        except discord.Forbidden:
-            pass
-        self.channelCacheHelper[g.id].remove(timekey)
-
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
         """[DISCORD API METHOD] Called when channel is deleted"""
@@ -1966,12 +2085,12 @@ class Cyberlog(commands.Cog):
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(channel.guild))
         msg = None
         if await logEnabled(channel.guild, 'channel'):
-            content = f'A moderator deleted the {channel.type[0]} channel named {channel.name}'
+            content = f'A moderator deleted the {channel.type.name} channel named {channel.name}'
             settings = await getCyberAttributes(channel.guild, 'channel')
             color = red[await utility.color_theme(channel.guild)] if settings['color'][2] == 'auto' else settings['color'][2]
             embed = discord.Embed(
-                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelDelete"] if settings["library"] > 1 else self.emojis["delete"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type, 'Unknown type')} Channel was deleted" if settings['context'][0] < 2 else ''}""",
-                description=f'{self.channelKeys.get(channel.type[0]) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.name}',
+                title=f"""{utility.channelEmoji(self, channel) if settings["context"][0] > 0 else ""}{(self.emojis["channelDelete"] if settings["library"] > 1 else self.emojis["delete"]) if settings["context"][0] > 0 else ""}{f"{utility.CHANNEL_KEYS.get(channel.type.name, 'Unknown type')} Channel was deleted" if settings['context'][0] < 2 else ''}""",
+                description=f'{self.channelKeys.get(channel.type.name) if settings["context"][1] > 0 else ""}{"Channel" if settings["context"][1] < 2 else ""}: {channel.name}',
                 color=color,
             )
             if settings['embedTimestamp'] in (1, 3):
@@ -1992,7 +2111,7 @@ class Cyberlog(commands.Cog):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
                             embed.set_author(name=log.user.display_name, icon_url=url)
-                    content = f'{log.user} deleted the {channel.type[0]} channel named {channel.name}'
+                    content = f'{log.user} deleted the {channel.type.name} channel named {channel.name}'
                     if not serverIsGimped(channel.guild):
                         await utility.run_task(
                             updateLastActive(log.user, discord.utils.utcnow(), 'deleted a channel'),
@@ -2010,8 +2129,8 @@ class Cyberlog(commands.Cog):
                 embed=embed if not settings['plainText'] else None,
                 tts=settings['tts'],
             )
-            if channel.type[0] != 'category':
-                channelList = self.categories.get(channel.category.id) if channel.category is not None else self.categories.get(channel.guild.id)
+            if channel.type.name != 'category':
+                channelList = channel.category.channels if channel.category else [c[1] for c in channel.guild.by_category() if c[0] is None]
                 startEnd = (
                     channelList.index(channel) - 3 if channelList.index(channel) >= 3 else 0,
                     channelList.index(channel) + 4 if channelList.index(channel) + 4 < len(channelList) else len(channelList),
@@ -2019,22 +2138,14 @@ class Cyberlog(commands.Cog):
                 # plainTextChannelList = f"{newline.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList])}"
                 embed.add_field(
                     name='Category Tree',
-                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){NEWLINE}" if startEnd[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type[0])}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{NEWLINE}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}""",
+                    value=f"""{self.emojis['folder'] if settings['library'] > 1 else '📁'}{channel.category}\n{f"> [...Hover to view {len(channelList[:startEnd[0]])} more channel{'s' if len(channelList[:startEnd[0]]) != 1 else ''}]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[:startEnd[0]])}'){NEWLINE}" if startEnd[0] > 0 else ""}{NEWLINE.join([f'> {self.channelKeys.get(c.type.name)}' + (f'**{c.name}**' if c.id == channel.id else c.name) for c in channelList[startEnd[0]:startEnd[1]]])}{f"{NEWLINE}> [Hover to view {len(channelList[startEnd[1]:])} more channel{'s' if len(channelList[startEnd[1]:]) != 1 else ''}...]({msg.jump_url} '{newlineQuote.join(chan.name for chan in channelList[startEnd[1]:])}')" if startEnd[1] < len(channelList) else ""}""",
                 )
-                if channel.category is not None:
-                    self.categories[channel.category.id].remove(channel)
-                else:
-                    self.categories[channel.guild.id].remove(channel)
-            if channel.type[0] == 'text':
+            if channel.type.name == 'text':
                 messages = await lightningdb.get_channel_messages(channel.id)
                 embed.add_field(name='Message count', value=len(messages) if messages else 0)
                 await lightningdb.delete_channel(channel.id)
-                channel_attachments_path = f'storage/{channel.guild.id}/attachments/{channel.id}'
-                try:
-                    await aioshutil.rmtree(channel_attachments_path)
-                except FileNotFoundError:
-                    # this channel didn't have an attachments directory
-                    pass
+                indexing: Indexing.Indexing = self.bot.get_cog('Indexing')
+                indexing.delete_all_attachments(channel)
                 self.pins.pop(channel.id, None)
             await msg.edit(content=None if not settings['plainText'] else content, embed=embed)
             await self.archiveLogEmbed(channel.guild, msg.id, embed, 'Channel Delete')
@@ -2071,18 +2182,21 @@ class Cyberlog(commands.Cog):
         """[DISCORD API METHOD] Called when member joins a server"""
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
+        # store only member id
         try:
-            self.members[member.guild.id].append(member)
+            self.members[member.guild.id].add(member.id)
         except KeyError:
-            self.members[member.guild.id] = [member]
+            self.members[member.guild.id] = {member.id}
+        except AttributeError:
+            self.members[member.guild.id] = {member.id}
+        # store permissions int
+        self.memberPermissions[member.guild.id][member.id] = member.guild_permissions.value
         await utility.run_task(
             self.doorguardHandler(member), queue=self.taskman, name=f'doorguardHandler-{member.guild.id}-{member.id}', cancel_after=300
         )
         msg = None
         if await logEnabled(member.guild, 'doorguard'):
-            newInv = []
             content = f'{member} joined the server'
-            targetInvite = None
             settings = await getCyberAttributes(member.guild, 'doorguard')
             color = green[await utility.color_theme(member.guild)] if settings['color'][0] == 'auto' else settings['color'][0]
             count = len(member.guild.members)
@@ -2100,40 +2214,36 @@ class Cyberlog(commands.Cog):
                 if settings['author'] in (1, 2, 4):
                     embed.set_author(name=member.display_name, icon_url=url)
             try:
-                newInv = await member.guild.invites()
-                oldInv = self.invites.get(str(member.guild.id))
-            except discord.Forbidden:
-                pass
-                # content+="Tip: I can determine who invited new members if I have the `Manage Server` permissions"
-            try:
-                for invite in oldInv:
+                invite_used = None
+                new_invites = await member.guild.invites()
+                old_invites = self.invites.get(str(member.guild.id))
+                for invite in new_invites:
                     try:
-                        if newInv[newInv.index(invite)].uses > invite.uses:
-                            targetInvite = newInv[newInv.index(invite)]
+                        if invite.uses > old_invites[invite.id]:
+                            invite_used = invite
                             break
                     except ValueError:  # An invite that reached max uses will be missing from the new list
-                        targetInvite = newInv[newInv.index(invite)]
+                        invite_used = invite
                         break
-                if not targetInvite:  # Check the vanity invite (if applicable) if we don't have an invite
+                if not invite_used:  # Check the vanity invite (if applicable) if we don't have an invite
                     try:
                         invite = await member.guild.vanity_invite()
-                        if invite.uses > self.invites.get(str(member.guild.id) + '_vanity').uses:
-                            targetInvite = invite
+                        if invite.uses > old_invites[invite.id]:
+                            invite_used = invite
                     except discord.HTTPException:
                         pass
-                if not targetInvite:  # If the vanity invite either doesn't exist or isn't the invite used, then it was an invite created between the invites were stored & now
-                    for i in newInv:
-                        if i.id not in [oi.id for oi in oldInv] and i.uses != 0:
-                            targetInvite = i
+                if not invite_used:  # If the vanity invite either doesn't exist or isn't the invite used, then it was an invite created between the invites were stored & now
+                    for i in new_invites:
+                        if i.id not in old_invites.keys() and i.uses != 0:
+                            invite_used = i
                             break
+                self.invites[str(member.guild.id)] = {inv.id: inv.uses for inv in new_invites}
+                vanity = await member.guild.vanity_invite()
+                self.invites[str(member.guild.id)][vanity.id] = vanity.uses
             except discord.Forbidden:
                 embed.add_field(name='Invite Details', value='Enable `manage server` permissions to use this feature')
-            except Exception as e:
-                embed.add_field(name='Invite Details', value=f'Error retrieving details: {e}'[:1023])
-            try:
-                self.invites[str(member.guild.id)] = newInv
-            except:
-                pass
+            except discord.HTTPException:
+                embed.add_field(name='Invite Details', value='Could not retrieve invite details due to a Discord error')
             msg = await (await logChannel(member.guild, 'doorguard')).send(
                 content=content if any((settings['plainText'], settings['flashText'], settings['tts'])) else None,
                 embed=embed if not settings['plainText'] else None,
@@ -2185,35 +2295,35 @@ class Cyberlog(commands.Cog):
                         QUICK ACTIONS\nYou will be asked to confirm any of these quick actions via reacting with a checkmark after initiation, so you can click one to learn more without harm.\n🤐: Mute {member.display_name}\n🔒: Quarantine {member.display_name}\n👢: Kick {member.display_name}\n🔨: Ban {member.display_name}')"""),
                 ]
                 embed.description = descriptionString[1]
-                if targetInvite:
-                    content = f'{targetInvite.inviter} invited {member} to the server' if targetInvite.inviter else content
+                if invite_used:
+                    content = f'{invite_used.inviter} invited {member} to the server' if invite_used.inviter else content
                     if (
                         (settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)))
                         or (settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)))
-                        and targetInvite.inviter
+                        and invite_used.inviter
                     ):
-                        url = await self.imageToURL(targetInvite.inviter.display_avatar)
+                        url = await self.imageToURL(invite_used.inviter.display_avatar)
                         if settings['thumbnail'] > 2 or (settings['thumbnail'] == 2 and utility.empty(embed.thumbnail.url)):
                             embed.set_thumbnail(url=url)
                         if settings['author'] > 2 or (settings['author'] == 2 and utility.empty(embed.author.name)):
-                            embed.set_author(name=targetInvite.inviter.name, icon_url=url)
+                            embed.set_author(name=invite_used.inviter.name, icon_url=url)
                     inviteString = [  # First: plaintext version, second: hover-links hybrid version
                         textwrap.dedent(f"""
-                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.display_name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
-                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
-                            {self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
-                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {utility.DisguardIntermediateTimestamp(targetInvite.created_at)}
-                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {utility.DisguardRelativeTimestamp(discord.utils.utcnow() + datetime.timedelta(seconds=targetInvite.max_age))}"}
-                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times"""),
+                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{invite_used.inviter.display_name} ({invite_used.inviter.mention})" if invite_used.inviter else "N/A"}
+                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{invite_used.code}
+                            {self.emojis["textChannel"] if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {invite_used.channel.name if invite_used.channel else "N/A"}
+                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {utility.DisguardIntermediateTimestamp(invite_used.created_at)}
+                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if invite_used.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {utility.DisguardRelativeTimestamp(invite_used.expires_at)}"}
+                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {invite_used.uses} of {"∞" if invite_used.max_uses == 0 else invite_used.max_uses} times"""),
                         textwrap.dedent(f"""
-                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{targetInvite.inviter.display_name} ({targetInvite.inviter.mention})" if targetInvite.inviter else "N/A"}
+                            {self.emojis["member"] if settings['context'][1] > 0 else ""}{"Invited by" if settings['context'][1] < 2 else ""}: {f"{invite_used.inviter.display_name} ({invite_used.inviter.mention})" if invite_used.inviter else "N/A"}
                             [Hover or react {self.emojis["expand"]} for more details]({msg.jump_url} '
-                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{targetInvite.code}
-                            {"🚪" if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {targetInvite.channel.name if targetInvite.channel else "N/A"}
-                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {targetInvite.created_at:%b %d, %Y • %I:%M %p} {await utility.name_zone(member.guild)}
-                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if targetInvite.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {(discord.utils.utcnow() + datetime.timedelta(seconds=targetInvite.max_age)):%b %d, %Y • %I:%M %p} {await utility.name_zone(member.guild)}"}
-                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {targetInvite.uses} of {"∞" if targetInvite.max_uses == 0 else targetInvite.max_uses} times')"""),
-                    ]  # Note to self: in v2.0, invites have an "expired_at" attribute, thus making "max age" calculations redundant
+                            {"🔗" if settings['context'][1] > 0 else ""}{"Code" if settings['context'][1] < 2 else ""}: discord.gg/{invite_used.code}
+                            {"🚪" if settings["context"][1] > 0 else ""}{"Channel" if settings['context'][1] < 2 else ""}: {invite_used.channel.name if invite_used.channel else "N/A"}
+                            {"📅" if settings['context'][1] > 0 else ""}{"Created" if settings['context'][1] < 2 else ""}: {invite_used.created_at:%b %d, %Y • %I:%M %p} {await utility.name_zone(member.guild)}
+                            {f"{'♾' if settings['context'][1] > 0 else ''}Never expires" if invite_used.max_age == 0 else f"{'⏰' if settings['context'][1] > 0 else ''}Expires: {invite_used.expires_at:%b %d, %Y • %I:%M %p} UTC"}
+                            {"🔓" if settings['context'][1] > 0 else ''}{"Used" if settings['context'][1] < 2 else ""}: {invite_used.uses} of {"∞" if invite_used.max_uses == 0 else invite_used.max_uses} times')"""),
+                    ]
                     embed.add_field(name='Invite Details', value=inviteString[1] if len(inviteString[1]) < 1024 else inviteString[0])
             if member.flags.did_rejoin:
                 embed.set_footer(text='This member rejoined the server')
@@ -2221,7 +2331,7 @@ class Cyberlog(commands.Cog):
             await self.archiveLogEmbed(member.guild, msg.id, embed, 'Member Join')
         await asyncio.gather(
             *[
-                database.VerifyMember(member, new=True, warnings=(await utility.get_server(member.guild)).get('antispam', {}).get('warn', 3)),
+                database.VerifyMember(member, new=True, warnings=(await cached_get_server(member.guild)).get('antispam', {}).get('warn', 3)),
                 database.VerifyUser(member, self.bot, new=True),
                 updateLastActive(member, discord.utils.utcnow(), 'joined a server'),
             ]
@@ -2237,7 +2347,7 @@ class Cyberlog(commands.Cog):
             )
 
         hadToRemute = False
-        events = (await utility.get_server(member.guild)).get('antispam', {}).get('timedEvents')
+        events = (await cached_get_server(member.guild)).get('antispam', {}).get('timedEvents')
         for event in events:
             try:
                 if event['type'] == 'mute' and event['target'] == member.id and (discord.utils.utcnow() - event['timestamp']).total_seconds > 60:
@@ -2494,7 +2604,7 @@ class Cyberlog(commands.Cog):
 
     async def doorguardHandler(self, member: discord.Member):
         """REPEATED JOINS"""  # Consider splitting this up into three methods or adding exception catchers
-        rj = await antispamObject(member.guild).get('repeatedJoins')
+        rj = (await antispamObject(member.guild)).get('repeatedJoins')
         if 0 not in rj[:2]:  # Make sure this module is enabled (remember, modules are set to 0 to mark them as disabled)
             try:
                 self.repeatedJoins[f'{member.guild.id}_{member.id}'].append(member.joined_at)
@@ -2697,7 +2807,8 @@ class Cyberlog(commands.Cog):
             )
             try:
                 try:
-                    sortedMembers = sorted(self.members[member.guild.id], key=lambda x: x.joined_at or discord.utils.utcnow())
+                    # compute placement from live guild members (avoid reading cached Member objects)
+                    sortedMembers = sorted(member.guild.members, key=lambda x: x.joined_at or discord.utils.utcnow())
                     memberJoinPlacement = sortedMembers.index(member) + 1
                 except KeyError:
                     sortedMembers = member.guild.members
@@ -2722,10 +2833,19 @@ class Cyberlog(commands.Cog):
             await message.edit(embed=embed if not settings['plainText'] else None)
             await self.archiveLogEmbed(member.guild, message.id, embed, 'Member Leave')
             # if any((settings['flashText'], settings['tts'])) and not settings['plainText']: await message.edit(content=None)
+        # clean up ID caches
         try:
-            self.members[member.guild.id].remove(member)
-        except (KeyError, ValueError):
+            self.members.get(member.guild.id, set()).discard(member.id)
+        except Exception:
             pass
+        # remove permission cache for this member
+        try:
+            self.memberPermissions[member.guild.id].pop(member.id, None)
+        except Exception:
+            pass
+        # cleanup voice/repeated join caches
+        self.memberVoiceLogs.pop(member.id, None)
+        self.repeatedJoins.pop(f'{member.guild.id}_{member.id}', None)
         await asyncio.gather(*[database.VerifyMembers(member.guild, [member]), database.DeleteUser(member, self.bot)])
         if message:
 
@@ -2910,10 +3030,16 @@ class Cyberlog(commands.Cog):
                     )
                     for r in added:
                         if after.guild.get_role(r):
-                            self.roles[r.id] = r.members
+                            try:
+                                self.roles[r.id] = {m.id for m in r.members}
+                            except Exception:
+                                self.roles[r.id] = set()
                     for r in removed:
                         if after.guild.get_role(r):
-                            self.roles[r.id] = r.members
+                            try:
+                                self.roles[r.id] = {m.id for m in r.members}
+                            except Exception:
+                                self.roles[r.id] = set()
                     if len(added) > 0:
                         embed.add_field(name=f'Role{"s" if len(added) > 1 else ""} added', value='\n'.join([r.name for r in added]))
                     if len(removed) > 0:
@@ -3262,7 +3388,7 @@ class Cyberlog(commands.Cog):
                 pass
         for s in servers:
             await utility.run_task(
-                database.VerifyMember(s.get_member(after.id), warnings=(await utility.get_server(s))['antispam'].get('warn', 3)),
+                database.VerifyMember(s.get_member(after.id), warnings=(await cached_get_server(s))['antispam'].get('warn', 3)),
                 queue=self.taskman,
                 name=f'user_update - VerifyMember-{s.id}-{after.id}',
                 cancel_after=300,
@@ -3436,6 +3562,7 @@ class Cyberlog(commands.Cog):
                 if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                     await message.edit(content=None)
                 await self.archiveLogEmbed(after, message.id, embed, 'Server Update')
+                return
                 if not settings['plainText']:
                     for r in reactions:
                         await message.add_reaction(r)
@@ -3564,7 +3691,11 @@ class Cyberlog(commands.Cog):
             if any((settings['tts'], settings['flashText'])) and not settings['plainText']:
                 await msg.edit(content=None)
             await self.archiveLogEmbed(role.guild, msg.id, embed, 'Role Create')
-        self.roles[role.id] = role.members
+        # store member IDs for this role to avoid caching Member objects
+        try:
+            self.roles[role.id] = {m.id for m in role.members}
+        except Exception:
+            self.roles[role.id] = set()
         await utility.run_task(
             database.VerifyServer(role.guild, self.bot),
             queue=self.taskman,
@@ -3647,6 +3778,13 @@ class Cyberlog(commands.Cog):
             )
             # Cache role members, and expel them upon role deletion. work for 2021.
             roleMembers = self.roles.get(role.id)
+            # roleMembers stored as IDs; convert to Member objects for downstream helpers
+            role_member_ids = self.roles.get(role.id)
+            if role_member_ids:
+                roleMembers = [role.guild.get_member(mid) for mid in role_member_ids]
+                roleMembers = [m for m in roleMembers if m is not None]
+            else:
+                roleMembers = []
             if roleMembers:
                 membersWhoLost = (
                     '\n'.join([f'👤{m.display_name}' for m in roleMembers])
@@ -3679,14 +3817,16 @@ class Cyberlog(commands.Cog):
         await self.CheckDisguardServerRoles(
             roleMembers if roleMembers else role.guild.members, mode=2, reason='Server role was deleted; member lost permissions'
         )
-        await utility.run_task(
-            database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)),
-            name=f'guild_role_delete - VerifyServer-{role.guild.id}',
-            queue=self.taskman,
-            cancel_after=300,
+        (
+            await utility.run_task(
+                database.VerifyServer(role.guild, self.bot, includeMembers=self.roles.get(role.id, role.guild.members)),
+                role.guild,
+                self.bot,
+                includeMembers=[role.guild.get_member(mid) for mid in self.roles.get(role.id, [m.id for m in role.guild.members])],
+            ),
         )
         await utility.run_task(
-            database.VerifyUsers(self.bot, self.roles.get(role.id, role.guild.members)),
+            database.VerifyUsers(self.bot, [role.guild.get_member(mid) for mid in self.roles.get(role.id, [m.id for m in role.guild.members])]),
             queue=self.taskman,
             name=f'guild_role_delete - VerifyUsers-{role.guild.id}',
             cancel_after=300,
@@ -3839,6 +3979,7 @@ class Cyberlog(commands.Cog):
             )
         for member in after.members:
             await database.VerifyUser(member, self.bot)
+        return
         if message and len(embed.fields) > 0 or before.name != after.name:
             # cutoff
             final = copy.deepcopy(embed)
@@ -4115,16 +4256,22 @@ class Cyberlog(commands.Cog):
     @commands.Cog.listener()
     async def on_invite_create(self, invite: discord.Invite):
         try:
-            self.invites[str(invite.guild.id)] = await invite.guild.invites()
-        except discord.HTTPException:
-            pass
+            invites = await invite.guild.invites()
+            self.invites[str(invite.guild.id)] = {inv.id: inv.uses for inv in invites}
+            vanity = await invite.guild.vanity_invite()
+            self.invites[str(invite.guild.id)][vanity.id] = vanity.uses
+        except (discord.HTTPException, discord.Forbidden):
+            logger.warning(f'Could not fetch invites for guild {invite.guild.id} on invite creation.')
 
     @commands.Cog.listener()
     async def on_invite_delete(self, invite: discord.Invite):
         try:
-            self.invites[str(invite.guild.id)] = await invite.guild.invites()
-        except discord.HTTPException:
-            pass
+            invites = await invite.guild.invites()
+            self.invites[str(invite.guild.id)] = {inv.id: inv.uses for inv in invites}
+            vanity = await invite.guild.vanity_invite()
+            self.invites[str(invite.guild.id)][vanity.id] = vanity.uses
+        except (discord.HTTPException, discord.Forbidden):
+            logger.warning(f'Could not fetch invites for guild {invite.guild.id} on invite deletion.')
 
     @commands.Cog.listener()
     async def on_webhooks_update(self, channel: discord.TextChannel):
@@ -4210,7 +4357,7 @@ class Cyberlog(commands.Cog):
         received = discord.utils.utcnow()
         adjusted = discord.utils.utcnow() + datetime.timedelta(hours=await utility.time_zone(member.guild))
         msg = None
-        serverData = await utility.get_server(member.guild)
+        serverData = await cached_get_server(member.guild)
         logRecapsEnabled = serverData['cyberlog']['voiceChatLogRecaps']
         if not await logEnabled(member.guild, 'voice') and not logRecapsEnabled:
             return
@@ -4688,7 +4835,7 @@ class Cyberlog(commands.Cog):
                 logArchives = {}
         logArchives[id].update(data)
         logArchives = json.dumps(logArchives, indent=4)
-        async with open(p, 'w+') as f:
+        async with aiofiles.open(p, 'w+') as f:
             await f.write(logArchives)
 
     # Review this monstrosity
@@ -4702,14 +4849,15 @@ class Cyberlog(commands.Cog):
         g = message.guild
         settings = await getCyberAttributes(g, mod)
         for m in membersInput:
-            oldPerms = self.memberPermissions[g.id][m.id]
-            # Technically can be made faster by calling each of the loops once separately rather than twice in a gen
-            removed = ' '.join(
-                [p[0] for p in oldPerms if p[1] and p[0] not in [pp[0] for pp in m.guild_permissions if pp[1]]]
-            )  # Permissions that were set to true previously and aren't currently set to True
-            gained = ' '.join(
-                [p[0] for p in m.guild_permissions if p[1] and p[0] not in [pp[0] for pp in oldPerms if pp[1]]]
-            )  # Same but permissions that are set to True not but weren't before
+            # memberPermissions stores perm integers; convert back before using utility.stringifyPermissions
+            try:
+                prev_perm_int = self.memberPermissions[g.id].get(m.id, 0)
+            except Exception:
+                prev_perm_int = 0
+            prev_perm_list = utility.stringifyPermissions(discord.Permissions(prev_perm_int))
+            curr_perm_list = utility.stringifyPermissions(m.guild_permissions)
+            removed = ' '.join([p for p in prev_perm_list if p not in curr_perm_list])
+            gained = ' '.join([p for p in curr_perm_list if p not in prev_perm_list])
             if removed:
                 try:
                     members[m.id].update({'removed': removed})
@@ -4824,15 +4972,26 @@ class Cyberlog(commands.Cog):
 
     async def dispatch_notice(self, server: discord.Guild, embed: discord.Embed):
         try:
-            channel = server.get_channel((await utility.get_server(server)).get('cyberlog').get('defaultChannel'))
+            channel = server.get_channel((await cached_get_server(server)).get('cyberlog').get('defaultChannel'))
             if channel:
                 await channel.send(embed=embed)
         except Exception as e:
             logger.error(f'Error dispatching notice: {e}', exc_info=True)
 
 
+# async memo with short TTL
+async def cached_get_server(guild, ttl=2.0) -> dict:
+    now = asyncio.get_event_loop().time()
+    entry = _server_cache.get(guild.id)
+    if entry and now - entry[0] < ttl:
+        return entry[1]
+    data = await utility.get_server(guild)
+    _server_cache[guild.id] = (now, data)
+    return data
+
+
 async def logEnabled(s: discord.Guild, mod: str):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     return all(
         [
             server_data.get('cyberlog').get(mod).get('enabled'),
@@ -4850,14 +5009,14 @@ async def logEnabled(s: discord.Guild, mod: str):
 
 
 async def logChannel(s: discord.Guild, mod: str):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     modular = server_data.get('cyberlog').get(mod).get('channel')
     default = server_data.get('cyberlog').get('defaultChannel')
     return s.get_channel(default) if modular is None else s.get_channel(modular)
 
 
 async def verifyLogChannel(bot, s: discord.Guild):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     try:
         default = server_data.get('cyberlog').get('defaultChannel')
     except:
@@ -4894,7 +5053,7 @@ async def verifyLogChannel(bot, s: discord.Guild):
 
 
 async def logExclusions(channel: discord.TextChannel, member: discord.Member):
-    server_data = await utility.get_server(channel.guild)
+    server_data = await cached_get_server(channel.guild)
     if type(member) is not discord.Member:
         member = channel.guild.get_member(member.id)
     if not member:
@@ -4909,15 +5068,15 @@ async def logExclusions(channel: discord.TextChannel, member: discord.Member):
 
 
 async def memberGlobal(s: discord.Guild):
-    return (await utility.get_server(s)).get('cyberlog').get('memberGlobal')
+    return (await cached_get_server(s)).get('cyberlog').get('memberGlobal')
 
 
 async def antispamObject(s: discord.Guild):
-    return (await utility.get_server(s)).get('antispam')
+    return (await cached_get_server(s)).get('antispam')
 
 
 async def readPerms(s: discord.Guild, mod):
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     return server_data.get('cyberlog').get(mod).get('read') or server_data['cyberlog']['read']
 
 
@@ -4963,7 +5122,7 @@ async def getTTS(s: discord.Guild, mod):
 
 async def cyberAttribute(s: discord.Guild, mod, a):
     """Returns common attribute: cyberlog <--> cyberlog module. Not coded for beta datasystem"""
-    server_data = await utility.get_server(s)
+    server_data = await cached_get_server(s)
     default = server_data['cyberlog'][a]
     specific = server_data['cyberlog'][mod][a]
 

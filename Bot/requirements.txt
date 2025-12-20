@@ -1,6 +1,7 @@
-aiofiles==24.1.0
+aiofiles==25.1.0
 aioshutil==1.5
 asyncpraw==7.8.1
+b2sdk==2.10.0
 colour==0.1.5
 discord.py==2.4.0
 emoji==2.10.1
@@ -11,5 +12,6 @@ profanityfilter==2.0.6
 psutil==5.9.8
 py7zr==0.20.8
 py_cpuinfo==9.0.0
-pydantic==2.9.2
+pydantic==2.12.2
 pymongo==4.6.1
+typing_extensions==4.15.0

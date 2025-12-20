@@ -1,7 +1,6 @@
 """Contains code that manages the MongoDB cloud database during Disguard's operation"""
 
 import asyncio
-import copy
 import datetime
 import logging
 import typing
@@ -178,358 +177,361 @@ async def Verification(b: commands.Bot):
 
 async def VerifyServers(b: commands.Bot, servs: typing.List[discord.Guild], full=False):
     """Creates, updates, or deletes database entries for Disguard's servers as necessary"""
-    server_id_list = [s.id for s in servs]  # missing servers that the bot is in, but there's no database entry for
-    servers_not_in_database = [s for s in servs if not await servers.find_one({'server_id': s.id})]
+    # build set of current guild ids (small memory)
+    current_guild_ids = {s.id for s in servs}
 
-    async def database_servers():
-        async for server in servers.find({'server_id': {'$in': server_id_list}}):
-            yield server
+    # handle servers that exist in memory but not in DB (create)
+    for server in servs:
+        if not await servers.find_one({'server_id': server.id}):
+            # yield_members generator kept minimal
+            async def _yield_members(s):
+                for m in s.members:
+                    yield m
 
-    def yield_members(s: discord.Guild):
-        for member in s.members:
-            yield member
+            await VerifyServer(server, b, mode='update', includeServer=True, includeMembers=_yield_members(server))
 
-    for server in servers_not_in_database:
-        # add servers the bot is in that aren't in the database
-        await VerifyServer(server, b, mode='update', includeServer=True, includeMembers=yield_members(server))
-    async for server in database_servers():
-        discord_server = b.get_guild(server['server_id'])
+    # stream DB servers and update existing ones
+    async for db_server in servers.find({'server_id': {'$in': list(current_guild_ids)}}):
+        guild = b.get_guild(db_server['server_id'])
+        if not guild:
+            continue
         try:
-            await lightningdb.post_server(server)
+            await lightningdb.post_server(db_server)
         except errors.DuplicateKeyError:
             if full:
-                await lightningdb.patch_server(discord_server.id, server)
-        except (AttributeError, KeyError, TypeError) as e:
-            print(e)
-        await asyncio.wait_for(
-            VerifyServer(discord_server, b, server, full, True, mode='update', includeMembers=yield_members(discord_server)), timeout=None
-        )
-    await servers.delete_many({'server_id': {'$nin': [s.id for s in servs]}})
+                await lightningdb.patch_server(guild.id, db_server)
+        except Exception as e:
+            logger.exception('VerifyServers: lightningdb.post_server error: %s', e)
+
+        # call VerifyServer for the live guild; pass db document to avoid re-fetching
+        await VerifyServer(guild, b, serv=db_server, full=full, mode='update', includeMembers=(m for m in guild.members))
+
+    # delete DB entries for servers the bot left
+    await servers.delete_many({'server_id': {'$nin': list(current_guild_ids)}})
 
 
 async def VerifyServer(
     s: discord.Guild,
     b: commands.Bot,
-    serv={},
-    full=False,
-    new=False,
+    serv: dict | None = None,
+    full: bool = False,
+    new: bool = False,
     *,
-    mode='update',
-    includeServer=True,
-    includeMembers: typing.Generator[discord.Member, None, None] = [],
-    parallel=True,
+    mode: str = 'update',
+    includeServer: bool = True,
+    includeMembers: typing.Iterable[discord.Member] | None = None,
+    parallel: bool = True,
 ):
     """Ensures that a server has a database entry, and checks/updates all its variables & members
     newOnly: if True, only create new servers
     full: if True, go over all variables even for existing servers
-    mode: update = update serially in this method, bulk = return update operations to be performed in bulk from an external method
+    mode: update = update serially in this method, return = return update operations to be performed in bulk from an external method
     includeServer: if True, update server variables if applicable
     includeMembers: update the members whose IDs are specified, if any
     """
     print(f'Verifying server: {s.name} - {s.id}')
     logger.info(f'Verifying server: {s.name} - {s.id}')
-    # mode = 'update'
     started = datetime.datetime.now()
     global bot
     bot = b
-    if not new and not serv:
+
+    if serv is None and not new:
         serv = await servers.find_one({'server_id': s.id}) or {}
+    serv = serv or {}
+
     spam = serv.get('antispam', {})
     log = serv.get('cyberlog', {})
-    serverChannels = []
-    categoriesAdded = []
+
+    # build channels list
+    serverChannels: list[dict] = []
+    categoriesAdded: list[int] = []
     for category, channels in s.by_category():
-        if (category and category.id not in categoriesAdded) or (not category and 0 not in categoriesAdded):
-            serverChannels.append({'name': f'-----{category.name if category else "NO CATEGORY"}-----', 'id': category.id if category else 0})
-            categoriesAdded.append(category.id if category else 0)
-        serverChannels += [{'name': channel.name, 'id': channel.id} for channel in channels if type(channel) is discord.TextChannel]
-    updateOperations = []
+        cid = category.id if category else 0
+        if cid not in categoriesAdded:
+            serverChannels.append({'name': f'-----{category.name if category else "NO CATEGORY"}-----', 'id': cid})
+            categoriesAdded.append(cid)
+        serverChannels += [{'name': channel.name, 'id': channel.id} for channel in channels if isinstance(channel, discord.TextChannel)]
+
+    update_ops: list[pymongo.UpdateOne] = []
+
+    # If server missing (new) or full requested, build full $set with all original field names so upsert creates full entry
     if (not serv or full) and includeServer:
-        # V1.0: Minor format/syntax updates
-        # TODO: consider Pydantic
-        updateOperations.append(
-            pymongo.UpdateOne(
-                {'server_id': s.id},
-                {
-                    '$set': {  # add entry for new servers
-                        'name': s.name,
-                        'prefix': serv.get('prefix', '.'),
-                        'thumbnail': s.icon.with_static_format('png').with_size(512).url if s.icon else '',  # Server icon, 512x512, png or gif
-                        'offset': serv.get('offset', utility.daylightSavings() * -1),  # Distance from UTC time
-                        'tzname': serv.get('tzname', 'EST'),  # Custom timezone name (EST by default)
-                        'jumpContext': serv.get('jumpContext', False),  # Whether to display content for posted message jump URL links
-                        'undoSuppression': serv.get(
-                            'undoSuppression', False
-                        ),  # Whether to enable the undo functionality after a message's embed was collapsed
-                        'redditComplete': serv.get(
-                            'redditComplete', 0
-                        ),  # Link to subreddits when /r/Reddit format is typed in a message. 0 = disabled, 1 = link only, 2 = link + embed
-                        'redditEnhance': (False, False)
-                        if serv.get('redditEnhance') == 0
-                        else (True, False)
-                        if serv.get('redditEnhance') == 1
-                        else (False, True)
-                        if serv.get('redditEnhance') == 2
-                        else (True, True)
-                        if serv.get('redditEnhance') == 3
-                        else serv.get('redditEnhance', (True, True)),  # index 0: submission, index 1: subreddit
-                        'birthdayChannel': serv.get('birthdayChannel') or serv.get('birthday', 0),  # Channel to send birthday announcements to
-                        'birthdate': serv.get(
-                            'birthdate', datetime.datetime(started.year, 1, 1, 12 - utility.daylightSavings())
-                        ),  # When to send bday announcements
-                        'birthdayMode': serv.get('birthdayMode', 1),  # How to respond to automatic messages. 0 = disabled, 1 = react, 2 = message
-                        'colorTheme': serv.get(
-                            'colorTheme', 0
-                        ),  # Whether to use the new (more neon/brighter/less bold colors, value 1) or the regular more pastel yet saturated colors, value 0
-                        'channels': serverChannels,
-                        'server_id': s.id,
-                        'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
-                        'flags': {},
-                        'announcementsChannel': serv.get('announcementsChannel', (0, False)),  # Channel to send announcements to
-                        'moderatorChannel': serv.get('moderatorChannel', (0, False)),  # Channel to send moderator messages to
-                        'generalChannel': serv.get('generalChannel', (0, False)),  # Channel to send general messages to
-                        #'summaries': [] if serv is None or serv.get('summaries') is None else serv.get('summaries'),
-                        'antispam': {
-                            'enabled': spam.get('enabled', False),  # Master switch for the antispam module
-                            'whisper': spam.get('whisper', False),  # whether to DM members of flagged messages instead of using the current channel
-                            'log': spam.get(
-                                'log', 0
-                            ),  # display detailed message to server's log channel? if None, logging is disabled, else, ID of log channel. UPDATE THE ANTISPAM PAGE/CODE TO ONLY USE ID
-                            'warn': spam.get('warn', 3),  # number of warnings before <action> is imposed
-                            'delete': 1
-                            if spam.get('delete') is False
-                            else 3
-                            if spam.get('delete') is True
-                            else spam.get(
-                                'delete', 3
-                            ),  # what to do when message is flagged. 0 = nothing, 1 = notify member only, 2 = delete message only, 3 = both
-                            'muteTime': spam.get('muteTime', 300),  # the duration a muted member keeps their mute role
-                            'action': spam.get(
-                                'action', 1
-                            ),  # action imposed upon spam detection: 0=nothing, 1=automute, 2=kick, 3=ban, 4=custom role
-                            'customRoleID': spam.get('customRoleID', None),  # if action is 4 (custom role), this is the ID of that role
-                            'congruent': spam.get(
-                                'congruent', [4, 7, 300]
-                            ),  # flag if [0]/[1] of user's last messages sent in [2] seconds contain equivalent content
-                            #'profanityThreshold': spam.get('profanityThreshold', 0), #Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message. also this hasn't been used in the history of Disguard apparently
-                            'emoji': spam.get('emoji', 0),  # Emoji to tolerate - 0=no filter, int=value, double=percentage
-                            'mentions': spam.get('mentions', 3),  # max @<user> mentions allowed
-                            'selfbot': spam.get('selfbot', True),  # Detect possible selfbots or spam advertisers?
-                            'caps': spam.get('caps', 0),  # Caps to tolerate - 0=no filter, int=value, double=percentage
-                            'links': spam.get('links', False),  # Flag links (does not include discord invites?
-                            'attachments': spam.get(
-                                'attachments', [False, False, False, False, False, False, False, False, False]
-                            ),  # [All attachments, media attachments, non-common attachments, pics, audio, video, static pictures, gifs, tie with flagging system]
-                            'invites': spam.get('invites', False),  # Flag discord.gg invites
-                            'everyoneTags': spam.get('everyoneTags', 2),  # Max number of unsuccessful @everyone tags; 0=anything tolerated
-                            'hereTags': spam.get('hereTags', 2),  # Max number of unsuccessful @here tags; 0=anything tolerated
-                            'roleTags': spam.get('roleTags', 3),  # Max number of <role> mentions tolerated; 0 = anything tolerated
-                            'quickMessages': spam.get(
-                                'quickMessages', [5, 10]
-                            ),  # If [0] messages sent in [1] seconds, flag message ([0]=0: disabled)
-                            'consecutiveMessages': spam.get(
-                                'consecutiveMessages', [10, 120]
-                            ),  # If this many messages in a row are sent by the same person, flag them
-                            'repeatedJoins': spam.get(
-                                'repeatedJoins', [0, 300, 86400]
-                            ),  # If user joins [0] times in [1] seconds, ban them for [2] seconds ([0]=0: disabled)
-                            'ignoreRoled': spam.get('ignoreRoled', False),  # Ignore members with a role
-                            'exclusionMode': spam.get('exclusionMode', 1),  # Blacklist (0) or Whitelist(1) the channel exclusions
-                            'channelExclusions': spam.get(
-                                'channelExclusions', await DefaultChannelExclusions(s)
-                            ),  # Don't filter messages in channels in this list
-                            'roleExclusions': spam.get(
-                                'roleExclusions', await DefaultRoleExclusions(s)
-                            ),  # Don't filter messages sent by members with a role in this list
-                            'memberExclusions': spam.get(
-                                'memberExclusions', await DefaultMemberExclusions(s)
-                            ),  # Don't filter messages sent by a member in this list
-                            'profanityEnabled': spam.get('profanityEnabled', False),  # Is the profanity filter enabled
-                            'profanityTolerance': spam.get(
-                                'profanityTolerance', 0
-                            ),  # Profanity to tolerate - 0=nothing tolerated, int=# of words>=value, double=% of words/whole message
-                            'filter': spam.get('filter', []),  # Profanity filter list
-                            'ageKick': spam.get('ageKick', None),  # Kick accounts joining the server under this many days old
-                            'ageKickDM': spam.get('ageKickDM', defaultAgeKickDM),  # The message sent to members kicked by the ageKick system
-                            #'ageKickOwner': spam.get('ageKickOwner', False), #Whether the ageKick system can only be edited by the owner. Deprecated in V1.0 due to giving too much power to the server owner
-                            'ageKickWhitelist': spam.get('ageKickWhitelist', []),  # The list of members who can bypass the ageKick system
-                            'warmup': spam.get('warmup', 0),  # If > 0, mute members for this amount of time when they join the server
-                            'timedEvents': spam.get('timedEvents', []),  # Bans, mutes, etc
-                            'automuteRole': spam.get('automuteRole', 0),
-                        },  # This might make custom mute role obsolete, will have to look into this when I redo the antispam module
-                        'cyberlog': {
-                            'enabled': log.get('enabled', False),
-                            'ghostReactionEnabled': log.get('ghostReactionEnabled', True),
-                            'disguardLogRecursion': log.get(
-                                'disguardLogRecursion', False
-                            ),  # Whether Disguard should clone embeds deleted in a log channel upon deletion. Enabling this makes it impossible to delete Disguard logs
-                            'indexing': log.get('indexing', log.get('enabled', True)),  # Whether to index messages in this server
-                            'image': log.get('image', False),
-                            'sendIndexFile': log.get('sendIndexFile', True),  # Whether to send message index files with message delete logs
-                            'storageCap': log.get('storageCap', 20),  # The maximum size of attachment storage in GB
-                            'messageLogsBotAuthor': log.get('messageLogsBotAuthor', 0),  # Whether to send logs for messages sent by the bot
-                            'defaultChannel': log.get('defaultChannel', None),
-                            'library': log.get(
-                                'library', 1
-                            ),  # 0: all legacy, 1: recommended, 2: all new. *add an option to disable emoji, probably in the emoji display settinsg key*
-                            'thumbnail': log.get(
-                                'thumbnail', 1
-                            ),  # 0: off, 1: target or none, 2: target or moderator, 3: moderator or none, 4: moderator or target
-                            'author': log.get(
-                                'author', 3
-                            ),  # 0: off, 1: target or none, 2: target or moderator 3: moderator or none, 4: moderator or target
-                            'context': log.get(
-                                'context', (1, 1)
-                            ),  # 0 = no emojis, 1 = emojis and descriptions, 2 = just emojis. index 0 = title, index 1 = description
-                            'hoverLinks': log.get(
-                                'hoverLinks', 1
-                            ),  # 0: data hidden, 1: data under hover links, 2: data under hover links & option to expand, 3: data visible. LATER
-                            'embedTimestamp': log.get('embedTimestamp', 2),  # 0: All off, 1: Just footer, 2: Just description, 3: All on
-                            'botLogging': 0 if log.get('botLogging') is None else log.get('botLogging', 0),  # 0: Disabled, 1: Plaintext, 2: Embeds
-                            'color': log.get('color', ('auto', 'auto', 'auto')),  # Log embed colors - 0: Create, 1: Edit, 2: Delete
-                            'plainText': log.get('plainText', False),  # Send logs in plaintext form
-                            'read': log.get('read', True),  # Read server audit log
-                            'flashText': log.get(
-                                'flashText'
-                            ),  # Send plaintext with the log embed so that push notifications display something that makes sense
-                            'tts': log.get('tts'),  # Enable TTS when sending logs
-                            'onlyVCJoinLeave': log.get(
-                                'onlyVCJoinLeave', False
-                            ),  # Whether to only send live logs of members joining/leaving voice channels
-                            'onlyVCForceActions': log.get(
-                                'onlyVCForceActions', True
-                            ),  # Whether to only send live logs of moderator-enforced events for voice chat
-                            'voiceChatLogRecaps': log.get('voiceChatLogRecaps', True),
-                            'ghostReactionTime': log.get(
-                                'ghostReactionTime', 10
-                            ),  # If a reaction is added then removed in this time frame, count it as a ghost reaction
-                            'memberGlobal': log.get('memberGlobal', 2),  # Which profile update types to include with user update logs
-                            'channelExclusions': log.get('channelExclusions', []),
-                            'roleExclusions': log.get('roleExclusions', []),
-                            'memberExclusions': log.get('memberExclusions', []),
-                            #'summarize': 0,# if log is None or log.get('summarize') is None else log.get('summarize'),
-                            'lastUpdate': serv.get('lastUpdate', discord.utils.utcnow()),
-                            'message': LogModule('message', 'Send logs when a message is edited or deleted').update(log.get('message', {})),
-                            'doorguard': LogModule('doorguard', 'Send logs when a member joins or leaves server').update(log.get('doorguard', {})),
-                            'channel': LogModule('channel', 'Send logs when channel is created, edited, or deleted').update(log.get('channel', {})),
-                            'member': LogModule(
-                                'member',
-                                'Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator',
-                            ).update(log.get('member', {})),
-                            'role': LogModule('role', 'Send logs when a role is created, edited, or deleted').update(log.get('role', {})),
-                            'emoji': LogModule('emoji', 'Send logs when emoji is created, edited, or deleted').update(log.get('emoji', {})),
-                            'server': LogModule('server', 'Send logs when server is updated, such as thumbnai').update(log.get('server', {})),
-                            'voice': LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice', {})),
-                            'misc': LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(
-                                log.get('misc', {})
-                            ),
-                        },
-                    }
-                },
-                upsert=True,
-            )
-        )
-    elif includeServer:  # only update things that may have changed (on discord's side) if the server already exists; otherwise we're literally putting things back into the variable for no reason
-        base = {}  # Empty dict, to be added to when things need to be updated
+        full_set = {
+            'name': s.name,
+            'prefix': serv.get('prefix', '.'),
+            'thumbnail': s.icon.with_static_format('png').with_size(512).url if s.icon else '',
+            'offset': serv.get('offset', utility.daylightSavings() * -1),
+            'tzname': serv.get('tzname', 'EST'),
+            'jumpContext': serv.get('jumpContext', False),
+            'undoSuppression': serv.get('undoSuppression', False),
+            'redditComplete': serv.get('redditComplete', 0),
+            'redditEnhance': (False, False)
+            if serv.get('redditEnhance') == 0
+            else (True, False)
+            if serv.get('redditEnhance') == 1
+            else (False, True)
+            if serv.get('redditEnhance') == 2
+            else (True, True)
+            if serv.get('redditEnhance') == 3
+            else serv.get('redditEnhance', (True, True)),
+            'birthdayChannel': serv.get('birthdayChannel') or serv.get('birthday', 0),
+            'birthdate': serv.get('birthdate', datetime.datetime(started.year, 1, 1, 12 - utility.daylightSavings())),
+            'birthdayMode': serv.get('birthdayMode', 1),
+            'colorTheme': serv.get('colorTheme', 0),
+            'channels': serverChannels,
+            'server_id': s.id,
+            'roles': [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()],
+            'flags': {},
+            'announcementsChannel': serv.get('announcementsChannel', (0, False)),
+            'moderatorChannel': serv.get('moderatorChannel', (0, False)),
+            'generalChannel': serv.get('generalChannel', (0, False)),
+            'antispam': {
+                'enabled': spam.get('enabled', False),
+                'whisper': spam.get('whisper', False),
+                'log': spam.get('log', 0),
+                'warn': spam.get('warn', 3),
+                'delete': 1 if spam.get('delete') is False else 3 if spam.get('delete') is True else spam.get('delete', 3),
+                'muteTime': spam.get('muteTime', 300),
+                'action': spam.get('action', 1),
+                'customRoleID': spam.get('customRoleID', None),
+                'congruent': spam.get('congruent', [4, 7, 300]),
+                'emoji': spam.get('emoji', 0),
+                'mentions': spam.get('mentions', 3),
+                'selfbot': spam.get('selfbot', True),
+                'caps': spam.get('caps', 0),
+                'links': spam.get('links', False),
+                'attachments': spam.get('attachments', [False] * 9),
+                'invites': spam.get('invites', False),
+                'everyoneTags': spam.get('everyoneTags', 2),
+                'hereTags': spam.get('hereTags', 2),
+                'roleTags': spam.get('roleTags', 3),
+                'quickMessages': spam.get('quickMessages', [5, 10]),
+                'consecutiveMessages': spam.get('consecutiveMessages', [10, 120]),
+                'repeatedJoins': spam.get('repeatedJoins', [0, 300, 86400]),
+                'ignoreRoled': spam.get('ignoreRoled', False),
+                'exclusionMode': spam.get('exclusionMode', 1),
+                'channelExclusions': spam.get('channelExclusions', await DefaultChannelExclusions(s)),
+                'roleExclusions': spam.get('roleExclusions', await DefaultRoleExclusions(s)),
+                'memberExclusions': spam.get('memberExclusions', await DefaultMemberExclusions(s)),
+                'profanityEnabled': spam.get('profanityEnabled', False),
+                'profanityTolerance': spam.get('profanityTolerance', 0),
+                'filter': spam.get('filter', []),
+                'ageKick': spam.get('ageKick', None),
+                'ageKickDM': spam.get('ageKickDM', defaultAgeKickDM),
+                'ageKickWhitelist': spam.get('ageKickWhitelist', []),
+                'warmup': spam.get('warmup', 0),
+                'timedEvents': spam.get('timedEvents', []),
+                'automuteRole': spam.get('automuteRole', 0),
+            },
+            'cyberlog': {
+                'enabled': log.get('enabled', False),
+                'ghostReactionEnabled': log.get('ghostReactionEnabled', True),
+                'disguardLogRecursion': log.get('disguardLogRecursion', False),
+                'indexing': log.get('indexing', log.get('enabled', True)),
+                'image': log.get('image', False),
+                'sendIndexFile': log.get('sendIndexFile', True),
+                'storageCap': log.get('storageCap', 20),
+                'messageLogsBotAuthor': log.get('messageLogsBotAuthor', 0),
+                'defaultChannel': log.get('defaultChannel', None),
+                'library': log.get('library', 1),
+                'thumbnail': log.get('thumbnail', 1),
+                'author': log.get('author', 3),
+                'context': log.get('context', (1, 1)),
+                'hoverLinks': log.get('hoverLinks', 1),
+                'embedTimestamp': log.get('embedTimestamp', 2),
+                'botLogging': 0 if log.get('botLogging') is None else log.get('botLogging', 0),
+                'color': log.get('color', ('auto', 'auto', 'auto')),
+                'plainText': log.get('plainText', False),
+                'read': log.get('read', True),
+                'flashText': log.get('flashText'),
+                'tts': log.get('tts'),
+                'onlyVCJoinLeave': log.get('onlyVCJoinLeave', False),
+                'onlyVCForceActions': log.get('onlyVCForceActions', True),
+                'voiceChatLogRecaps': log.get('voiceChatLogRecaps', True),
+                'ghostReactionTime': log.get('ghostReactionTime', 10),
+                'memberGlobal': log.get('memberGlobal', 2),
+                'channelExclusions': log.get('channelExclusions', []),
+                'roleExclusions': log.get('roleExclusions', []),
+                'memberExclusions': log.get('memberExclusions', []),
+                'lastUpdate': serv.get('lastUpdate', discord.utils.utcnow()),
+                'message': LogModule('message', 'Send logs when a message is edited or deleted').update(log.get('message', {})),
+                'doorguard': LogModule('doorguard', 'Send logs when a member joins or leaves server').update(log.get('doorguard', {})),
+                'channel': LogModule('channel', 'Send logs when channel is created, edited, or deleted').update(log.get('channel', {})),
+                'member': LogModule(
+                    'member',
+                    'Send logs when member changes username or nickname, has roles added or removed, changes avatar, or changes discriminator',
+                ).update(log.get('member', {})),
+                'role': LogModule('role', 'Send logs when a role is created, edited, or deleted').update(log.get('role', {})),
+                'emoji': LogModule('emoji', 'Send logs when emoji is created, edited, or deleted').update(log.get('emoji', {})),
+                'server': LogModule('server', 'Send logs when server is updated, such as thumbnai').update(log.get('server', {})),
+                'voice': LogModule('voice', "Send logs when members' voice chat attributes change").update(log.get('voice', {})),
+                'misc': LogModule('misc', "Logging for various bonus features that don't fit into an above category").update(log.get('misc', {})),
+            },
+        }
+        # perform actual write or prepare UpdateOne
+        if mode == 'update':
+            await servers.update_one({'server_id': s.id}, {'$set': full_set}, upsert=True)
+        else:
+            update_ops.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': full_set}, upsert=True))
+
+    elif includeServer:
+        # existing server: only set fields that changed
+        base: dict = {}
         roleGen = [{'name': role.name, 'id': role.id} for role in iter(s.roles) if not role.managed and not role.is_default()]
-        if s.name != serv['name']:
-            base.update({'name': s.name})
-        if s.icon.with_static_format('png').with_size(512).url != serv['thumbnail']:
-            base.update({'thumbnail': s.icon.with_static_format('png').with_size(512).url if s.icon else ''})
-        if serverChannels != serv['channels']:
-            base.update({'channels': serverChannels})
-        if roleGen != serv['roles']:
-            base.update({'roles': roleGen})
+        if serv.get('name') != s.name:
+            base['name'] = s.name
+        thumbnail = s.icon.with_static_format('png').with_size(512).url if s.icon else ''
+        if serv.get('thumbnail') != thumbnail:
+            base['thumbnail'] = thumbnail
+        if serverChannels != serv.get('channels'):
+            base['channels'] = serverChannels
+        if roleGen != serv.get('roles'):
+            base['roles'] = roleGen
         if base:
-            updateOperations.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': base}))
+            if mode == 'update':
+                await servers.update_one({'server_id': s.id}, {'$set': base})
+            else:
+                update_ops.append(pymongo.UpdateOne({'server_id': s.id}, {'$set': base}))
+
+    # handle members
     started2 = datetime.datetime.now()
     if includeMembers:
         results = await VerifyMembers(s, includeMembers, serv, mode=mode, parallel=parallel)
-        if mode == 'return':
-            updateOperations += results
+        if mode == 'return' and results:
+            # VerifyMembers returns UpdateOne list when mode=='return'
+            update_ops += results
     started3 = datetime.datetime.now()
-    if mode == 'update':
-        await servers.bulk_write(updateOperations, ordered=not parallel)
+
+    # If mode == 'update', nothing else to do (we already wrote changes)
+    # If mode == 'return', return collected UpdateOne operations
     print(
         f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Member updates: {(started3 - started2).seconds}s\n Database write: {(datetime.datetime.now() - started3).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s'
     )
     logger.info(
         f'Verified Server {s.name}:\n Preparation: {(started2 - started).seconds}s\n Member updates: {(started3 - started2).seconds}s\n Database write: {(datetime.datetime.now() - started3).seconds}s\n Total: {(datetime.datetime.now() - started).seconds}s'
     )
+
     if mode == 'return':
-        return updateOperations
+        return update_ops
 
 
-async def VerifyMembers(s: discord.Guild, members: typing.Generator[discord.Member, None, None], serv=None, *, mode='update', parallel=True) -> None:
-    """Verifies multiple server members"""
+async def VerifyMembers(
+    s: discord.Guild, members: typing.Iterable[discord.Member], serv=None, *, mode='update', parallel=True, chunk_size: int = 1000
+):
+    """Verifies multiple server members
+
+    This version avoids building a massive in-memory dict by writing members
+    to the DB in batches using bulk_write.
+    """
     if not serv:
         serv = (await servers.find_one({'server_id': s.id})) or {}
     antispam = serv.get('antispam', {})
-    warnings = antispam.get('warn', 3)  # Number of warnings to give to new members
+    warnings_default = antispam.get('warn', 3)
+
     db_memb = serv.get('members', {})
-    if type(db_memb) is list:
-        old_list = copy.deepcopy(db_memb)
-        db_memb = {}
-        for member in old_list:
-            db_memb.update({str(member['id']): {'name': member['name'], 'warnings': member['warnings']}})
-    member_dict = {
-        str(member.id): {
-            'name': member.name,
-            'warnings': db_memb.get(str(member.id), {}).get('warnings', warnings),
-        }
-        for member in members
-    }
-    await servers.update_one({'server_id': s.id}, {'$set': {'members': member_dict}})
+    # convert legacy list format to dict without deepcopy (only if needed)
+    if isinstance(db_memb, list):
+        db_memb = {str(m['id']): {'name': m.get('name'), 'warnings': m.get('warnings', warnings_default)} for m in db_memb}
+
+    ops: list[pymongo.UpdateOne] = []
+    results_ops: list[pymongo.UpdateOne] | None = [] if mode == 'return' else None
+
+    count = 0
+    for member in members:
+        member_id = str(member.id)
+        warnings_val = db_memb.get(member_id, {}).get('warnings', warnings_default)
+        member_doc = {'name': member.name, 'warnings': warnings_val}
+        op = pymongo.UpdateOne({'server_id': s.id}, {'$set': {f'members.{member_id}': member_doc}})
+        if mode == 'return':
+            results_ops.append(op)
+        else:
+            ops.append(op)
+            count += 1
+            if count >= chunk_size:
+                await servers.bulk_write(ops, ordered=not parallel)
+                ops.clear()
+                count = 0
+
+    # flush remaining ops
+    if mode != 'return' and ops:
+        await servers.bulk_write(ops, ordered=not parallel)
+
+    if mode == 'return':
+        return results_ops
 
 
-async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=False):
-    """Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date"""
+async def VerifyUsers(b: commands.Bot, usrs: typing.List[discord.User], full=False, *, chunk_size: int = 500):
+    """Ensures every global Discord user in a bot server has one unique entry, and ensures everyone's attributes are up to date.
+
+    Processes users in chunks to reduce peak memory usage.
+    """
     print(f'Verifying {len(usrs)} users...')
     logger.info(f'Verifying {len(usrs)} users...')
     start_time = datetime.datetime.now()
 
-    user_obj_dict = {u.id: u for u in usrs}
-    user_id_list = list(user_obj_dict.keys())
-    # Query all users in one go
-    database_users = await users.find({'user_id': {'$in': user_id_list}}).to_list(None)
-    database_user_dict = {user['user_id']: user for user in database_users}
+    # iterate in chunks so we don't build huge dicts or load massive DB query results
+    update_ops: list[pymongo.UpdateOne] = []
     updated_users = set()
 
-    # Prepare bulk operations
-    update_ops = []
+    # helper to flush ops to DB in chunks
+    async def _flush_ops(ops: list[pymongo.UpdateOne]):
+        if not ops:
+            return
+        await users.bulk_write(ops, ordered=False)
+        ops.clear()
 
-    # Add new users
-    for user_id in user_id_list:
-        if user_id not in database_user_dict:
-            user = user_obj_dict.get(user_id)
-            # Collect update operation instead of calling VerifyUser
-            op = await VerifyUser(user, b, mode='return', new=True)
-            if op:
-                update_ops += op
-            updated_users.add(user_id)
+    # process in batches
+    for i in range(0, len(usrs), chunk_size):
+        batch = usrs[i : i + chunk_size]
+        batch_ids = [u.id for u in batch]
+        # fetch only the DB users that correspond to this batch
+        db_batch = await users.find({'user_id': {'$in': batch_ids}}).to_list(None)
+        db_user_map = {d['user_id']: d for d in db_batch}
 
-    # Update existing users
-    for user in database_users:
-        if user['user_id'] not in updated_users:
-            u = user_obj_dict.get(user['user_id'])
+        # add new users in this batch
+        for u in batch:
+            if u.id not in db_user_map:
+                # re-use VerifyUser in 'return' mode to collect ops (hopefully small per user)
+                ops = await VerifyUser(u, b, mode='return', new=True)
+                if ops:
+                    update_ops.extend(ops)
+                updated_users.add(u.id)
+                # flush periodically to keep memory down
+                if len(update_ops) >= 1000:
+                    await _flush_ops(update_ops)
+
+        # update existing users in this batch
+        for db_user in db_batch:
+            uid = db_user['user_id']
+            if uid in updated_users:
+                continue
+            u = next((x for x in batch if x.id == uid), None)
+            if u is None:
+                continue
             try:
-                await lightningdb.post_user(user)
+                await lightningdb.post_user(db_user)
             except errors.DuplicateKeyError:
                 if full:
-                    await lightningdb.patch_user(u.id, user)
+                    await lightningdb.patch_user(u.id, db_user)
             except (AttributeError, KeyError, TypeError):
                 pass
-            op = await VerifyUser(u, b, user, full, True, mode='return')
-            if op:
-                update_ops += op
-            updated_users.add(user['user_id'])
+            ops = await VerifyUser(u, b, db_user, full, True, mode='return')
+            if ops:
+                update_ops.extend(ops)
+            updated_users.add(uid)
+            if len(update_ops) >= 1000:
+                await _flush_ops(update_ops)
 
-    # Bulk write all updates at once
-    if update_ops:
-        await users.bulk_write(update_ops, ordered=False)
+    # final flush of any remaining ops
+    await _flush_ops(update_ops)
 
-    # Delete users not in the bot's mutual servers
-    await users.delete_many({'user_id': {'$nin': user_id_list}})
+    # Delete users not in the bot's mutual servers.
+    # If the total user list is huge and cannot be passed directly to $nin,
+    # consider an alternative approach (mark-and-sweep or temporary collection).
+    all_ids = [u.id for u in usrs]
+    if all_ids:
+        await users.delete_many({'user_id': {'$nin': all_ids}})
+
     print(f'Verified {len(updated_users)} users')
     logger.info(f'Verified {len(updated_users)} users in {(datetime.datetime.now() - start_time)} delta')
 

@@ -119,7 +119,7 @@ async def on_ready():  # Method is called whenever bot is ready after connection
         await asyncio.wait_for(initialize_check(), timeout=None)
         await utility.update_bot_presence(bot, activity=discord.CustomActivity(name='Retrieving data'))
         print('Grabbing pins...')
-        await cyber.grab_pins()
+        # await cyber.grab_pins()
     print('Booted')
     presence = {'status': discord.Status.online, 'activity': discord.Activity(name=f'{len(bot.guilds)} servers', type=discord.ActivityType.watching)}
     if not bot.activity:
@@ -154,13 +154,13 @@ async def on_message(message: discord.Message):
     tasks = []
     if indexing:
         tasks.append(asyncio.create_task(indexing.on_message(message, data)))
-    if cyberlog:
+    if cyberlog and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(cyberlog.on_message(message, data)))
-    if reddit:
+    if reddit and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(reddit.on_message(message, data)))
-    if birthdays:
+    if birthdays and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(birthdays.on_message(message, data)))
-    if misc:
+    if misc and not utility.large_server(message.guild):
         tasks.append(asyncio.create_task(misc.on_message(message, data)))
 
     if tasks:
