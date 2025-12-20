@@ -73,10 +73,10 @@ bot.initialized = False
 
 async def main():
     lightningdb.initialize()
-    database.initialize(secure.beta())
-    await bot.start(secure.beta())
-    # database.initialize(secure.token())
-    # await bot.start(secure.token())
+    # database.initialize(secure.beta())
+    # await bot.start(secure.beta())
+    database.initialize(secure.token())
+    await bot.start(secure.token())
 
 
 indexes = 'Indexes'
