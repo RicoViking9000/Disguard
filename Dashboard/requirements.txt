@@ -18,5 +18,5 @@ pymongo==3.10.1
 motor==2.1.0
 requests==2.21.0
 requests-oauthlib==1.2.0
-urllib3==1.24.2
+urllib3==1.26.19
 Werkzeug==2.2.2
