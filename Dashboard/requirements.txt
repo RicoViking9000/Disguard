@@ -12,7 +12,7 @@ google-auth-oauthlib==1.0.0
 gunicorn==19.9.0
 idna==2.8
 itsdangerous==2.0.0
-Jinja2==3.0.0
+Jinja2==3.1.4
 oauthlib==3.0.1
 pymongo==3.10.1
 motor==2.1.0
